@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 
 import { GridgoLogo } from "@/components/GridgoLogo";
