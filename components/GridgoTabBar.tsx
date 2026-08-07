@@ -8,6 +8,20 @@ import { useThemeColors } from "@/hooks/useTheme";
 import { useAlertsStore } from "@/store/alerts";
 
 /**
+ * Design breathing room beneath the tab row, stacked on the system bottom
+ * inset — never Math.max'd with it. `insets.bottom` is the OS keep-out zone
+ * (gesture bar / three-button nav); this pad is intentional content spacing.
+ */
+export const TAB_BAR_BOTTOM_DESIGN_PAD = 8;
+
+/**
+ * Material Design 3 navigation bar height for icon + label (dp). Columns use
+ * this as min-height so the content region matches platform standard; the
+ * system inset is extra, below, via container paddingBottom.
+ */
+export const TAB_BAR_CONTENT_MIN_HEIGHT = 80;
+
+/**
  * One Lucide glyph per tab, all outline, all the same optical weight, so the
  * row reads as one set.
  */
@@ -23,10 +37,17 @@ const ICONS: Record<TabName, LucideIcon> = {
  * The GRIDGO supplier tab bar.
  *
  * Five labelled destinations. No raised action disc — every tab is a place.
- * Columns bottom-align so all five share a baseline. Geometry leaves slack
- * above the glyph (top padding) so the unread badge can sit proud of the icon
- * without crossing the bar's top border, and labels use a min height so large
- * dynamic type can grow without clipping. Touch targets stay at least 44dp.
+ * Columns bottom-align so all five share a baseline.
+ *
+ * Geometry (default font scale, content region only — system inset is separate):
+ *   pt-4 (16) + icon (24) + gap-1 (4) + label min-h-4 (16) + pb-4 (16) = 76
+ *   min-h-20 (80) is the MD3 platform floor; residual 4dp sits as top slack
+ *   above the icon (justify-end). Touch floor 44dp is exceeded comfortably.
+ *   Top padding also covers the unread badge's -top-1 overhang.
+ *
+ * Bottom padding of the bar container is `insets.bottom + design pad` so the
+ * OS keep-out zone and design breathing room stack. The surface (and top
+ * border) still paints through the inset region to the physical edge.
  *
  * The open tab is said twice over: its glyph goes to action-yellow and its
  * label to medium yellow. The row still reads in grayscale via weight. Yellow
@@ -37,7 +58,11 @@ export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
   const unreadCount = useAlertsStore((s) => s.unreadCount);
 
   return (
-    <View className="relative" style={{ paddingBottom: Math.max(insets.bottom, 8) }}>
+    <View
+      testID="gridgo-tab-bar"
+      className="relative"
+      style={{ paddingBottom: insets.bottom + TAB_BAR_BOTTOM_DESIGN_PAD }}
+    >
       <View className="absolute inset-x-0 bottom-0 top-0 border-t border-outline bg-surface" />
 
       <View className="flex-row items-end">
@@ -94,10 +119,10 @@ function TabItem({ name, label, focused, onPress, badge = 0 }: TabItemProps) {
       accessibilityRole="tab"
       accessibilityLabel={showBadge ? `${label}, ${badge} unread` : label}
       accessibilityState={{ selected: focused }}
-      // pt-2 leaves room for the badge's -top-1 overhang; min-h-11 is the
-      // 44dp touch floor. No fixed column height — label line box may grow
-      // under maxFontSizeMultiplier.
-      className="min-h-11 flex-1 items-center justify-end gap-1 pb-2 pt-2"
+      // MD3 icon+label bar = 80dp (min-h-20). pt-4 covers badge overhang;
+      // no fixed column height — label line box may grow under a capped
+      // maxFontSizeMultiplier and the min-height absorbs it.
+      className="min-h-20 flex-1 items-center justify-end gap-1 pb-4 pt-4"
     >
       {({ pressed }) => (
         <>
@@ -122,6 +147,9 @@ function TabItem({ name, label, focused, onPress, badge = 0 }: TabItemProps) {
           </View>
           <Text
             numberOfLines={1}
+            // Cap growth so five labels still fit a narrow phone, but allow
+            // ~40% dynamic type (min-h-20 can absorb a taller line box). A
+            // hard 1.0 would ignore accessibility text entirely.
             maxFontSizeMultiplier={1.4}
             style={{
               includeFontPadding: false,
