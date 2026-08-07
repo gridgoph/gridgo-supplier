@@ -106,4 +106,21 @@ describe("GridgoTabBar", () => {
     expect(screen.getByRole("tab", { name: "Alerts, 3 unread" })).toBeTruthy();
     expect(screen.getByText("3")).toBeTruthy();
   });
+
+  it("caps the unread badge at 9+ without a fixed column height that clips it", async () => {
+    useAlertsStore.setState({ unreadCount: 12 });
+
+    await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
+
+    expect(screen.getByRole("tab", { name: "Alerts, 12 unread" })).toBeTruthy();
+    expect(screen.getByText("9+")).toBeTruthy();
+
+    // Geometry regression guard: columns need top slack for the badge's
+    // -top-1 overhang. A tight h-13 stack puts the badge above the bar border.
+    const alertsTab = screen.getByRole("tab", { name: "Alerts, 12 unread" });
+    const className = String(alertsTab.props.className ?? "");
+    expect(className).toContain("pt-2");
+    expect(className).toContain("min-h-11");
+    expect(className).not.toContain("h-13");
+  });
 });
