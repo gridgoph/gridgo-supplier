@@ -40,11 +40,27 @@ The app includes:
 - NativeWind
 - Zustand
 - AsyncStorage
-- Local demo API (`gridgo-api`) for auth and data — replaceable with Clerk/Supabase later
+- Zustand for client session state
+- Local **custom auth + domain API** via `gridgo-api` (MVP — not Clerk/Supabase/PayMongo; replaceable later)
 
 Do not introduce new major libraries unless there is a strong reason. Ask before installing anything new.
 
 ---
+
+
+## MVP stack (current phase)
+
+For this MVP we **do not** integrate Clerk, Supabase, PayMongo, or other production SaaS.
+
+Every screen that needs network uses **`lib/api.ts`** against the shared local **`gridgo-api`**:
+
+- **Custom auth** — email/password → bearer token; role enforced in Zustand session (`store/session.ts`). Mismatched role is rejected (no role switcher).
+- **Custom domain API** — orders/jobs, credits, COD, dispatch, proofs, notifications.
+- **Zustand** — session and feature stores (not React Context for global session).
+- **Money** — PHP minor units only; Pilot Credits + COD ≤ ₱1,500.
+- **Replace later** — keep the same `lib/api.ts` surface when Clerk/Supabase/PayMongo land.
+
+Product scope for this binary: **`PRD.md`**. Fleet blueprint: `gridgo-tinker`.
 
 ## Development Philosophy
 
