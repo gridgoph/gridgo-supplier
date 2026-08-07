@@ -233,6 +233,11 @@ export async function listJobs(): Promise<Order[]> {
   return result.jobs;
 }
 
+export async function getOrder(orderId: string): Promise<Order> {
+  const result = await request<{ order: Order }>(`/orders/${orderId}`);
+  return result.order;
+}
+
 export async function listOffers(): Promise<Order[]> {
   const result = await request<{ offers: Order[] }>("/dispatch/offers");
   return result.offers;

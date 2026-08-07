@@ -4,7 +4,8 @@ import type { ReactElement } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { GridgoTabBar } from "@/components/GridgoTabBar";
-import { ACTION_TAB, TABS } from "@/constants/tabs";
+import { TABS } from "@/constants/tabs";
+import { useAlertsStore } from "@/store/alerts";
 
 const navigate = jest.fn();
 const emit = jest.fn(() => ({ defaultPrevented: false }));
@@ -45,22 +46,23 @@ describe("GridgoTabBar", () => {
   beforeEach(() => {
     navigate.mockClear();
     emit.mockClear();
+    useAlertsStore.setState({ unreadCount: 0 });
   });
 
-  it("labels every destination, so none is an icon alone", async () => {
+  it("labels every destination, including Schedule", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    for (const tab of TABS.filter((entry) => entry.name !== ACTION_TAB)) {
+    for (const tab of TABS) {
       expect(screen.getByText(tab.label)).toBeTruthy();
     }
   });
 
-  it("names the action tab for screen readers even though it draws no label", async () => {
+  it("exposes every tab to screen readers as a labelled tab", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    // Supplier action tab is Schedule (no visible label); a11y still names it.
-    expect(screen.queryByText("Schedule")).toBeNull();
-    expect(screen.getByRole("tab", { name: "Schedule" })).toBeTruthy();
+    for (const tab of TABS) {
+      expect(screen.getByRole("tab", { name: tab.label })).toBeTruthy();
+    }
   });
 
   it("marks only the open tab as selected", async () => {
@@ -94,5 +96,14 @@ describe("GridgoTabBar", () => {
     fireEvent.press(screen.getByRole("tab", { name: "Schedule" }));
 
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("announces unread alerts on the Alerts tab", async () => {
+    useAlertsStore.setState({ unreadCount: 3 });
+
+    await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
+
+    expect(screen.getByRole("tab", { name: "Alerts, 3 unread" })).toBeTruthy();
+    expect(screen.getByText("3")).toBeTruthy();
   });
 });
