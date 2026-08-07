@@ -165,6 +165,19 @@ export function getToken(): string | null {
   return tokenMemory;
 }
 
+/** Fired when an authenticated request gets HTTP 401 (token gone or invalid). */
+export type UnauthorizedHandler = () => void;
+
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+/**
+ * Register the session-clearing callback. The store wires this once so a 401
+ * drops `user` and the root `Stack.Protected` guard handles navigation.
+ */
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  unauthorizedHandler = handler;
+}
+
 export class ApiError extends Error {
   status: number;
   body: unknown;
@@ -197,7 +210,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       data = text;
     }
   }
-  if (!res.ok) throw new ApiError(res.status, data);
+  if (!res.ok) {
+    // Clear the bearer on any 401 so a stale token cannot keep calling APIs.
+    // The session store's unauthorized handler then nulls `user` and the root
+    // route guard unmounts the signed-in area (no per-screen redirects).
+    if (res.status === 401) {
+      setToken(null);
+      unauthorizedHandler?.();
+    }
+    throw new ApiError(res.status, data);
+  }
   return data as T;
 }
 

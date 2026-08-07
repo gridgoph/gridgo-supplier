@@ -55,6 +55,7 @@ For this MVP we **do not** integrate Clerk, Supabase, PayMongo, or other product
 Every screen that needs network uses **`lib/api.ts`** against the shared local **`gridgo-api`**:
 
 - **Custom auth** — email/password → bearer token; role enforced in Zustand session (`store/session.ts`). Mismatched role is rejected (no role switcher).
+- **Session → routes** — `Stack.Protected` in `app/_layout.tsx` (SDK 54) guards the signed-in area (`(tabs)`, `job/[id]`, `payout`, `design-system`) from `isSignedIn(user)`. Do not sprinkle `router.replace` on logout/401; clearing `user` (logout, role reject, or API 401 via `setUnauthorizedHandler`) is enough. Guard history is removed, so back cannot re-enter signed-out screens.
 - **Custom domain API** — orders/jobs, credits, COD, dispatch, proofs, notifications.
 - **API base** — `getApiBase()` / `resolveApiBase()` in `lib/api.ts`: `EXPO_PUBLIC_API_URL` override, else hostname from Expo `hostUri` (so physical Expo Go uses the LAN IP), Android loopback remapped to `10.0.2.2`, port from `EXPO_PUBLIC_API_PORT` (default `8787`). Do not hardcode a developer LAN IP.
 - **Zustand** — session and feature stores (not React Context for global session).
