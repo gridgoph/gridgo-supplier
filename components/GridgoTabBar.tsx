@@ -39,13 +39,18 @@ const ICONS: Record<TabName, LucideIcon> = {
  * Five labelled destinations. No raised action disc — every tab is a place.
  * Columns bottom-align so all five share a baseline.
  *
- * Geometry matches client/rider (canonical column; content region only —
- * system inset is separate):
+ * Geometry matches client (canonical column; content region only — system
+ * inset is separate):
  *   pt-2 (8) + icon (24) + gap-1 (4) + label min-h-4 (16) + pb-2 (8) = 60
  *   min-h-20 (80) is the MD3 platform floor; residual 20dp sits as top slack
  *   above the icon (justify-end). Label-to-bar-bottom-edge = pb-2 = 8dp
  *   (same as client). Touch floor 44dp is exceeded comfortably.
  *   Top slack also covers the unread badge's -top-1 overhang.
+ *
+ * The painted surface is an absolute overlay with `top-4` (16dp), so the
+ * visible bar is 64 + inset + 8 — not the full 80dp column. The top strip is
+ * transparent breathing room; the row is bottom-aligned so icons/labels stay
+ * inside the painted region (no raised action disc in this app).
  *
  * Bottom padding of the bar container is `insets.bottom + design pad` so the
  * OS keep-out zone and design breathing room stack. The surface (and top
@@ -65,7 +70,10 @@ export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
       className="relative"
       style={{ paddingBottom: insets.bottom + TAB_BAR_BOTTOM_DESIGN_PAD }}
     >
-      <View className="absolute inset-x-0 bottom-0 top-0 border-t border-outline bg-surface" />
+      <View
+        testID="gridgo-tab-bar-surface"
+        className="absolute inset-x-0 bottom-0 top-4 border-t border-outline bg-surface"
+      />
 
       <View className="flex-row items-end">
         {state.routes.map((route, index) => {

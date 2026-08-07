@@ -196,4 +196,30 @@ describe("GridgoTabBar", () => {
     expect(homeLabel.props.maxFontSizeMultiplier).toBe(1.4);
     expect(homeLabel.props.maxFontSizeMultiplier).toBeGreaterThan(1);
   });
+
+  /**
+   * Visible bar height is driven by where the surface starts, not column min-height.
+   * Client paints with top-4 (16dp): visible = 64 + inset + 8. Painting at top-0
+   * makes a 16dp-taller slab (80 + inset + 8) without changing touch columns.
+   */
+  it("offsets the painted surface by top-4 so the visible bar matches client", async () => {
+    await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
+
+    const surface = screen.getByTestId("gridgo-tab-bar-surface");
+    const className = String(surface.props.className ?? "");
+    expect(className).toContain("absolute");
+    expect(className).toContain("inset-x-0");
+    expect(className).toContain("bottom-0");
+    expect(className).toContain("top-4");
+    expect(className).toContain("border-t");
+    expect(className).toContain("border-outline");
+    expect(className).toContain("bg-surface");
+    expect(className).not.toMatch(/\btop-0\b/);
+
+    // Column geometry unchanged: pressable stays min-h-20; only the paint shifts.
+    const homeTab = screen.getByRole("tab", { name: "Home" });
+    const tabClass = String(homeTab.props.className ?? "");
+    expect(tabClass).toContain("min-h-20");
+    expect(TAB_BAR_CONTENT_MIN_HEIGHT).toBe(80);
+  });
 });
