@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+
 /**
  * GRIDGO demo API client.
  *
@@ -51,12 +53,17 @@ export type Notification = {
   at: string;
 };
 
-const DEFAULT_BASE = "http://127.0.0.1:8787";
-
 let tokenMemory: string | null = null;
 
+/** Android emulator reaches the host machine via 10.0.2.2. */
+function defaultBase(): string {
+  if (Platform.OS === "android") return "http://10.0.2.2:8787";
+  return "http://127.0.0.1:8787";
+}
+
 export function getApiBase(): string {
-  return process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") || DEFAULT_BASE;
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "");
+  return fromEnv || defaultBase();
 }
 
 export function setToken(token: string | null): void {
