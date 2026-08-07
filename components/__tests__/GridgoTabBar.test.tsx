@@ -58,21 +58,22 @@ describe("GridgoTabBar", () => {
   it("names the action tab for screen readers even though it draws no label", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    expect(screen.queryByText("New Request")).toBeNull();
-    expect(screen.getByRole("tab", { name: "New Request" })).toBeTruthy();
+    // Supplier action tab is Schedule (no visible label); a11y still names it.
+    expect(screen.queryByText("Schedule")).toBeNull();
+    expect(screen.getByRole("tab", { name: "Schedule" })).toBeTruthy();
   });
 
   it("marks only the open tab as selected", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(1)} />);
 
-    expect(screen.getByRole("tab", { name: "Orders", selected: true })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Jobs", selected: true })).toBeTruthy();
     expect(screen.queryAllByRole("tab", { selected: true })).toHaveLength(1);
   });
 
   it("navigates to a tab that is not open", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    fireEvent.press(screen.getByRole("tab", { name: "Notifications" }));
+    fireEvent.press(screen.getByRole("tab", { name: "Alerts" }));
 
     expect(navigate).toHaveBeenCalledWith("notifications");
   });
@@ -90,7 +91,7 @@ describe("GridgoTabBar", () => {
 
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    fireEvent.press(screen.getByRole("tab", { name: "New Request" }));
+    fireEvent.press(screen.getByRole("tab", { name: "Schedule" }));
 
     expect(navigate).not.toHaveBeenCalled();
   });

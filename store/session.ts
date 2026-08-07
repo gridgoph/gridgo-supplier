@@ -36,9 +36,21 @@ export const useSession = create<SessionState>((set) => ({
       }
       set({ user, loading: false });
     } catch (e) {
+      if (e instanceof api.ApiError) {
+        if (e.status === 401) {
+          set({ loading: false, error: "Incorrect email or password." });
+          return;
+        }
+        set({
+          loading: false,
+          error: e.message || `Request failed (HTTP ${e.status}).`,
+        });
+        return;
+      }
+      // Network / fetch failure — backend never answered with an HTTP status.
       set({
         loading: false,
-        error: e instanceof Error ? e.message : "login_failed",
+        error: `Cannot reach the backend at ${api.getApiBase()}. Check that gridgo-api is running and reachable on this network.`,
       });
     }
   },

@@ -1,3 +1,4 @@
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 /**
@@ -55,15 +56,105 @@ export type Notification = {
 
 let tokenMemory: string | null = null;
 
-/** Android emulator reaches the host machine via 10.0.2.2. */
-function defaultBase(): string {
-  if (Platform.OS === "android") return "http://10.0.2.2:8787";
-  return "http://127.0.0.1:8787";
+/** Inputs for pure API-base resolution (exported for unit tests). */
+export type ResolveApiBaseInput = {
+  /** Explicit override (`EXPO_PUBLIC_API_URL`). Wins when non-empty. */
+  envUrl?: string | null;
+  /** API port (`EXPO_PUBLIC_API_PORT`), default 8787. */
+  envPort?: string | null;
+  /**
+   * Dev-server host strings from expo-constants (`host:port`, URLs, etc.).
+   * First parseable hostname wins.
+   */
+  hostCandidates?: Array<string | null | undefined>;
+  /** `Platform.OS` value used for the Android emulator loopback remap. */
+  platformOS?: string;
+};
+
+/**
+ * Pull hostname from an Expo host field (`192.168.1.55:8081`,
+ * `exp://192.168.1.55:8081`, full URLs). Drops the packager port.
+ */
+export function hostnameFromHostUri(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  try {
+    const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)
+      ? trimmed
+      : `http://${trimmed}`;
+    const hostname = new URL(withScheme).hostname;
+    return hostname || null;
+  } catch {
+    // host:port or bare host without a parseable URL shape
+    const hostPart = trimmed.split("/")[0]?.split(":")[0]?.trim();
+    return hostPart || null;
+  }
+}
+
+/** Collect populated host fields across Expo Go, dev builds, and legacy manifests. */
+function collectExpoHostCandidates(): Array<string | null | undefined> {
+  const manifest = Constants.manifest as { debuggerHost?: string; hostUri?: string } | null;
+  const manifest2 = Constants.manifest2 as {
+    extra?: { expoClient?: { hostUri?: string; debuggerHost?: string } };
+  } | null;
+
+  return [
+    Constants.expoConfig?.hostUri,
+    Constants.platform?.hostUri,
+    Constants.expoGoConfig &&
+      typeof Constants.expoGoConfig === "object" &&
+      "debuggerHost" in Constants.expoGoConfig
+      ? String((Constants.expoGoConfig as { debuggerHost?: string }).debuggerHost ?? "")
+      : null,
+    manifest2?.extra?.expoClient?.hostUri,
+    manifest2?.extra?.expoClient?.debuggerHost,
+    manifest?.debuggerHost,
+    manifest?.hostUri,
+    Constants.linkingUri,
+    Constants.experienceUrl,
+  ];
+}
+
+/**
+ * Resolve the demo API base URL.
+ *
+ * Precedence:
+ * 1. Non-empty `envUrl` (trailing slash stripped)
+ * 2. Hostname from Expo dev-server host candidates → `http://<host>:<port>`
+ * 3. If that host is loopback and platform is Android → `http://10.0.2.2:<port>`
+ * 4. `http://127.0.0.1:<port>`
+ */
+export function resolveApiBase(input: ResolveApiBaseInput = {}): string {
+  const envUrl = input.envUrl?.trim().replace(/\/$/, "");
+  if (envUrl) return envUrl;
+
+  const port = input.envPort?.trim() || "8787";
+  const candidates = input.hostCandidates ?? [];
+  let host: string | null = null;
+  for (const candidate of candidates) {
+    host = hostnameFromHostUri(candidate);
+    if (host) break;
+  }
+
+  if (host) {
+    if ((host === "localhost" || host === "127.0.0.1") && input.platformOS === "android") {
+      return `http://10.0.2.2:${port}`;
+    }
+    return `http://${host}:${port}`;
+  }
+
+  return `http://127.0.0.1:${port}`;
 }
 
 export function getApiBase(): string {
-  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "");
-  return fromEnv || defaultBase();
+  return resolveApiBase({
+    envUrl: process.env.EXPO_PUBLIC_API_URL,
+    envPort: process.env.EXPO_PUBLIC_API_PORT,
+    hostCandidates: collectExpoHostCandidates(),
+    platformOS: Platform.OS,
+  });
 }
 
 export function setToken(token: string | null): void {
