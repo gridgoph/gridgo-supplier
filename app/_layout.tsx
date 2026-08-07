@@ -16,6 +16,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { colors, type ThemeName, typography } from "@/constants/theme";
 import { useAppFonts } from "@/hooks/useAppFonts";
 import { useThemeColors, useThemeName } from "@/hooks/useTheme";
+import { SessionProvider } from "@/store/session";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -57,6 +58,7 @@ export default function RootLayout() {
   if (!fontsReady) return null;
 
   return (
+    <SessionProvider>
     <SafeAreaProvider>
       <ThemeProvider value={navigationTheme(scheme)}>
         <Stack
@@ -72,6 +74,7 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ headerShown: false }} />
           {/* The tab shell draws its own headers per tab. */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -80,5 +83,6 @@ export default function RootLayout() {
         <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       </ThemeProvider>
     </SafeAreaProvider>
+    </SessionProvider>
   );
 }

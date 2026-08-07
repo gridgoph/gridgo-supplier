@@ -1,8 +1,22 @@
-/** Bottom-tab labels and routes for the GRIDGO Supplier app. */
-export const tabs = [
-  { name: "home", title: "Home", icon: "home" as const },
-  { name: "jobs", title: "Jobs", icon: "briefcase" as const },
-  { name: "schedule", title: "Schedule", icon: "calendar" as const },
-  { name: "notifications", title: "Alerts", icon: "bell" as const },
-  { name: "account", title: "Account", icon: "user" as const },
-] as const;
+/**
+ * The supplier tab bar.
+ * Same shape as the client app so GridgoTabBar stays shared.
+ */
+
+export type TabName = "home" | "jobs" | "schedule" | "notifications" | "account";
+
+export type TabDefinition = {
+  name: TabName;
+  label: string;
+};
+
+export const TABS: readonly TabDefinition[] = [
+  { name: "home", label: "Home" },
+  { name: "jobs", label: "Jobs" },
+  { name: "schedule", label: "Schedule" },
+  { name: "notifications", label: "Alerts" },
+  { name: "account", label: "Account" },
+];
+
+/** No floating action disc — job accept/decline is on the Jobs screen. */
+export const ACTION_TAB = "schedule" as TabName;

@@ -1,5 +1,5 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { Bell, FileText, House, Plus, User, type LucideIcon } from "lucide-react-native";
+import { Bell, Briefcase, Calendar, House, User, type LucideIcon } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -12,8 +12,8 @@ import { useThemeColors } from "@/hooks/useTheme";
  */
 const ICONS: Record<TabName, LucideIcon> = {
   home: House,
-  orders: FileText,
-  "new-request": Plus,
+  jobs: Briefcase,
+  schedule: Calendar,
   notifications: Bell,
   account: User,
 };
