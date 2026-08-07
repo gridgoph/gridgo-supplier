@@ -56,6 +56,7 @@ Every screen that needs network uses **`lib/api.ts`** against the shared local *
 
 - **Custom auth** — email/password → bearer token; role enforced in Zustand session (`store/session.ts`). Mismatched role is rejected (no role switcher).
 - **Custom domain API** — orders/jobs, credits, COD, dispatch, proofs, notifications.
+- **API base** — `getApiBase()` / `resolveApiBase()` in `lib/api.ts`: `EXPO_PUBLIC_API_URL` override, else hostname from Expo `hostUri` (so physical Expo Go uses the LAN IP), Android loopback remapped to `10.0.2.2`, port from `EXPO_PUBLIC_API_PORT` (default `8787`). Do not hardcode a developer LAN IP.
 - **Zustand** — session and feature stores (not React Context for global session).
 - **Money** — PHP minor units only; Pilot Credits + COD ≤ ₱1,500.
 - **Replace later** — keep the same `lib/api.ts` surface when Clerk/Supabase/PayMongo land.
@@ -305,3 +306,12 @@ Before every feature:
 - Follow it strictly.
 - Build clean, simple code.
 - Replicate UI exactly when designs are provided.
+
+---
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.
