@@ -1,6 +1,6 @@
 /**
- * The supplier tab bar.
- * Same shape as the client app so GridgoTabBar stays shared.
+ * The supplier tab bar — five honest destinations.
+ * No floating action disc; every tab is a place, not an action.
  */
 
 export type TabName = "home" | "jobs" | "schedule" | "notifications" | "account";
@@ -17,6 +17,3 @@ export const TABS: readonly TabDefinition[] = [
   { name: "notifications", label: "Alerts" },
   { name: "account", label: "Account" },
 ];
-
-/** No floating action disc — job accept/decline is on the Jobs screen. */
-export const ACTION_TAB = "schedule" as TabName;

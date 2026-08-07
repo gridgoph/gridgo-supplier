@@ -5,11 +5,10 @@ import { TABS } from "@/constants/tabs";
 import { useThemeColors } from "@/hooks/useTheme";
 
 /**
- * The client tab shell.
+ * The supplier tab shell.
  *
- * The bar is drawn from the tokens on every platform — see `GridgoTabBar`.
- * Headers are off here because the tabs do not share one: Home carries a role
- * header, New Request carries the stepper.
+ * Five destinations, no raised action disc. The bar is drawn from the tokens
+ * on every platform — see `GridgoTabBar`. Headers are off; each tab draws its own.
  */
 export default function TabsLayout() {
   const colors = useThemeColors();
