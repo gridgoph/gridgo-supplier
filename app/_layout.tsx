@@ -77,9 +77,35 @@ export default function RootLayout() {
           <Stack.Screen name="onboarding" options={{ headerShown: false }} />
           {/* The tab shell draws its own headers per tab. */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="job/[id]" options={{ title: "Job" }} />
-          <Stack.Screen name="payout" options={{ title: "Protected payment" }} />
-          <Stack.Screen name="design-system" options={{ title: "Design system" }} />
+          {/*
+            Pushed screens sit above the tab shell. On iOS the native stack labels
+            the back control with the previous screen's title; with no title the
+            route group falls through as "(tabs)". These screens are reachable
+            from more than one tab, so no single origin label is honest — use a
+            bare chevron (headerBackButtonDisplayMode: "minimal"). The native
+            back control keeps its accessible name for VoiceOver.
+          */}
+          <Stack.Screen
+            name="job/[id]"
+            options={{
+              title: "Job",
+              headerBackButtonDisplayMode: "minimal",
+            }}
+          />
+          <Stack.Screen
+            name="payout"
+            options={{
+              title: "Protected payment",
+              headerBackButtonDisplayMode: "minimal",
+            }}
+          />
+          <Stack.Screen
+            name="design-system"
+            options={{
+              title: "Design system",
+              headerBackButtonDisplayMode: "minimal",
+            }}
+          />
         </Stack>
         <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       </ThemeProvider>

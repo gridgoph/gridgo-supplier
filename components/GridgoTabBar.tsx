@@ -23,8 +23,10 @@ const ICONS: Record<TabName, LucideIcon> = {
  * The GRIDGO supplier tab bar.
  *
  * Five labelled destinations. No raised action disc — every tab is a place.
- * Columns are a fixed 52px stack: 8px foot, 16px label box, 4px gap, 24px
- * glyph, bottom-aligned so all five share a baseline.
+ * Columns bottom-align so all five share a baseline. Geometry leaves slack
+ * above the glyph (top padding) so the unread badge can sit proud of the icon
+ * without crossing the bar's top border, and labels use a min height so large
+ * dynamic type can grow without clipping. Touch targets stay at least 44dp.
  *
  * The open tab is said twice over: its glyph goes to action-yellow and its
  * label to medium yellow. The row still reads in grayscale via weight. Yellow
@@ -92,7 +94,10 @@ function TabItem({ name, label, focused, onPress, badge = 0 }: TabItemProps) {
       accessibilityRole="tab"
       accessibilityLabel={showBadge ? `${label}, ${badge} unread` : label}
       accessibilityState={{ selected: focused }}
-      className="h-13 flex-1 items-center justify-end gap-1 pb-2"
+      // pt-2 leaves room for the badge's -top-1 overhang; min-h-11 is the
+      // 44dp touch floor. No fixed column height — label line box may grow
+      // under maxFontSizeMultiplier.
+      className="min-h-11 flex-1 items-center justify-end gap-1 pb-2 pt-2"
     >
       {({ pressed }) => (
         <>
@@ -105,7 +110,10 @@ function TabItem({ name, label, focused, onPress, badge = 0 }: TabItemProps) {
               />
               {showBadge ? (
                 <View className="absolute -right-2.5 -top-1 min-h-4 min-w-4 items-center justify-center rounded-pill bg-accent px-1">
-                  <Text className="text-nav font-medium text-accent-on">
+                  <Text
+                    maxFontSizeMultiplier={1}
+                    className="text-nav font-medium text-accent-on"
+                  >
                     {badge > 9 ? "9+" : String(badge)}
                   </Text>
                 </View>
@@ -120,7 +128,9 @@ function TabItem({ name, label, focused, onPress, badge = 0 }: TabItemProps) {
               textAlignVertical: "center",
               color: focused ? colors.actionYellow : colors.textMuted,
             }}
-            className={focused ? "h-4 text-nav font-medium" : "h-4 text-nav"}
+            className={
+              focused ? "min-h-4 text-nav font-medium" : "min-h-4 text-nav"
+            }
           >
             {label}
           </Text>
