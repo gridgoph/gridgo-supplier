@@ -39,11 +39,13 @@ const ICONS: Record<TabName, LucideIcon> = {
  * Five labelled destinations. No raised action disc — every tab is a place.
  * Columns bottom-align so all five share a baseline.
  *
- * Geometry (default font scale, content region only — system inset is separate):
- *   pt-4 (16) + icon (24) + gap-1 (4) + label min-h-4 (16) + pb-4 (16) = 76
- *   min-h-20 (80) is the MD3 platform floor; residual 4dp sits as top slack
- *   above the icon (justify-end). Touch floor 44dp is exceeded comfortably.
- *   Top padding also covers the unread badge's -top-1 overhang.
+ * Geometry matches client/rider (canonical column; content region only —
+ * system inset is separate):
+ *   pt-2 (8) + icon (24) + gap-1 (4) + label min-h-4 (16) + pb-2 (8) = 60
+ *   min-h-20 (80) is the MD3 platform floor; residual 20dp sits as top slack
+ *   above the icon (justify-end). Label-to-bar-bottom-edge = pb-2 = 8dp
+ *   (same as client). Touch floor 44dp is exceeded comfortably.
+ *   Top slack also covers the unread badge's -top-1 overhang.
  *
  * Bottom padding of the bar container is `insets.bottom + design pad` so the
  * OS keep-out zone and design breathing room stack. The surface (and top
@@ -119,10 +121,11 @@ function TabItem({ name, label, focused, onPress, badge = 0 }: TabItemProps) {
       accessibilityRole="tab"
       accessibilityLabel={showBadge ? `${label}, ${badge} unread` : label}
       accessibilityState={{ selected: focused }}
-      // MD3 icon+label bar = 80dp (min-h-20). pt-4 covers badge overhang;
-      // no fixed column height — label line box may grow under a capped
+      // MD3 icon+label bar = 80dp (min-h-20). Client-canonical pb-2/pt-2:
+      // 20dp top slack covers badge overhang; label sits 8dp above bar bottom.
+      // No fixed column height — label line box may grow under a capped
       // maxFontSizeMultiplier and the min-height absorbs it.
-      className="min-h-20 flex-1 items-center justify-end gap-1 pb-4 pt-4"
+      className="min-h-20 flex-1 items-center justify-end gap-1 pb-2 pt-2"
     >
       {({ pressed }) => (
         <>
