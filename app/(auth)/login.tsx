@@ -5,7 +5,7 @@ import { Redirect } from "expo-router";
 import { GridgoLogo } from "@/components/GridgoLogo";
 import { StatusChip } from "@/components/StatusChip";
 import { getApiBase, health } from "@/lib/api";
-import { useSession } from "@/store/session";
+import { isSignedIn, useSession } from "@/store/session";
 
 type HealthState = "checking" | "reachable" | "unreachable";
 
@@ -31,7 +31,7 @@ export default function LoginScreen() {
     };
   }, []);
 
-  if (user) return <Redirect href="/(tabs)/home" />;
+  if (isSignedIn(user)) return <Redirect href="/(tabs)/home" />;
 
   return (
     <View className="flex-1 bg-canvas px-6">

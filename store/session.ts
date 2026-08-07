@@ -7,6 +7,14 @@ import * as api from "@/lib/api";
 export const APP_ROLE = "supplier" as const;
 export const DEMO_EMAIL = "supplier@gridgo.local";
 
+/**
+ * Single source for `Stack.Protected` and launch redirects.
+ * Any path that clears `user` (logout, role reject, 401) relies on this.
+ */
+export function isSignedIn(user: User | null | undefined): boolean {
+  return user != null;
+}
+
 type SessionState = {
   user: User | null;
   loading: boolean;
@@ -59,3 +67,11 @@ export const useSession = create<SessionState>((set) => ({
     set({ user: null });
   },
 }));
+
+/**
+ * Expired / invalid bearer → clear session here. The root `Stack.Protected`
+ * guard then drops signed-in routes; call sites must not sprinkle redirects.
+ */
+api.setUnauthorizedHandler(() => {
+  useSession.setState({ user: null });
+});
