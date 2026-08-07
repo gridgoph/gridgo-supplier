@@ -3,7 +3,11 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 import type { ReactElement } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { GridgoTabBar } from "@/components/GridgoTabBar";
+import {
+  GridgoTabBar,
+  TAB_BAR_BOTTOM_DESIGN_PAD,
+  TAB_BAR_CONTENT_MIN_HEIGHT,
+} from "@/components/GridgoTabBar";
 import { TABS } from "@/constants/tabs";
 import { useAlertsStore } from "@/store/alerts";
 
@@ -26,20 +30,35 @@ function tabBarProps(openIndex: number): BottomTabBarProps {
   } as unknown as BottomTabBarProps;
 }
 
-/** `useSafeAreaInsets` needs a provider; these are iPhone-with-home-indicator metrics. */
-function renderInSafeArea(ui: ReactElement) {
+type Insets = { top: number; left: number; right: number; bottom: number };
+
+/** `useSafeAreaInsets` needs a provider; bottom is the value under test. */
+function renderInSafeArea(
+  ui: ReactElement,
+  insets: Insets = { top: 47, left: 0, right: 0, bottom: 34 },
+) {
   return render(ui, {
     wrapper: ({ children }) => (
       <SafeAreaProvider
         initialMetrics={{
           frame: { x: 0, y: 0, width: 390, height: 844 },
-          insets: { top: 47, left: 0, right: 0, bottom: 34 },
+          insets,
         }}
       >
         {children}
       </SafeAreaProvider>
     ),
   });
+}
+
+/** Flatten a RN style prop (object | array | falsy) to a single object. */
+function flattenStyle(style: unknown): Record<string, unknown> {
+  if (style == null) return {};
+  if (Array.isArray(style)) {
+    return Object.assign({}, ...style.map(flattenStyle));
+  }
+  if (typeof style === "object") return style as Record<string, unknown>;
+  return {};
 }
 
 describe("GridgoTabBar", () => {
@@ -116,11 +135,60 @@ describe("GridgoTabBar", () => {
     expect(screen.getByText("9+")).toBeTruthy();
 
     // Geometry regression guard: columns need top slack for the badge's
-    // -top-1 overhang. A tight h-13 stack puts the badge above the bar border.
+    // -top-1 overhang. A tight fixed height (h-13) clips; MD3 floor is min-h-20.
     const alertsTab = screen.getByRole("tab", { name: "Alerts, 12 unread" });
     const className = String(alertsTab.props.className ?? "");
-    expect(className).toContain("pt-2");
-    expect(className).toContain("min-h-11");
+    expect(className).toContain("pt-4");
+    expect(className).toContain("min-h-20");
     expect(className).not.toContain("h-13");
+    expect(TAB_BAR_CONTENT_MIN_HEIGHT).toBe(80);
+  });
+
+  /**
+   * System bottom inset is a keep-out zone; design pad is intentional spacing.
+   * They must be added. Math.max silently drops the design pad on every modern
+   * Android device where inset > 8.
+   *
+   * Representative Android bottoms:
+   * - 48: gesture navigation (large keep-out)
+   * - 24: three-button / mid OEM inset
+   * - 0:  zero inset reported
+   */
+  it.each([
+    { bottom: 48, label: "gesture / large inset" },
+    { bottom: 24, label: "three-button / mid inset" },
+    { bottom: 0, label: "zero inset" },
+  ])(
+    "stacks system bottom inset with design pad ($label)",
+    async ({ bottom }) => {
+      await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />, {
+        top: 24,
+        left: 0,
+        right: 0,
+        bottom,
+      });
+
+      const bar = screen.getByTestId("gridgo-tab-bar");
+      const paddingBottom = flattenStyle(bar.props.style).paddingBottom;
+
+      expect(TAB_BAR_BOTTOM_DESIGN_PAD).toBe(8);
+      // Additive composition — not Math.max.
+      expect(paddingBottom).toBe(bottom + TAB_BAR_BOTTOM_DESIGN_PAD);
+
+      if (bottom > TAB_BAR_BOTTOM_DESIGN_PAD) {
+        // Math.max(bottom, 8) === bottom when bottom > 8; addition is larger.
+        expect(paddingBottom).not.toBe(Math.max(bottom, TAB_BAR_BOTTOM_DESIGN_PAD));
+        expect(paddingBottom).toBeGreaterThan(bottom);
+      }
+    },
+  );
+
+  it("allows modest dynamic type growth on tab labels", async () => {
+    await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
+
+    const homeLabel = screen.getByText("Home");
+    // Constrained bar, not a hard lockout of accessibility text.
+    expect(homeLabel.props.maxFontSizeMultiplier).toBe(1.4);
+    expect(homeLabel.props.maxFontSizeMultiplier).toBeGreaterThan(1);
   });
 });
