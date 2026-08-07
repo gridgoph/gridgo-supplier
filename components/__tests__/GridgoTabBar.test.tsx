@@ -134,13 +134,18 @@ describe("GridgoTabBar", () => {
     expect(screen.getByRole("tab", { name: "Alerts, 12 unread" })).toBeTruthy();
     expect(screen.getByText("9+")).toBeTruthy();
 
-    // Geometry regression guard: columns need top slack for the badge's
-    // -top-1 overhang. A tight fixed height (h-13) clips; MD3 floor is min-h-20.
+    // Geometry regression guard: client-canonical pt-2/pb-2 leaves 20dp top
+    // slack inside min-h-20 for the badge's -top-1 overhang. A tight fixed
+    // height (h-13) clips; MD3 floor is min-h-20. Label-to-bottom-edge = 8dp.
     const alertsTab = screen.getByRole("tab", { name: "Alerts, 12 unread" });
     const className = String(alertsTab.props.className ?? "");
-    expect(className).toContain("pt-4");
+    expect(className).toContain("pt-2");
+    expect(className).toContain("pb-2");
     expect(className).toContain("min-h-20");
+    expect(className).toContain("justify-end");
     expect(className).not.toContain("h-13");
+    expect(className).not.toMatch(/\bpt-4\b/);
+    expect(className).not.toMatch(/\bpb-4\b/);
     expect(TAB_BAR_CONTENT_MIN_HEIGHT).toBe(80);
   });
 
