@@ -130,6 +130,13 @@ function RootStack() {
           }}
         />
         <Stack.Screen
+          name="settings"
+          options={{
+            title: "Settings",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        <Stack.Screen
           name="design-system"
           options={{
             title: "Design system",
