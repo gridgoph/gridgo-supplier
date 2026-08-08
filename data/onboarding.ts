@@ -1,13 +1,12 @@
 /**
- * Client onboarding copy.
+ * Supplier onboarding copy.
  *
- * Three beats, in the order a print job actually moves: the request, the
- * proof, the delivery. Riders and suppliers meet their own context after
- * sign-in, through role gating.
+ * Three beats, in the order work actually lands: jobs find the shop, the shop
+ * produces and self-checks, then the job is handed off and paid.
  *
- * The copy names things the Davao pilot's clients already recognise — the
- * Messenger back-and-forth it replaces, the preflight check, the stale
- * location warning — rather than describing features.
+ * The copy names things a Davao print supplier already does — accept/decline
+ * under SLA, self-QC evidence, rider pickup, protected payment — rather than
+ * describing features.
  */
 
 import type { IllustrationName } from "@/components/illustrations";
@@ -26,27 +25,27 @@ export type OnboardingSlide = {
 
 export const onboardingSlides: readonly OnboardingSlide[] = [
   {
-    id: "order",
+    id: "jobs",
     step: "01 / 03",
-    title: "Order print the right way",
-    body: "Pick the product, size, material and deadline in four steps. No back-and-forth on Messenger.",
+    title: "Jobs find your shop",
+    body: "GRIDGO matches print work to your capacity. Accept or decline inside the SLA — no sales chase, no Messenger ping-pong.",
     cta: "Next",
-    art: "workstation",
+    art: "storefront",
   },
   {
-    id: "approve",
+    id: "produce",
     step: "02 / 03",
-    title: "Approve before it prints",
-    body: "Every file runs a preflight check. You see the proof and approve it, or send it back for changes.",
+    title: "Produce and check it",
+    body: "Work the approved spec and artwork. Upload self-QC evidence before you mark the job ready for pickup.",
     cta: "Next",
-    art: "proof",
+    art: "working",
   },
   {
-    id: "track",
+    id: "handoff",
     step: "03 / 03",
-    title: "Watch it come to you",
-    body: "Track your rider on the map with a live ETA, and an honest note when the location goes stale.",
+    title: "Hand off and get paid",
+    body: "Stage the job for the rider, then track protected payment status as settlement clears.",
     cta: "Get Started",
-    art: "scooter",
+    art: "packages",
   },
 ] as const;
