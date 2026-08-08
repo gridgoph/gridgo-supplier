@@ -106,7 +106,7 @@ export default function OnboardingScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "bottom"]}>
       {/* Header sits above the pager so Skip is never swallowed by the scroller. */}
       <View className="gg-page flex-row items-center justify-between py-3" style={{ zIndex: 2 }}>
-        <GridgoLogo />
+        <GridgoLogo role="supplier" />
         <Pressable
           onPress={dismiss}
           accessibilityRole="button"
