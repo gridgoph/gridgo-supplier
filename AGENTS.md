@@ -109,6 +109,8 @@ assets/
 
 **components/** is for reusable UI. Create a component when it is reused in multiple places, when it makes a screen easier to read, or when it represents a clear UI concept. Examples for this app: `PrimaryButton`, `SecondaryButton`, `StatusChip`, `JobCard`, `SpecRow`, `SelfQcCard`, `CountdownTimer`, `EmptyState`. Do not create components too early.
 
+**Brand lockup** — `components/GridgoLogo.tsx` owns the mark, wordmark, and typed role lockups (`client` | `business` | `supplier` | `rider` | `admin`). Entry points in this app use `role="supplier"`. Do not invent per-screen role strings.
+
 **data/** holds hardcoded content. Keep it typed.
 
 **store/** holds Zustand stores. Examples of state to keep here: session, theme preference (`system` | `light` | `dark`), the in-progress print request draft (product, size, material, quantity, deadline, address, uploaded artwork), cart/reorder items, order list and selected order, active delivery tracking as received (rider location, ETA, last-updated timestamp, stale flag), and the unread notification count. Persist with AsyncStorage when needed — theme preference, session, and the request draft are worth persisting. Never persist rider location or ETAs; they are someone else's live data and go stale the moment the app is backgrounded.
