@@ -44,7 +44,42 @@ export type Order = {
   artworkName: string | null;
   createdAt: string;
   updatedAt: string;
-  timeline: { at: string; state: string; by: string; note: string }[];
+  /** Client artwork approved by QA. Read-only for this app. */
+  artworkFileIds?: string[];
+  /** Proofs this shop has sent the client. Newest last. */
+  proofFileIds?: string[];
+  deliveryPhotoFileIds?: string[];
+  timeline: {
+    at: string;
+    state: string;
+    by: string;
+    note: string;
+    /** Present on proof submissions. */
+    fileId?: string;
+  }[];
+};
+
+/** Stored file metadata. `fileId` is the only durable identity a client keeps. */
+export type StoredFile = {
+  fileId: string;
+  purpose: "artwork" | "proof" | "delivery_photo" | "service_image";
+  originalFilename: string;
+  declaredContentType: string;
+  detectedContentType: string;
+  size: number;
+  ownerId: string;
+  state: "pending_upload" | "ready" | "delete_pending" | "deleted";
+  createdAt: string;
+  readyAt: string | null;
+  references: { type: string; id: string; field: string }[];
+};
+
+/** A short-lived capability, never file identity. Do not persist or rewrite. */
+export type DownloadUrl = {
+  fileId: string;
+  url: string;
+  expiresAt: string;
+  expiresInSeconds: number;
 };
 
 export type Notification = {
@@ -98,6 +133,7 @@ export type SupplierService = {
   capacityWeekly: number | null;
   zones: string[];
   equipmentNotes: string;
+  imageFileIds?: string[];
   state: string;
   verifiedAt: string | null;
   suspendedAt: string | null;
@@ -383,11 +419,35 @@ export async function creditBalance(): Promise<{ balanceMinor: number }> {
  */
 export type Health = {
   ok: boolean;
-  storage?: { status: "checking" | "available" | "unavailable" };
+  storage?: { status: "checking" | "available" | "unavailable" | "initializing" };
 };
 
 export async function health(): Promise<Health> {
   return request("/health");
+}
+
+/**
+ * Bind an uploaded file to this order. For a proof this is the step that moves
+ * the order into the client's review — the upload alone changes nothing.
+ */
+export async function attachFileToOrder(
+  fileId: string,
+  orderId: string,
+): Promise<{ file: StoredFile; order: Order }> {
+  return request(`/files/${fileId}/attach`, {
+    method: "POST",
+    body: JSON.stringify({ orderId }),
+  });
+}
+
+export async function getFile(fileId: string): Promise<StoredFile> {
+  const result = await request<{ file: StoredFile }>(`/files/${fileId}`);
+  return result.file;
+}
+
+/** Short-lived signed URL. Request a fresh one rather than caching it. */
+export async function getDownloadUrl(fileId: string): Promise<DownloadUrl> {
+  return request(`/files/${fileId}/download-url`);
 }
 
 export async function requestProof(

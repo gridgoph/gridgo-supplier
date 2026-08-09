@@ -8,7 +8,7 @@ import { GridgoLogo } from "@/components/GridgoLogo";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { StatusChip } from "@/components/StatusChip";
-import { formatDeadlineFull, nextPromisedDeadline } from "@/lib/dates";
+import { formatDeadlineFull } from "@/lib/dates";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import {
@@ -64,7 +64,6 @@ export default function HomeScreen() {
 
   const pending = jobs.filter(isAwaitingDecision).length;
   const inProduction = jobs.filter(isInProductionPipeline).length;
-  const nextDeadline = nextPromisedDeadline(jobs);
   const payout = summarizePayouts(jobs);
   const urgent = mostUrgentJob(jobs);
   const urgentAction = urgent ? primaryAction(urgent.state) : null;
@@ -154,13 +153,6 @@ export default function HomeScreen() {
         <View className="mt-6 flex-row gap-3">
           <StatTile label="Awaiting accept" value={pending} />
           <StatTile label="In production" value={inProduction} />
-        </View>
-
-        <View className="mt-3 gg-card gap-1">
-          <Text className="text-caption text-text-muted">Next promised finish</Text>
-          <Text className="text-body-lg font-medium text-text-primary">
-            {nextDeadline ? formatDeadlineFull(nextDeadline) : "Nothing dated yet"}
-          </Text>
         </View>
 
         <Pressable

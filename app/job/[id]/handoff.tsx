@@ -62,7 +62,7 @@ export default function HandoffScreen() {
   }
 
   async function markReady() {
-    if (!job || !step) return;
+    if (!job || !step?.targetState) return;
     const updated = await action.run({
       jobId: job.id,
       targetState: step.targetState,

@@ -3,6 +3,7 @@ import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from "react
 import Animated, { FadeInDown, useReducedMotion } from "react-native-reanimated";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 
+import { ArtworkPanel } from "@/components/ArtworkPanel";
 import { EmptyState } from "@/components/EmptyState";
 import { JobTimeline } from "@/components/JobTimeline";
 import { JourneyTrack } from "@/components/JourneyTrack";
@@ -13,7 +14,8 @@ import { StatusChip } from "@/components/StatusChip";
 import { formatDeadlineFull } from "@/lib/dates";
 import * as api from "@/lib/api";
 import { custodyForOrder } from "@/lib/handoff";
-import { actionsForJob, presentOrderState, routeForAction } from "@/lib/jobState";
+import { actionsForJob, presentOrderState, routeForAction, waitingOn } from "@/lib/jobState";
+import { lastChangeRequest } from "@/lib/proof";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useJob } from "@/hooks/useJob";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -67,8 +69,11 @@ export default function JobWorkspaceScreen() {
   const primary = actions.find((a) => a.primary) ?? null;
   const secondary = actions.filter((a) => !a.primary);
   const urgency = deadlineUrgency(job.promisedDate || job.deadline);
+  const changeRequest =
+    job.state === "supplier_proof_changes_requested" ? lastChangeRequest(job) : null;
   const custody = custodyForOrder(job);
   const showCustody = ["ready", "rider_assigned", "with_rider"].includes(custody.state);
+  const waiting = waitingOn(job.state);
 
   return (
     <View className="gg-screen">
@@ -121,14 +126,25 @@ export default function JobWorkspaceScreen() {
           <JourneyTrack state={job.state} />
         </View>
 
+        {changeRequest ? (
+          <View className="mt-6 rounded-card border border-warning bg-surface p-4">
+            <Text className="text-overline text-warning">CLIENT ASKED FOR CHANGES</Text>
+            <Text className="mt-2 text-body text-text-primary">{changeRequest}</Text>
+          </View>
+        ) : null}
+
         <View className="gg-card mt-6">
           <Text className="mb-2 text-overline text-text-muted">APPROVED SPEC</Text>
           <SpecRow label="Size" value={job.size || "—"} />
           <SpecRow label="Material" value={job.material || "—"} />
           <SpecRow label="Quantity" value={`${job.quantity}`} />
-          <SpecRow label="Artwork" value={job.artworkName || "Not attached"} />
           <SpecRow label="Print total" value={api.formatPhp(job.totalMinor)} />
           <SpecRow label="Deliver to" value={job.address || "—"} />
+        </View>
+
+        <View className="mt-6 gap-3">
+          <Text className="text-overline text-text-muted">APPROVED ARTWORK</Text>
+          <ArtworkPanel order={job} />
         </View>
 
         {showCustody ? (
@@ -184,12 +200,8 @@ export default function JobWorkspaceScreen() {
           </View>
         ) : (
           <View className="gg-panel mt-8 gap-1">
-            <Text className="text-body font-medium text-text-primary">
-              Nothing to do on this job right now
-            </Text>
-            <Text className="text-body text-text-secondary">
-              {custody.detail} Pull down to refresh for the next update.
-            </Text>
+            <Text className="text-body font-medium text-text-primary">{waiting.title}</Text>
+            <Text className="text-body text-text-secondary">{waiting.body}</Text>
           </View>
         )}
       </ScrollView>

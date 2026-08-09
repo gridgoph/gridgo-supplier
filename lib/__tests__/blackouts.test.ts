@@ -2,7 +2,6 @@ import {
   blackoutOnDay,
   blackoutReasonLabel,
   blackoutSpanLabel,
-  closedDayKeys,
   MAX_BLACKOUT_DAYS,
   validateBlackout,
   type Blackout,
@@ -65,16 +64,6 @@ describe("blackoutOnDay", () => {
   it("does not match the day either side", () => {
     expect(blackoutOnDay(list, "2026-08-09")).toBeNull();
     expect(blackoutOnDay(list, "2026-08-13")).toBeNull();
-  });
-});
-
-describe("closedDayKeys", () => {
-  it("expands every closure into its days", () => {
-    const keys = closedDayKeys([
-      closure({ id: "a", startDay: "2026-08-10", endDay: "2026-08-11" }),
-      closure({ id: "b", startDay: "2026-09-01", endDay: "2026-09-01" }),
-    ]);
-    expect([...keys].sort()).toEqual(["2026-08-10", "2026-08-11", "2026-09-01"]);
   });
 });
 

@@ -1,4 +1,4 @@
-import { dayKeyLabel, dayKeyRange, daysBetween, fromDayKey } from "@/lib/day";
+import { dayKeyLabel, daysBetween, fromDayKey } from "@/lib/day";
 
 /**
  * Shop closures ("blackout windows").
@@ -77,15 +77,6 @@ export function validateBlackout(
 /** The closure covering a day, or null. */
 export function blackoutOnDay(blackouts: Blackout[], dayKey: string): Blackout | null {
   return blackouts.find((b) => b.startDay <= dayKey && dayKey <= b.endDay) ?? null;
-}
-
-/** Every day key a set of closures covers, for marking an agenda. */
-export function closedDayKeys(blackouts: Blackout[]): Set<string> {
-  const keys = new Set<string>();
-  for (const b of blackouts) {
-    for (const key of dayKeyRange(b.startDay, b.endDay)) keys.add(key);
-  }
-  return keys;
 }
 
 /** "Mon 11 Aug" for one day, "Mon 11 Aug – Wed 13 Aug" for a run. */

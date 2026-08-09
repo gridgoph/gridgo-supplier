@@ -17,6 +17,7 @@ export default function JobLayout() {
       <Stack.Screen name="index" options={{ title: "Job" }} />
       <Stack.Screen name="accept" options={{ title: "Accept job" }} />
       <Stack.Screen name="decline" options={{ title: "Decline job" }} />
+      <Stack.Screen name="proof" options={{ title: "Proof" }} />
       <Stack.Screen name="advance" options={{ title: "Production update" }} />
       <Stack.Screen name="self-qc" options={{ title: "Self-QC" }} />
       <Stack.Screen name="handoff" options={{ title: "Pickup handoff" }} />

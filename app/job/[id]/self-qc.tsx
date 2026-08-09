@@ -1,18 +1,16 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { EvidenceCapture } from "@/components/EvidenceCapture";
 import { FlowScreen } from "@/components/FlowScreen";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SelfQcChecklist } from "@/components/SelfQcChecklist";
+import { StatusChip } from "@/components/StatusChip";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { NoteField } from "@/components/controls/NoteField";
-import { probeStorage, storedEvidence, type StorageAvailability } from "@/lib/evidence";
 import { allSelfQcComplete, findAction, SELF_QC_CHECKS } from "@/lib/jobState";
-import { useEvidenceUploads } from "@/hooks/useEvidenceUploads";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
 import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
@@ -21,8 +19,9 @@ import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
  * Self-QC: the shop's own sign-off that the printed work matches the spec.
  *
  * The checks are the record Operations and the client rely on, so they cannot
- * be part-completed, and photo evidence is only counted once GRIDGO has stored
- * it and returned an id.
+ * be part-completed. GRIDGO's file storage has no purpose for a photo of
+ * finished work — only client proofs, delivery photos and shop images — so the
+ * screen says that plainly rather than offering a camera with nowhere to send.
  */
 export default function SelfQcScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -33,24 +32,11 @@ export default function SelfQcScreen() {
   const setNote = useJobDrafts((s) => s.setNote);
   const clearDraft = useJobDrafts((s) => s.clearDraft);
 
-  const [availability, setAvailability] = useState<StorageAvailability>("checking");
   const [showErrors, setShowErrors] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const evidence = useEvidenceUploads(job?.id);
-
-  useEffect(() => {
-    let active = true;
-    void probeStorage().then((result) => {
-      if (active) setAvailability(result);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const complete = allSelfQcComplete(draft.qcChecks);
   const remaining = SELF_QC_CHECKS.filter((c) => draft.qcChecks[c.id] !== true).length;
-  const stored = storedEvidence(evidence.items);
   const step = job ? findAction(job.state, "self_qc") : null;
 
   function requestConfirm() {
@@ -62,18 +48,13 @@ export default function SelfQcScreen() {
   }
 
   async function completeSelfQc() {
-    if (!job || !step) return;
+    if (!job || !step?.targetState) return;
     const extra = draft.note.trim();
-    const evidenceNote = stored.length
-      ? `${stored.length} photo${stored.length === 1 ? "" : "s"} attached`
-      : "no photos attached";
+    const headline = `Self-QC passed — all ${SELF_QC_CHECKS.length} checks confirmed`;
     const updated = await action.run({
       jobId: job.id,
       targetState: step.targetState,
-      note: extra
-        ? `Self-QC passed — ${evidenceNote}. ${extra}`
-        : `Self-QC passed — ${evidenceNote}`,
-      extra: stored.length ? { attachmentIds: stored.map((e) => e.attachmentId) } : undefined,
+      note: extra ? `${headline}. ${extra}` : headline,
     });
     setConfirming(false);
     if (!updated) return;
@@ -94,7 +75,7 @@ export default function SelfQcScreen() {
         <>
           <PrimaryButton
             label={action.busy ? "Saving…" : "Complete self-QC"}
-            disabled={action.busy || evidence.busy}
+            disabled={action.busy}
             onPress={requestConfirm}
           />
           <SecondaryButton
@@ -123,18 +104,21 @@ export default function SelfQcScreen() {
         />
       </FieldShell>
 
-      <FieldShell
-        label="Photo evidence"
-        hint="Photos are attached to the job once GRIDGO confirms it has stored them."
-      >
-        <EvidenceCapture
-          availability={availability}
-          items={evidence.items}
-          onTakePhoto={() => void evidence.takePhoto()}
-          onPickPhoto={() => void evidence.pickPhoto()}
-          onRetry={(key) => void evidence.retry(key)}
-          onRemove={evidence.remove}
-        />
+      <FieldShell label="Photo evidence">
+        <View className="gg-panel gap-2">
+          <View className="flex-row">
+            <StatusChip
+              tone="warning"
+              label="Photo evidence unavailable"
+              icon="triangle-alert"
+            />
+          </View>
+          <Text className="text-body text-text-secondary">
+            GRIDGO stores client proofs, delivery photos and shop images, but it has no place yet
+            for a photo of finished work. Your checks below are recorded against the job, and
+            Operations can ask for photos directly until that is added.
+          </Text>
+        </View>
       </FieldShell>
 
       <FieldShell
@@ -153,11 +137,7 @@ export default function SelfQcScreen() {
         <ConfirmDialog
           visible={confirming}
           question={`Sign off self-QC for ${job.title}?`}
-          consequence={
-            stored.length
-              ? `Your ${SELF_QC_CHECKS.length} checks and ${stored.length} photo${stored.length === 1 ? "" : "s"} become the job's quality record. The client sees it immediately.`
-              : `Your ${SELF_QC_CHECKS.length} checks become the job's quality record, with no photos attached. The client sees it immediately.`
-          }
+          consequence={`Your ${SELF_QC_CHECKS.length} checks become this job's quality record, and the client sees it immediately.`}
           confirmLabel="Complete self-QC"
           cancelLabel="Keep checking"
           busy={action.busy}

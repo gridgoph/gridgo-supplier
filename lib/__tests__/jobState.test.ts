@@ -13,6 +13,7 @@ import {
   primaryAction,
   routeForAction,
   SELF_QC_CHECKS,
+  waitingOn,
 } from "@/lib/jobState";
 import type { Order } from "@/lib/api";
 
@@ -66,8 +67,20 @@ describe("actionsForJob", () => {
     expect(actions.find((a) => a.kind === "decline")?.destructive).toBe(true);
   });
 
-  it("sends accepted work to client payment", () => {
-    expect(primaryAction("supplier_accepted")?.targetState).toBe("awaiting_payment");
+  it("sends an accepted job to the client as a proof, not straight to payment", () => {
+    const next = primaryAction("supplier_accepted");
+    expect(next?.kind).toBe("send_proof");
+    // A proof moves the order by attaching a file, so there is no target state.
+    expect(next?.targetState).toBeNull();
+  });
+
+  it("asks for a corrected proof when the client rejected one", () => {
+    expect(primaryAction("supplier_proof_changes_requested")?.kind).toBe("resend_proof");
+  });
+
+  it("only offers payment once the client has approved the proof", () => {
+    expect(primaryAction("supplier_proof_review")).toBeNull();
+    expect(primaryAction("supplier_proof_approved")?.targetState).toBe("awaiting_payment");
   });
 
   it("starts production only after payment is authorized", () => {
@@ -177,16 +190,51 @@ describe("findAction", () => {
 
 describe("journeyIndex", () => {
   it("moves forward through the shop's sequence", () => {
-    expect(journeyIndex("supplier_assigned")).toBe(0);
-    expect(journeyIndex("payment_authorized")).toBe(1);
-    expect(journeyIndex("production")).toBe(2);
-    expect(journeyIndex("supplier_self_qc")).toBe(3);
-    expect(journeyIndex("ready_for_dispatch")).toBe(4);
-    expect(journeyIndex("delivered")).toBe(5);
+    const order = [
+      "supplier_assigned",
+      "supplier_accepted",
+      "supplier_proof_review",
+      "awaiting_payment",
+      "production",
+      "supplier_self_qc",
+      "ready_for_dispatch",
+      "delivered",
+    ];
+    expect(order.map(journeyIndex)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it("keeps the proof round trip on one step rather than going backwards", () => {
+    expect(journeyIndex("supplier_proof_changes_requested")).toBe(
+      journeyIndex("supplier_proof_review"),
+    );
+    expect(journeyIndex("supplier_proof_approved")).toBe(journeyIndex("supplier_proof_review"));
   });
 
   it("covers every step so the track never has a gap", () => {
-    expect(JOB_JOURNEY).toHaveLength(6);
+    expect(JOB_JOURNEY).toHaveLength(8);
     expect(journeyIndex("approved_for_matching")).toBe(-1);
+  });
+});
+
+describe("waitingOn", () => {
+  it("names whose move it is when the shop has nothing to do", () => {
+    expect(waitingOn("supplier_proof_review").title).toContain("client");
+    expect(waitingOn("awaiting_payment").title).toContain("payment");
+    expect(waitingOn("ready_for_dispatch").title).toContain("rider");
+  });
+
+  it("never leaks a state string into the copy", () => {
+    for (const state of [
+      "supplier_proof_review",
+      "awaiting_payment",
+      "ready_for_dispatch",
+      "picked_up",
+      "completed",
+      "something_unmapped",
+    ]) {
+      const result = waitingOn(state);
+      expect(result.title).not.toMatch(/_/);
+      expect(result.body).not.toMatch(/_/);
+    }
   });
 });

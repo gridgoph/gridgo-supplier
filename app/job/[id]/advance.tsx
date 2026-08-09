@@ -49,7 +49,9 @@ export default function AdvanceJobScreen() {
   const status = job ? presentOrderState(job.state) : null;
 
   async function advance() {
-    if (!job || !step) return;
+    // A step with no target state is not a transition at all (a proof is sent
+    // by attaching a file), so it never reaches this screen.
+    if (!job || !step?.targetState) return;
     const headline = template?.timelineNote ?? step.resultLabel;
     const extra = draft.note.trim();
     const updated = await action.run({
