@@ -40,6 +40,14 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "GRIDGO uses the camera so you can attach self-QC photos of finished work to a job.",
+          "photosPermission": "GRIDGO needs your photo library so you can attach self-QC photos of finished work to a job."
+        }
       ]
     ],
     "experiments": {

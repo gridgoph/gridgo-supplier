@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { ChevronRight } from "lucide-react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";
@@ -9,18 +10,27 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { StatusChip } from "@/components/StatusChip";
 import { formatDeadlineFull, nextPromisedDeadline } from "@/lib/dates";
 import * as api from "@/lib/api";
+import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import {
   isAwaitingDecision,
   isInProductionPipeline,
   mostUrgentJob,
   presentOrderState,
   primaryAction,
+  routeForAction,
 } from "@/lib/jobState";
 import { summarizePayouts } from "@/lib/payout";
+import { deadlineUrgency } from "@/lib/urgency";
 import { useAlertsStore } from "@/store/alerts";
 import { useSession } from "@/store/session";
 import { useThemeColors } from "@/hooks/useTheme";
 
+/**
+ * The floor at a glance.
+ *
+ * The one job that needs the shop comes first and carries the screen's only
+ * yellow action; counts and money sit underneath it, quiet.
+ */
 export default function HomeScreen() {
   const { user } = useSession();
   const colors = useThemeColors();
@@ -40,11 +50,7 @@ export default function HomeScreen() {
       setUnreadCount(notifications.filter((n) => !n.read).length);
       setError(null);
     } catch (e) {
-      setError(
-        e instanceof Error
-          ? e.message
-          : `Cannot load jobs from ${api.getApiBase()}. Check that gridgo-api is running.`,
-      );
+      setError(humanizeApiError(e, offlineMessage("load your floor")));
     } finally {
       setLoading(false);
     }
@@ -62,13 +68,28 @@ export default function HomeScreen() {
   const payout = summarizePayouts(jobs);
   const urgent = mostUrgentJob(jobs);
   const urgentAction = urgent ? primaryAction(urgent.state) : null;
+  const urgentStatus = urgent ? presentOrderState(urgent.state) : null;
+  const urgency = urgent
+    ? deadlineUrgency(urgent.promisedDate || urgent.deadline)
+    : null;
 
   return (
     <View className="gg-screen">
-      <ScrollView className="flex-1" contentContainerClassName="gg-page pb-10" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="gg-page pb-10"
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={() => void reload()}
+            tintColor={colors.textMuted}
+          />
+        }
+      >
         <ScreenHeader
           title={user?.supplierName || "Supplier"}
-          subtitle="Time-sensitive production actions"
+          subtitle="Your floor right now"
           right={<GridgoLogo size={28} role="supplier" />}
         />
 
@@ -80,31 +101,65 @@ export default function HomeScreen() {
         ) : null}
 
         {error ? (
-          <View className="mb-4">
-            <EmptyState
-              title="Jobs unavailable"
-              body={error}
-              actionLabel="Try again"
-              onAction={() => void reload()}
-            />
-          </View>
+          <EmptyState
+            title="Jobs unavailable"
+            body={error}
+            actionLabel="Try again"
+            onAction={() => void reload()}
+          />
         ) : null}
 
-        <View className="flex-row gap-3">
-          <View className="gg-card flex-1 gap-1">
-            <Text className="text-caption text-text-muted">Awaiting accept</Text>
-            <Text className="text-display text-text-primary">{pending}</Text>
+        {!error && urgent && urgentAction && urgentStatus ? (
+          <View className="gg-card gap-4">
+            <View className="gap-3">
+              <Text className="text-overline text-text-muted">NEEDS YOU NEXT</Text>
+              <Text className="text-h2 text-text-primary">{urgent.title}</Text>
+              <View className="flex-row">
+                <StatusChip
+                  tone={urgentStatus.tone}
+                  label={urgentStatus.label}
+                  icon={urgentStatus.icon}
+                />
+              </View>
+              <Text
+                className={
+                  urgency?.level === "overdue"
+                    ? "text-body font-medium text-error"
+                    : "text-body text-text-secondary"
+                }
+              >
+                {formatDeadlineFull(urgent.promisedDate || urgent.deadline)}
+                {urgency && urgency.level !== "undated" ? ` · ${urgency.label}` : ""}
+              </Text>
+            </View>
+            <PrimaryButton
+              label={urgentAction.label}
+              onPress={() =>
+                router.push({
+                  pathname: routeForAction(urgentAction.kind),
+                  params: { id: urgent.id, action: urgentAction.kind },
+                })
+              }
+            />
           </View>
-          <View className="gg-card flex-1 gap-1">
-            <Text className="text-caption text-text-muted">In production</Text>
-            <Text className="text-display text-text-primary">{inProduction}</Text>
-          </View>
+        ) : !loading && !error ? (
+          <EmptyState
+            title="Floor is clear"
+            body="Nothing needs a decision right now. Check Schedule for what is coming, or Jobs when GRIDGO matches new work."
+            actionLabel="Open schedule"
+            onAction={() => router.push("/(tabs)/schedule")}
+          />
+        ) : null}
+
+        <View className="mt-6 flex-row gap-3">
+          <StatTile label="Awaiting accept" value={pending} />
+          <StatTile label="In production" value={inProduction} />
         </View>
 
-        <View className="gg-card mt-3 gap-2">
-          <Text className="text-caption text-text-muted">Next promised deadline</Text>
+        <View className="mt-3 gg-card gap-1">
+          <Text className="text-caption text-text-muted">Next promised finish</Text>
           <Text className="text-body-lg font-medium text-text-primary">
-            {nextDeadline ? formatDeadlineFull(nextDeadline) : "No dated jobs yet"}
+            {nextDeadline ? formatDeadlineFull(nextDeadline) : "Nothing dated yet"}
           </Text>
         </View>
 
@@ -112,50 +167,34 @@ export default function HomeScreen() {
           onPress={() => router.push("/payout")}
           accessibilityRole="button"
           accessibilityLabel="Open protected payment"
-          className="gg-card mt-3 gap-2"
+          className="gg-touch mt-3 flex-row items-center gap-3 rounded-card border border-outline bg-surface p-4"
+          style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
         >
-          <View className="flex-row items-center justify-between gap-2">
+          <View className="min-w-0 flex-1 gap-1">
             <Text className="text-caption text-text-muted">Protected payment</Text>
-            <Text className="text-caption text-brand">View all</Text>
-          </View>
-          <Text className="text-body-lg font-medium text-text-primary">
-            {payout.heldCount === 0
-              ? "Nothing held right now"
-              : `${payout.heldCount} job${payout.heldCount === 1 ? "" : "s"} held · ${api.formatPhp(payout.heldGrossMinor)} gross`}
-          </Text>
-          <Text className="text-caption text-text-muted">
-            Commission and net are not on the demo ledger yet.
-          </Text>
-        </Pressable>
-
-        {urgent && urgentAction ? (
-          <View className="gg-card mt-6 gap-3">
-            <Text className="text-overline text-text-muted">NEEDS YOU</Text>
-            <Text className="text-h3 text-text-primary">{urgent.title}</Text>
-            <StatusChip
-              tone={presentOrderState(urgent.state).tone}
-              label={presentOrderState(urgent.state).label}
-              icon={presentOrderState(urgent.state).icon}
-            />
-            <Text className="text-body text-text-secondary">
-              Due {formatDeadlineFull(urgent.deadline || urgent.promisedDate)}
+            <Text className="text-body-lg font-medium text-text-primary">
+              {payout.heldCount === 0
+                ? "Nothing held right now"
+                : `${api.formatPhp(payout.heldGrossMinor)} held`}
             </Text>
-            <PrimaryButton
-              label={urgentAction.label}
-              onPress={() => router.push(`/job/${urgent.id}`)}
-            />
+            <Text className="text-caption text-text-muted">
+              {payout.heldCount === 0
+                ? "Money appears here once a client pays for a job you accepted."
+                : `Across ${payout.heldCount} job${payout.heldCount === 1 ? "" : "s"}. Commission and net are not on the demo ledger.`}
+            </Text>
           </View>
-        ) : !loading && !error ? (
-          <View className="mt-6">
-            <EmptyState
-              title="Floor is clear"
-              body="No jobs need a decision right now. Open Jobs when Operations matches new work."
-              actionLabel="Open jobs"
-              onAction={() => router.push("/(tabs)/jobs")}
-            />
-          </View>
-        ) : null}
+          <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+        </Pressable>
       </ScrollView>
+    </View>
+  );
+}
+
+function StatTile({ label, value }: { label: string; value: number }) {
+  return (
+    <View className="gg-card flex-1 gap-1">
+      <Text className="text-caption text-text-muted">{label}</Text>
+      <Text className="text-h1 text-text-primary">{value}</Text>
     </View>
   );
 }

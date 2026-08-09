@@ -24,6 +24,10 @@ export type SupplierAction = {
   primary: boolean;
   /** Destructive actions need confirmation. */
   destructive?: boolean;
+  /** What the shop is committing to, in one sentence. */
+  consequence: string;
+  /** The state name the shop will see afterwards — same verb, past tense. */
+  resultLabel: string;
 };
 
 export type StatePresentation = {
@@ -83,13 +87,19 @@ export function actionsForJob(state: string): SupplierAction[] {
           label: "Accept job",
           targetState: "supplier_accepted",
           primary: true,
+          consequence:
+            "Your shop commits to producing this job by the finish time you promise.",
+          resultLabel: "Accepted",
         },
         {
           kind: "decline",
-          label: "Decline",
+          label: "Decline job",
           targetState: "approved_for_matching",
           primary: false,
           destructive: true,
+          consequence:
+            "The job returns to GRIDGO for rematching and is not offered to your shop again.",
+          resultLabel: "Declined",
         },
       ];
     case "supplier_accepted":
@@ -99,6 +109,9 @@ export function actionsForJob(state: string): SupplierAction[] {
           label: "Send for payment",
           targetState: "awaiting_payment",
           primary: true,
+          consequence:
+            "The client is asked to pay. Production starts once payment clears.",
+          resultLabel: "Sent for payment",
         },
       ];
     case "payment_authorized":
@@ -108,6 +121,9 @@ export function actionsForJob(state: string): SupplierAction[] {
           label: "Start production",
           targetState: "production",
           primary: true,
+          consequence:
+            "The client sees production has started, with the note you write below.",
+          resultLabel: "In production",
         },
       ];
     case "production":
@@ -117,20 +133,87 @@ export function actionsForJob(state: string): SupplierAction[] {
           label: "Complete self-QC",
           targetState: "supplier_self_qc",
           primary: true,
+          consequence:
+            "Your checks and photo evidence become the record Operations and the client rely on.",
+          resultLabel: "Self-QC done",
         },
       ];
     case "supplier_self_qc":
       return [
         {
           kind: "ready_for_pickup",
-          label: "Ready for pickup",
+          label: "Mark ready for pickup",
           targetState: "ready_for_dispatch",
           primary: true,
+          consequence:
+            "GRIDGO assigns a rider to collect from your shop. The job must be packed and staged before you confirm.",
+          resultLabel: "Ready for pickup",
         },
       ];
     default:
       return [];
   }
+}
+
+/** Flow-screen routes. Literal so Expo Router's typed routes can check them. */
+export type SupplierActionRoute =
+  | "/job/[id]/accept"
+  | "/job/[id]/decline"
+  | "/job/[id]/advance"
+  | "/job/[id]/self-qc"
+  | "/job/[id]/handoff";
+
+/** The flow screen an action opens. Nothing state-changing is a bare row tap. */
+export function routeForAction(kind: SupplierActionKind): SupplierActionRoute {
+  switch (kind) {
+    case "accept":
+      return "/job/[id]/accept";
+    case "decline":
+      return "/job/[id]/decline";
+    case "self_qc":
+      return "/job/[id]/self-qc";
+    case "ready_for_pickup":
+      return "/job/[id]/handoff";
+    default:
+      return "/job/[id]/advance";
+  }
+}
+
+export function findAction(state: string, kind: string): SupplierAction | null {
+  return actionsForJob(state).find((a) => a.kind === kind) ?? null;
+}
+
+/**
+ * The job's journey through the shop. This *is* a sequence, so the workspace
+ * numbers it — the shop needs to know what is left, not only what happened.
+ */
+export const JOB_JOURNEY = [
+  { id: "decision", label: "Decision", states: ["supplier_assigned"] },
+  {
+    id: "accepted",
+    label: "Accepted",
+    states: ["supplier_accepted", "awaiting_payment", "payment_authorized"],
+  },
+  { id: "production", label: "Production", states: ["production"] },
+  { id: "self_qc", label: "Self-QC", states: ["supplier_self_qc"] },
+  { id: "pickup", label: "Pickup", states: ["ready_for_dispatch", "rider_assigned"] },
+  {
+    id: "delivery",
+    label: "Delivery",
+    states: [
+      "picked_up",
+      "out_for_delivery",
+      "delivered",
+      "issue_window_open",
+      "completed",
+      "payout_released",
+    ],
+  },
+] as const;
+
+/** Index into `JOB_JOURNEY`, or -1 when the job left the supplier's path. */
+export function journeyIndex(state: string): number {
+  return JOB_JOURNEY.findIndex((step) => step.states.some((s) => s === state));
 }
 
 export function primaryAction(state: string): SupplierAction | null {

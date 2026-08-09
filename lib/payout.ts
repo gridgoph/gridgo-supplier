@@ -185,6 +185,21 @@ export function summarizePayouts(jobs: Order[]): {
   return { heldCount, releasedCount, heldGrossMinor, amountsPartial: true };
 }
 
+/** The three ways a shop reads its ledger. */
+export type PayoutFilter = "held" | "released" | "all";
+
+export const PAYOUT_FILTERS: readonly { value: PayoutFilter; label: string }[] = [
+  { value: "held", label: "Held" },
+  { value: "released", label: "Released" },
+  { value: "all", label: "All" },
+] as const;
+
+export function matchesPayoutFilter(row: ProtectedPayment, filter: PayoutFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "released") return row.settlement === "released";
+  return row.settlement === "held" || row.settlement === "settling";
+}
+
 /** Human label for payment method — never snake_case. */
 export function presentPaymentMethod(method: string | null): string {
   if (!method) return "Not set";

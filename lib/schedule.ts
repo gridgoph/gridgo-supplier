@@ -1,77 +1,45 @@
 import type { Order } from "@/lib/api";
-
-export type AgendaSectionId = "today" | "next7" | "later" | "undated";
-
-export type AgendaSection = {
-  id: AgendaSectionId;
-  title: string;
-  jobs: Order[];
-};
+import { addDays, daysBetween, startOfDay, toDayKey } from "@/lib/day";
+import { loadByDay, type DayLoad } from "@/lib/capacity";
 
 /**
- * Agenda grouping for the Schedule tab.
+ * The working agenda: what is due, what is late, what is next.
  *
- * Small screens get a chronological list by design — Today, then Next 7 days,
- * then anything further out. Only accepted-and-beyond jobs with a date belong
- * on the production agenda; assignment-pending work lives on Jobs.
+ * A print shop reads this standing at a press, so the grouping is one row per
+ * calendar day rather than vague buckets. Late work is never hidden further
+ * down the list — it is lifted to the top and counted.
  */
-export function buildAgenda(
-  jobs: Order[],
-  now: Date = new Date(),
-): AgendaSection[] {
-  const startOfToday = startOfLocalDay(now);
-  const endOfToday = new Date(startOfToday);
-  endOfToday.setDate(endOfToday.getDate() + 1);
-  const endOfNext7 = new Date(startOfToday);
-  endOfNext7.setDate(endOfNext7.getDate() + 8);
 
-  const eligible = jobs.filter((j) => isAgendaEligible(j));
+export type ScheduleRange = "today" | "week" | "all";
 
-  const today: Order[] = [];
-  const next7: Order[] = [];
-  const later: Order[] = [];
-  const undated: Order[] = [];
+export const SCHEDULE_RANGES: readonly { value: ScheduleRange; label: string }[] = [
+  { value: "today", label: "Today" },
+  { value: "week", label: "7 days" },
+  { value: "all", label: "All" },
+] as const;
 
-  for (const job of eligible) {
-    const raw = job.promisedDate || job.deadline;
-    if (!raw) {
-      undated.push(job);
-      continue;
-    }
-    const when = new Date(raw);
-    if (Number.isNaN(when.getTime())) {
-      undated.push(job);
-      continue;
-    }
-    if (when >= startOfToday && when < endOfToday) {
-      today.push(job);
-    } else if (when >= endOfToday && when < endOfNext7) {
-      next7.push(job);
-    } else if (when >= endOfNext7) {
-      later.push(job);
-    } else {
-      // Past due but still active — keep visible under Today so it is not lost.
-      today.push(job);
-    }
-  }
+export type ScheduleDay = {
+  dayKey: string;
+  jobs: Order[];
+  load: DayLoad | undefined;
+  /** Days from today. Negative in the past. */
+  offset: number;
+};
 
-  const byDate = (a: Order, b: Order) =>
-    String(a.promisedDate || a.deadline || "").localeCompare(
-      String(b.promisedDate || b.deadline || ""),
-    );
+export type ScheduleSummary = {
+  late: number;
+  today: number;
+  week: number;
+};
 
-  today.sort(byDate);
-  next7.sort(byDate);
-  later.sort(byDate);
-
-  const sections: AgendaSection[] = [
-    { id: "today", title: "Today", jobs: today },
-    { id: "next7", title: "Next 7 days", jobs: next7 },
-  ];
-  if (later.length) sections.push({ id: "later", title: "Later", jobs: later });
-  if (undated.length) sections.push({ id: "undated", title: "No date set", jobs: undated });
-  return sections;
-}
+export type Schedule = {
+  days: ScheduleDay[];
+  /** Promised before now and still in the shop's hands. */
+  lateJobs: Order[];
+  /** Accepted work with no date, which cannot be planned around. */
+  undatedJobs: Order[];
+  summary: ScheduleSummary;
+};
 
 /** Accepted (or later) jobs that the shop has committed to produce. */
 export function isAgendaEligible(job: Pick<Order, "state">): boolean {
@@ -87,8 +55,96 @@ export function isAgendaEligible(job: Pick<Order, "state">): boolean {
   return !blocked.has(job.state);
 }
 
-function startOfLocalDay(d: Date): Date {
-  const out = new Date(d);
-  out.setHours(0, 0, 0, 0);
-  return out;
+/** Work that has left the shop is history, not agenda. */
+export function isStillInShop(job: Pick<Order, "state">): boolean {
+  return !["picked_up", "out_for_delivery", "delivered", "issue_window_open", "completed", "payout_released"].includes(
+    job.state,
+  );
+}
+
+export function buildSchedule(
+  jobs: Order[],
+  range: ScheduleRange = "week",
+  now: Date = new Date(),
+): Schedule {
+  const eligible = jobs.filter(isAgendaEligible);
+  const todayKey = toDayKey(now);
+  const load = loadByDay(eligible);
+
+  const dated: Order[] = [];
+  const undatedJobs: Order[] = [];
+  for (const job of eligible) {
+    const when = job.promisedDate || job.deadline;
+    const key = when ? toDayKey(when) : "";
+    if (!key) undatedJobs.push(job);
+    else dated.push(job);
+  }
+
+  const lateJobs = dated
+    .filter((job) => isStillInShop(job) && whenOf(job) < now.getTime())
+    .sort(byWhen);
+
+  const grouped = new Map<string, Order[]>();
+  for (const job of dated) {
+    const key = toDayKey(job.promisedDate || job.deadline || "");
+    const list = grouped.get(key) ?? [];
+    list.push(job);
+    grouped.set(key, list);
+  }
+
+  const horizon = range === "today" ? 0 : range === "week" ? 7 : null;
+  const days: ScheduleDay[] = [];
+
+  // Always show every day in the window, even empty ones: an empty Wednesday is
+  // information a shop uses when it decides what to accept.
+  const windowDays = horizon == null ? 7 : horizon;
+  for (let offset = 0; offset <= windowDays; offset += 1) {
+    const dayKey = toDayKey(addDays(startOfDay(now), offset));
+    days.push({
+      dayKey,
+      offset,
+      jobs: (grouped.get(dayKey) ?? []).sort(byWhen),
+      load: load.get(dayKey),
+    });
+    grouped.delete(dayKey);
+  }
+
+  if (horizon == null) {
+    // "All" also shows anything beyond the window, in date order.
+    const rest = [...grouped.keys()]
+      .filter((key) => (daysBetween(todayKey, key) ?? 0) > windowDays)
+      .sort();
+    for (const dayKey of rest) {
+      days.push({
+        dayKey,
+        offset: daysBetween(todayKey, dayKey) ?? 0,
+        jobs: (grouped.get(dayKey) ?? []).sort(byWhen),
+        load: load.get(dayKey),
+      });
+    }
+  }
+
+  const dayStart = startOfDay(now).getTime();
+  const weekEnd = addDays(startOfDay(now), 8).getTime();
+  const summary: ScheduleSummary = {
+    late: lateJobs.length,
+    today: dated.filter((job) => toDayKey(job.promisedDate || job.deadline || "") === todayKey)
+      .length,
+    week: dated.filter((job) => {
+      const at = whenOf(job);
+      return at >= dayStart && at < weekEnd;
+    }).length,
+  };
+
+  return { days, lateJobs, undatedJobs, summary };
+}
+
+function whenOf(job: Order): number {
+  const raw = job.promisedDate || job.deadline;
+  const at = raw ? new Date(raw).getTime() : Number.NaN;
+  return Number.isNaN(at) ? Number.POSITIVE_INFINITY : at;
+}
+
+function byWhen(a: Order, b: Order): number {
+  return whenOf(a) - whenOf(b);
 }

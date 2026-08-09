@@ -33,6 +33,8 @@ export type Order = {
   deadline: string | null;
   address: string;
   zone: string;
+  /** Shop pin the rider collects from. Set once a supplier is assigned. */
+  pickup?: { lat: number; lng: number; label: string } | null;
   totalMinor: number;
   deliveryFeeMinor: number;
   paymentMethod: string | null;
@@ -52,6 +54,64 @@ export type Notification = {
   body: string;
   read: boolean;
   at: string;
+};
+
+/** One entry of the platform-wide vocabulary served by `GET /taxonomy`. */
+export type TaxonomyCategory = {
+  id: string;
+  code: string;
+  name: string;
+  productFamilyIds: string[];
+  active: boolean;
+};
+
+export type TaxonomyTerm = {
+  id: string;
+  code: string;
+  name: string;
+  categoryCodes: string[];
+  active: boolean;
+};
+
+export type Taxonomy = {
+  categories: TaxonomyCategory[];
+  materials: TaxonomyTerm[];
+  finishes: TaxonomyTerm[];
+};
+
+/** A capability line the shop is accredited for — the capacity the app edits. */
+export type SupplierService = {
+  id: string;
+  supplierId: string;
+  categoryCode: string;
+  materialCodes: string[];
+  finishCodes: string[];
+  productFamilyIds: string[];
+  sizeMin: string | null;
+  sizeMax: string | null;
+  qtyMin: number | null;
+  qtyMax: number | null;
+  pricingBasis: string;
+  referenceRateMinor: number;
+  turnaroundHours: number;
+  capacityDaily: number | null;
+  capacityWeekly: number | null;
+  zones: string[];
+  equipmentNotes: string;
+  state: string;
+  verifiedAt: string | null;
+  suspendedAt: string | null;
+  suspendReason: string | null;
+  withdrawnAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Fields this app is allowed to change on a live service line. */
+export type SupplierServicePatch = {
+  capacityDaily?: number;
+  capacityWeekly?: number;
+  turnaroundHours?: number;
 };
 
 let tokenMemory: string | null = null;
@@ -285,6 +345,28 @@ export async function transitionOrder(
   return result.order;
 }
 
+export async function getTaxonomy(): Promise<Taxonomy> {
+  const result = await request<{ taxonomy: Taxonomy }>("/taxonomy");
+  return result.taxonomy;
+}
+
+/** The signed-in shop's own service lines (the API scopes this by bearer). */
+export async function listSupplierServices(): Promise<SupplierService[]> {
+  const result = await request<{ services: SupplierService[] }>("/supplier-services");
+  return result.services;
+}
+
+export async function updateSupplierService(
+  serviceId: string,
+  patch: SupplierServicePatch,
+): Promise<SupplierService> {
+  const result = await request<{ service: SupplierService }>(
+    `/supplier-services/${serviceId}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+  );
+  return result.service;
+}
+
 export async function listNotifications(): Promise<Notification[]> {
   const result = await request<{ notifications: Notification[] }>("/notifications");
   return result.notifications;
@@ -294,7 +376,17 @@ export async function creditBalance(): Promise<{ balanceMinor: number }> {
   return request("/credits/balance");
 }
 
-export async function health(): Promise<{ ok: boolean }> {
+/**
+ * Object storage the API may or may not have. `storage` is absent on API
+ * builds without file support — the app must treat that as "unavailable"
+ * rather than assuming an upload route exists.
+ */
+export type Health = {
+  ok: boolean;
+  storage?: { status: "checking" | "available" | "unavailable" };
+};
+
+export async function health(): Promise<Health> {
   return request("/health");
 }
 

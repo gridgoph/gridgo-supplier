@@ -1,33 +1,55 @@
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";
+import { JobRow } from "@/components/JobRow";
+import { ScheduleDayCard } from "@/components/ScheduleDayCard";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { StatusChip } from "@/components/StatusChip";
-import { formatDeadlineLabel, formatDeadlineTime } from "@/lib/dates";
+import { SecondaryButton } from "@/components/SecondaryButton";
+import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import * as api from "@/lib/api";
-import { presentOrderState } from "@/lib/jobState";
-import { buildAgenda } from "@/lib/schedule";
+import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import { blackoutOnDay } from "@/lib/blackouts";
+import { shopDailyCapacity } from "@/lib/capacity";
+import { buildSchedule, SCHEDULE_RANGES, type ScheduleRange } from "@/lib/schedule";
+import { useShopPlan } from "@/store/shopPlan";
 import { useThemeColors } from "@/hooks/useTheme";
 
+/**
+ * The shop's working week.
+ *
+ * Late first, then a day at a time with the load already committed to each one.
+ * Density is the point — this is read between jobs, not browsed.
+ */
 export default function ScheduleScreen() {
   const colors = useThemeColors();
+  const blackouts = useShopPlan((s) => s.blackouts);
   const [jobs, setJobs] = useState<api.Order[]>([]);
+  const [services, setServices] = useState<api.SupplierService[]>([]);
+  const [range, setRange] = useState<ScheduleRange>("week");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // "Late" and "Today" are read against the clock at load time, so a screen
+  // left open overnight re-dates itself on the next refresh rather than
+  // quietly claiming yesterday's jobs are still due today.
+  const [now, setNow] = useState(() => new Date());
 
   const reload = useCallback(async () => {
     setLoading(true);
+    setNow(new Date());
     try {
-      setJobs(await api.listJobs());
+      const [jobList, serviceList] = await Promise.all([
+        api.listJobs(),
+        // Capacity is a nice-to-have on this screen; a shop with no service
+        // lines still gets its agenda.
+        api.listSupplierServices().catch(() => [] as api.SupplierService[]),
+      ]);
+      setJobs(jobList);
+      setServices(serviceList);
       setError(null);
     } catch (e) {
-      setError(
-        e instanceof Error
-          ? e.message
-          : `Cannot load schedule from ${api.getApiBase()}.`,
-      );
+      setError(humanizeApiError(e, offlineMessage("load your schedule")));
     } finally {
       setLoading(false);
     }
@@ -39,104 +61,147 @@ export default function ScheduleScreen() {
     }, [reload]),
   );
 
-  const sections = useMemo(() => buildAgenda(jobs), [jobs]);
-  const hasAny = sections.some((s) => s.jobs.length > 0);
+  const schedule = useMemo(() => buildSchedule(jobs, range, now), [jobs, range, now]);
+  const dailyCapacity = useMemo(() => shopDailyCapacity(services), [services]);
+  const hasAnything =
+    schedule.days.some((d) => d.jobs.length > 0) ||
+    schedule.lateJobs.length > 0 ||
+    schedule.undatedJobs.length > 0;
+
+  function openJob(jobId: string) {
+    router.push({ pathname: "/job/[id]", params: { id: jobId } });
+  }
 
   return (
     <View className="gg-screen">
-      <ScrollView className="flex-1" contentContainerClassName="gg-page pb-10" showsVerticalScrollIndicator={false}>
-        <ScreenHeader
-          title="Schedule"
-          subtitle="Today and the next 7 days"
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="gg-page pb-10"
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={() => void reload()}
+            tintColor={colors.textMuted}
+          />
+        }
+      >
+        <ScreenHeader title="Schedule" subtitle="What is due, what is late, what is next" />
+
+        <SegmentedControl
+          options={SCHEDULE_RANGES.map((r) => ({ value: r.value, label: r.label }))}
+          value={range}
+          onChange={setRange}
+          accessibilityLabel="Schedule range"
         />
+
+        <View className="mt-4 flex-row gap-3">
+          <SummaryTile
+            label="Late"
+            value={schedule.summary.late}
+            emphasis={schedule.summary.late > 0}
+          />
+          <SummaryTile label="Due today" value={schedule.summary.today} />
+          <SummaryTile label="This week" value={schedule.summary.week} />
+        </View>
 
         {loading && !jobs.length ? (
           <View className="items-center py-12">
             <ActivityIndicator color={colors.textMuted} />
-            <Text className="mt-3 text-body text-text-muted">Loading agenda…</Text>
+            <Text className="mt-3 text-body text-text-muted">Loading your week…</Text>
           </View>
         ) : null}
 
         {error ? (
-          <EmptyState
-            title="Schedule unavailable"
-            body={error}
-            actionLabel="Try again"
-            onAction={() => void reload()}
-          />
+          <View className="mt-6">
+            <EmptyState
+              title="Schedule unavailable"
+              body={error}
+              actionLabel="Try again"
+              onAction={() => void reload()}
+            />
+          </View>
         ) : null}
 
-        {!loading && !error && !hasAny ? (
-          <EmptyState
-            title="Nothing on the agenda"
-            body="Accepted jobs with a promised date appear here. Accept work from Jobs to fill this week."
-            actionLabel="Open jobs"
-            onAction={() => router.push("/(tabs)/jobs")}
-          />
+        {!loading && !error && !hasAnything ? (
+          <View className="mt-6">
+            <EmptyState
+              title="Nothing booked in"
+              body="Accepted jobs appear here on the day you promised them. Open Jobs to take on the work GRIDGO has matched to your shop."
+              actionLabel="Open jobs"
+              onAction={() => router.push("/(tabs)/jobs")}
+            />
+          </View>
         ) : null}
 
-        <View className="gap-6">
-          {sections.map((section) => {
-            if (!section.jobs.length) {
-              if (section.id === "today" || section.id === "next7") {
-                return (
-                  <View key={section.id} className="gap-3">
-                    <Text className="text-overline text-text-muted">
-                      {section.title.toUpperCase()}
-                    </Text>
-                    <View className="gg-panel">
-                      <Text className="text-body text-text-secondary">
-                        {section.id === "today"
-                          ? "No promised finishes today."
-                          : "No jobs in the next 7 days."}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              }
-              return null;
-            }
+        {schedule.lateJobs.length ? (
+          <View className="mt-6 gap-3">
+            <Text className="text-overline text-error">
+              LATE · {schedule.lateJobs.length}
+            </Text>
+            <View className="gap-2">
+              {schedule.lateJobs.map((job) => (
+                <JobRow key={job.id} job={job} now={now} onPress={() => openJob(job.id)} />
+              ))}
+            </View>
+          </View>
+        ) : null}
 
-            return (
-              <View key={section.id} className="gap-3">
-                <Text className="text-overline text-text-muted">
-                  {section.title.toUpperCase()}
-                </Text>
-                {section.jobs.map((job) => {
-                  const status = presentOrderState(job.state);
-                  const when = job.promisedDate || job.deadline;
-                  return (
-                    <Pressable
-                      key={job.id}
-                      onPress={() => router.push(`/job/${job.id}`)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${job.title}, ${status.label}`}
-                      className="gg-card gap-2"
-                    >
-                      <View className="flex-row items-start justify-between gap-3">
-                        <View className="min-w-0 flex-1 gap-1">
-                          <Text className="text-body-lg font-medium text-text-primary" numberOfLines={2}>
-                            {job.title}
-                          </Text>
-                          <Text className="text-body text-text-secondary">
-                            {formatDeadlineLabel(when)}
-                            {formatDeadlineTime(when) ? ` · ${formatDeadlineTime(when)}` : ""}
-                          </Text>
-                        </View>
-                        <StatusChip
-                          tone={status.tone}
-                          label={status.label}
-                          icon={status.icon}
-                        />
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            );
-          })}
+        <View className="mt-6 gap-6">
+          {schedule.days.map((day) => (
+            <ScheduleDayCard
+              key={day.dayKey}
+              day={day}
+              now={now}
+              dailyCapacity={dailyCapacity}
+              closure={blackoutOnDay(blackouts, day.dayKey)}
+              onOpenJob={openJob}
+            />
+          ))}
+        </View>
+
+        {schedule.undatedJobs.length ? (
+          <View className="mt-6 gap-3">
+            <Text className="text-overline text-text-muted">NO DATE SET</Text>
+            <View className="gap-2">
+              {schedule.undatedJobs.map((job) => (
+                <JobRow key={job.id} job={job} now={now} onPress={() => openJob(job.id)} />
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        <View className="mt-8">
+          <SecondaryButton
+            label="Capacity & closures"
+            onPress={() => router.push("/capacity")}
+          />
+          {dailyCapacity == null ? (
+            <Text className="mt-2 text-caption text-text-muted">
+              Set a daily capacity so this screen can warn you before a day is oversold.
+            </Text>
+          ) : null}
         </View>
       </ScrollView>
+    </View>
+  );
+}
+
+function SummaryTile({
+  label,
+  value,
+  emphasis,
+}: {
+  label: string;
+  value: number;
+  emphasis?: boolean;
+}) {
+  return (
+    <View className="gg-card flex-1 gap-1">
+      <Text className="text-caption text-text-muted">{label}</Text>
+      <Text className={emphasis ? "text-h2 text-error" : "text-h2 text-text-primary"}>
+        {value}
+      </Text>
     </View>
   );
 }

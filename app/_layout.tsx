@@ -13,9 +13,10 @@ import * as SystemUI from "expo-system-ui";
 import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { colors, type ThemeName, typography } from "@/constants/theme";
+import { colors, type ThemeName } from "@/constants/theme";
 import { useAppFonts } from "@/hooks/useAppFonts";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
+import { stackScreenOptions } from "@/lib/navigationOptions";
 import { isSignedIn, useSession } from "@/store/session";
 
 SplashScreen.preventAutoHideAsync();
@@ -79,22 +80,11 @@ export default function RootLayout() {
  */
 function RootStack() {
   const user = useSession((s) => s.user);
-  const token = useThemeColors();
+  const scheme = useThemeName();
   const signedIn = isSignedIn(user);
 
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: token.surface },
-        headerTintColor: token.textPrimary,
-        headerTitleStyle: {
-          fontSize: typography.h3.fontSize,
-          fontFamily: typography.h3.fontFamily,
-        },
-        headerShadowVisible: false,
-        contentStyle: { backgroundColor: token.canvas },
-      }}
-    >
+    <Stack screenOptions={stackScreenOptions(scheme)}>
       {/* Launch redirect stays public so cold start always has an anchor. */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
@@ -115,17 +105,26 @@ function RootStack() {
           single origin label is honest — use a bare chevron. The native back
           control keeps its accessible name for VoiceOver.
         */}
-        <Stack.Screen
-          name="job/[id]"
-          options={{
-            title: "Job",
-            headerBackButtonDisplayMode: "minimal",
-          }}
-        />
+        {/* The job stack draws its own headers for the workspace and its flows. */}
+        <Stack.Screen name="job/[id]" options={{ headerShown: false }} />
         <Stack.Screen
           name="payout"
           options={{
             title: "Protected payment",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        <Stack.Screen
+          name="capacity"
+          options={{
+            title: "Capacity & closures",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        <Stack.Screen
+          name="shop-closure"
+          options={{
+            title: "Shop closure",
             headerBackButtonDisplayMode: "minimal",
           }}
         />

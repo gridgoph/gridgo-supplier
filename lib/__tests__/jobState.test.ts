@@ -1,13 +1,17 @@
 import {
   actionsForJob,
   allSelfQcComplete,
+  findAction,
   isAwaitingDecision,
   isInProductionPipeline,
+  JOB_JOURNEY,
+  journeyIndex,
   mostUrgentJob,
   needsSupplierAction,
   presentOrderState,
   presentTimelineActor,
   primaryAction,
+  routeForAction,
   SELF_QC_CHECKS,
 } from "@/lib/jobState";
 import type { Order } from "@/lib/api";
@@ -130,5 +134,59 @@ describe("timeline presentation", () => {
     expect(presentTimelineActor("user_supplier")).toBe("You");
     expect(presentTimelineActor("system")).toBe("GRIDGO");
     expect(presentTimelineActor("user_client")).toBe("Client");
+  });
+});
+
+describe("action copy", () => {
+  it("gives every action a consequence and a matching result label", () => {
+    for (const state of [
+      "supplier_assigned",
+      "supplier_accepted",
+      "payment_authorized",
+      "production",
+      "supplier_self_qc",
+    ]) {
+      for (const action of actionsForJob(state)) {
+        expect(action.consequence.length).toBeGreaterThan(0);
+        expect(action.resultLabel).not.toMatch(/_/);
+      }
+    }
+  });
+});
+
+describe("routeForAction", () => {
+  it("sends every action to its own flow screen", () => {
+    expect(routeForAction("accept")).toBe("/job/[id]/accept");
+    expect(routeForAction("decline")).toBe("/job/[id]/decline");
+    expect(routeForAction("self_qc")).toBe("/job/[id]/self-qc");
+    expect(routeForAction("ready_for_pickup")).toBe("/job/[id]/handoff");
+  });
+
+  it("sends plain stage moves to the shared update screen", () => {
+    expect(routeForAction("start_production")).toBe("/job/[id]/advance");
+    expect(routeForAction("request_payment")).toBe("/job/[id]/advance");
+  });
+});
+
+describe("findAction", () => {
+  it("only finds an action that is valid in the job's current state", () => {
+    expect(findAction("supplier_assigned", "accept")?.targetState).toBe("supplier_accepted");
+    expect(findAction("production", "accept")).toBeNull();
+  });
+});
+
+describe("journeyIndex", () => {
+  it("moves forward through the shop's sequence", () => {
+    expect(journeyIndex("supplier_assigned")).toBe(0);
+    expect(journeyIndex("payment_authorized")).toBe(1);
+    expect(journeyIndex("production")).toBe(2);
+    expect(journeyIndex("supplier_self_qc")).toBe(3);
+    expect(journeyIndex("ready_for_dispatch")).toBe(4);
+    expect(journeyIndex("delivered")).toBe(5);
+  });
+
+  it("covers every step so the track never has a gap", () => {
+    expect(JOB_JOURNEY).toHaveLength(6);
+    expect(journeyIndex("approved_for_matching")).toBe(-1);
   });
 });
