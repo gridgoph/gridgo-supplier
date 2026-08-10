@@ -89,7 +89,7 @@ export default function HomeScreen() {
         <ScreenHeader
           title={user?.supplierName || "Supplier"}
           subtitle="Your floor right now"
-          right={<GridgoLogo size={28} role="supplier" />}
+          right={<GridgoLogo size={40} role="supplier" />}
         />
 
         {loading && !jobs.length ? (

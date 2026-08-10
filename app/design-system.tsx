@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { GridgoLogo } from "@/components/GridgoLogo";
+import { GridgoLogo, type GridgoLogoRole } from "@/components/GridgoLogo";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SpecRow } from "@/components/SpecRow";
@@ -55,6 +55,23 @@ const ACTION_INKS: Ink[] = [
   { token: "actionYellow", swatch: "bg-action-yellow" },
   { token: "brand", swatch: "bg-brand" },
   { token: "brandLogo", swatch: "bg-brand-logo" },
+];
+
+/**
+ * Every lockup this binary renders, at the size its real call site passes.
+ * `size` is the lockup's height, so each row's mark is exactly as tall as the
+ * text beside it — the thing to check when this screen is read as a proof.
+ */
+const LOCKUP_SPECIMENS: {
+  name: string;
+  spec: string;
+  size: number;
+  role?: GridgoLogoRole;
+}[] = [
+  { name: "Sign in", spec: "48 · supplier", size: 48, role: "supplier" },
+  { name: "Onboarding", spec: "40 · supplier", size: 40, role: "supplier" },
+  { name: "Tab header", spec: "40 · supplier", size: 40, role: "supplier" },
+  { name: "Wordmark", spec: "32 · no role", size: 32 },
 ];
 
 const TYPE_SCALE: { name: string; className: string; spec: string }[] = [
@@ -186,6 +203,32 @@ export default function DesignSystemScreen() {
             </View>
 
             <ThemeSwitch />
+          </View>
+
+          {/* Lockup */}
+          <View className="gap-4">
+            <SectionHead
+              title="LOCKUP"
+              rule="The mark stands the full height of the text block beside it."
+            />
+            <View className="border-t border-outline">
+              {LOCKUP_SPECIMENS.map((specimen) => (
+                <View
+                  key={specimen.name}
+                  className="gap-2 border-b border-outline-subtle py-4"
+                >
+                  <View className="flex-row items-center justify-between gap-3">
+                    <Text className="text-caption text-text-secondary">
+                      {specimen.name}
+                    </Text>
+                    <Text className="text-caption text-text-muted">
+                      {specimen.spec}
+                    </Text>
+                  </View>
+                  <GridgoLogo size={specimen.size} role={specimen.role} />
+                </View>
+              ))}
+            </View>
           </View>
 
           {/* Ink */}

@@ -62,6 +62,7 @@ Every screen that needs network uses **`lib/api.ts`** against the shared local *
 - **Zustand** — session and feature stores (not React Context for global session).
 - **Money** — PHP minor units only; Pilot Credits + COD ≤ ₱1,500.
 - **Replace later** — keep the same `lib/api.ts` surface when Clerk/Supabase/PayMongo land.
+- **`expo start --web`** — the web bundle throws `Cannot use 'import.meta' outside a module` before it hydrates: zustand v5's devtools middleware ships `import.meta.env`, and Metro emits it into a classic `<script>`. Only web is affected; iOS/Android are fine. To render the app in a browser (screenshots, visual review) put a proxy in front of the dev server that rewrites that token. Signed-in routes also bounce to `/login` on a hard reload because the guard runs before the session rehydrates, so navigate in-app rather than reloading a deep link.
 
 Product scope for this binary: **`PRD.md`**. Fleet blueprint: `gridgo-tinker`.
 
@@ -129,7 +130,7 @@ assets/
 
 **components/** is for reusable UI. Create a component when it is reused in multiple places, when it makes a screen easier to read, or when it represents a clear UI concept. Examples for this app: `PrimaryButton`, `SecondaryButton`, `StatusChip`, `JobCard`, `SpecRow`, `SelfQcCard`, `CountdownTimer`, `EmptyState`. Do not create components too early.
 
-**Brand lockup** — `components/GridgoLogo.tsx` owns the mark, wordmark, and typed role lockups (`client` | `business` | `supplier` | `rider` | `admin`). Entry points in this app use `role="supplier"`. Do not invent per-screen role strings.
+**Brand lockup** — `components/GridgoLogo.tsx` owns the mark, wordmark, and typed role lockups (`client` | `business` | `supplier` | `rider` | `admin`). Entry points in this app use `role="supplier"`. Do not invent per-screen role strings. `size` is the lockup's height and the mark's edge: with a role the mark spans **both** text lines, so every proportion is derived in `gridgoLockupMetrics` — change the ratios there, never the layout in a screen. The mark's height must equal the text block's; a mark only as tall as the wordmark line is the regression this has shipped twice.
 
 **data/** holds hardcoded content. Keep it typed.
 

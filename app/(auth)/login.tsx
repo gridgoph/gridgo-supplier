@@ -36,7 +36,7 @@ export default function LoginScreen() {
   return (
     <View className="flex-1 bg-canvas px-6">
       <View className="flex-1 justify-center">
-        <GridgoLogo role="supplier" />
+        <GridgoLogo size={48} role="supplier" />
         <Text className="mt-6 font-satoshi-bold text-2xl text-text-primary">Supplier sign in</Text>
         <Text className="mt-1 font-satoshi text-text-secondary">Demo API · supplier role</Text>
 
