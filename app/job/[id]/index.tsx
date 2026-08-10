@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from "react-native";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
 import Animated, { FadeInDown, useReducedMotion } from "react-native-reanimated";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 
@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { JobTimeline } from "@/components/JobTimeline";
 import { JourneyTrack } from "@/components/JourneyTrack";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { SkeletonBlock } from "@/components/Skeleton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SpecRow } from "@/components/SpecRow";
 import { StatusChip } from "@/components/StatusChip";
@@ -44,9 +45,24 @@ export default function JobWorkspaceScreen() {
 
   if (loading && !job) {
     return (
-      <View className="gg-screen items-center justify-center">
-        <ActivityIndicator color={colors.textMuted} />
-        <Text className="mt-3 text-body text-text-muted">Opening job…</Text>
+      <View
+        className="gg-screen gg-page pt-4"
+        accessibilityRole="progressbar"
+        accessibilityLabel="Opening this job"
+      >
+        <View className="gap-3">
+          <SkeletonBlock className="h-6 w-32 rounded-pill" />
+          <SkeletonBlock className="h-8 w-3/4" />
+          <SkeletonBlock className="h-5 w-1/2" />
+        </View>
+        <View className="mt-8 gap-2">
+          <SkeletonBlock className="h-3 w-28" />
+          <SkeletonBlock className="h-1 w-full rounded-pill" />
+        </View>
+        <View className="mt-8 gap-4">
+          <SkeletonBlock className="h-40 w-full rounded-card" />
+          <SkeletonBlock className="h-24 w-full rounded-card" />
+        </View>
       </View>
     );
   }
@@ -55,10 +71,12 @@ export default function JobWorkspaceScreen() {
     return (
       <View className="gg-screen gg-page justify-center">
         <EmptyState
-          title="Job unavailable"
-          body={error || "This job is not on your floor."}
+          title="This job is not reachable"
+          body={error || "It is no longer on your floor. GRIDGO may have rematched it."}
           actionLabel="Try again"
           onAction={() => void reload()}
+          secondaryLabel="Back to jobs"
+          onSecondary={() => router.navigate("/(tabs)/jobs")}
         />
       </View>
     );

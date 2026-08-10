@@ -76,23 +76,11 @@ export function isLiveService(service: Pick<SupplierService, "state">): boolean 
   return service.state === "live";
 }
 
-/** Plain label for a service line's accreditation state. */
-export function presentServiceState(state: string): string {
-  switch (state) {
-    case "live":
-      return "Live";
-    case "draft":
-      return "Draft";
-    case "pending_verification":
-      return "Waiting on Operations";
-    case "suspended":
-      return "Suspended";
-    case "withdrawn":
-      return "Withdrawn";
-    default:
-      return "Not routing work";
-  }
-}
+/**
+ * Plain label for a service line's accreditation state. The vocabulary lives in
+ * `lib/supplierServices.ts` so capacity and the catalogue use the same words.
+ */
+export { presentServiceState } from "@/lib/supplierServices";
 
 /**
  * The shop's daily unit capacity: the total of every live service line. Null

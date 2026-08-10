@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DangerButton } from "@/components/DangerButton";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
@@ -17,6 +16,7 @@ import {
   type BlackoutReasonId,
 } from "@/lib/blackouts";
 import { fromDayKey, toDayKey } from "@/lib/day";
+import { askConfirm } from "@/store/sheets";
 import { newBlackoutId, useShopPlan } from "@/store/shopPlan";
 
 /**
@@ -43,7 +43,21 @@ export default function ShopClosureScreen() {
   const [reason, setReason] = useState<BlackoutReasonId>(existing?.reason ?? "holiday");
   const [note, setNote] = useState(existing?.note ?? "");
   const [error, setError] = useState<string | null>(null);
-  const [removing, setRemoving] = useState(false);
+
+  async function remove() {
+    if (!existing) return;
+    const confirmed = await askConfirm({
+      question: `Remove the closure on ${blackoutSpanLabel(existing)}?`,
+      consequence:
+        "Your schedule will treat those days as open again and stop warning you about them.",
+      confirmLabel: "Remove closure",
+      cancelLabel: "Keep it",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    removeBlackout(existing.id);
+    router.back();
+  }
 
   function save() {
     const problem = validateBlackout({ startDay, endDay }, blackouts, existing?.id);
@@ -144,26 +158,9 @@ export default function ShopClosureScreen() {
           />
           <SecondaryButton label="Cancel" onPress={() => router.back()} />
           {existing ? (
-            <DangerButton label="Remove closure" onPress={() => setRemoving(true)} />
+            <DangerButton label="Remove closure" onPress={() => void remove()} />
           ) : null}
         </View>
-
-        {existing ? (
-          <ConfirmDialog
-            visible={removing}
-            question={`Remove the closure on ${blackoutSpanLabel(existing)}?`}
-            consequence="Your schedule will treat those days as open again and stop warning you about them."
-            confirmLabel="Remove closure"
-            cancelLabel="Keep it"
-            destructive
-            onConfirm={() => {
-              removeBlackout(existing.id);
-              setRemoving(false);
-              router.back();
-            }}
-            onCancel={() => setRemoving(false)}
-          />
-        ) : null}
       </ScrollView>
     </View>
   );

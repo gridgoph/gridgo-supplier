@@ -3,16 +3,14 @@ import { Text, View } from "react-native";
 import { StatusChip } from "@/components/StatusChip";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { Stepper } from "@/components/controls/Stepper";
-import type { SupplierService, Taxonomy } from "@/lib/api";
-import {
-  CAPACITY_BOUNDS,
-  presentServiceState,
-  type CapacityDraft,
-} from "@/lib/capacity";
+import type { SupplierService } from "@/lib/api";
+import { CAPACITY_BOUNDS, type CapacityDraft } from "@/lib/capacity";
+import { presentLifecycle, serviceLifecycle } from "@/lib/supplierServices";
+import { findCategory, resolveCategoryCode, type ServiceCatalog } from "@/lib/taxonomy";
 
 type Props = {
   service: SupplierService;
-  taxonomy: Taxonomy | null;
+  catalog: ServiceCatalog | null;
   draft: CapacityDraft;
   onChange: (patch: Partial<CapacityDraft>) => void;
   /** Names what is wrong with these three numbers, if anything. */
@@ -21,7 +19,7 @@ type Props = {
 };
 
 /**
- * Capacity for one accredited service line.
+ * Capacity for one category the shop offers.
  *
  * These numbers are what GRIDGO matches work against, so they are edited with
  * bounded steppers rather than a keyboard — a mistyped 200 instead of 20 would
@@ -30,31 +28,39 @@ type Props = {
  */
 export function ServiceCapacityCard({
   service,
-  taxonomy,
+  catalog,
   draft,
   onChange,
   error,
   disabled,
 }: Props) {
-  const categoryName =
-    taxonomy?.categories.find((c) => c.code === service.categoryCode)?.name ?? "Service line";
+  // A line filed before the catalogue was published still holds a retired code,
+  // so the heading has to resolve it or the shop reads "Service line".
+  const category = catalog
+    ? findCategory(catalog, resolveCategoryCode(catalog, service.categoryCode))
+    : null;
+  const categoryName = category?.name ?? "A category GRIDGO no longer publishes";
+  const status = presentLifecycle(serviceLifecycle(service.state));
   const live = service.state === "live";
 
   return (
     <View className="gg-card gap-4">
       <View className="gap-2">
         <Text className="text-h3 text-text-primary">{categoryName}</Text>
+        {/*
+          A shop accredited before the catalogue was published can hold more
+          than one line under the same category. Its own note of what the line
+          runs on is what tells the two apart.
+        */}
+        {service.equipmentNotes ? (
+          <Text className="text-caption text-text-muted">{service.equipmentNotes}</Text>
+        ) : null}
         <View className="flex-row">
-          <StatusChip
-            tone={live ? "success" : "neutral"}
-            label={presentServiceState(service.state)}
-            icon={live ? "circle-check" : "clock"}
-          />
+          <StatusChip tone={status.tone} label={status.label} icon={status.icon} />
         </View>
         {!live ? (
           <Text className="text-caption text-text-muted">
-            GRIDGO does not route new work to this line yet. Your capacity is kept for when it
-            does.
+            {status.detail} Your capacity is kept for when GRIDGO starts routing work here.
           </Text>
         ) : null}
       </View>

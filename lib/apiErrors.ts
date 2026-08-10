@@ -18,6 +18,16 @@ const MESSAGES: Record<string, string> = {
   forbidden:
     "Your account is not allowed to do this. Ask Operations to check your shop's accreditation.",
   invalid_service: "Some required details are missing. Fill every field and try again.",
+  invalid_category_code:
+    "GRIDGO has changed what it publishes since this screen loaded. Pull down to refresh and pick again.",
+  invalid_material_code:
+    "GRIDGO no longer offers one of the materials you picked. Refresh and choose from the current list.",
+  invalid_finish_code:
+    "GRIDGO no longer offers one of the finishes you picked. Refresh and choose from the current list.",
+  already_live:
+    "Operations has already verified this one, so there is nothing to send. Refresh to see it.",
+  supplier_not_approved:
+    "Your shop's accreditation is still with Operations, so services cannot be verified yet. They will let you know when it clears.",
   payout_held:
     "Protected payment is on hold for this job while Operations reviews a claim.",
 };

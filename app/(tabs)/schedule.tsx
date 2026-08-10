@@ -1,12 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from "react-native";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";
+import { ErrorNotice } from "@/components/ErrorNotice";
 import { JobRow } from "@/components/JobRow";
 import { ScheduleDayCard } from "@/components/ScheduleDayCard";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
+import { SectionHeader } from "@/components/SectionHeader";
+import { SkeletonList } from "@/components/Skeleton";
+import { StatTile } from "@/components/StatTile";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
@@ -28,6 +32,7 @@ export default function ScheduleScreen() {
   const [jobs, setJobs] = useState<api.Order[]>([]);
   const [services, setServices] = useState<api.SupplierService[]>([]);
   const [range, setRange] = useState<ScheduleRange>("week");
+  const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // "Late" and "Today" are read against the clock at load time, so a screen
@@ -48,6 +53,7 @@ export default function ScheduleScreen() {
       setJobs(jobList);
       setServices(serviceList);
       setError(null);
+      setLoaded(true);
     } catch (e) {
       setError(humanizeApiError(e, offlineMessage("load your schedule")));
     } finally {
@@ -67,6 +73,7 @@ export default function ScheduleScreen() {
     schedule.days.some((d) => d.jobs.length > 0) ||
     schedule.lateJobs.length > 0 ||
     schedule.undatedJobs.length > 0;
+  const firstLoad = loading && !loaded;
 
   function openJob(jobId: string) {
     router.push({ pathname: "/job/[id]", params: { id: jobId } });
@@ -80,7 +87,7 @@ export default function ScheduleScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={loading}
+            refreshing={loading && loaded}
             onRefresh={() => void reload()}
             tintColor={colors.textMuted}
           />
@@ -96,34 +103,33 @@ export default function ScheduleScreen() {
         />
 
         <View className="mt-4 flex-row gap-3">
-          <SummaryTile
-            label="Late"
-            value={schedule.summary.late}
-            emphasis={schedule.summary.late > 0}
-          />
-          <SummaryTile label="Due today" value={schedule.summary.today} />
-          <SummaryTile label="This week" value={schedule.summary.week} />
+          <StatTile label="Late" value={schedule.summary.late} tone="error" />
+          <StatTile label="Due today" value={schedule.summary.today} />
+          <StatTile label="This week" value={schedule.summary.week} />
         </View>
 
-        {loading && !jobs.length ? (
-          <View className="items-center py-12">
-            <ActivityIndicator color={colors.textMuted} />
-            <Text className="mt-3 text-body text-text-muted">Loading your week…</Text>
+        {firstLoad ? (
+          <View className="mt-8">
+            <SkeletonList label="Loading your week" variant="row" count={4} />
           </View>
         ) : null}
 
-        {error ? (
+        {error && !loaded ? (
           <View className="mt-6">
             <EmptyState
-              title="Schedule unavailable"
+              title="Your week is not reachable"
               body={error}
               actionLabel="Try again"
               onAction={() => void reload()}
             />
           </View>
+        ) : error ? (
+          <View className="mt-6">
+            <ErrorNotice message={error} onRetry={() => void reload()} />
+          </View>
         ) : null}
 
-        {!loading && !error && !hasAnything ? (
+        {loaded && !error && !hasAnything ? (
           <View className="mt-6">
             <EmptyState
               title="Nothing booked in"
@@ -135,10 +141,13 @@ export default function ScheduleScreen() {
         ) : null}
 
         {schedule.lateJobs.length ? (
-          <View className="mt-6 gap-3">
-            <Text className="text-overline text-error">
-              LATE · {schedule.lateJobs.length}
-            </Text>
+          <View className="mt-8 gap-3">
+            <SectionHeader
+              title="LATE"
+              count={schedule.lateJobs.length}
+              tone="error"
+              hint="Past the day you promised. Tell the client where it stands."
+            />
             <View className="gap-2">
               {schedule.lateJobs.map((job) => (
                 <JobRow key={job.id} job={job} now={now} onPress={() => openJob(job.id)} />
@@ -147,7 +156,7 @@ export default function ScheduleScreen() {
           </View>
         ) : null}
 
-        <View className="mt-6 gap-6">
+        <View className="mt-8 gap-7">
           {schedule.days.map((day) => (
             <ScheduleDayCard
               key={day.dayKey}
@@ -161,8 +170,12 @@ export default function ScheduleScreen() {
         </View>
 
         {schedule.undatedJobs.length ? (
-          <View className="mt-6 gap-3">
-            <Text className="text-overline text-text-muted">NO DATE SET</Text>
+          <View className="mt-8 gap-3">
+            <SectionHeader
+              title="NO DATE SET"
+              count={schedule.undatedJobs.length}
+              hint="Accepting one of these is where you promise its finish time."
+            />
             <View className="gap-2">
               {schedule.undatedJobs.map((job) => (
                 <JobRow key={job.id} job={job} now={now} onPress={() => openJob(job.id)} />
@@ -171,37 +184,18 @@ export default function ScheduleScreen() {
           </View>
         ) : null}
 
-        <View className="mt-8">
+        <View className="mt-10 gap-2">
           <SecondaryButton
             label="Capacity & closures"
             onPress={() => router.push("/capacity")}
           />
           {dailyCapacity == null ? (
-            <Text className="mt-2 text-caption text-text-muted">
+            <Text className="text-caption text-text-muted">
               Set a daily capacity so this screen can warn you before a day is oversold.
             </Text>
           ) : null}
         </View>
       </ScrollView>
-    </View>
-  );
-}
-
-function SummaryTile({
-  label,
-  value,
-  emphasis,
-}: {
-  label: string;
-  value: number;
-  emphasis?: boolean;
-}) {
-  return (
-    <View className="gg-card flex-1 gap-1">
-      <Text className="text-caption text-text-muted">{label}</Text>
-      <Text className={emphasis ? "text-h2 text-error" : "text-h2 text-text-primary"}>
-        {value}
-      </Text>
     </View>
   );
 }

@@ -15,6 +15,24 @@ export function isSignedIn(user: User | null | undefined): boolean {
   return user != null;
 }
 
+/**
+ * The app a non-supplier account belongs in, named the way a person would.
+ * The platform's own role strings never reach a screen.
+ */
+export function appForRole(role: User["role"]): string {
+  switch (role) {
+    case "client":
+      return "GRIDGO for clients";
+    case "rider":
+      return "GRIDGO Rider";
+    case "ops_admin":
+    case "super_admin":
+      return "the GRIDGO Operations portal";
+    default:
+      return "a different GRIDGO app";
+  }
+}
+
 type SessionState = {
   user: User | null;
   loading: boolean;
@@ -38,7 +56,7 @@ export const useSession = create<SessionState>((set) => ({
         set({
           user: null,
           loading: false,
-          error: `This account is role "${user.role}". Open the ${user.role} app instead.`,
+          error: `This account is not a print shop. Open ${appForRole(user.role)} to sign in with it.`,
         });
         return;
       }
@@ -51,14 +69,18 @@ export const useSession = create<SessionState>((set) => ({
         }
         set({
           loading: false,
-          error: e.message || `Request failed (HTTP ${e.status}).`,
+          error:
+            e.status >= 500
+              ? "GRIDGO could not sign you in just now. Wait a moment and try again."
+              : "GRIDGO would not accept that sign-in. Check the email and password, then try again.",
         });
         return;
       }
       // Network / fetch failure — backend never answered with an HTTP status.
       set({
         loading: false,
-        error: `Cannot reach the backend at ${api.getApiBase()}. Check that gridgo-api is running and reachable on this network.`,
+        error:
+          "Cannot reach GRIDGO from this device. Check this device's connection, then try again — the connection GRIDGO is using is on the Account screen once you are in.",
       });
     }
   },

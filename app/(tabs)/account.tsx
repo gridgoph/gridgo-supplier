@@ -29,6 +29,11 @@ export default function AccountScreen() {
         <View className="mt-6 gap-2">
           <Text className="text-overline text-text-muted">SHOP</Text>
           <DestinationRow
+            title="Services you offer"
+            detail="The work GRIDGO may send you, and how each one is verified"
+            onPress={() => router.push("/services")}
+          />
+          <DestinationRow
             title="Capacity & closures"
             detail="What you can take on each day, and the days you are shut"
             onPress={() => router.push("/capacity")}

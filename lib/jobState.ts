@@ -57,7 +57,9 @@ export function presentOrderState(state: string): StatePresentation {
     case "awaiting_payment":
       return { label: "Awaiting payment", tone: "warning", icon: "clock" };
     case "payment_authorized":
-      return { label: "Paid — start production", tone: "info", icon: "circle-check" };
+      // A status says where the job stands; the button says what to do about
+      // it. Naming the next action here made both read the same words twice.
+      return { label: "Paid", tone: "info", icon: "circle-check" };
     case "production":
       return { label: "In production", tone: "info", icon: "square-pen" };
     case "supplier_self_qc":

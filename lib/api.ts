@@ -143,11 +143,19 @@ export type SupplierService = {
   updatedAt: string;
 };
 
-/** Fields this app is allowed to change on a live service line. */
+/**
+ * Fields this app is allowed to change on a service line.
+ *
+ * Widening `materialCodes` on a verified line sends it back to Operations for
+ * verification — that is the platform's rule, not this app's, and the screen
+ * must say so before the shop saves.
+ */
 export type SupplierServicePatch = {
   capacityDaily?: number;
   capacityWeekly?: number;
   turnaroundHours?: number;
+  materialCodes?: string[];
+  finishCodes?: string[];
 };
 
 let tokenMemory: string | null = null;
@@ -399,6 +407,37 @@ export async function updateSupplierService(
   const result = await request<{ service: SupplierService }>(
     `/supplier-services/${serviceId}`,
     { method: "PATCH", body: JSON.stringify(patch) },
+  );
+  return result.service;
+}
+
+/** Declare a capability line. It lands as a draft until the shop submits it. */
+export async function createSupplierService(
+  categoryCode: string,
+): Promise<SupplierService> {
+  const result = await request<{ service: SupplierService }>("/supplier-services", {
+    method: "POST",
+    body: JSON.stringify({ categoryCode }),
+  });
+  return result.service;
+}
+
+/** Hand a line to Operations for verification. */
+export async function submitSupplierService(serviceId: string): Promise<SupplierService> {
+  const result = await request<{ service: SupplierService }>(
+    `/supplier-services/${serviceId}/submit`,
+    { method: "POST", body: "{}" },
+  );
+  return result.service;
+}
+
+/** Stop offering a line. In-flight jobs are unaffected. */
+export async function withdrawSupplierService(
+  serviceId: string,
+): Promise<SupplierService> {
+  const result = await request<{ service: SupplierService }>(
+    `/supplier-services/${serviceId}/withdraw`,
+    { method: "POST", body: "{}" },
   );
   return result.service;
 }

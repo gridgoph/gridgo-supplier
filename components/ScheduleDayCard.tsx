@@ -36,7 +36,7 @@ export function ScheduleDayCard({ day, dailyCapacity, closure, now, onOpenJob }:
             <Text className="text-caption text-text-muted">{absolute}</Text>
           ) : null}
         </View>
-        {capacity.capacityUnits != null ? (
+        {capacity.capacityUnits != null && capacity.committedUnits > 0 ? (
           <Text
             className={
               capacity.over
@@ -53,7 +53,12 @@ export function ScheduleDayCard({ day, dailyCapacity, closure, now, onOpenJob }:
         ) : null}
       </View>
 
-      {capacity.capacityUnits != null ? (
+      {/*
+        A day with nothing on it draws no bar: an empty track states nothing the
+        "Nothing promised" line below has not already said, and a week of them
+        turns the agenda into a ladder of grey rules.
+      */}
+      {capacity.capacityUnits != null && capacity.committedUnits > 0 ? (
         <View
           className="h-1 w-full overflow-hidden rounded-pill bg-outline"
           accessibilityRole="progressbar"

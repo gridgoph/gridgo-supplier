@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 
 import { EmptyState } from "@/components/EmptyState";
-import { useThemeColors } from "@/hooks/useTheme";
+import { ErrorNotice } from "@/components/ErrorNotice";
+import { SkeletonBlock } from "@/components/Skeleton";
 
 type Props = {
   loading: boolean;
@@ -39,13 +40,23 @@ export function FlowScreen({
   footer,
   actionError,
 }: Props) {
-  const colors = useThemeColors();
-
   if (loading) {
     return (
-      <View className="gg-screen items-center justify-center">
-        <ActivityIndicator color={colors.textMuted} />
-        <Text className="mt-3 text-body text-text-muted">Loading job…</Text>
+      <View
+        className="gg-screen gg-page pt-4"
+        accessibilityRole="progressbar"
+        accessibilityLabel="Loading this job"
+      >
+        <View className="gap-3">
+          <SkeletonBlock className="h-7 w-2/3" />
+          <SkeletonBlock className="h-5 w-1/2" />
+          <SkeletonBlock className="h-4 w-full" />
+        </View>
+        <View className="mt-8 gap-4">
+          <SkeletonBlock className="h-24 w-full rounded-card" />
+          <SkeletonBlock className="h-12 w-full" />
+          <SkeletonBlock className="h-12 w-full" />
+        </View>
       </View>
     );
   }
@@ -54,7 +65,7 @@ export function FlowScreen({
     return (
       <View className="gg-screen gg-page justify-center">
         <EmptyState
-          title="Job unavailable"
+          title="This job is not reachable"
           body={error}
           actionLabel="Try again"
           onAction={onRetry}
@@ -86,8 +97,8 @@ export function FlowScreen({
           <View className="mt-8 gap-6">{children}</View>
 
           {actionError ? (
-            <View className="mt-6 rounded-field border border-error bg-surface p-3">
-              <Text className="text-body text-error">{actionError}</Text>
+            <View className="mt-6">
+              <ErrorNotice message={actionError} />
             </View>
           ) : null}
 

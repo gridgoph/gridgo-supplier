@@ -3,7 +3,6 @@ import { Pressable, Text, View } from "react-native";
 import { Circle, CircleCheck } from "lucide-react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FlowScreen } from "@/components/FlowScreen";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
@@ -20,6 +19,7 @@ import { findAction } from "@/lib/jobState";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
 import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
+import { askConfirm } from "@/store/sheets";
 import { useThemeColors } from "@/hooks/useTheme";
 
 /**
@@ -40,7 +40,6 @@ export default function HandoffScreen() {
   const colors = useThemeColors();
 
   const [showErrors, setShowErrors] = useState(false);
-  const [confirming, setConfirming] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -53,22 +52,27 @@ export default function HandoffScreen() {
   const ready = allHandoffChecksDone(draft.handoffChecks);
   const remaining = handoffChecksRemaining(draft.handoffChecks);
 
-  function requestConfirm() {
+  async function markReady() {
     if (!ready) {
       setShowErrors(true);
       return;
     }
-    setConfirming(true);
-  }
-
-  async function markReady() {
     if (!job || !step?.targetState) return;
+
+    const confirmed = await askConfirm({
+      question: `Call a rider for ${job.title}?`,
+      consequence:
+        "GRIDGO starts assigning a rider now, so the job must already be packed and staged at your counter.",
+      confirmLabel: "Mark ready for pickup",
+      cancelLabel: "Not packed yet",
+    });
+    if (!confirmed) return;
+
     const updated = await action.run({
       jobId: job.id,
       targetState: step.targetState,
       note: "Packed, labelled and staged at the counter for rider pickup",
     });
-    setConfirming(false);
     if (!updated) return;
     clearDraft(job.id);
   }
@@ -88,7 +92,7 @@ export default function HandoffScreen() {
             <PrimaryButton
               label={action.busy ? "Saving…" : "Mark ready for pickup"}
               disabled={action.busy}
-              onPress={requestConfirm}
+              onPress={() => void markReady()}
             />
             <SecondaryButton
               label="Not packed yet"
@@ -175,19 +179,6 @@ export default function HandoffScreen() {
           not let it leave without it.
         </Text>
       </View>
-
-      {job && step ? (
-        <ConfirmDialog
-          visible={confirming}
-          question={`Call a rider for ${job.title}?`}
-          consequence="GRIDGO starts assigning a rider now, so the job must already be packed and staged at your counter."
-          confirmLabel="Mark ready for pickup"
-          cancelLabel="Not packed yet"
-          busy={action.busy}
-          onConfirm={() => void markReady()}
-          onCancel={() => setConfirming(false)}
-        />
-      ) : null}
     </FlowScreen>
   );
 }

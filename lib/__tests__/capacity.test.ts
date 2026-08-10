@@ -187,7 +187,7 @@ describe("capacity drafts", () => {
 
 describe("presentServiceState", () => {
   it("never shows the raw state string", () => {
-    expect(presentServiceState("pending_verification")).toBe("Waiting on Operations");
+    expect(presentServiceState("pending_verification")).toBe("Submitted");
     expect(presentServiceState("something_new")).not.toContain("_");
   });
 });
