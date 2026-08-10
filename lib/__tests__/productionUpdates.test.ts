@@ -17,13 +17,10 @@ describe("templatesForAction", () => {
     expect(templatesForAction("start_production").length).toBeGreaterThan(1);
   });
 
-  it("has nothing to choose when sending for payment", () => {
-    expect(templatesForAction("request_payment")).toHaveLength(1);
-  });
-
   it("offers nothing for steps that have their own screen", () => {
     expect(templatesForAction("self_qc")).toEqual([]);
     expect(templatesForAction("decline")).toEqual([]);
+    expect(templatesForAction("add_proof")).toEqual([]);
     expect(templatesForAction(undefined)).toEqual([]);
   });
 });

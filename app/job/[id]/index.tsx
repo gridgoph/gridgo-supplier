@@ -6,6 +6,7 @@ import { ArtworkPanel } from "@/components/ArtworkPanel";
 import { EmptyState } from "@/components/EmptyState";
 import { JobTimeline } from "@/components/JobTimeline";
 import { JourneyTrack } from "@/components/JourneyTrack";
+import { MilestoneList } from "@/components/MilestoneList";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { SecondaryButton } from "@/components/SecondaryButton";
@@ -15,7 +16,8 @@ import { formatDeadlineFull } from "@/lib/dates";
 import * as api from "@/lib/api";
 import { custodyForOrder } from "@/lib/handoff";
 import { actionsForJob, presentOrderState, routeForAction, waitingOn } from "@/lib/jobState";
-import { lastChangeRequest } from "@/lib/proof";
+import { earningsSplit, milestoneViews } from "@/lib/milestones";
+import { unreleasedMinor } from "@/lib/payout";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useJob } from "@/hooks/useJob";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -83,12 +85,12 @@ export default function JobWorkspaceScreen() {
   }
 
   const status = presentOrderState(job.state);
-  const actions = actionsForJob(job.state);
+  const actions = actionsForJob(job);
   const primary = actions.find((a) => a.primary) ?? null;
   const secondary = actions.filter((a) => !a.primary);
   const urgency = deadlineUrgency(job.promisedDate || job.deadline);
-  const changeRequest =
-    job.state === "supplier_proof_changes_requested" ? lastChangeRequest(job) : null;
+  const milestones = milestoneViews(job);
+  const split = earningsSplit(job);
   const custody = custodyForOrder(job);
   const showCustody = ["ready", "rider_assigned", "with_rider"].includes(custody.state);
   const waiting = waitingOn(job.state);
@@ -142,21 +144,49 @@ export default function JobWorkspaceScreen() {
           <JourneyTrack state={job.state} />
         </View>
 
-        {changeRequest ? (
-          <View className="mt-6 rounded-card border border-warning bg-surface p-4">
-            <Text className="text-overline text-warning">CLIENT ASKED FOR CHANGES</Text>
-            <Text className="mt-2 text-body text-text-primary">{changeRequest}</Text>
-          </View>
-        ) : null}
-
         <View className="gg-card mt-6">
           <Text className="mb-2 text-overline text-text-muted">APPROVED SPEC</Text>
           <SpecRow label="Size" value={job.size || "—"} />
           <SpecRow label="Material" value={job.material || "—"} />
           <SpecRow label="Quantity" value={`${job.quantity}`} />
-          <SpecRow label="Print total" value={api.formatPhp(job.totalMinor)} />
+          {job.supplierPriceMinor != null ? (
+            <SpecRow label="Your price" value={api.formatPhp(job.supplierPriceMinor)} />
+          ) : null}
           <SpecRow label="Deliver to" value={job.address || "—"} />
         </View>
+
+        {/*
+          What this job is worth to the shop, and what each part is waiting on.
+          The amounts are the shop's own earnings — the client's total, the
+          delivery fee and GRIDGO's commission are somebody else's money and
+          none of them belong on a supplier's screen.
+        */}
+        {milestones.length ? (
+          <View className="mt-6 gap-3">
+            <Text className="text-overline text-text-muted">YOUR EARNINGS</Text>
+            <View className="gg-card gap-4">
+              <View className="flex-row items-end justify-between gap-3">
+                <View className="min-w-0 flex-1 gap-0.5">
+                  <Text className="text-caption text-text-muted">
+                    {split.releasedMinor > 0 ? "Released so far" : "Still to come"}
+                  </Text>
+                  <Text className="text-h2 text-text-primary">
+                    {api.formatPhp(
+                      split.releasedMinor > 0
+                        ? split.releasedMinor
+                        : unreleasedMinor(split),
+                    )}
+                  </Text>
+                </View>
+                <Text className="text-caption text-text-muted">
+                  of {api.formatPhp(split.totalMinor)}
+                </Text>
+              </View>
+              <View className="gg-divider" />
+              <MilestoneList milestones={milestones} showDetail />
+            </View>
+          </View>
+        ) : null}
 
         <View className="mt-6 gap-3">
           <Text className="text-overline text-text-muted">APPROVED ARTWORK</Text>
@@ -195,7 +225,11 @@ export default function JobWorkspaceScreen() {
                   onPress={() =>
                     router.push({
                       pathname: routeForAction(primary.kind),
-                      params: { id: job.id, action: primary.kind },
+                      params: {
+                        id: job.id,
+                        action: primary.kind,
+                        ...(primary.milestoneCode ? { milestone: primary.milestoneCode } : {}),
+                      },
                     })
                   }
                 />
@@ -208,7 +242,11 @@ export default function JobWorkspaceScreen() {
                 onPress={() =>
                   router.push({
                     pathname: routeForAction(action.kind),
-                    params: { id: job.id, action: action.kind },
+                    params: {
+                      id: job.id,
+                      action: action.kind,
+                      ...(action.milestoneCode ? { milestone: action.milestoneCode } : {}),
+                    },
                   })
                 }
               />

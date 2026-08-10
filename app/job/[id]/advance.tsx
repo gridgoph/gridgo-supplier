@@ -40,7 +40,7 @@ export default function AdvanceJobScreen() {
   const setNote = useJobDrafts((s) => s.setNote);
   const clearDraft = useJobDrafts((s) => s.clearDraft);
 
-  const step = job ? findAction(job.state, actionKind ?? "") : null;
+  const step = job ? findAction(job, actionKind ?? "") : null;
   const templates = templatesForAction(step?.kind);
   const [chosen, setChosen] = useState<ProductionTemplateId | null>(null);
 

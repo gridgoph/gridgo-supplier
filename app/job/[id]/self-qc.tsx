@@ -6,7 +6,6 @@ import { FlowScreen } from "@/components/FlowScreen";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SelfQcChecklist } from "@/components/SelfQcChecklist";
-import { StatusChip } from "@/components/StatusChip";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { NoteField } from "@/components/controls/NoteField";
 import { allSelfQcComplete, findAction, SELF_QC_CHECKS } from "@/lib/jobState";
@@ -19,9 +18,9 @@ import { askConfirm } from "@/store/sheets";
  * Self-QC: the shop's own sign-off that the printed work matches the spec.
  *
  * The checks are the record Operations and the client rely on, so they cannot
- * be part-completed. GRIDGO's file storage has no purpose for a photo of
- * finished work — only client proofs, delivery photos and shop images — so the
- * screen says that plainly rather than offering a camera with nowhere to send.
+ * be part-completed. Photographs of the work are a separate thing and belong on
+ * their own screen: each one backs a named part of the shop's payout, so it is
+ * filed against a milestone rather than dropped in beside a checklist.
  */
 export default function SelfQcScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -36,7 +35,7 @@ export default function SelfQcScreen() {
 
   const complete = allSelfQcComplete(draft.qcChecks);
   const remaining = SELF_QC_CHECKS.filter((c) => draft.qcChecks[c.id] !== true).length;
-  const step = job ? findAction(job.state, "self_qc") : null;
+  const step = job ? findAction(job, "self_qc") : null;
 
   async function completeSelfQc() {
     if (!complete) {
@@ -107,23 +106,6 @@ export default function SelfQcScreen() {
         />
       </FieldShell>
 
-      <FieldShell label="Photo evidence">
-        <View className="gg-panel gap-2">
-          <View className="flex-row">
-            <StatusChip
-              tone="warning"
-              label="Photo evidence unavailable"
-              icon="triangle-alert"
-            />
-          </View>
-          <Text className="text-body text-text-secondary">
-            GRIDGO stores client proofs, delivery photos and shop images, but it has no place yet
-            for a photo of finished work. Your checks below are recorded against the job, and
-            Operations can ask for photos directly until that is added.
-          </Text>
-        </View>
-      </FieldShell>
-
       <FieldShell
         label="Anything the client should know (optional)"
         hint="For example, a colour that shifted slightly, or how the job is packed."
@@ -139,8 +121,8 @@ export default function SelfQcScreen() {
       <View className="gg-panel gap-1">
         <Text className="text-body font-medium text-text-primary">What happens next</Text>
         <Text className="text-body text-text-secondary">
-          After sign-off the job waits on you to pack it and mark it ready for pickup. A rider is
-          only assigned once you do.
+          After sign-off the job waits on you to pack it, photograph the packed job as your
+          evidence, and mark it ready for pickup. A rider is only assigned once you do.
         </Text>
       </View>
     </FlowScreen>

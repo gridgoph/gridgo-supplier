@@ -55,6 +55,25 @@ export function formatRelativeDay(iso: string | null | undefined, now: Date = ne
   return formatDeadlineLabel(iso);
 }
 
+/**
+ * A notification's own stamp: the date and the time of day, both.
+ *
+ * An alert is a thing that happened at a moment, and a shop reading a list of
+ * them wants to know which day as well as which hour — "3:45 PM" alone is
+ * ambiguous the morning after.
+ */
+export function formatNotificationAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const date = d.toLocaleDateString("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const time = d.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" });
+  return `${date} · ${time}`;
+}
+
 export function formatTimelineAt(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;

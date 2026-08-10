@@ -26,7 +26,7 @@ type Props = {
 export function JobRow({ job, now = new Date(), onPress }: Props) {
   const status = presentOrderState(job.state);
   const urgency = deadlineUrgency(job.promisedDate || job.deadline, now);
-  const next = primaryAction(job.state);
+  const next = primaryAction(job);
   const time = formatDeadlineTime(job.promisedDate || job.deadline);
   const late = urgency.level === "overdue";
 

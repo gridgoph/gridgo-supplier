@@ -29,7 +29,36 @@ const MESSAGES: Record<string, string> = {
   supplier_not_approved:
     "Your shop's accreditation is still with Operations, so services cannot be verified yet. They will let you know when it clears.",
   payout_held:
-    "Protected payment is on hold for this job while Operations reviews a claim.",
+    "The client has reported a problem with this job, so GRIDGO is holding what is left of your earnings until Operations settles it.",
+
+  // Opening an account.
+  email_already_registered:
+    "That email already has a GRIDGO account. Sign in with it instead, or use a different address.",
+  invalid_category_ranks:
+    "Pick at least one kind of work and rank it. If a category has just been retired, close this and open it again to see the current list.",
+  invalid_signup:
+    "Some required details are missing or too short. Check every field, then try again.",
+  invalid_password:
+    "Choose a password of at least 8 characters, then try again.",
+  invalid_email: "Enter a working email address — GRIDGO sends your job alerts to it.",
+  invalid_phone: "Enter a mobile number GRIDGO and the rider can reach you on.",
+  invalid_shop_location:
+    "GRIDGO needs your shop's location to work out delivery. Fill in the address and try again.",
+
+  // Money and evidence.
+  invalid_money:
+    "Enter your price for this job in pesos before you accept it.",
+  invalid_milestone_code:
+    "That part of the job does not take your evidence. Close this and pick one of the parts listed on the job.",
+  milestone_not_found:
+    "That part of the job is no longer there. Pull down to refresh and try again.",
+  pof_required: "GRIDGO needs your evidence for this part before it can release it.",
+  milestone_not_reached:
+    "The job has not reached this part yet. Take the step it shows and file your evidence then.",
+  payment_method_not_allowed:
+    "GRIDGO has retired that way of paying. The client pays digitally in two parts, and nothing is collected at your counter.",
+  assignment_notification_required:
+    "The client has not been told your price yet. Pull down to refresh and try again.",
 };
 
 export function humanizeApiError(error: unknown, fallback: string): string {

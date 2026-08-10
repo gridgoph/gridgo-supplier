@@ -8,7 +8,7 @@ type Props = {
   placeholder: string;
   accessibilityLabel: string;
   /** Picks the keyboard, autofill and capitalisation the field really needs. */
-  kind?: "email" | "password" | "text";
+  kind?: "email" | "password" | "new-password" | "phone" | "name" | "text";
   onSubmit?: () => void;
   returnKeyType?: TextInputProps["returnKeyType"];
   editable?: boolean;
@@ -31,6 +31,7 @@ export function TextField({
   editable = true,
 }: Props) {
   const colors = useThemeColors();
+  const secure = kind === "password" || kind === "new-password";
 
   return (
     <View className={editable ? undefined : "gg-disabled"}>
@@ -43,18 +44,60 @@ export function TextField({
         accessibilityLabel={accessibilityLabel}
         onSubmitEditing={onSubmit}
         returnKeyType={returnKeyType}
-        autoCapitalize={kind === "text" ? "sentences" : "none"}
+        autoCapitalize={CAPITALIZE[kind]}
         autoCorrect={kind === "text"}
-        autoComplete={
-          kind === "email" ? "email" : kind === "password" ? "current-password" : "off"
-        }
-        keyboardType={kind === "email" ? "email-address" : "default"}
-        secureTextEntry={kind === "password"}
-        textContentType={
-          kind === "email" ? "emailAddress" : kind === "password" ? "password" : "none"
-        }
+        autoComplete={AUTOCOMPLETE[kind]}
+        keyboardType={KEYBOARD[kind]}
+        secureTextEntry={secure}
+        textContentType={CONTENT_TYPE[kind]}
         className="gg-field"
       />
     </View>
   );
 }
+
+type Kind = NonNullable<Props["kind"]>;
+
+/**
+ * Each kind's four platform hints, kept together so a new one cannot be added
+ * with the keyboard set and the autofill forgotten.
+ *
+ * `new-password` matters on its own: on iOS a field marked `password` offers
+ * the saved one, which is exactly wrong on a screen where someone is choosing a
+ * password for an account that does not exist yet.
+ */
+const CAPITALIZE: Record<Kind, TextInputProps["autoCapitalize"]> = {
+  email: "none",
+  password: "none",
+  "new-password": "none",
+  phone: "none",
+  name: "words",
+  text: "sentences",
+};
+
+const AUTOCOMPLETE: Record<Kind, TextInputProps["autoComplete"]> = {
+  email: "email",
+  password: "current-password",
+  "new-password": "new-password",
+  phone: "tel",
+  name: "name",
+  text: "off",
+};
+
+const KEYBOARD: Record<Kind, TextInputProps["keyboardType"]> = {
+  email: "email-address",
+  password: "default",
+  "new-password": "default",
+  phone: "phone-pad",
+  name: "default",
+  text: "default",
+};
+
+const CONTENT_TYPE: Record<Kind, TextInputProps["textContentType"]> = {
+  email: "emailAddress",
+  password: "password",
+  "new-password": "newPassword",
+  phone: "telephoneNumber",
+  name: "name",
+  text: "none",
+};

@@ -52,7 +52,7 @@ export function newUploadItem(input: {
   return { ...input, stage: "idle", progress: 0, fileId: null, error: null };
 }
 
-/** `proof` and `artwork` share this ceiling; delivery photos are smaller. */
+/** `fulfilment_proof` and `artwork` share this ceiling; delivery photos are smaller. */
 export const MAX_PROOF_BYTES = 200 * 1024 * 1024;
 
 export function tooLargeMessage(sizeBytes: number, maxBytes = MAX_PROOF_BYTES): string {
@@ -78,9 +78,9 @@ export function uploadStageLabel(item: UploadItem): string {
     case "processing":
       return "Sent — GRIDGO is still saving it";
     case "stored":
-      return "Saved. Ready to send to the client";
+      return "Saved. Ready to file";
     case "attached":
-      return "Sent to the client";
+      return "Filed with GRIDGO";
     case "failed":
       return item.error ?? "Not saved";
     default:
@@ -101,22 +101,26 @@ const UPLOAD_MESSAGES: Record<string, string> = {
   request_body_too_large: "That request was too large. Try again with a smaller file.",
   multipart_required: "The file did not arrive intact. Choose it again and resend.",
   content_type_not_allowed:
-    "GRIDGO stores JPEG, PNG, WebP and PDF. Export the proof in one of those and try again.",
+    "GRIDGO stores JPEG, PNG, WebP and PDF. Export the evidence in one of those and try again.",
   purpose_media_type_not_allowed:
-    "That file type is not accepted for a proof. Send a JPEG, PNG, WebP or PDF.",
+    "That file type is not accepted as evidence. Send a JPEG, PNG, WebP or PDF.",
   file_type_mismatch:
     "The file's name and its contents disagree, so GRIDGO cannot trust it. Export it again from your design app.",
   heic_not_supported:
     "iPhone HEIC photos are not supported. Set your camera to Most Compatible, or export the shot as JPEG.",
-  proof_upload_not_allowed:
-    "This job is not waiting on a proof. Pull down to refresh and take the step it shows.",
+  invalid_milestone_code:
+    "That part of the job does not take your evidence. Close this and pick one of the parts listed on the job.",
+  milestone_not_found:
+    "That part of the job is no longer there. Pull down to refresh and try again.",
   file_not_ready: "That upload did not finish. Send the file again.",
-  file_already_attached: "That file has already been sent. Upload a new one for this job.",
+  file_already_attached:
+    "That file already backs another part of the job. Take a new photo for this one.",
   file_not_found: "GRIDGO no longer has that file. Send it again.",
   order_not_found: "This job is no longer on your floor. It may have been rematched.",
   storage_object_missing: "GRIDGO lost track of that file. Send it again.",
   storage_object_mismatch: "That file arrived damaged. Send it again.",
-  forbidden: "This job is not assigned to your shop, so files cannot be added to it.",
+  forbidden:
+    "This part of the job is not yours to evidence — the rider files the delivery. Open the job to see what is waiting on you.",
   minio_unavailable:
     "GRIDGO's file storage is not responding. Nothing was lost — try sending the file again in a moment.",
   storage_initializing:

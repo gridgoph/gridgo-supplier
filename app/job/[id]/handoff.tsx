@@ -48,7 +48,7 @@ export default function HandoffScreen() {
   );
 
   const custody = job ? custodyForOrder(job) : null;
-  const step = job ? findAction(job.state, "ready_for_pickup") : null;
+  const step = job ? findAction(job, "ready_for_pickup") : null;
   const ready = allHandoffChecksDone(draft.handoffChecks);
   const remaining = handoffChecksRemaining(draft.handoffChecks);
 

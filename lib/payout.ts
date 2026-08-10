@@ -1,209 +1,93 @@
 import type { Order } from "@/lib/api";
-import type { StatusIconName, StatusTone } from "@/components/StatusChip";
+import {
+  addSplits,
+  earningsSplit,
+  milestoneViews,
+  type EarningsSplit,
+  type MilestoneView,
+} from "@/lib/milestones";
 
 /**
- * Protected-payment presentation derived only from order fields the demo API
- * returns. There is no supplier payout ledger endpoint — never invent amounts.
+ * What a shop is owed, read off the payout milestones the platform keeps.
  *
- * Terminology: always "Protected payment", never "GRIDGO escrow".
+ * Every figure here is the shop's **own** earnings. The client's total, the
+ * delivery fee and GRIDGO's commission are all somebody else's money and none
+ * of them belong on this screen — the commission is not even sent to this app.
+ *
+ * Nothing is filtered by job status, because the three things a shop wants to
+ * separate — evidence it still owes, evidence GRIDGO is reviewing, money that
+ * has landed — are properties of a *milestone*, not of a job. One job routinely
+ * holds all three at once, so the split lives inside each row.
  */
 
-export type SettlementState =
-  | "not_started"
-  | "held"
-  | "settling"
-  | "released"
-  | "unknown";
-
-export type ProtectedPayment = {
+export type PayoutRow = {
   orderId: string;
   title: string;
-  /** Print total from the order — delivery fee is not supplier revenue. */
-  grossMinor: number;
-  deliveryFeeMinor: number;
-  /**
-   * Commission is not returned by the demo API. Always null; UI must say so.
-   */
-  commissionMinor: number | null;
-  /**
-   * Net cannot be computed without commission. Null when unknown.
-   */
-  netMinor: number | null;
-  settlement: SettlementState;
-  settlementLabel: string;
-  tone: StatusTone;
-  icon: StatusIconName;
-  /** Honest reason when funds are held or unavailable. */
-  holdReason: string | null;
-  paymentStatus: string;
-  paymentMethod: string | null;
+  state: string;
+  split: EarningsSplit;
+  milestones: MilestoneView[];
+  /** A claim is holding whatever has not been released yet. */
+  held: boolean;
+  /** When the client's window to report a problem closes, if it is open. */
+  issueWindowExpiresAt: string | null;
 };
 
-const TERMINAL_SETTLED = new Set(["payout_released"]);
-const COMPLETED_LIKE = new Set(["completed", "payout_released"]);
-const HELD_STATES = new Set([
-  "payment_authorized",
-  "production",
-  "supplier_self_qc",
-  "ready_for_dispatch",
-  "rider_assigned",
-  "picked_up",
-  "out_for_delivery",
-  "delivered",
-  "issue_window_open",
-]);
+/** Jobs with money attached: a price agreed means milestones exist. */
+export function isPayoutRelevant(order: Pick<Order, "payoutMilestones">): boolean {
+  return (order.payoutMilestones?.length ?? 0) > 0;
+}
 
-export function deriveProtectedPayment(order: Order): ProtectedPayment {
-  const grossMinor = order.totalMinor;
-  const settlement = settlementFromOrder(order);
-  const { label, tone, icon, holdReason } = settlementPresentation(settlement, order);
-
+export function derivePayoutRow(order: Order): PayoutRow {
   return {
     orderId: order.id,
     title: order.title,
-    grossMinor,
-    deliveryFeeMinor: order.deliveryFeeMinor,
-    commissionMinor: null,
-    netMinor: null,
-    settlement,
-    settlementLabel: label,
-    tone,
-    icon,
-    holdReason,
-    paymentStatus: order.paymentStatus,
-    paymentMethod: order.paymentMethod,
+    state: order.state,
+    split: earningsSplit(order),
+    milestones: milestoneViews(order),
+    held: order.payoutHold === true,
+    issueWindowExpiresAt: order.issueWindowExpiresAt ?? null,
   };
 }
 
-export function settlementFromOrder(order: Pick<Order, "state" | "paymentStatus">): SettlementState {
-  if (TERMINAL_SETTLED.has(order.state)) return "released";
-  if (order.state === "completed") return "settling";
-  if (order.paymentStatus === "authorized" || HELD_STATES.has(order.state)) return "held";
-  if (order.paymentStatus === "unpaid" || order.paymentStatus === "pending") return "not_started";
-  return "unknown";
+export function payoutRows(jobs: Order[]): PayoutRow[] {
+  return jobs.filter(isPayoutRelevant).map(derivePayoutRow);
 }
 
-function settlementPresentation(
-  settlement: SettlementState,
-  order: Pick<Order, "state" | "paymentStatus">,
-): {
-  label: string;
-  tone: StatusTone;
-  icon: StatusIconName;
-  holdReason: string | null;
-} {
-  switch (settlement) {
-    case "released":
-      return {
-        label: "Released",
-        tone: "success",
-        icon: "circle-check",
-        holdReason: null,
-      };
-    case "settling":
-      return {
-        label: "Ready to release",
-        tone: "info",
-        icon: "clock",
-        holdReason: "Job completed. Operations releases protected payment from the demo ledger.",
-      };
-    case "held":
-      return {
-        label: "Held",
-        tone: "warning",
-        icon: "clock",
-        holdReason: holdReasonFor(order),
-      };
-    case "not_started":
-      return {
-        label: "Not paid yet",
-        tone: "neutral",
-        icon: "clock",
-        holdReason: "Client has not authorised payment for this job.",
-      };
-    default:
-      return {
-        label: "Status unavailable",
-        tone: "neutral",
-        icon: "triangle-alert",
-        holdReason: "Demo ledger does not expose a settlement state for this job.",
-      };
-  }
-}
-
-function holdReasonFor(order: Pick<Order, "state">): string {
-  if (order.state === "issue_window_open") {
-    return "Held during the post-delivery issue window.";
-  }
-  if (
-    order.state === "production" ||
-    order.state === "supplier_self_qc" ||
-    order.state === "payment_authorized"
-  ) {
-    return "Held until production, handoff, and delivery complete.";
-  }
-  if (
-    order.state === "ready_for_dispatch" ||
-    order.state === "rider_assigned" ||
-    order.state === "picked_up" ||
-    order.state === "out_for_delivery"
-  ) {
-    return "Held until the rider completes delivery.";
-  }
-  if (order.state === "delivered") {
-    return "Held while delivery is confirmed.";
-  }
-  return "Protected payment is held until the job settles.";
-}
-
-/** Jobs that should appear on the Protected payment list. */
-export function isPayoutRelevant(order: Pick<Order, "state" | "paymentStatus">): boolean {
-  if (order.paymentStatus === "authorized" || order.paymentStatus === "collected") return true;
-  if (HELD_STATES.has(order.state) || COMPLETED_LIKE.has(order.state)) return true;
-  if (order.state === "awaiting_payment" || order.state === "supplier_accepted") return true;
-  return false;
-}
-
-export function summarizePayouts(jobs: Order[]): {
-  heldCount: number;
-  releasedCount: number;
-  heldGrossMinor: number;
-  /** True when commission/net cannot be shown from API data. */
-  amountsPartial: true;
-} {
-  const rows = jobs.filter(isPayoutRelevant).map(deriveProtectedPayment);
-  let heldCount = 0;
-  let releasedCount = 0;
-  let heldGrossMinor = 0;
-  for (const row of rows) {
-    if (row.settlement === "held" || row.settlement === "settling") {
-      heldCount += 1;
-      heldGrossMinor += row.grossMinor;
-    }
-    if (row.settlement === "released") releasedCount += 1;
-  }
-  return { heldCount, releasedCount, heldGrossMinor, amountsPartial: true };
-}
-
-/** The three ways a shop reads its ledger. */
-export type PayoutFilter = "held" | "released" | "all";
+/** The two ways a shop reads its ledger, plus everything. */
+export type PayoutFilter = "unsettled" | "released" | "all";
 
 export const PAYOUT_FILTERS: readonly { value: PayoutFilter; label: string }[] = [
-  { value: "held", label: "Held" },
+  { value: "unsettled", label: "To settle" },
   { value: "released", label: "Released" },
   { value: "all", label: "All" },
 ] as const;
 
-export function matchesPayoutFilter(row: ProtectedPayment, filter: PayoutFilter): boolean {
+export function matchesPayoutFilter(row: PayoutRow, filter: PayoutFilter): boolean {
   if (filter === "all") return true;
-  if (filter === "released") return row.settlement === "released";
-  return row.settlement === "held" || row.settlement === "settling";
+  if (filter === "released") return row.split.releasedMinor > 0;
+  return row.split.totalMinor > row.split.releasedMinor;
 }
 
-/** Human label for payment method — never snake_case. */
-export function presentPaymentMethod(method: string | null): string {
-  if (!method) return "Not set";
-  if (method === "pilot_credit") return "Pilot Credits";
-  if (method === "cod") return "Cash on delivery";
-  return method.replaceAll("_", " ");
+/**
+ * Ordering: what the shop can act on first, then what GRIDGO is holding, then
+ * what is done. A payout list sorted by date buries the one row that pays.
+ */
+export function sortPayoutRows(rows: PayoutRow[]): PayoutRow[] {
+  const rank = (row: PayoutRow): number => {
+    if (row.split.needsProofMinor > 0) return 0;
+    if (row.held) return 1;
+    if (row.split.awaitingReleaseMinor > 0) return 2;
+    return 3;
+  };
+  return [...rows].sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
+}
+
+export function summarizePayouts(jobs: Order[]): EarningsSplit & { jobCount: number } {
+  const rows = payoutRows(jobs);
+  return { ...addSplits(rows.map((row) => row.split)), jobCount: rows.length };
+}
+
+/** Everything not yet in the shop's hands, however it is stuck. */
+export function unreleasedMinor(split: EarningsSplit): number {
+  return split.needsProofMinor + split.awaitingReleaseMinor + split.heldMinor;
 }

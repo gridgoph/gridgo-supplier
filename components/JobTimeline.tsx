@@ -2,7 +2,11 @@ import { Text, View } from "react-native";
 
 import type { Order } from "@/lib/api";
 import { formatTimelineAt } from "@/lib/dates";
-import { presentTimelineActor, presentTimelineState } from "@/lib/jobState";
+import {
+  presentTimelineActor,
+  presentTimelineNote,
+  presentTimelineState,
+} from "@/lib/jobState";
 
 type Props = {
   timeline: Order["timeline"];
@@ -44,7 +48,9 @@ export function JobTimeline({ timeline }: Props) {
                 {formatTimelineAt(entry.at)} · {presentTimelineActor(entry.by)}
               </Text>
               {entry.note ? (
-                <Text className="mt-1 text-body text-text-secondary">{entry.note}</Text>
+                <Text className="mt-1 text-body text-text-secondary">
+                  {presentTimelineNote(entry.note)}
+                </Text>
               ) : null}
             </View>
           </View>

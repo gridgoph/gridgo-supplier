@@ -74,6 +74,35 @@ describe("every stack screen keeps a way back", () => {
     expect(untitled).toEqual([]);
   });
 
+  /**
+   * The captain's decision, after a crew tried labelling the control "Back"
+   * because riders were missing the bare chevron: the chevron alone is what
+   * they want. `headerBackButtonDisplayMode: "minimal"` gives exactly that and
+   * is also what stops iOS falling back to the previous route's title — without
+   * it a shop hears "(tabs)". So the rule is not "no Back label", it is "always
+   * minimal", and dropping the option to remove the label would bring the route
+   * group name back.
+   */
+  it("shows a bare chevron back control, never a worded one", () => {
+    const sources = [
+      ...files.map((file) => [path.relative(ROOT, file), fs.readFileSync(file, "utf8")] as const),
+      [
+        "lib/navigationOptions.ts",
+        fs.readFileSync(path.join(ROOT, "lib/navigationOptions.ts"), "utf8"),
+      ] as const,
+    ];
+
+    for (const [file, source] of sources) {
+      expect({ file, source }).toEqual({
+        file,
+        source: expect.not.stringContaining("headerBackTitle"),
+      });
+    }
+
+    const chrome = fs.readFileSync(path.join(ROOT, "lib/navigationOptions.ts"), "utf8");
+    expect(chrome).toContain('headerBackButtonDisplayMode: "minimal"');
+  });
+
   it("swaps tab content instantly, under a bar that does not move", () => {
     const tabs = fs.readFileSync(path.join(ROOT, "app/(tabs)/_layout.tsx"), "utf8");
 

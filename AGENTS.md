@@ -18,11 +18,12 @@ GRIDGO ships one app per role. Client, Rider, Operations, and Super Admin surfac
 
 The app includes:
 
-- Assignment inbox with accept / decline inside SLA
+- Self sign-up, with categories ranked best-first, and an approval a shop waits for
+- Assignment inbox with accept / decline inside SLA, where accepting names the shop's own price
 - Approved specification and artwork review (read-only of QA-approved files)
-- Production progress and self-QC evidence upload
+- Production progress, self-QC, and Proof of Fulfilment against each payout milestone
 - Pickup handoff readiness
-- Payout status notifications (demo ledger via gridgo-api)
+- Earnings: four milestones per job, each gated on evidence
 
 **Cross-cutting**
 
@@ -54,13 +55,13 @@ For this MVP we **do not** integrate Clerk, Supabase, PayMongo, or other product
 
 Every screen that needs network uses **`lib/api.ts`** against the shared local **`gridgo-api`**:
 
-- **Custom auth** — email/password → bearer token; role enforced in Zustand session (`store/session.ts`). Mismatched role is rejected (no role switcher).
-- **Session → routes** — `Stack.Protected` in `app/_layout.tsx` (SDK 54) guards the signed-in area (`(tabs)`, `job/[id]`, `payout`, `capacity`, `shop-closure`, `settings`, `design-system`) from `isSignedIn(user)`. Do not sprinkle `router.replace` on logout/401; clearing `user` (logout, role reject, or API 401 via `setUnauthorizedHandler`) is enough. Guard history is removed, so back cannot re-enter signed-out screens.
-- **Custom domain API** — orders/jobs, credits, COD, dispatch, files, notifications.
-- **Files** — `gridgo-api`'s `docs/STORAGE_API.md` is the authoritative contract; read it before touching `lib/files.ts`. Upload streams from the device URI (`expo-file-system/legacy` `createUploadTask`) and a file is stored only when a `201` returns `file.fileId`. Attaching a `proof` is what moves an order, not a transition.
+- **Operational model v2** — `gridgo-api`'s `docs/OPERATIONAL_MODEL_V2_API.md` is the authoritative contract for routes, states, role authorization and money. Read it before changing any flow; it supersedes anything older that disagrees. The supplier proof-to-client loop, cash on delivery, and Pilot Credits as a payment method are all **retired** — do not reintroduce them.
+- **Custom auth** — email/password → bearer token; role enforced in Zustand session (`store/session.ts`). Mismatched role is rejected (no role switcher). Shops **sign themselves up** (`POST /auth/signup`); Operations no longer creates accounts.
+- **Session → routes** — `Stack.Protected` in `app/_layout.tsx` (SDK 54) guards on three states, not two: signed out, signed in but **not accredited**, and matchable. A shop that has signed up is signed in while `verificationStatus !== "approved"`, and `/jobs` returns nothing for it — so it gets `app/accreditation.tsx` rather than a tab shell whose every tab would be empty for a reason none of them explains (`isMatchable` in `store/session.ts`). Do not sprinkle `router.replace` on logout/401; clearing `user` is enough.
+- **Files** — `gridgo-api`'s `docs/STORAGE_API.md` is the authoritative contract; read it before touching `lib/files.ts`. Upload streams from the device URI (`expo-file-system/legacy` `createUploadTask`) and a file is stored only when a `201` returns `file.fileId`. Attaching a `fulfilment_proof` names a `milestoneCode` and moves **money, not state** — the order does not transition.
 - **API base** — `getApiBase()` / `resolveApiBase()` in `lib/api.ts`: `EXPO_PUBLIC_API_URL` override, else hostname from Expo `hostUri` (so physical Expo Go uses the LAN IP), Android loopback remapped to `10.0.2.2`, port from `EXPO_PUBLIC_API_PORT` (default `8787`). Do not hardcode a developer LAN IP.
 - **Zustand** — session and feature stores (not React Context for global session).
-- **Money** — PHP minor units only; Pilot Credits + COD ≤ ₱1,500.
+- **Money** — PHP minor units only, formatted at the edge. The client pays a 75% digital downpayment then a 25% digital balance; neither is this app's business. What **is**: the shop's own `supplierPriceMinor` and its milestone `amountMinor`. GRIDGO's commission is withheld from this app by the server's role projection, so if a field here ever looks like commission, the wrong field was read. Milestone shares split the shop's price, never the client's total.
 - **Replace later** — keep the same `lib/api.ts` surface when Clerk/Supabase/PayMongo land.
 - **`expo start --web`** — the web bundle throws `Cannot use 'import.meta' outside a module` before it hydrates: zustand v5's devtools middleware ships `import.meta.env`, and Metro emits it into a classic `<script>`. Only web is affected; iOS/Android are fine. To render the app in a browser (screenshots, visual review) put a proxy in front of the dev server that rewrites that token. Signed-in routes also bounce to `/login` on a hard reload because the guard runs before the session rehydrates, so navigate in-app rather than reloading a deep link.
 
@@ -70,15 +71,20 @@ Product scope for this binary: **`PRD.md`**. Fleet blueprint: `gridgo-tinker`.
 
 Prefer these modules over burying logic in screens:
 
-- `lib/jobState.ts` — the only place a raw order state becomes a label, an action, or a journey step. `actionsForJob` is the single source of what a shop may do next; `targetState: null` means the step is not a transition (a proof moves the order by attaching a file). `waitingOn` says whose move it is when the shop has none.
+- `lib/jobState.ts` — the only place a raw order state becomes a label, an action, or a journey step. `actionsForJob` takes the **order**, not the state, because what a shop should do next depends on which evidence it still owes: an outstanding Proof of Fulfilment takes the yellow and demotes the forward step, since half a job's money waits on a photo. `targetState: null` means the step is not a transition. `waitingOn` says whose move it is when the shop has none. `presentTimelineNote` translates the check codes the platform composes into its own notes — a failed pickup arrives as `visible_defects` and would otherwise land on a shop's timeline verbatim.
+- `lib/milestones.ts` — the only place that reads `payoutMilestones`, and the source of the payout vocabulary. Two platform rules shape every screen built on it: shares split the **shop's** price, and **nobody in this app releases money** — a shop files evidence, Operations releases, so "done" here means *evidence filed* and no copy may imply the money has moved. Who owes which proof is fixed: the shop for printing and packing, the rider for delivery, and retention inherits the delivered proof. A milestone the job has not reached yet reads "Not started", never "Proof needed" — a chip asking for work nobody can do teaches a shop to ignore the chips that matter.
+- `lib/signup.ts` + `components/CategoryRankList.tsx` — a shop declares categories **best first**, and list position *is* the rank (the platform requires `1..n` with no gaps). Sign-up cannot read `GET /taxonomy` because that route needs a bearer and nobody has signed in yet, so the categories come from `data/serviceCatalog.ts`; the platform re-checks every code and is the authority. `data/davaoAreas.ts` exists for the same reason — the shop pin is required, this app has no map, so an area is picked and Operations confirms the exact pin during accreditation.
+- `store/alerts.ts` — GRIDGO has **no route for marking a notification read**; `GET /notifications` is the whole surface. Dismissal is therefore a decision this device remembers, persisted, and the screen says so rather than implying it synced. When the platform grows a route, this store is the one place that changes.
 - `lib/taxonomy.ts` — the only place that reads the shape of `GET /taxonomy`. `gridgo-api`'s `docs/TAXONOMY_API.md` is the contract; read it before touching this. Categories, subcategories, materials and finishes are four **flat** collections and every reference is a category `code` on the referring record. Two consequences the screens are built on: a supplier service line holds one `categoryCode`, so **a shop declares a category, not a subcategory**; and a line stored before the catalogue was published still holds a retired code, so every lookup goes through `resolveCategoryCode` or accredited work vanishes from the screen. `data/serviceCatalog.ts` is the chart this app falls back to when the platform has not migrated — it is display only, and `declarable` says whether a category can be filed against at all.
 - `lib/supplierServices.ts` — the draft → submitted → verified → suspended → removed vocabulary, used by both the catalogue and capacity so there is one set of words. Widening `materialCodes` on a verified line sends it back to Operations; `expandsCapability` is how a screen warns before that happens.
 - `lib/apiErrors.ts` / `lib/files.ts` — the only places that read an API error code. No `snake_case`, status code, or state string may reach a screen.
 - `lib/schedule.ts` + `lib/capacity.ts` + `lib/blackouts.ts` + `lib/day.ts` — agenda grouping, capacity arithmetic, and closures. Day comparisons go through `toDayKey` (local calendar), never UTC slicing.
 - `store/jobDrafts.ts` / `store/shopPlan.ts` — persisted through `lib/persistStorage.ts`, which uses AsyncStorage in every real runtime and inert storage only when `typeof window === "undefined"` during web SSR. Never gate persistence on `Platform.OS`.
-- `lib/navigationOptions.ts` — header chrome for the root stack and the nested `app/job/[id]` stack; both must look identical. Every pushed screen carries a `title`, or iOS labels its back control with the route group and a shop hears "(tabs)"; `app/__tests__/navigationChrome.test.ts` fails when one does not.
+- `lib/navigationOptions.ts` — header chrome for the root stack and the nested `app/job/[id]` stack; both must look identical. Every pushed screen carries a `title`, or iOS labels its back control with the route group and a shop hears "(tabs)". The back control is **always `headerBackButtonDisplayMode: "minimal"`** — the captain's decision, after a crew tried labelling it "Back". That option does two jobs at once: it gives the bare chevron *and* it is what stops iOS falling back to the previous route's title, so removing it to drop a label would bring "(tabs)" back. `app/__tests__/navigationChrome.test.ts` fails on a missing title or a `headerBackTitle`.
 - `hooks/usePullToRefresh.ts` — the only thing that may drive a `RefreshControl`'s `refreshing`. Every list here reloads on focus, and binding that flag to the screen's own `loading` put the platform refresh indicator on screen at every tab switch — on iOS it insets the scroll view to make room and takes it back again, so the page slid down and settled on every visit. A focus reload refreshes silently.
 - Safe-area insets **stack** with design spacing, never `Math.max` with it: the inset is the OS keep-out zone and the padding is breathing room (`components/ScreenHeader.tsx` at the top, `components/GridgoTabBar.tsx` at the bottom). Taking the larger spends the whole gap on the notch.
+- Bottom-bar geometry is **per platform**, because the two platforms specify different bars: Apple's tab bar is 49pt over a 34pt home-indicator inset (83pt together), Material Design 3's navigation bar is 80dp with the system inset below it. Using Material's figure on iOS is what made the bar stand too far off the bottom of the screen. The constants and the resulting heights are in `components/GridgoTabBar.tsx`; the inset still stacks. Client, rider and supplier must carry the same numbers.
+- Gestures: a swipeable must stay **mounted** across the state its own callback changes. Wrapping only the unread alerts in `ReanimatedSwipeable` tore the gesture handler out of the tree from inside its open callback and hung the app on a real device; the list also freezes its section split until the next load, so a card cannot change parent under a thumb. `components/__tests__/AlertCard.test.tsx` pins both. `GestureHandlerRootView` lives at the root of `app/_layout.tsx` — nothing gesture-driven responds on Android without it.
 
 ## Controls
 
@@ -99,7 +105,7 @@ What gets which presentation:
 
 - **Sheet** — a short question or a small step over something already on screen (a confirmation, the calendar, a production update).
 - **`presentation: "modal"`** — a self-contained create/edit task with its own save and cancel (`shop-closure`).
-- **Pushed screen** — a commitment with fields to read and fill (accept, decline, proof, self-QC, handoff), and every destination.
+- **Pushed screen** — a commitment with fields to read and fill (accept, decline, proof of fulfilment, self-QC, handoff), and every destination.
 
 Android keeps its own imperative system dialogs for date and time (`DateTimeField`); the sheet route is what every other platform gets.
 
@@ -335,13 +341,13 @@ When building a feature:
 
 ## Authentication
 
-Use Clerk. Do not build custom auth, and do not use Supabase Auth.
+For the pilot this is the local `gridgo-api`, not Clerk — see **MVP stack** above, which is what the code does. Clerk is a later replacement behind the same `lib/api.ts` surface; do not build against it yet.
 
-One Clerk application serves every GRIDGO app, so a person holding two roles keeps one account. The platform role (`client`, `supplier`, `rider`, `ops_admin`, `super_admin`) lives in Clerk `publicMetadata`, is writable only through the Backend API, and reaches this app as a session claim — read it, never write it.
+One account serves a person across every GRIDGO app, and the platform role (`client`, `supplier`, `rider`, `ops_admin`, `super_admin`) is the server's to set — read it, never write it.
 
-This app serves `client`. Check the role once, at the door, and hand a non-client user off to their own app. That check decides what renders, nothing more: every read and write is decided server-side by Row Level Security against the Clerk user id and role claim, so removing the check would grant no access.
+This app serves `supplier`. Check the role once, at the door, and hand a non-supplier account off to its own app by name (`appForRole`), never by naming the platform's role string. That check decides what renders, nothing more: every read and write is authorized server-side, so removing it would grant no access.
 
-Clients are the only role that signs up. Supplier, rider, and admin accounts exist only by invitation from Operations, so this app never offers a path to create one.
+**Client, supplier and rider all sign themselves up.** Supplier and rider accounts then wait for Operations to approve them and are not matchable meanwhile — which is a state this app has to show honestly, not a reason to hide the sign-up path. Only Operations and Super Admin accounts are created by invitation.
 
 ---
 

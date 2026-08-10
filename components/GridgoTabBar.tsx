@@ -1,6 +1,6 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Bell, Briefcase, Calendar, House, User, type LucideIcon } from "lucide-react-native";
-import { Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TABS, type TabName } from "@/constants/tabs";
@@ -8,18 +8,42 @@ import { useThemeColors } from "@/hooks/useTheme";
 import { useAlertsStore } from "@/store/alerts";
 
 /**
- * Design breathing room beneath the tab row, stacked on the system bottom
- * inset — never Math.max'd with it. `insets.bottom` is the OS keep-out zone
- * (gesture bar / three-button nav); this pad is intentional content spacing.
+ * Bar geometry, which the two platforms genuinely disagree about.
+ *
+ * Apple's tab bar is 49pt and sits directly on the 34pt home-indicator inset —
+ * 83pt in total on a modern iPhone. Material Design 3's navigation bar is 80dp
+ * with the system inset below it. One number cannot be both, and using the
+ * Android figure on iOS is what made the bar stand too far off the bottom of
+ * the screen: 80 + 34 + 8 is 122pt where Apple asks for 83.
+ *
+ * So the content region is per-platform and the system inset still **stacks**
+ * on top of it. Never `Math.max`: the inset is the OS keep-out zone and the pad
+ * is intentional spacing, and taking the larger of the two spends the whole gap
+ * on the notch.
  */
-export const TAB_BAR_BOTTOM_DESIGN_PAD = 8;
+export const TAB_BAR_CONTENT_MIN_HEIGHT = Platform.OS === "ios" ? 49 : 80;
 
 /**
- * Material Design 3 navigation bar height for icon + label (dp). Columns use
- * this as min-height so the content region matches platform standard; the
- * system inset is extra, below, via container paddingBottom.
+ * Breathing room below the row, on top of the system inset.
+ *
+ * Android keeps it: MD3's 80dp is the bar itself, the system inset sits under
+ * it, and dropping this pad is what made the bar feel tight. iOS gets none —
+ * the 34pt home-indicator inset is Apple's own breathing room, and on a device
+ * without one the column already clears the 49pt bar on its own.
  */
-export const TAB_BAR_CONTENT_MIN_HEIGHT = 80;
+export const TAB_BAR_BOTTOM_DESIGN_PAD = Platform.OS === "ios" ? 0 : 8;
+
+/**
+ * Column padding above and below the icon/label pair.
+ *
+ * Android's 80dp floor leaves room for the roomier pad; iOS has to fit the same
+ * 24pt icon and label inside a bar two thirds the height, so it takes the
+ * tighter one. Intrinsic column height is therefore 60dp on Android (inside the
+ * 80dp floor) and 52pt on iOS (which is what the bar actually becomes, three
+ * points over Apple's 49 because this type scale's label line box is 16pt).
+ */
+export const TAB_ITEM_PADDING_CLASS =
+  Platform.OS === "ios" ? "pb-1 pt-1" : "pb-2 pt-2";
 
 /**
  * One Lucide glyph per tab, all outline, all the same optical weight, so the
@@ -39,22 +63,23 @@ const ICONS: Record<TabName, LucideIcon> = {
  * Five labelled destinations. No raised action disc — every tab is a place.
  * Columns bottom-align so all five share a baseline.
  *
- * Geometry matches client (canonical column; content region only — system
- * inset is separate):
- *   pt-2 (8) + icon (24) + gap-1 (4) + label min-h-4 (16) + pb-2 (8) = 60
- *   min-h-20 (80) is the MD3 platform floor; residual 20dp sits as top slack
- *   above the icon (justify-end). Label-to-bar-bottom-edge = pb-2 = 8dp
- *   (same as client). Touch floor 44dp is exceeded comfortably.
- *   Top slack also covers the unread badge's -top-1 overhang.
+ * The surface paints the whole container, so the bar a person sees is exactly
+ * `content region + design pad + system inset` and nothing has to be subtracted
+ * to reason about it. It used to be inset 16dp from the top of the container,
+ * which made every measurement two numbers and existed to keep a raised action
+ * disc inside the paint — this app has never had one.
  *
- * The painted surface is an absolute overlay with `top-4` (16dp), so the
- * visible bar is 64 + inset + 8 — not the full 80dp column. The top strip is
- * transparent breathing room; the row is bottom-aligned so icons/labels stay
- * inside the painted region (no raised action disc in this app).
+ * Resulting bar heights:
+ *   iOS, home-indicator iPhone:  52 +  0 + 34 =  86pt   (Apple: 49 + 34 = 83)
+ *   iOS, no home indicator:      52 +  0 +  0 =  52pt   (Apple: 49)
+ *   Android, gesture nav:        80 +  8 + 24 = 112dp   (MD3: 80 + inset)
+ *   Android, three-button:       80 +  8 + 48 = 136dp
  *
- * Bottom padding of the bar container is `insets.bottom + design pad` so the
- * OS keep-out zone and design breathing room stack. The surface (and top
- * border) still paints through the inset region to the physical edge.
+ * Column content is icon (24) + gap-1 (4) + label min-h-4 (16) inside the
+ * per-platform padding, bottom-aligned. On Android the residual slack inside
+ * the 80dp floor sits above the icon and covers the unread badge's overhang;
+ * on iOS the badge overhangs into the tighter top pad, which the column's own
+ * min-height absorbs. The 44dp touch floor is exceeded on both.
  *
  * The open tab is said twice over: its glyph goes to action-yellow and its
  * label to medium yellow. The row still reads in grayscale via weight. Yellow
@@ -72,7 +97,7 @@ export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
     >
       <View
         testID="gridgo-tab-bar-surface"
-        className="absolute inset-x-0 bottom-0 top-4 border-t border-outline bg-surface"
+        className="absolute inset-0 border-t border-outline bg-surface"
       />
 
       <View className="flex-row items-end">
@@ -129,11 +154,11 @@ function TabItem({ name, label, focused, onPress, badge = 0 }: TabItemProps) {
       accessibilityRole="tab"
       accessibilityLabel={showBadge ? `${label}, ${badge} unread` : label}
       accessibilityState={{ selected: focused }}
-      // MD3 icon+label bar = 80dp (min-h-20). Client-canonical pb-2/pt-2:
-      // 20dp top slack covers badge overhang; label sits 8dp above bar bottom.
-      // No fixed column height — label line box may grow under a capped
-      // maxFontSizeMultiplier and the min-height absorbs it.
-      className="min-h-20 flex-1 items-center justify-end gap-1 pb-2 pt-2"
+      // Height floor and padding are per-platform — see the constants above.
+      // Never a fixed height: the label line box grows under a capped
+      // maxFontSizeMultiplier and the min-height is what absorbs it.
+      style={{ minHeight: TAB_BAR_CONTENT_MIN_HEIGHT }}
+      className={`flex-1 items-center justify-end gap-1 ${TAB_ITEM_PADDING_CLASS}`}
     >
       {({ pressed }) => (
         <>

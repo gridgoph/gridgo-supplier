@@ -10,13 +10,73 @@ import { Platform } from "react-native";
 
 export type Role = "client" | "supplier" | "rider" | "ops_admin" | "super_admin";
 
+/**
+ * Where a shop stands with Operations. A shop is not matchable until
+ * `approved`, and the API enforces that — this app only has to say so.
+ */
+export type VerificationStatus =
+  | "unverified"
+  | "pending"
+  | "approved"
+  | "suspended"
+  | "rejected";
+
+/** One category a shop declares, and how well it says it does it (1 = best). */
+export type CategoryRank = {
+  categoryCode: string;
+  rank: number;
+};
+
+export type ShopLocation = { lat: number; lng: number; label: string };
+
 export type User = {
   id: string;
   email: string;
   name: string;
   role: Role;
+  phone?: string;
   orgName?: string;
   supplierName?: string;
+  shop?: ShopLocation | null;
+  /** What the shop declared it does, best first. */
+  categoryRanks?: CategoryRank[];
+  verificationStatus?: VerificationStatus;
+  /** Operations' own words on the decision. Safe to show. */
+  verificationNote?: string | null;
+  verifiedAt?: string | null;
+};
+
+/** `downpayment` is 75% of the client total; `balance` is the remaining 25%. */
+export type InstallmentCode = "downpayment" | "balance";
+
+/**
+ * One half of the digital payment split.
+ *
+ * The client's own `reference` is withheld from this app by the server's role
+ * projection, so it is absent from this type on purpose — a supplier never
+ * sees how the client paid, only whether GRIDGO has the money.
+ */
+export type Installment = {
+  amountMinor: number;
+  method: string | null;
+  status: "not_submitted" | "pending_confirmation" | "confirmed" | "legacy_confirmed";
+  submittedAt: string | null;
+  confirmedAt: string | null;
+  confirmationSource: string | null;
+};
+
+/** The four parts the shop is paid in. Shares split the shop's own price. */
+export type MilestoneCode = "printing" | "packaging_qc" | "delivered" | "retention";
+
+export type PayoutMilestone = {
+  code: MilestoneCode;
+  sharePercent: number;
+  /** The shop's own earnings for this part. Withheld from client and rider. */
+  amountMinor: number;
+  status: "pending_pof" | "pof_attached" | "released";
+  /** Proof of Fulfilment files backing this part. */
+  pofFileIds: string[];
+  releasedAt: string | null;
 };
 
 export type Order = {
@@ -30,39 +90,74 @@ export type Order = {
   quantity: number;
   size: string;
   material: string;
+  finish?: string;
   deadline: string | null;
   address: string;
   zone: string;
   /** Shop pin the rider collects from. Set once a supplier is assigned. */
   pickup?: { lat: number; lng: number; label: string } | null;
+  /**
+   * The shop's own asking price. Present only for the assigned supplier —
+   * GRIDGO's commission on top of it never reaches this app at all.
+   */
+  supplierPriceMinor?: number;
+  /** Client-visible print subtotal. Includes commission the shop cannot see. */
+  subtotalMinor?: number;
   totalMinor: number;
   deliveryFeeMinor: number;
+  deliveryDistanceMeters?: number;
+  downpaymentMinor?: number;
+  balanceMinor?: number;
   paymentMethod: string | null;
   paymentStatus: string;
-  codEligible: boolean;
+  payments?: Record<InstallmentCode, Installment>;
+  payoutMilestones?: PayoutMilestone[];
+  /** True while a claim holds every unreleased part of this payout. */
+  payoutHold?: boolean;
+  issueWindowOpenedAt?: string | null;
+  issueWindowExpiresAt?: string | null;
   promisedDate: string | null;
   artworkName: string | null;
   createdAt: string;
   updatedAt: string;
   /** Client artwork approved by QA. Read-only for this app. */
   artworkFileIds?: string[];
-  /** Proofs this shop has sent the client. Newest last. */
-  proofFileIds?: string[];
+  /** Every Proof of Fulfilment on this job, from this shop and the rider. */
+  fulfilmentProofFileIds?: string[];
   deliveryPhotoFileIds?: string[];
   timeline: {
     at: string;
     state: string;
     by: string;
     note: string;
-    /** Present on proof submissions. */
+    /** Present on evidence entries. */
     fileId?: string;
   }[];
+};
+
+/** A client's report against a delivered job. It is what holds a payout. */
+export type Issue = {
+  id: string;
+  orderId: string;
+  description: string;
+  kind: string;
+  status: string;
+  consequence: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolution: string | null;
+};
+
+/** Platform-wide operational settings. The issue window is the one this app reads. */
+export type Settings = {
+  issueWindowHours: number;
+  deliveryFeeBands: { maxDistanceMeters: number | null; feeMinor: number }[];
 };
 
 /** Stored file metadata. `fileId` is the only durable identity a client keeps. */
 export type StoredFile = {
   fileId: string;
-  purpose: "artwork" | "proof" | "delivery_photo" | "service_image";
+  purpose: "artwork" | "fulfilment_proof" | "delivery_photo" | "service_image";
   originalFilename: string;
   declaredContentType: string;
   detectedContentType: string;
@@ -85,6 +180,10 @@ export type DownloadUrl = {
 export type Notification = {
   id: string;
   userId: string;
+  /** Platform event name. Never shown; used to place an alert on a job. */
+  type?: string;
+  /** Set when the alert is about a job. */
+  orderId?: string;
   title: string;
   body: string;
   read: boolean;
@@ -336,6 +435,35 @@ export async function login(email: string, password: string): Promise<{ token: s
   return result;
 }
 
+/** What a shop tells GRIDGO to open an account. Ranks are 1..n, best first. */
+export type SupplierSignup = {
+  email: string;
+  password: string;
+  name: string;
+  phone: string;
+  supplierName: string;
+  shop: ShopLocation;
+  categoryRanks: CategoryRank[];
+};
+
+/**
+ * Open a shop account.
+ *
+ * The account exists immediately and is signed in, but it starts unapproved:
+ * GRIDGO will not match work to it until Operations says so. The bearer is set
+ * here so the shop lands inside the app rather than back on the door.
+ */
+export async function signupSupplier(
+  input: SupplierSignup,
+): Promise<{ token: string; user: User }> {
+  const result = await request<{ token: string; user: User }>("/auth/signup", {
+    method: "POST",
+    body: JSON.stringify({ role: "supplier", ...input }),
+  });
+  setToken(result.token);
+  return result;
+}
+
 export async function logout(): Promise<void> {
   try {
     await request("/auth/logout", { method: "POST" });
@@ -364,17 +492,17 @@ export async function getOrder(orderId: string): Promise<Order> {
   return result.order;
 }
 
-export async function listOffers(): Promise<Order[]> {
-  const result = await request<{ offers: Order[] }>("/dispatch/offers");
-  return result.offers;
+/** Issues clients have raised on this shop's own jobs. A live one holds payout. */
+export async function listIssues(orderId?: string): Promise<Issue[]> {
+  const query = orderId ? `?orderId=${encodeURIComponent(orderId)}` : "";
+  const result = await request<{ issues: Issue[] }>(`/issues${query}`);
+  return result.issues;
 }
 
-export async function acceptOffer(orderId: string): Promise<Order> {
-  const result = await request<{ order: Order }>(`/dispatch/${orderId}/accept`, {
-    method: "POST",
-    body: "{}",
-  });
-  return result.order;
+/** Platform-wide settings. Read for the issue-window length, never assumed. */
+export async function getSettings(): Promise<Settings> {
+  const result = await request<{ settings: Settings }>("/settings");
+  return result.settings;
 }
 
 export async function transitionOrder(
@@ -447,10 +575,6 @@ export async function listNotifications(): Promise<Notification[]> {
   return result.notifications;
 }
 
-export async function creditBalance(): Promise<{ balanceMinor: number }> {
-  return request("/credits/balance");
-}
-
 /**
  * Object storage the API may or may not have. `storage` is absent on API
  * builds without file support — the app must treat that as "unavailable"
@@ -466,16 +590,20 @@ export async function health(): Promise<Health> {
 }
 
 /**
- * Bind an uploaded file to this order. For a proof this is the step that moves
- * the order into the client's review — the upload alone changes nothing.
+ * Bind an uploaded file to one payout milestone as its Proof of Fulfilment.
+ *
+ * This is what makes a milestone releasable; the upload alone changes nothing,
+ * and the job's own state does not move. A file can back one record only, so
+ * each milestone needs its own upload.
  */
-export async function attachFileToOrder(
+export async function attachFulfilmentProof(
   fileId: string,
   orderId: string,
+  milestoneCode: MilestoneCode,
 ): Promise<{ file: StoredFile; order: Order }> {
   return request(`/files/${fileId}/attach`, {
     method: "POST",
-    body: JSON.stringify({ orderId }),
+    body: JSON.stringify({ orderId, milestoneCode }),
   });
 }
 
@@ -487,17 +615,6 @@ export async function getFile(fileId: string): Promise<StoredFile> {
 /** Short-lived signed URL. Request a fresh one rather than caching it. */
 export async function getDownloadUrl(fileId: string): Promise<DownloadUrl> {
   return request(`/files/${fileId}/download-url`);
-}
-
-export async function requestProof(
-  orderId: string,
-  kind: string,
-  extra: Record<string, unknown> = {},
-): Promise<{ order: Order }> {
-  return request(`/dispatch/${orderId}/proof`, {
-    method: "POST",
-    body: JSON.stringify({ kind, otp: "1234", photoName: "demo.jpg", ...extra }),
-  });
 }
 
 /** Format PHP minor units (centavos) for display. */

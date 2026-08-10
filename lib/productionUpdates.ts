@@ -14,8 +14,7 @@ export type ProductionTemplateId =
   | "printing"
   | "on_track"
   | "materials_ready"
-  | "finishing"
-  | "sent_for_payment";
+  | "finishing";
 
 export type ProductionTemplate = {
   id: ProductionTemplateId;
@@ -35,14 +34,15 @@ export const PRODUCTION_UPDATE_TEMPLATES: readonly ProductionTemplate[] = [
   },
   { id: "on_track", label: "On track", timelineNote: "Production update — job is on track" },
   { id: "finishing", label: "Finishing", timelineNote: "Production update — finishing and trimming" },
-  {
-    id: "sent_for_payment",
-    label: "Ready to invoice",
-    timelineNote: "Sent to the client for payment",
-  },
 ] as const;
 
-/** The templates that make sense for a given step. */
+/**
+ * The templates that make sense for a given step.
+ *
+ * Only starting production takes one. Asking the client for payment used to be
+ * a step the shop drove and is not one any more: the client pays 75% before the
+ * press runs at all, so there is nothing for a shop to invoice.
+ */
 export function templatesForAction(
   kind: SupplierActionKind | undefined,
 ): ProductionTemplate[] {
@@ -50,9 +50,6 @@ export function templatesForAction(
     return PRODUCTION_UPDATE_TEMPLATES.filter((t) =>
       ["queued", "printing", "materials_ready"].includes(t.id),
     );
-  }
-  if (kind === "request_payment") {
-    return PRODUCTION_UPDATE_TEMPLATES.filter((t) => t.id === "sent_for_payment");
   }
   return [];
 }
