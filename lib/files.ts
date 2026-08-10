@@ -1,0 +1,242 @@
+import {
+  createUploadTask,
+  FileSystemUploadType,
+} from "expo-file-system/legacy";
+
+import * as api from "@/lib/api";
+
+/**
+ * Uploading a file to GRIDGO, told truthfully.
+ *
+ * Two things have to happen and they are not the same thing: the bytes leave
+ * the phone, then the API confirms MinIO stored them and returns a `fileId`.
+ * Progress reaching 100% is not success — only that id is. Nothing here ever
+ * invents or reuses one.
+ *
+ * See `docs/STORAGE_API.md` in gridgo-api for the contract this implements.
+ */
+
+export type UploadStage =
+  | "idle"
+  | "uploading"
+  | "processing"
+  | "stored"
+  | "attached"
+  | "failed";
+
+export type UploadItem = {
+  /** Local id, stable for the whole attempt. */
+  key: string;
+  /** Device file URI. Streamed, never read into memory. */
+  uri: string;
+  fileName: string;
+  /** iOS reports this unreliably; the server decides from magic bytes. */
+  mimeType: string | null;
+  sizeBytes: number | null;
+  stage: UploadStage;
+  /** 0–1 while bytes are moving. */
+  progress: number;
+  /** Server-issued id. Only set from a 201 response. */
+  fileId: string | null;
+  /** Names what went wrong and how to fix it. */
+  error: string | null;
+};
+
+export function newUploadItem(input: {
+  key: string;
+  uri: string;
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+}): UploadItem {
+  return { ...input, stage: "idle", progress: 0, fileId: null, error: null };
+}
+
+/** `proof` and `artwork` share this ceiling; delivery photos are smaller. */
+export const MAX_PROOF_BYTES = 200 * 1024 * 1024;
+
+export function tooLargeMessage(sizeBytes: number, maxBytes = MAX_PROOF_BYTES): string {
+  const mb = (sizeBytes / (1024 * 1024)).toFixed(1);
+  const limit = Math.round(maxBytes / (1024 * 1024));
+  return `This file is ${mb} MB and the limit is ${limit} MB. Export it smaller and send it again.`;
+}
+
+export function isUploadBusy(items: UploadItem[]): boolean {
+  return items.some((i) => i.stage === "uploading" || i.stage === "processing");
+}
+
+/** Files GRIDGO has confirmed it stored. Anything else does not count. */
+export function storedUploads(items: UploadItem[]): UploadItem[] {
+  return items.filter((i) => (i.stage === "stored" || i.stage === "attached") && i.fileId);
+}
+
+/** One line saying where an upload has actually got to. */
+export function uploadStageLabel(item: UploadItem): string {
+  switch (item.stage) {
+    case "uploading":
+      return `Sending ${Math.round(item.progress * 100)}%`;
+    case "processing":
+      return "Sent — GRIDGO is still saving it";
+    case "stored":
+      return "Saved. Ready to send to the client";
+    case "attached":
+      return "Sent to the client";
+    case "failed":
+      return item.error ?? "Not saved";
+    default:
+      return "Ready to send";
+  }
+}
+
+/** Every documented failure, mapped to a fix the shop can act on. */
+const UPLOAD_MESSAGES: Record<string, string> = {
+  invalid_file_purpose: "GRIDGO rejected this upload. Reopen the job and try again.",
+  invalid_multipart: "The file did not arrive intact. Choose it again and resend.",
+  unexpected_form_field: "GRIDGO rejected this upload. Reopen the job and try again.",
+  file_required: "No file reached GRIDGO. Choose the file again.",
+  file_empty: "That file is empty. Pick or retake it, then send it again.",
+  filename_required:
+    "That file has no name GRIDGO can read. Save it with a name ending in .jpg, .png or .pdf and try again.",
+  file_too_large: "That file is over GRIDGO's size limit. Export it smaller and send it again.",
+  request_body_too_large: "That request was too large. Try again with a smaller file.",
+  multipart_required: "The file did not arrive intact. Choose it again and resend.",
+  content_type_not_allowed:
+    "GRIDGO stores JPEG, PNG, WebP and PDF. Export the proof in one of those and try again.",
+  purpose_media_type_not_allowed:
+    "That file type is not accepted for a proof. Send a JPEG, PNG, WebP or PDF.",
+  file_type_mismatch:
+    "The file's name and its contents disagree, so GRIDGO cannot trust it. Export it again from your design app.",
+  heic_not_supported:
+    "iPhone HEIC photos are not supported. Set your camera to Most Compatible, or export the shot as JPEG.",
+  proof_upload_not_allowed:
+    "This job is not waiting on a proof. Pull down to refresh and take the step it shows.",
+  file_not_ready: "That upload did not finish. Send the file again.",
+  file_already_attached: "That file has already been sent. Upload a new one for this job.",
+  file_not_found: "GRIDGO no longer has that file. Send it again.",
+  order_not_found: "This job is no longer on your floor. It may have been rematched.",
+  storage_object_missing: "GRIDGO lost track of that file. Send it again.",
+  storage_object_mismatch: "That file arrived damaged. Send it again.",
+  forbidden: "This job is not assigned to your shop, so files cannot be added to it.",
+  minio_unavailable:
+    "GRIDGO's file storage is not responding. Nothing was lost — try sending the file again in a moment.",
+  storage_initializing:
+    "GRIDGO's file storage is still starting up. Wait a few seconds and send the file again.",
+};
+
+export type UploadResult =
+  | { ok: true; fileId: string }
+  | { ok: false; error: string };
+
+/**
+ * Stream one file to `POST /files`.
+ *
+ * The native uploader sends straight from the device URI, so a 200 MB proof is
+ * never read into JavaScript memory — that is what crashes mid-range Android
+ * phones. Only `purpose` and `file` are sent; the contract rejects any other
+ * form field.
+ */
+export async function uploadFile(
+  item: UploadItem,
+  purpose: api.StoredFile["purpose"],
+  onProgress: (fraction: number) => void,
+): Promise<UploadResult> {
+  const token = api.getToken();
+  if (!token) {
+    return { ok: false, error: "Your session ended. Sign in again to send this file." };
+  }
+
+  try {
+    const task = createUploadTask(
+      `${api.getApiBase()}/files`,
+      item.uri,
+      {
+        httpMethod: "POST",
+        uploadType: FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        // Left as reported. The API decides from magic bytes, and iOS is
+        // routinely wrong here.
+        mimeType: item.mimeType ?? undefined,
+        parameters: { purpose },
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      },
+      (data) => {
+        if (!data.totalBytesExpectedToSend) return;
+        onProgress(Math.min(1, data.totalBytesSent / data.totalBytesExpectedToSend));
+      },
+    );
+
+    const response = await task.uploadAsync();
+    if (!response) {
+      return { ok: false, error: "The upload stopped before it finished. Send the file again." };
+    }
+
+    const body = parseJson(response.body);
+    if (response.status === 201) {
+      const fileId = readFileId(body);
+      if (!fileId) {
+        // A 201 without an id means nothing is provably stored.
+        return {
+          ok: false,
+          error: "GRIDGO did not confirm it saved the file. Send it again.",
+        };
+      }
+      return { ok: true, fileId };
+    }
+
+    return { ok: false, error: messageFor(body, response.status) };
+  } catch {
+    return {
+      ok: false,
+      error: "The file could not be sent. Check this device's connection and try again.",
+    };
+  }
+}
+
+/** Turn a file-route failure into a sentence naming the fix. */
+export function messageFor(body: Record<string, unknown> | null, status: number): string {
+  const code = typeof body?.error === "string" ? body.error : "";
+  const known = UPLOAD_MESSAGES[code];
+  if (known) return known;
+  if (status === 401) return "Your session ended. Sign in again to send this file.";
+  if (status >= 500) return "GRIDGO could not handle this file. Try again in a moment.";
+  return "GRIDGO could not accept this file. Try again, or send a different export.";
+}
+
+function parseJson(text: string | undefined): Record<string, unknown> | null {
+  if (!text) return null;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return typeof parsed === "object" && parsed ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readFileId(body: Record<string, unknown> | null): string | null {
+  const file = body?.file;
+  if (typeof file === "object" && file && "fileId" in file) {
+    const id = (file as { fileId: unknown }).fileId;
+    if (typeof id === "string" && id) return id;
+  }
+  return null;
+}
+
+export type StorageAvailability = "checking" | "available" | "unavailable";
+
+/**
+ * Whether GRIDGO can store files right now.
+ *
+ * A build without file support omits `storage` from `/health` entirely, so a
+ * missing field is treated as unavailable rather than assumed to work.
+ */
+export async function probeStorage(): Promise<StorageAvailability> {
+  try {
+    const result = await api.health();
+    const status = result.storage?.status;
+    if (status === "available") return "available";
+    if (status === "checking" || status === "initializing") return "checking";
+    return "unavailable";
+  } catch {
+    return "unavailable";
+  }
+}

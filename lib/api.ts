@@ -33,6 +33,8 @@ export type Order = {
   deadline: string | null;
   address: string;
   zone: string;
+  /** Shop pin the rider collects from. Set once a supplier is assigned. */
+  pickup?: { lat: number; lng: number; label: string } | null;
   totalMinor: number;
   deliveryFeeMinor: number;
   paymentMethod: string | null;
@@ -42,7 +44,42 @@ export type Order = {
   artworkName: string | null;
   createdAt: string;
   updatedAt: string;
-  timeline: { at: string; state: string; by: string; note: string }[];
+  /** Client artwork approved by QA. Read-only for this app. */
+  artworkFileIds?: string[];
+  /** Proofs this shop has sent the client. Newest last. */
+  proofFileIds?: string[];
+  deliveryPhotoFileIds?: string[];
+  timeline: {
+    at: string;
+    state: string;
+    by: string;
+    note: string;
+    /** Present on proof submissions. */
+    fileId?: string;
+  }[];
+};
+
+/** Stored file metadata. `fileId` is the only durable identity a client keeps. */
+export type StoredFile = {
+  fileId: string;
+  purpose: "artwork" | "proof" | "delivery_photo" | "service_image";
+  originalFilename: string;
+  declaredContentType: string;
+  detectedContentType: string;
+  size: number;
+  ownerId: string;
+  state: "pending_upload" | "ready" | "delete_pending" | "deleted";
+  createdAt: string;
+  readyAt: string | null;
+  references: { type: string; id: string; field: string }[];
+};
+
+/** A short-lived capability, never file identity. Do not persist or rewrite. */
+export type DownloadUrl = {
+  fileId: string;
+  url: string;
+  expiresAt: string;
+  expiresInSeconds: number;
 };
 
 export type Notification = {
@@ -52,6 +89,65 @@ export type Notification = {
   body: string;
   read: boolean;
   at: string;
+};
+
+/** One entry of the platform-wide vocabulary served by `GET /taxonomy`. */
+export type TaxonomyCategory = {
+  id: string;
+  code: string;
+  name: string;
+  productFamilyIds: string[];
+  active: boolean;
+};
+
+export type TaxonomyTerm = {
+  id: string;
+  code: string;
+  name: string;
+  categoryCodes: string[];
+  active: boolean;
+};
+
+export type Taxonomy = {
+  categories: TaxonomyCategory[];
+  materials: TaxonomyTerm[];
+  finishes: TaxonomyTerm[];
+};
+
+/** A capability line the shop is accredited for — the capacity the app edits. */
+export type SupplierService = {
+  id: string;
+  supplierId: string;
+  categoryCode: string;
+  materialCodes: string[];
+  finishCodes: string[];
+  productFamilyIds: string[];
+  sizeMin: string | null;
+  sizeMax: string | null;
+  qtyMin: number | null;
+  qtyMax: number | null;
+  pricingBasis: string;
+  referenceRateMinor: number;
+  turnaroundHours: number;
+  capacityDaily: number | null;
+  capacityWeekly: number | null;
+  zones: string[];
+  equipmentNotes: string;
+  imageFileIds?: string[];
+  state: string;
+  verifiedAt: string | null;
+  suspendedAt: string | null;
+  suspendReason: string | null;
+  withdrawnAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Fields this app is allowed to change on a live service line. */
+export type SupplierServicePatch = {
+  capacityDaily?: number;
+  capacityWeekly?: number;
+  turnaroundHours?: number;
 };
 
 let tokenMemory: string | null = null;
@@ -285,6 +381,28 @@ export async function transitionOrder(
   return result.order;
 }
 
+export async function getTaxonomy(): Promise<Taxonomy> {
+  const result = await request<{ taxonomy: Taxonomy }>("/taxonomy");
+  return result.taxonomy;
+}
+
+/** The signed-in shop's own service lines (the API scopes this by bearer). */
+export async function listSupplierServices(): Promise<SupplierService[]> {
+  const result = await request<{ services: SupplierService[] }>("/supplier-services");
+  return result.services;
+}
+
+export async function updateSupplierService(
+  serviceId: string,
+  patch: SupplierServicePatch,
+): Promise<SupplierService> {
+  const result = await request<{ service: SupplierService }>(
+    `/supplier-services/${serviceId}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+  );
+  return result.service;
+}
+
 export async function listNotifications(): Promise<Notification[]> {
   const result = await request<{ notifications: Notification[] }>("/notifications");
   return result.notifications;
@@ -294,8 +412,42 @@ export async function creditBalance(): Promise<{ balanceMinor: number }> {
   return request("/credits/balance");
 }
 
-export async function health(): Promise<{ ok: boolean }> {
+/**
+ * Object storage the API may or may not have. `storage` is absent on API
+ * builds without file support — the app must treat that as "unavailable"
+ * rather than assuming an upload route exists.
+ */
+export type Health = {
+  ok: boolean;
+  storage?: { status: "checking" | "available" | "unavailable" | "initializing" };
+};
+
+export async function health(): Promise<Health> {
   return request("/health");
+}
+
+/**
+ * Bind an uploaded file to this order. For a proof this is the step that moves
+ * the order into the client's review — the upload alone changes nothing.
+ */
+export async function attachFileToOrder(
+  fileId: string,
+  orderId: string,
+): Promise<{ file: StoredFile; order: Order }> {
+  return request(`/files/${fileId}/attach`, {
+    method: "POST",
+    body: JSON.stringify({ orderId }),
+  });
+}
+
+export async function getFile(fileId: string): Promise<StoredFile> {
+  const result = await request<{ file: StoredFile }>(`/files/${fileId}`);
+  return result.file;
+}
+
+/** Short-lived signed URL. Request a fresh one rather than caching it. */
+export async function getDownloadUrl(fileId: string): Promise<DownloadUrl> {
+  return request(`/files/${fileId}/download-url`);
 }
 
 export async function requestProof(

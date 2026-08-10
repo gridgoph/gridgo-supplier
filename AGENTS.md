@@ -55,14 +55,34 @@ For this MVP we **do not** integrate Clerk, Supabase, PayMongo, or other product
 Every screen that needs network uses **`lib/api.ts`** against the shared local **`gridgo-api`**:
 
 - **Custom auth** — email/password → bearer token; role enforced in Zustand session (`store/session.ts`). Mismatched role is rejected (no role switcher).
-- **Session → routes** — `Stack.Protected` in `app/_layout.tsx` (SDK 54) guards the signed-in area (`(tabs)`, `job/[id]`, `payout`, `design-system`) from `isSignedIn(user)`. Do not sprinkle `router.replace` on logout/401; clearing `user` (logout, role reject, or API 401 via `setUnauthorizedHandler`) is enough. Guard history is removed, so back cannot re-enter signed-out screens.
-- **Custom domain API** — orders/jobs, credits, COD, dispatch, proofs, notifications.
+- **Session → routes** — `Stack.Protected` in `app/_layout.tsx` (SDK 54) guards the signed-in area (`(tabs)`, `job/[id]`, `payout`, `capacity`, `shop-closure`, `settings`, `design-system`) from `isSignedIn(user)`. Do not sprinkle `router.replace` on logout/401; clearing `user` (logout, role reject, or API 401 via `setUnauthorizedHandler`) is enough. Guard history is removed, so back cannot re-enter signed-out screens.
+- **Custom domain API** — orders/jobs, credits, COD, dispatch, files, notifications.
+- **Files** — `gridgo-api`'s `docs/STORAGE_API.md` is the authoritative contract; read it before touching `lib/files.ts`. Upload streams from the device URI (`expo-file-system/legacy` `createUploadTask`) and a file is stored only when a `201` returns `file.fileId`. Attaching a `proof` is what moves an order, not a transition.
 - **API base** — `getApiBase()` / `resolveApiBase()` in `lib/api.ts`: `EXPO_PUBLIC_API_URL` override, else hostname from Expo `hostUri` (so physical Expo Go uses the LAN IP), Android loopback remapped to `10.0.2.2`, port from `EXPO_PUBLIC_API_PORT` (default `8787`). Do not hardcode a developer LAN IP.
 - **Zustand** — session and feature stores (not React Context for global session).
 - **Money** — PHP minor units only; Pilot Credits + COD ≤ ₱1,500.
 - **Replace later** — keep the same `lib/api.ts` surface when Clerk/Supabase/PayMongo land.
 
 Product scope for this binary: **`PRD.md`**. Fleet blueprint: `gridgo-tinker`.
+
+## Where the rules live
+
+Prefer these modules over burying logic in screens:
+
+- `lib/jobState.ts` — the only place a raw order state becomes a label, an action, or a journey step. `actionsForJob` is the single source of what a shop may do next; `targetState: null` means the step is not a transition (a proof moves the order by attaching a file). `waitingOn` says whose move it is when the shop has none.
+- `lib/apiErrors.ts` / `lib/files.ts` — the only places that read an API error code. No `snake_case`, status code, or state string may reach a screen.
+- `lib/schedule.ts` + `lib/capacity.ts` + `lib/blackouts.ts` + `lib/day.ts` — agenda grouping, capacity arithmetic, and closures. Day comparisons go through `toDayKey` (local calendar), never UTC slicing.
+- `store/jobDrafts.ts` / `store/shopPlan.ts` — persisted through `lib/persistStorage.ts`, which uses AsyncStorage in every real runtime and inert storage only when `typeof window === "undefined"` during web SSR. Never gate persistence on `Platform.OS`.
+- `lib/navigationOptions.ts` — header chrome for the root stack and the nested `app/job/[id]` stack; both must look identical.
+
+## Controls
+
+Every input uses the control its data calls for, and the native one where the platform has it (all are bundled in Expo Go for SDK 54 — check `node_modules/expo/bundledNativeModules.json` before adding another):
+
+- Dates → `components/controls/DateTimeField.tsx` (`@react-native-community/datetimepicker`; Android opens the dialog imperatively, iOS confirms in a sheet). Never a text box a date is typed into.
+- Fixed small sets → `components/controls/SegmentedControl.tsx`; longer fixed sets → `OptionList`.
+- Bounded counts → `Stepper`. Money → `MoneyField` + `lib/money.ts`. Free text stays free text (`NoteField`).
+- Anything irreversible → `components/ConfirmDialog.tsx` with a question naming the thing. Never a bare "Are you sure?".
 
 ## Development Philosophy
 
