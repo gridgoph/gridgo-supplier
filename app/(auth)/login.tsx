@@ -1,19 +1,32 @@
 import { useEffect, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 import { Redirect } from "expo-router";
 
+import { ErrorNotice } from "@/components/ErrorNotice";
 import { GridgoLogo } from "@/components/GridgoLogo";
+import { PrimaryButton } from "@/components/PrimaryButton";
 import { StatusChip } from "@/components/StatusChip";
+import { FieldShell } from "@/components/controls/FieldShell";
+import { TextField } from "@/components/controls/TextField";
 import { getApiBase, health } from "@/lib/api";
 import { isSignedIn, useSession } from "@/store/session";
 
 type HealthState = "checking" | "reachable" | "unreachable";
 
+/**
+ * The door.
+ *
+ * Only shops sign in here — client, rider and Operations accounts have their
+ * own apps, and the error says which one rather than naming a platform role.
+ * The connection line at the foot is for the person holding the phone: on a
+ * demo build, "GRIDGO is not answering on this network" is the difference
+ * between a wrong password and a laptop that went to sleep.
+ */
 export default function LoginScreen() {
   const { user, login, loading, error } = useSession();
   const [email, setEmail] = useState("supplier@gridgo.local");
   const [password, setPassword] = useState("demo");
-  const [apiBase] = useState(() => getApiBase());
+  const [apiHost] = useState(() => hostOf(getApiBase()));
   const [healthState, setHealthState] = useState<HealthState>("checking");
 
   useEffect(() => {
@@ -34,55 +47,94 @@ export default function LoginScreen() {
   if (isSignedIn(user)) return <Redirect href="/(tabs)/home" />;
 
   return (
-    <View className="flex-1 bg-canvas px-6">
-      <View className="flex-1 justify-center">
-        <GridgoLogo size={48} role="supplier" />
-        <Text className="mt-6 font-satoshi-bold text-2xl text-text-primary">Supplier sign in</Text>
-        <Text className="mt-1 font-satoshi text-text-secondary">Demo API · supplier role</Text>
-
-        <TextInput
-          className="mt-6 rounded-xl border border-outline bg-surface px-4 py-3 font-satoshi text-text-primary"
-          autoCapitalize="none"
-          value={email}
-          onChangeText={setEmail}
-          placeholder="Email"
-        />
-        <TextInput
-          className="mt-3 rounded-xl border border-outline bg-surface px-4 py-3 font-satoshi text-text-primary"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Password"
-        />
-        {error ? <Text className="mt-3 font-satoshi text-error">{error}</Text> : null}
-        <Pressable
-          className="mt-5 items-center rounded-xl bg-action-yellow py-3.5"
-          disabled={loading}
-          onPress={() => void login(email.trim(), password)}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <View className="gg-screen">
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="gg-page grow justify-center pb-8 pt-16"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text className="font-satoshi-medium text-action-yellow-on">
-            {loading ? "Signing in…" : "Sign in"}
+          <GridgoLogo size={48} role="supplier" />
+
+          <View className="mt-8 gap-2">
+            <Text className="text-h1 text-text-primary">Sign in</Text>
+            <Text className="text-body-lg text-text-secondary">
+              The shop side of GRIDGO — job offers, production, and payout for print
+              manufacturers in Davao.
+            </Text>
+          </View>
+
+          <View className="mt-8 gap-4">
+            <FieldShell label="Email">
+              <TextField
+                value={email}
+                onChange={setEmail}
+                kind="email"
+                placeholder="you@yourshop.ph"
+                accessibilityLabel="Email"
+                returnKeyType="next"
+              />
+            </FieldShell>
+
+            <FieldShell label="Password">
+              <TextField
+                value={password}
+                onChange={setPassword}
+                kind="password"
+                placeholder="Your password"
+                accessibilityLabel="Password"
+                returnKeyType="go"
+                onSubmit={() => void login(email.trim(), password)}
+              />
+            </FieldShell>
+          </View>
+
+          {error ? (
+            <View className="mt-4">
+              <ErrorNotice message={error} />
+            </View>
+          ) : null}
+
+          <View className="mt-6">
+            <PrimaryButton
+              label={loading ? "Signing in…" : "Sign in"}
+              disabled={loading}
+              onPress={() => void login(email.trim(), password)}
+            />
+          </View>
+
+          <Text className="mt-4 text-caption text-text-muted">
+            Shops are invited by GRIDGO Operations. If you cannot get in, ask them to check your
+            shop&apos;s accreditation.
           </Text>
-        </Pressable>
-        <Text className="mt-4 font-satoshi text-sm text-text-muted">supplier@gridgo.local / demo</Text>
-      </View>
+        </ScrollView>
 
-      <View className="mb-8 flex-row items-center gap-2">
-        <Text
-          className="min-w-0 flex-1 font-satoshi text-caption text-text-muted"
-          numberOfLines={2}
-          accessibilityLabel={`API base ${apiBase}`}
-        >
-          {apiBase}
-        </Text>
-        {healthState === "checking" ? (
-          <StatusChip tone="neutral" label="Checking…" icon="clock" />
-        ) : healthState === "reachable" ? (
-          <StatusChip tone="success" label="Reachable" icon="circle-check" />
-        ) : (
-          <StatusChip tone="error" label="Unreachable" icon="circle-x" />
-        )}
+        <View className="gg-page flex-row items-center gap-3 pb-8">
+          <Text
+            className="min-w-0 flex-1 text-caption text-text-muted"
+            numberOfLines={1}
+            accessibilityLabel={`GRIDGO on this network at ${apiHost}`}
+          >
+            GRIDGO on {apiHost}
+          </Text>
+          {healthState === "checking" ? (
+            <StatusChip tone="neutral" label="Checking" icon="clock" />
+          ) : healthState === "reachable" ? (
+            <StatusChip tone="success" label="Answering" icon="circle-check" />
+          ) : (
+            <StatusChip tone="error" label="No answer" icon="circle-x" />
+          )}
+        </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
+}
+
+/** Host and port only — the scheme adds nothing on a phone screen. */
+function hostOf(base: string): string {
+  return base.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }

@@ -1,14 +1,12 @@
-import DateTimePicker, {
+import {
   DateTimePickerAndroid,
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import { CalendarDays } from "lucide-react-native";
-import { useState } from "react";
-import { Modal, Platform, Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text } from "react-native";
 
-import { PrimaryButton } from "@/components/PrimaryButton";
-import { SecondaryButton } from "@/components/SecondaryButton";
-import { useThemeColors, useThemeName } from "@/hooks/useTheme";
+import { useThemeColors } from "@/hooks/useTheme";
+import { askDate } from "@/store/sheets";
 
 type Mode = "date" | "datetime";
 
@@ -29,9 +27,13 @@ type Props = {
  *
  * Dates are never typed into a text box: the shop taps the field and gets the
  * platform calendar, so `2026-08-12T17:00:00+08:00` is something the app
- * produces rather than something a person has to spell. Android opens the
- * system dialog imperatively; iOS presents the inline picker in a sheet with an
- * explicit confirm, so a stray scroll never silently changes a promise.
+ * produces rather than something a person has to spell.
+ *
+ * Android opens its own system dialogs imperatively — date, then clock — which
+ * is what a person on that platform expects. Everywhere else the calendar is a
+ * presented sheet route (`app/pick-date.tsx`), so it drags down, honours the
+ * back gesture, and dims what is behind it without this component drawing an
+ * overlay of its own.
  */
 export function DateTimeField({
   value,
@@ -44,10 +46,6 @@ export function DateTimeField({
   disabled,
 }: Props) {
   const colors = useThemeColors();
-  const scheme = useThemeName();
-  const [iosOpen, setIosOpen] = useState(false);
-  const [iosDraft, setIosDraft] = useState<Date | null>(null);
-
   const shown = value ?? null;
 
   function openAndroid() {
@@ -78,80 +76,46 @@ export function DateTimeField({
     });
   }
 
-  function open() {
+  async function open() {
     if (disabled) return;
     if (Platform.OS === "android") {
       openAndroid();
       return;
     }
-    setIosDraft(value ?? defaultStart(minimumDate));
-    setIosOpen(true);
+    const picked = await askDate({
+      title: accessibilityLabel,
+      mode,
+      initial: (value ?? defaultStart(minimumDate)).toISOString(),
+      minimum: minimumDate?.toISOString(),
+      maximum: maximumDate?.toISOString(),
+      confirmLabel: mode === "date" ? "Use this day" : "Use this time",
+    });
+    if (picked) onChange(clamp(picked, minimumDate, maximumDate));
   }
 
   return (
-    <>
-      <Pressable
-        onPress={open}
-        disabled={disabled}
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel}
-        accessibilityValue={{ text: shown ? formatValue(shown, mode) : placeholder }}
-        accessibilityState={{ disabled: Boolean(disabled) }}
-        className={
-          disabled
-            ? "gg-field gg-disabled flex-row items-center justify-between"
-            : "gg-field flex-row items-center justify-between"
-        }
-        style={({ pressed }) => (pressed && !disabled ? { opacity: 0.7 } : undefined)}
+    <Pressable
+      onPress={() => void open()}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityValue={{ text: shown ? formatValue(shown, mode) : placeholder }}
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      className={
+        disabled
+          ? "gg-field gg-disabled flex-row items-center justify-between"
+          : "gg-field flex-row items-center justify-between"
+      }
+      style={({ pressed }) => (pressed && !disabled ? { opacity: 0.7 } : undefined)}
+    >
+      <Text
+        className={shown ? "text-body text-text-primary" : "text-body text-text-muted"}
+        numberOfLines={1}
       >
-        <Text
-          className={
-            shown ? "text-body text-text-primary" : "text-body text-text-muted"
-          }
-          numberOfLines={1}
-        >
-          {shown ? formatValue(shown, mode) : placeholder}
-        </Text>
-        <CalendarDays size={18} color={colors.textMuted} strokeWidth={2} />
-      </Pressable>
-
-      {Platform.OS === "ios" ? (
-        <Modal
-          visible={iosOpen}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setIosOpen(false)}
-        >
-          <View
-            className="flex-1 justify-end"
-            style={{ backgroundColor: colors.scrim }}
-          >
-            <View className="gap-4 rounded-t-card border-t border-outline bg-surface p-4">
-              <Text className="text-h3 text-text-primary">{accessibilityLabel}</Text>
-              <DateTimePicker
-                value={iosDraft ?? defaultStart(minimumDate)}
-                mode={mode === "date" ? "date" : "datetime"}
-                display="inline"
-                themeVariant={scheme}
-                minimumDate={minimumDate}
-                maximumDate={maximumDate}
-                onChange={(_event, picked) => {
-                  if (picked) setIosDraft(picked);
-                }}
-              />
-              <PrimaryButton
-                label="Use this time"
-                onPress={() => {
-                  if (iosDraft) onChange(clamp(iosDraft, minimumDate, maximumDate));
-                  setIosOpen(false);
-                }}
-              />
-              <SecondaryButton label="Cancel" onPress={() => setIosOpen(false)} />
-            </View>
-          </View>
-        </Modal>
-      ) : null}
-    </>
+        {shown ? formatValue(shown, mode) : placeholder}
+      </Text>
+      <CalendarDays size={18} color={colors.textMuted} strokeWidth={2} />
+    </Pressable>
   );
 }
 

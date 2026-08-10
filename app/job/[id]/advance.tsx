@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FlowScreen } from "@/components/FlowScreen";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
@@ -24,8 +23,14 @@ import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
  * One production step, taken deliberately.
  *
  * The shop picks what actually happened from its own vocabulary, adds anything
- * the client should know, and confirms. The note is what lands on the client's
- * order timeline — a status word on its own tells them nothing.
+ * the client should know, and takes the step. The note is what lands on the
+ * client's order timeline — a status word on its own tells them nothing.
+ *
+ * This is a short, reversible step over a job the shop is already looking at,
+ * so it is presented as a sheet rather than pushed as a place: the job stays
+ * behind it and the sheet drags away. The consequence sits directly above the
+ * action, which is why there is no second confirmation on top of it — asking
+ * the same question twice teaches a shop to stop reading either time.
  */
 export default function AdvanceJobScreen() {
   const { id, action: actionKind } = useLocalSearchParams<{ id: string; action?: string }>();
@@ -38,7 +43,6 @@ export default function AdvanceJobScreen() {
   const step = job ? findAction(job.state, actionKind ?? "") : null;
   const templates = templatesForAction(step?.kind);
   const [chosen, setChosen] = useState<ProductionTemplateId | null>(null);
-  const [confirming, setConfirming] = useState(false);
 
   // The job arrives after the first render, so the choice is derived rather
   // than seeded — otherwise the control would open on a template that is not in
@@ -59,7 +63,6 @@ export default function AdvanceJobScreen() {
       targetState: step.targetState,
       note: extra ? `${headline}. ${extra}` : headline,
     });
-    setConfirming(false);
     if (!updated) return;
     clearDraft(job.id);
     router.back();
@@ -87,7 +90,7 @@ export default function AdvanceJobScreen() {
             <PrimaryButton
               label={action.busy ? "Saving…" : (step?.label ?? "Save update")}
               disabled={action.busy || !step}
-              onPress={() => setConfirming(true)}
+              onPress={() => void advance()}
             />
             <SecondaryButton
               label="Not yet"
@@ -142,17 +145,11 @@ export default function AdvanceJobScreen() {
         </FieldShell>
       ) : null}
 
-      {job && step ? (
-        <ConfirmDialog
-          visible={confirming}
-          question={`${step.label} for ${job.title}?`}
-          consequence={`${template?.timelineNote ?? step.resultLabel} appears on the client's order timeline straight away.`}
-          confirmLabel={step.label}
-          cancelLabel="Not yet"
-          busy={action.busy}
-          onConfirm={() => void advance()}
-          onCancel={() => setConfirming(false)}
-        />
+      {step ? (
+        <Text className="text-caption text-text-muted">
+          {template?.timelineNote ?? step.resultLabel} appears on the client&apos;s order
+          timeline straight away.
+        </Text>
       ) : null}
     </FlowScreen>
   );

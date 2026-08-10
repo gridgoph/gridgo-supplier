@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DangerButton } from "@/components/DangerButton";
 import { FlowScreen } from "@/components/FlowScreen";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -18,6 +17,7 @@ import {
 import { findAction } from "@/lib/jobState";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
+import { askConfirm } from "@/store/sheets";
 
 /**
  * Declining cannot be undone by the shop, so it asks for a reason, states the
@@ -33,26 +33,29 @@ export default function DeclineJobScreen() {
   const [reason, setReason] = useState<DeclineReasonId | null>(null);
   const [detail, setDetail] = useState("");
   const [showErrors, setShowErrors] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const [declined, setDeclined] = useState(false);
 
-  function requestConfirm() {
-    if (!reason) {
+  async function decline() {
+    if (!job || !reason) {
       setShowErrors(true);
       return;
     }
-    setConfirming(true);
-  }
+    const confirmed = await askConfirm({
+      question: `Decline ${job.title}?`,
+      consequence:
+        "It goes back to GRIDGO for rematching now, and your shop will not be offered it again.",
+      confirmLabel: "Decline job",
+      cancelLabel: "Keep this job",
+      destructive: true,
+    });
+    if (!confirmed) return;
 
-  async function decline() {
-    if (!job || !reason) return;
     const step = findAction(job.state, "decline");
     const updated = await action.run({
       jobId: job.id,
       targetState: step?.targetState ?? "approved_for_matching",
       note: declineTimelineNote(reason, detail),
     });
-    setConfirming(false);
     if (!updated) return;
     // GRIDGO removes the job from this shop the moment it is declined, so the
     // workspace behind this screen no longer has anything to show. The outcome
@@ -103,7 +106,7 @@ export default function DeclineJobScreen() {
           <DangerButton
             label={action.busy ? "Declining…" : "Decline job"}
             disabled={action.busy}
-            onPress={requestConfirm}
+            onPress={() => void decline()}
           />
           <SecondaryButton
             label="Keep this job"
@@ -150,18 +153,6 @@ export default function DeclineJobScreen() {
           affected, and no penalty is applied in the pilot.
         </Text>
       </View>
-
-      <ConfirmDialog
-        visible={confirming}
-        question={`Decline ${job?.title ?? "this job"}?`}
-        consequence="It goes back to GRIDGO for rematching now, and your shop will not be offered it again."
-        confirmLabel="Decline job"
-        cancelLabel="Keep this job"
-        destructive
-        busy={action.busy}
-        onConfirm={() => void decline()}
-        onCancel={() => setConfirming(false)}
-      />
     </FlowScreen>
   );
 }

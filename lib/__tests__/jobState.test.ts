@@ -47,7 +47,7 @@ function job(partial: Partial<Order> & Pick<Order, "id" | "state">): Order {
 describe("presentOrderState", () => {
   it("maps supplier states to plain labels without snake_case", () => {
     expect(presentOrderState("supplier_assigned").label).toBe("Needs decision");
-    expect(presentOrderState("payment_authorized").label).toBe("Paid — start production");
+    expect(presentOrderState("payment_authorized").label).toBe("Paid");
     expect(presentOrderState("ready_for_dispatch").label).toBe("Ready for pickup");
     expect(presentOrderState("supplier_assigned").label).not.toMatch(/_/);
   });

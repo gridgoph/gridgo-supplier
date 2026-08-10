@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FlowScreen } from "@/components/FlowScreen";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
@@ -14,6 +13,7 @@ import { probeStorage, storedUploads, type StorageAvailability } from "@/lib/fil
 import { lastChangeRequest } from "@/lib/proof";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { useJob } from "@/hooks/useJob";
+import { askConfirm } from "@/store/sheets";
 
 /**
  * Sending a proof to the client.
@@ -31,7 +31,6 @@ export default function ProofScreen() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [showErrors, setShowErrors] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const [sent, setSent] = useState(false);
 
   useEffect(() => {
@@ -49,25 +48,26 @@ export default function ProofScreen() {
   const changeRequest = job ? lastChangeRequest(job) : null;
   const correcting = job?.state === "supplier_proof_changes_requested";
 
-  function requestConfirm() {
-    if (!latest) {
+  async function sendProof() {
+    if (!job || !latest?.fileId) {
       setShowErrors(true);
       return;
     }
-    setConfirming(true);
-  }
+    const confirmed = await askConfirm({
+      question: `Send this proof for ${job.title}?`,
+      consequence: `${latest.fileName} goes to the client for approval. You cannot pull it back — a change means uploading a new proof.`,
+      confirmLabel: "Send proof to client",
+      cancelLabel: "Not yet",
+    });
+    if (!confirmed) return;
 
-  async function sendProof() {
-    if (!job || !latest?.fileId) return;
     setSending(true);
     setSendError(null);
     try {
       await api.attachFileToOrder(latest.fileId, job.id);
       upload.markAttached(latest.key);
-      setConfirming(false);
       setSent(true);
     } catch (e) {
-      setConfirming(false);
       setSendError(humanizeApiError(e, offlineMessage("send this proof")));
     } finally {
       setSending(false);
@@ -113,7 +113,7 @@ export default function ProofScreen() {
             <PrimaryButton
               label={sending ? "Sending…" : "Send proof to client"}
               disabled={sending || upload.busy}
-              onPress={requestConfirm}
+              onPress={() => void sendProof()}
             />
             <SecondaryButton
               label="Not yet"
@@ -188,19 +188,6 @@ export default function ProofScreen() {
             </Text>
           </View>
         </>
-      ) : null}
-
-      {job && latest ? (
-        <ConfirmDialog
-          visible={confirming}
-          question={`Send this proof for ${job.title}?`}
-          consequence={`${latest.fileName} goes to the client for approval. You cannot pull it back — a change means uploading a new proof.`}
-          confirmLabel="Send proof to client"
-          cancelLabel="Not yet"
-          busy={sending}
-          onConfirm={() => void sendProof()}
-          onCancel={() => setConfirming(false)}
-        />
       ) : null}
     </FlowScreen>
   );

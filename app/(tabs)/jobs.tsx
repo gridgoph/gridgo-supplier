@@ -1,10 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from "react-native";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";
+import { ErrorNotice } from "@/components/ErrorNotice";
 import { JobCard } from "@/components/JobCard";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { SectionHeader } from "@/components/SectionHeader";
+import { SkeletonList } from "@/components/Skeleton";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { needsSupplierAction } from "@/lib/jobState";
@@ -19,6 +22,7 @@ import { useThemeColors } from "@/hooks/useTheme";
 export default function JobsScreen() {
   const colors = useThemeColors();
   const [jobs, setJobs] = useState<api.Order[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,6 +31,7 @@ export default function JobsScreen() {
     try {
       setJobs(await api.listJobs());
       setError(null);
+      setLoaded(true);
     } catch (e) {
       setError(humanizeApiError(e, offlineMessage("load your jobs")));
     } finally {
@@ -51,6 +56,8 @@ export default function JobsScreen() {
     };
   }, [jobs]);
 
+  const firstLoad = loading && !loaded;
+
   return (
     <View className="gg-screen">
       <ScrollView
@@ -59,7 +66,7 @@ export default function JobsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={loading}
+            refreshing={loading && loaded}
             onRefresh={() => void reload()}
             tintColor={colors.textMuted}
           />
@@ -70,36 +77,35 @@ export default function JobsScreen() {
           subtitle="Accept, produce, self-QC, hand off to the rider"
         />
 
-        {loading && !jobs.length ? (
-          <View className="items-center py-12">
-            <ActivityIndicator color={colors.textMuted} />
-            <Text className="mt-3 text-body text-text-muted">Loading assignments…</Text>
-          </View>
-        ) : null}
+        {firstLoad ? <SkeletonList label="Loading your assignments" count={3} /> : null}
 
-        {error ? (
+        {error && !loaded ? (
           <EmptyState
-            title="Could not load jobs"
+            title="Jobs are not reachable"
             body={error}
             actionLabel="Try again"
             onAction={() => void reload()}
           />
+        ) : error ? (
+          <View className="mb-6">
+            <ErrorNotice message={error} onRetry={() => void reload()} />
+          </View>
         ) : null}
 
-        {!loading && !error && !jobs.length ? (
+        {loaded && !error && !jobs.length ? (
           <EmptyState
             title="No assignments yet"
-            body="When Operations matches a job to your shop, it lands here for accept or decline. Set your capacity so GRIDGO knows what to send you."
-            actionLabel="Set capacity"
-            onAction={() => router.push("/capacity")}
+            body="When GRIDGO matches a job to your shop, it lands here for accept or decline. Make sure the services you offer are up to date so the right work reaches you."
+            actionLabel="Check your services"
+            onAction={() => router.push("/services")}
+            secondaryLabel="Set capacity"
+            onSecondary={() => router.push("/capacity")}
           />
         ) : null}
 
         {waiting.length ? (
           <View className="gap-3">
-            <Text className="text-overline text-text-muted">
-              NEEDS YOU · {waiting.length}
-            </Text>
+            <SectionHeader title="NEEDS YOU" count={waiting.length} />
             {waiting.map((job) => (
               <JobCard
                 key={job.id}
@@ -112,9 +118,11 @@ export default function JobsScreen() {
 
         {running.length ? (
           <View className={waiting.length ? "mt-8 gap-3" : "gap-3"}>
-            <Text className="text-overline text-text-muted">
-              IN FLIGHT · {running.length}
-            </Text>
+            <SectionHeader
+              title="IN FLIGHT"
+              count={running.length}
+              hint="Nothing to do on these until someone else moves."
+            />
             {running.map((job) => (
               <JobCard
                 key={job.id}
@@ -124,6 +132,13 @@ export default function JobsScreen() {
               />
             ))}
           </View>
+        ) : null}
+
+        {loaded && !error && jobs.length > 0 && !waiting.length ? (
+          <Text className="mt-6 text-caption text-text-muted">
+            Every job here is waiting on the client, GRIDGO, or a rider. You will see a new
+            one the moment it needs your shop.
+          </Text>
         ) : null}
       </ScrollView>
     </View>

@@ -1,12 +1,14 @@
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";
+import { ErrorNotice } from "@/components/ErrorNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { ServiceCapacityCard } from "@/components/ServiceCapacityCard";
+import { SkeletonList } from "@/components/Skeleton";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { blackoutReasonLabel, blackoutSpanLabel } from "@/lib/blackouts";
@@ -16,6 +18,7 @@ import {
   validateCapacity,
   type CapacityDraft,
 } from "@/lib/capacity";
+import { buildCatalog, type ServiceCatalog } from "@/lib/taxonomy";
 import { useShopPlan } from "@/store/shopPlan";
 import { useThemeColors } from "@/hooks/useTheme";
 
@@ -31,7 +34,7 @@ export default function CapacityScreen() {
   const blackouts = useShopPlan((s) => s.blackouts);
 
   const [services, setServices] = useState<api.SupplierService[]>([]);
-  const [taxonomy, setTaxonomy] = useState<api.Taxonomy | null>(null);
+  const [catalog, setCatalog] = useState<ServiceCatalog | null>(null);
   const [drafts, setDrafts] = useState<Record<string, CapacityDraft>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,12 +45,12 @@ export default function CapacityScreen() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [serviceList, taxonomyResult] = await Promise.all([
+      const [serviceList, taxonomy] = await Promise.all([
         api.listSupplierServices(),
         api.getTaxonomy().catch(() => null),
       ]);
       setServices(serviceList);
-      setTaxonomy(taxonomyResult);
+      setCatalog(buildCatalog(taxonomy));
       setDrafts(
         Object.fromEntries(serviceList.map((s) => [s.id, capacityDraftFor(s)])),
       );
@@ -110,22 +113,21 @@ export default function CapacityScreen() {
         <View className="gap-2">
           <Text className="text-h2 text-text-primary">Capacity</Text>
           <Text className="text-body text-text-secondary">
-            What each accredited line can take in a day and a week, and how fast you turn work
-            around. GRIDGO matches jobs to your shop against these numbers.
+            How much of each category you offer can go through the shop in a day and a week,
+            and how fast you turn work around. GRIDGO matches jobs to you against these numbers.
           </Text>
         </View>
 
         {loading && !services.length ? (
-          <View className="items-center py-12">
-            <ActivityIndicator color={colors.textMuted} />
-            <Text className="mt-3 text-body text-text-muted">Loading your service lines…</Text>
+          <View className="mt-6">
+            <SkeletonList label="Loading the services you offer" count={2} />
           </View>
         ) : null}
 
         {error && !services.length ? (
           <View className="mt-6">
             <EmptyState
-              title="Capacity unavailable"
+              title="Capacity is not reachable"
               body={error}
               actionLabel="Try again"
               onAction={() => void reload()}
@@ -134,18 +136,20 @@ export default function CapacityScreen() {
         ) : error ? (
           // Saving is still the screen's one yellow action, so a refresh
           // failure states itself quietly rather than competing with it.
-          <View className="mt-6 rounded-field border border-error bg-surface p-3">
-            <Text className="text-body text-error">{error}</Text>
+          <View className="mt-6">
+            <ErrorNotice message={error} onRetry={() => void reload()} />
           </View>
         ) : null}
 
         {!loading && !error && !services.length ? (
           <View className="mt-6">
             <EmptyState
-              title="No service lines yet"
-              body="Operations sets up the categories your shop is accredited for. Ask them to add your first line, then set its capacity here."
-              actionLabel="Check again"
-              onAction={() => void reload()}
+              title="Nothing to set capacity for"
+              body="Capacity is set per service your shop offers. Pick what you produce first, then say how much of it you can turn out in a day."
+              actionLabel="Choose your services"
+              onAction={() => router.push("/services")}
+              secondaryLabel="Check again"
+              onSecondary={() => void reload()}
             />
           </View>
         ) : null}
@@ -155,7 +159,7 @@ export default function CapacityScreen() {
             <ServiceCapacityCard
               key={service.id}
               service={service}
-              taxonomy={taxonomy}
+              catalog={catalog}
               draft={drafts[service.id] ?? capacityDraftFor(service)}
               onChange={(patch) => {
                 setSaved(false);
@@ -175,8 +179,8 @@ export default function CapacityScreen() {
         </View>
 
         {saveError ? (
-          <View className="mt-4 rounded-field border border-error bg-surface p-3">
-            <Text className="text-body text-error">{saveError}</Text>
+          <View className="mt-4">
+            <ErrorNotice message={saveError} />
           </View>
         ) : null}
 
@@ -186,11 +190,12 @@ export default function CapacityScreen() {
           </Text>
         ) : null}
 
-        {services.length ? (
+        {/* Nothing changed, nothing to save — so no greyed-out yellow slab. */}
+        {changed.length ? (
           <View className="mt-6">
             <PrimaryButton
               label={saving ? "Saving…" : "Save capacity"}
-              disabled={saving || !changed.length}
+              disabled={saving}
               onPress={() => void saveAll()}
             />
           </View>

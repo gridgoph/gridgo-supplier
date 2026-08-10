@@ -1,9 +1,11 @@
 import type { Stack } from "expo-router";
 import type { ComponentProps } from "react";
 
-import { colors, typography, type ThemeName } from "@/constants/theme";
+import { colors, radius, typography, type ThemeName } from "@/constants/theme";
 
 type ScreenOptions = ComponentProps<typeof Stack>["screenOptions"];
+type ScreenProps = ComponentProps<typeof Stack.Screen>;
+type SingleScreenOptions = NonNullable<ScreenProps["options"]>;
 
 /**
  * Header chrome for every stack in the app.
@@ -28,5 +30,34 @@ export function stackScreenOptions(scheme: ThemeName): ScreenOptions {
       name for VoiceOver.
     */
     headerBackButtonDisplayMode: "minimal",
+  };
+}
+
+/**
+ * A sheet presented by the navigator rather than an overlay drawn by a screen.
+ *
+ * `formSheet` hands the platform the presentation: iOS gets a UIKit sheet with
+ * detents, Android gets a Material bottom sheet. Both bring spring physics that
+ * track the finger, drag-to-dismiss, the back gesture, a real scrim, and the
+ * system's own reduced-motion handling — none of which a hand-rolled `<Modal>`
+ * has. `fitToContents` keeps a short question short: a two-line confirmation
+ * must never open full height.
+ *
+ * The sheet paints its own surface (`components/SheetSurface`), so the screen
+ * container behind it stays transparent and the sheet's corners stay round.
+ */
+export function sheetScreenOptions(scheme: ThemeName): SingleScreenOptions {
+  const token = colors[scheme];
+  return {
+    presentation: "formSheet",
+    headerShown: false,
+    sheetAllowedDetents: "fitToContents",
+    sheetGrabberVisible: true,
+    sheetCornerRadius: radius.card,
+    sheetElevation: 24,
+    contentStyle: { backgroundColor: "transparent" },
+    // Android's bottom sheet paints its own container; keep it off the canvas
+    // colour so the surface below is what shows through the rounded corners.
+    navigationBarColor: token.surface,
   };
 }

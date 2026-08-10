@@ -16,7 +16,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { colors, type ThemeName } from "@/constants/theme";
 import { useAppFonts } from "@/hooks/useAppFonts";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
-import { stackScreenOptions } from "@/lib/navigationOptions";
+import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions";
 import { isSignedIn, useSession } from "@/store/session";
 
 SplashScreen.preventAutoHideAsync();
@@ -94,8 +94,12 @@ function RootStack() {
       </Stack.Protected>
 
       <Stack.Protected guard={signedIn}>
-        {/* The tab shell draws its own headers per tab. */}
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        {/*
+          The tab shell draws its own headers per tab. It still needs a title:
+          a pushed screen's back control falls back to the previous route's
+          name, and "(tabs)" is not something a person should ever hear.
+        */}
+        <Stack.Screen name="(tabs)" options={{ headerShown: false, title: "GRIDGO" }} />
         {/*
           Pushed screens sit above the tab shell and must share the same guard —
           a tabs-only guard would leave job/payout/design-system reachable after
@@ -121,11 +125,18 @@ function RootStack() {
             headerBackButtonDisplayMode: "minimal",
           }}
         />
+        {/* The catalogue draws its own headers for the list and one category. */}
+        <Stack.Screen name="services" options={{ headerShown: false }} />
+        {/*
+          A closure is a self-contained task with its own save and cancel, not a
+          place in the app — so it is presented as a modal rather than pushed,
+          and dismissing it abandons the edit exactly as a person expects.
+        */}
         <Stack.Screen
           name="shop-closure"
           options={{
             title: "Shop closure",
-            headerBackButtonDisplayMode: "minimal",
+            presentation: "modal",
           }}
         />
         <Stack.Screen
@@ -142,6 +153,13 @@ function RootStack() {
             headerBackButtonDisplayMode: "minimal",
           }}
         />
+
+        {/*
+          Sheets the app asks for and waits on. Both are routes so the platform
+          owns the presentation — see `sheetScreenOptions`.
+        */}
+        <Stack.Screen name="confirm" options={sheetScreenOptions(scheme)} />
+        <Stack.Screen name="pick-date" options={sheetScreenOptions(scheme)} />
       </Stack.Protected>
     </Stack>
   );

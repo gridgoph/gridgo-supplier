@@ -26,13 +26,28 @@ let hydrated = false;
 const listeners = new Set<() => void>();
 
 function applyPreference(next: ThemePreference) {
-  Appearance.setColorScheme(next === "system" ? null : next);
+  // react-native-web has no `setColorScheme`, so calling it unguarded throws
+  // and the in-app override dies on the web build. The CSS layer below is what
+  // actually switches the theme there; on iOS and Android this is what makes
+  // native chrome follow the choice too.
+  if (typeof Appearance.setColorScheme === "function") {
+    Appearance.setColorScheme(next === "system" ? null : next);
+  }
 
   // react-native-css keeps its own colour-scheme observable, seeded from
   // Appearance and updated by its change listener. Push the value directly so
   // the CSS layer switches on the same frame rather than waiting for the
   // native echo, which platforms deliver at different times.
-  cssColorScheme.set(next === "system" ? Appearance.getColorScheme() : next);
+  //
+  // On the web build that setter delegates straight back to Appearance, so it
+  // throws for the same reason. Nothing is broken by that — the page still
+  // follows the system's own colour scheme — but an unhandled throw here would
+  // take the Settings screen down with it.
+  try {
+    cssColorScheme.set(next === "system" ? Appearance.getColorScheme() : next);
+  } catch {
+    // No override on this platform; `prefers-color-scheme` still drives it.
+  }
 }
 
 function notify() {

@@ -71,6 +71,8 @@ Product scope for this binary: **`PRD.md`**. Fleet blueprint: `gridgo-tinker`.
 Prefer these modules over burying logic in screens:
 
 - `lib/jobState.ts` — the only place a raw order state becomes a label, an action, or a journey step. `actionsForJob` is the single source of what a shop may do next; `targetState: null` means the step is not a transition (a proof moves the order by attaching a file). `waitingOn` says whose move it is when the shop has none.
+- `lib/taxonomy.ts` — the only place that reads the shape of `GET /taxonomy`. `gridgo-api`'s `docs/TAXONOMY_API.md` is the contract; read it before touching this. Categories, subcategories, materials and finishes are four **flat** collections and every reference is a category `code` on the referring record. Two consequences the screens are built on: a supplier service line holds one `categoryCode`, so **a shop declares a category, not a subcategory**; and a line stored before the catalogue was published still holds a retired code, so every lookup goes through `resolveCategoryCode` or accredited work vanishes from the screen. `data/serviceCatalog.ts` is the chart this app falls back to when the platform has not migrated — it is display only, and `declarable` says whether a category can be filed against at all.
+- `lib/supplierServices.ts` — the draft → submitted → verified → suspended → removed vocabulary, used by both the catalogue and capacity so there is one set of words. Widening `materialCodes` on a verified line sends it back to Operations; `expandsCapability` is how a screen warns before that happens.
 - `lib/apiErrors.ts` / `lib/files.ts` — the only places that read an API error code. No `snake_case`, status code, or state string may reach a screen.
 - `lib/schedule.ts` + `lib/capacity.ts` + `lib/blackouts.ts` + `lib/day.ts` — agenda grouping, capacity arithmetic, and closures. Day comparisons go through `toDayKey` (local calendar), never UTC slicing.
 - `store/jobDrafts.ts` / `store/shopPlan.ts` — persisted through `lib/persistStorage.ts`, which uses AsyncStorage in every real runtime and inert storage only when `typeof window === "undefined"` during web SSR. Never gate persistence on `Platform.OS`.
@@ -83,7 +85,21 @@ Every input uses the control its data calls for, and the native one where the pl
 - Dates → `components/controls/DateTimeField.tsx` (`@react-native-community/datetimepicker`; Android opens the dialog imperatively, iOS confirms in a sheet). Never a text box a date is typed into.
 - Fixed small sets → `components/controls/SegmentedControl.tsx`; longer fixed sets → `OptionList`.
 - Bounded counts → `Stepper`. Money → `MoneyField` + `lib/money.ts`. Free text stays free text (`NoteField`).
-- Anything irreversible → `components/ConfirmDialog.tsx` with a question naming the thing. Never a bare "Are you sure?".
+- Anything irreversible → `await askConfirm({...})` from `store/sheets.ts`, with a question naming the thing. Never a bare "Are you sure?".
+
+## Sheets and modals
+
+A sheet is a **route**, never an overlay a screen draws. `lib/navigationOptions.ts` `sheetScreenOptions` presents one as `formSheet` sized to its content, so the platform provides the spring physics that track the finger, drag-to-dismiss, the back gesture, the scrim and its own reduced-motion handling. Nothing here re-implements any of that, and no new `<Modal>` should appear in this app.
+
+`store/sheets.ts` is how a screen asks for one and waits: `const ok = await askConfirm({...})`, `const when = await askDate({...})`. Dismissing any way the platform allows resolves as declined — nothing is committed until the sheet's own action is pressed. The routes are `app/confirm.tsx` and `app/pick-date.tsx`; both render `components/SheetSurface.tsx`, which must never claim `flex-1` or the content-sized detent cannot measure it.
+
+What gets which presentation:
+
+- **Sheet** — a short question or a small step over something already on screen (a confirmation, the calendar, a production update).
+- **`presentation: "modal"`** — a self-contained create/edit task with its own save and cancel (`shop-closure`).
+- **Pushed screen** — a commitment with fields to read and fill (accept, decline, proof, self-QC, handoff), and every destination.
+
+Android keeps its own imperative system dialogs for date and time (`DateTimeField`); the sheet route is what every other platform gets.
 
 ## Development Philosophy
 
@@ -192,6 +208,12 @@ Define tokens once in `constants/theme.ts` and consume them by semantic name. Ne
 
 Color never carries meaning alone. Every status is **icon + label + color**: "Approved", "Blocked", "Needs correction", "Last updated 3 min ago". A screen must stay fully readable in grayscale.
 
+### The states that are actually shipped
+
+Loading, empty and failed are most of what a shop sees on a bad connection, so they are components rather than improvised per screen: `components/Skeleton.tsx` (placeholders in the shape of what is coming — never a bare spinner), `components/EmptyState.tsx` (an invitation to act), `components/ErrorNotice.tsx` (inline, when the screen still has something to show). A screen that has loaded once keeps its content and states the failure quietly; a screen with nothing yet gets the full empty state.
+
+A disabled yellow button is not a state — if there is nothing to save, do not draw the action at all.
+
 ### Type
 
 Satoshi for all UI, falling back to `system-ui` until the licensed font files are available. Poppins ExtraBold is brand display only; Instrument Serif is rare decorative text only — never labels, data, or controls.
@@ -224,6 +246,8 @@ Use NativeWind classes. Do not use StyleSheet unless it is not possible to style
 Use the NativeWind version installed in this project. Check package.json. Do not upgrade without approval.
 
 Reuse class patterns through utilities in global.css.
+
+**A class that names a token this project never defined is not an error — it compiles to nothing.** `global.css` resets Tailwind's colour, type, radius, weight and shadow scales to `initial`, so `text-2xl`, `font-satoshi-bold`, `font-semibold`, `rounded-full` and `bg-blue-500` are silent no-ops: the element renders in the system font at the browser's default size. This shipped on the login screen of all three GRIDGO apps before anyone noticed. `lib/__tests__/designSystem.test.ts` now reads `global.css` and fails when any class in `app/` or `components/` cannot resolve — run the tests before believing a screen looks the way you wrote it.
 
 ### Style Exception List
 

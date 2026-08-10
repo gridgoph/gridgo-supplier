@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FlowScreen } from "@/components/FlowScreen";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
@@ -14,6 +13,7 @@ import { allSelfQcComplete, findAction, SELF_QC_CHECKS } from "@/lib/jobState";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
 import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
+import { askConfirm } from "@/store/sheets";
 
 /**
  * Self-QC: the shop's own sign-off that the printed work matches the spec.
@@ -33,22 +33,26 @@ export default function SelfQcScreen() {
   const clearDraft = useJobDrafts((s) => s.clearDraft);
 
   const [showErrors, setShowErrors] = useState(false);
-  const [confirming, setConfirming] = useState(false);
 
   const complete = allSelfQcComplete(draft.qcChecks);
   const remaining = SELF_QC_CHECKS.filter((c) => draft.qcChecks[c.id] !== true).length;
   const step = job ? findAction(job.state, "self_qc") : null;
 
-  function requestConfirm() {
+  async function completeSelfQc() {
     if (!complete) {
       setShowErrors(true);
       return;
     }
-    setConfirming(true);
-  }
-
-  async function completeSelfQc() {
     if (!job || !step?.targetState) return;
+
+    const confirmed = await askConfirm({
+      question: `Sign off self-QC for ${job.title}?`,
+      consequence: `Your ${SELF_QC_CHECKS.length} checks become this job's quality record, and the client sees it immediately.`,
+      confirmLabel: "Complete self-QC",
+      cancelLabel: "Keep checking",
+    });
+    if (!confirmed) return;
+
     const extra = draft.note.trim();
     const headline = `Self-QC passed — all ${SELF_QC_CHECKS.length} checks confirmed`;
     const updated = await action.run({
@@ -56,7 +60,6 @@ export default function SelfQcScreen() {
       targetState: step.targetState,
       note: extra ? `${headline}. ${extra}` : headline,
     });
-    setConfirming(false);
     if (!updated) return;
     clearDraft(job.id);
     router.back();
@@ -76,7 +79,7 @@ export default function SelfQcScreen() {
           <PrimaryButton
             label={action.busy ? "Saving…" : "Complete self-QC"}
             disabled={action.busy}
-            onPress={requestConfirm}
+            onPress={() => void completeSelfQc()}
           />
           <SecondaryButton
             label="Save and come back"
@@ -132,19 +135,6 @@ export default function SelfQcScreen() {
           accessibilityLabel="Note for the client"
         />
       </FieldShell>
-
-      {job && step ? (
-        <ConfirmDialog
-          visible={confirming}
-          question={`Sign off self-QC for ${job.title}?`}
-          consequence={`Your ${SELF_QC_CHECKS.length} checks become this job's quality record, and the client sees it immediately.`}
-          confirmLabel="Complete self-QC"
-          cancelLabel="Keep checking"
-          busy={action.busy}
-          onConfirm={() => void completeSelfQc()}
-          onCancel={() => setConfirming(false)}
-        />
-      ) : null}
 
       <View className="gg-panel gap-1">
         <Text className="text-body font-medium text-text-primary">What happens next</Text>

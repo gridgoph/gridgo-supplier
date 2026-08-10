@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from "react-native";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";
-import { SpecRow } from "@/components/SpecRow";
+import { SkeletonList } from "@/components/Skeleton";
 import { StatusChip } from "@/components/StatusChip";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import * as api from "@/lib/api";
@@ -75,11 +75,11 @@ export default function PayoutScreen() {
         }
       >
         <View className="gap-2">
-          <Text className="text-caption text-text-muted">HELD FOR YOUR SHOP</Text>
+          <Text className="text-overline text-text-muted">HELD FOR YOUR SHOP</Text>
           <Text className="text-display text-text-primary">{api.formatPhp(heldTotal)}</Text>
           <Text className="text-body text-text-secondary">
-            Protected payment holds the print total until a job settles. Delivery fees are listed
-            separately and are not shop revenue.
+            Protected payment holds the print total until a job settles. Delivery fees belong to
+            the rider, and GRIDGO does not publish its commission or your net figure yet.
           </Text>
         </View>
 
@@ -93,16 +93,15 @@ export default function PayoutScreen() {
         </View>
 
         {loading && !jobs.length ? (
-          <View className="items-center py-12">
-            <ActivityIndicator color={colors.textMuted} />
-            <Text className="mt-3 text-body text-text-muted">Loading the ledger…</Text>
+          <View className="mt-6">
+            <SkeletonList label="Loading your protected payments" count={3} compact />
           </View>
         ) : null}
 
         {error ? (
           <View className="mt-6">
             <EmptyState
-              title="Ledger unavailable"
+              title="Protected payment is not reachable"
               body={error}
               actionLabel="Try again"
               onAction={() => void reload()}
@@ -127,26 +126,30 @@ export default function PayoutScreen() {
           </View>
         ) : null}
 
-        <View className="mt-6 gap-4">
+        <View className="mt-6 gap-3">
           {rows.map((row) => (
             <View key={row.orderId} className="gg-card gap-3">
               <View className="flex-row items-start justify-between gap-3">
-                <Text className="min-w-0 flex-1 text-body-lg font-medium text-text-primary">
+                <Text className="min-w-0 flex-1 text-body font-medium text-text-secondary">
                   {row.title}
                 </Text>
                 <StatusChip tone={row.tone} label={row.settlementLabel} icon={row.icon} />
               </View>
 
-              <View>
-                <SpecRow label="Gross (print)" value={api.formatPhp(row.grossMinor)} />
-                <SpecRow label="Delivery fee" value={api.formatPhp(row.deliveryFeeMinor)} />
-                <SpecRow label="GRIDGO commission" value="Not on demo ledger" />
-                <SpecRow label="Net to shop" value="Not on demo ledger" />
-                <SpecRow label="Payment method" value={presentPaymentMethod(row.paymentMethod)} />
+              <View className="gap-0.5">
+                <Text className="text-h2 text-text-primary">
+                  {api.formatPhp(row.grossMinor)}
+                </Text>
+                <Text className="text-caption text-text-muted">
+                  Print total · paid by {presentPaymentMethod(row.paymentMethod).toLowerCase()}
+                  {row.deliveryFeeMinor > 0
+                    ? ` · ${api.formatPhp(row.deliveryFeeMinor)} delivery to the rider`
+                    : ""}
+                </Text>
               </View>
 
               {row.holdReason ? (
-                <Text className="text-caption text-text-secondary">{row.holdReason}</Text>
+                <Text className="text-body text-text-secondary">{row.holdReason}</Text>
               ) : null}
             </View>
           ))}

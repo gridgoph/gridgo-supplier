@@ -86,7 +86,11 @@ describe("session clearing paths feed the same guard", () => {
 
     expect(useSession.getState().user).toBeNull();
     expect(isSignedIn(useSession.getState().user)).toBe(false);
-    expect(useSession.getState().error).toMatch(/role "client"/);
+    // The message names the app to open, never the platform's role string.
+    const error = useSession.getState().error ?? "";
+    expect(error).toContain("GRIDGO for clients");
+    expect(error).not.toMatch(/\brole\b/i);
+    expect(error).not.toContain("client\"");
   });
 });
 
