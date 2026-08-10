@@ -2,29 +2,38 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 import type { Notification } from "@/lib/api";
+import * as alertsApi from "@/lib/alertsApi";
 import { createPersistStorage } from "@/lib/persistStorage";
 
 /**
- * Which alerts the shop has already dealt with, and the badge that follows.
+ * Which alerts the shop has dealt with, and the badge that follows.
  *
- * GRIDGO has no route for marking a notification read — `GET /notifications` is
- * the whole surface, and the `read` flag on a record is only ever set by the
- * platform itself. So dismissing one is a decision this device remembers, kept
- * on the phone so it survives a restart rather than the list refilling with
- * things the shop has already seen.
+ * Every change here goes to GRIDGO first (`lib/alertsApi`). Two of the three
+ * routes are new and may not be deployed yet, so when one answers "not there",
+ * the decision is remembered on this device instead — which is what this app
+ * did for everything before those routes existed.
  *
- * The consequence is worth being clear about: reading an alert here does not
- * read it on another device. Nothing in the app claims otherwise, and when the
- * platform grows a route this store is the one place that has to change.
+ * **The device-local half is temporary.** When mark-read and delete are live,
+ * `dismissed` and `deleted` should be deleted outright along with the caveat
+ * lines that describe them; `lib/alertsApi` names the rest of the cleanup. A
+ * dismissal this phone remembers does not follow a shop to another phone, and
+ * nothing in the app claims otherwise.
  */
 
 type AlertsState = {
   unreadCount: number;
-  /** Alert ids this device has dismissed. */
+  /** Alert ids this device has marked read because GRIDGO could not. */
   dismissed: string[];
+  /** Alert ids this device has deleted because GRIDGO could not. */
+  deleted: string[];
   hydrated: boolean;
-  markRead: (id: string) => void;
-  /** Recount from a freshly loaded list, honouring local dismissals. */
+  /** True once any change had to fall back to this device. Drives the caveat. */
+  localOnly: boolean;
+  markRead: (id: string) => Promise<alertsApi.AlertWriteOutcome>;
+  /** Mark exactly these read — never "everything", see `lib/alertsApi`. */
+  markManyRead: (ids: string[]) => Promise<alertsApi.AlertWriteOutcome>;
+  remove: (id: string) => Promise<alertsApi.AlertWriteOutcome>;
+  /** Recount from a freshly loaded list, honouring local decisions. */
   syncFrom: (alerts: Notification[]) => void;
 };
 
@@ -32,36 +41,79 @@ export function isAlertUnread(alert: Notification, dismissed: string[]): boolean
   return !alert.read && !dismissed.includes(alert.id);
 }
 
+/** Alerts the shop still has: what GRIDGO served, minus anything deleted here. */
+export function visibleAlerts(alerts: Notification[], deleted: string[]): Notification[] {
+  return alerts.filter((alert) => !deleted.includes(alert.id));
+}
+
 export const useAlertsStore = create<AlertsState>()(
   persist(
     (set, get) => ({
       unreadCount: 0,
       dismissed: [],
+      deleted: [],
+      localOnly: false,
       hydrated: false,
-      markRead: (id) => {
+      markRead: async (id) => {
+        const outcome = await alertsApi.markRead(id);
+        if (outcome.status === "failed") return outcome;
+
         const { dismissed, unreadCount } = get();
-        if (dismissed.includes(id)) return;
+        if (!dismissed.includes(id)) {
+          set({
+            dismissed: [...dismissed, id],
+            unreadCount: Math.max(0, unreadCount - 1),
+          });
+        }
+        if (outcome.status === "not_open_yet") set({ localOnly: true });
+        return outcome;
+      },
+      markManyRead: async (ids) => {
+        const outcome = await alertsApi.markAllRead(ids);
+        if (outcome.status === "failed") return outcome;
+
+        const { dismissed } = get();
+        const merged = [...new Set([...dismissed, ...ids])];
         set({
-          dismissed: [...dismissed, id],
-          unreadCount: Math.max(0, unreadCount - 1),
+          dismissed: merged,
+          unreadCount: Math.max(0, get().unreadCount - ids.filter((id) => !dismissed.includes(id)).length),
         });
+        if (outcome.status === "not_open_yet") set({ localOnly: true });
+        return outcome;
+      },
+      remove: async (id) => {
+        const outcome = await alertsApi.remove(id);
+        if (outcome.status === "failed") return outcome;
+
+        const { deleted, dismissed, unreadCount } = get();
+        set({
+          deleted: deleted.includes(id) ? deleted : [...deleted, id],
+          // A deleted alert cannot still be counted as unread.
+          unreadCount: dismissed.includes(id) ? unreadCount : Math.max(0, unreadCount - 1),
+        });
+        if (outcome.status === "not_open_yet") set({ localOnly: true });
+        return outcome;
       },
       syncFrom: (alerts) => {
-        const { dismissed } = get();
-        // Drop ids the platform no longer serves so the list cannot grow without
-        // bound on a shop that has been running for months.
+        const { dismissed, deleted } = get();
+        // Drop ids the platform no longer serves so neither list can grow
+        // without bound on a shop that has been running for months.
         const live = alerts.map((alert) => alert.id);
-        const stillThere = dismissed.filter((id) => live.includes(id));
+        const stillDismissed = dismissed.filter((id) => live.includes(id));
+        const stillDeleted = deleted.filter((id) => live.includes(id));
         set({
-          dismissed: stillThere,
-          unreadCount: alerts.filter((alert) => isAlertUnread(alert, stillThere)).length,
+          dismissed: stillDismissed,
+          deleted: stillDeleted,
+          unreadCount: visibleAlerts(alerts, stillDeleted).filter((alert) =>
+            isAlertUnread(alert, stillDismissed),
+          ).length,
         });
       },
     }),
     {
       name: "gridgo-supplier-alerts",
-      storage: createPersistStorage<Pick<AlertsState, "dismissed">>(),
-      partialize: (state) => ({ dismissed: state.dismissed }),
+      storage: createPersistStorage<Pick<AlertsState, "dismissed" | "deleted">>(),
+      partialize: (state) => ({ dismissed: state.dismissed, deleted: state.deleted }),
       onRehydrateStorage: () => (state) => {
         if (state) state.hydrated = true;
       },

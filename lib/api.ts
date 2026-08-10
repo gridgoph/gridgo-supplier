@@ -157,7 +157,13 @@ export type Settings = {
 /** Stored file metadata. `fileId` is the only durable identity a client keeps. */
 export type StoredFile = {
   fileId: string;
-  purpose: "artwork" | "fulfilment_proof" | "delivery_photo" | "service_image";
+  /** `verification_document` is provisional — see the note above `logout`. */
+  purpose:
+    | "artwork"
+    | "fulfilment_proof"
+    | "delivery_photo"
+    | "service_image"
+    | "verification_document";
   originalFilename: string;
   declaredContentType: string;
   detectedContentType: string;
@@ -462,6 +468,81 @@ export async function signupSupplier(
   });
   setToken(result.token);
   return result;
+}
+
+/* --------------------------------------------------------------------------
+   Provisional routes
+
+   Two things a shop does for itself are being added to the platform in
+   parallel with this app: moving its own pin, and sending Operations the
+   papers that accredit it. Neither is in `docs/OPERATIONAL_MODEL_V2_API.md`
+   yet, so the shapes below are the documented ones extended the obvious way —
+   `shop { lat, lng, label }` exactly as `POST /auth/signup` already accepts it,
+   and the storage contract's own upload-then-attach pair.
+
+   `lib/verification.ts` is the only caller and it treats a missing route as a
+   fact to state rather than an error to swallow. When the platform lands
+   these, this block is what changes.
+   -------------------------------------------------------------------------- */
+
+/**
+ * Provisional. Mark one of the caller's own notifications read.
+ *
+ * The record has carried a `read` flag since v2; nothing could set it. These
+ * three are the routes that close that gap.
+ */
+export async function markNotificationRead(id: string): Promise<Notification> {
+  const result = await request<{ notification: Notification }>(
+    `/notifications/${id}/read`,
+    { method: "POST", body: "{}" },
+  );
+  return result.notification;
+}
+
+/**
+ * Provisional. Mark a named set read.
+ *
+ * The ids are explicit on purpose. A bodyless "mark everything" would also
+ * mark alerts that arrived while the shop was reading the screen — things it
+ * has never seen — and a read flag that lies is worse than no read flag.
+ */
+export async function markNotificationsRead(ids: string[]): Promise<Notification[]> {
+  const result = await request<{ notifications: Notification[] }>("/notifications/read", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+  return result.notifications;
+}
+
+/** Provisional. Delete one of the caller's own notifications. */
+export async function deleteNotification(id: string): Promise<void> {
+  await request(`/notifications/${id}`, { method: "DELETE" });
+}
+
+/** Provisional. Move the signed-in shop's own pin. */
+export async function updateShopLocation(shop: ShopLocation): Promise<User> {
+  const result = await request<{ user: User }>("/auth/me/shop", {
+    method: "PATCH",
+    body: JSON.stringify({ shop }),
+  });
+  return result.user;
+}
+
+/**
+ * Provisional. Bind an uploaded file to the caller's own pending accreditation.
+ *
+ * Uploading uses the ordinary `POST /files` route with a
+ * `verification_document` purpose; this is the second half of that pair.
+ */
+export async function attachVerificationDocument(
+  fileId: string,
+  documentKind: string,
+): Promise<StoredFile> {
+  const result = await request<{ file: StoredFile }>(`/files/${fileId}/attach`, {
+    method: "POST",
+    body: JSON.stringify({ documentKind }),
+  });
+  return result.file;
 }
 
 export async function logout(): Promise<void> {

@@ -1,15 +1,22 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { ChevronRight } from "lucide-react-native";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 
+import { DocumentSlot } from "@/components/DocumentSlot";
 import { GridgoLogo } from "@/components/GridgoLogo";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SpecRow } from "@/components/SpecRow";
 import { StatusChip } from "@/components/StatusChip";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 import { PUBLISHED_CATALOG } from "@/data/serviceCatalog";
 import type { VerificationStatus } from "@/lib/api";
+import { chooseFile, takePhoto, type PickOutcome } from "@/lib/pickFile";
+import { VERIFICATION_DOCUMENTS } from "@/lib/verification";
+import { describeDocumentQueue, useAccreditationDocs } from "@/store/accreditationDocs";
+import type { DocumentKind } from "@/store/signupDraft";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 import { useSession } from "@/store/session";
@@ -20,9 +27,13 @@ import { useSession } from "@/store/session";
  * A shop that has signed itself up is signed in but not matchable: GRIDGO will
  * not send it work until Operations approves the account. The floor, the job
  * list and the schedule would all be empty in that state and every one of them
- * would read as "quiet today" rather than "you are not live yet" — so an
- * unapproved shop gets this screen instead of the tab shell, and it says the
- * one true thing plus the one useful thing it can still do.
+ * would read as "quiet today" rather than "you are not live yet".
+ *
+ * So this screen replaces the tab shell, and it has two jobs. It says the one
+ * true thing — nobody is ignoring you, Operations is reading your account — and
+ * it carries the only work left that can move the decision along: the papers,
+ * and the pin. Everything else a waiting shop can do is a distraction from
+ * those two.
  */
 export default function AccreditationScreen() {
   const user = useSession((s) => s.user);
@@ -30,6 +41,13 @@ export default function AccreditationScreen() {
   const logout = useSession((s) => s.logout);
   const colors = useThemeColors();
   const [checking, setChecking] = useState(false);
+
+  const entries = useAccreditationDocs((s) => s.entries);
+  const hydrated = useAccreditationDocs((s) => s.hydrated);
+  const addDocument = useAccreditationDocs((s) => s.add);
+  const removeDocument = useAccreditationDocs((s) => s.remove);
+  const sendDocuments = useAccreditationDocs((s) => s.send);
+  const [pickProblems, setPickProblems] = useState<Partial<Record<DocumentKind, string>>>({});
 
   const reload = useCallback(async () => {
     setChecking(true);
@@ -48,9 +66,35 @@ export default function AccreditationScreen() {
     }, [reload]),
   );
 
+  // A queue left half-sent by a dead phone or a dropped connection picks itself
+  // back up once the store has rehydrated. `send` is a no-op when nothing is
+  // outstanding, and it refuses to run twice at once.
+  useEffect(() => {
+    if (hydrated) void sendDocuments();
+  }, [hydrated, sendDocuments]);
+
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const status = presentVerification(user?.verificationStatus);
   const ranked = user?.categoryRanks ?? [];
+  const queue = describeDocumentQueue(entries);
+  const outstanding = VERIFICATION_DOCUMENTS.filter(
+    (definition) => entries[definition.kind]?.stage !== "sent",
+  );
+  const canSend = outstanding.some((definition) => {
+    const stage = entries[definition.kind]?.stage;
+    return stage === "queued" || stage === "failed";
+  });
+
+  function apply(kind: DocumentKind, outcome: PickOutcome) {
+    if (outcome.ok) {
+      addDocument(kind, outcome.document);
+      setPickProblems((current) => ({ ...current, [kind]: undefined }));
+      void sendDocuments();
+      return;
+    }
+    if (outcome.cancelled) return;
+    setPickProblems((current) => ({ ...current, [kind]: outcome.message }));
+  }
 
   return (
     <View className="gg-screen">
@@ -66,6 +110,11 @@ export default function AccreditationScreen() {
           />
         }
       >
+        {/*
+          The logo belongs here. This is still the door — a shop that has not
+          been accredited has never seen the app proper, and the mark is what
+          says which GRIDGO it is waiting on.
+        */}
         <ScreenHeader
           title={user?.supplierName || "Your shop"}
           subtitle="Accreditation"
@@ -86,12 +135,53 @@ export default function AccreditationScreen() {
           ) : null}
         </View>
 
-        <View className="gg-card mt-6">
-          <Text className="mb-2 text-overline text-text-muted">WHAT GRIDGO HAS</Text>
-          <SpecRow label="Shop" value={user?.supplierName || "—"} />
-          <SpecRow label="Contact" value={user?.name || "—"} />
-          <SpecRow label="Email" value={user?.email || "—"} />
-          <SpecRow label="Address" value={user?.shop?.label || "—"} />
+        {/* The one thing a waiting shop can still act on. */}
+        <View className="mt-6 gap-2">
+          <Text className="text-overline text-text-muted">YOUR PAPERS</Text>
+          {queue ? (
+            <View className="gg-panel gap-1">
+              <Text className="text-body font-medium text-text-primary">{queue.title}</Text>
+              <Text className="text-body text-text-secondary">{queue.body}</Text>
+            </View>
+          ) : null}
+          {outstanding.map((definition) => {
+            const entry = entries[definition.kind];
+            return (
+              <DocumentSlot
+                key={definition.kind}
+                definition={definition}
+                picked={entry?.picked}
+                problem={pickProblems[definition.kind] ?? entry?.error}
+                onTakePhoto={() => void takePhoto().then((o) => apply(definition.kind, o))}
+                onChooseFile={() => void chooseFile().then((o) => apply(definition.kind, o))}
+                onRemove={() => removeDocument(definition.kind)}
+              />
+            );
+          })}
+        </View>
+
+        <View className="mt-6 gap-2">
+          <Text className="text-overline text-text-muted">WHAT GRIDGO HAS</Text>
+          <View className="gg-card">
+            <SpecRow label="Shop" value={user?.supplierName || "—"} />
+            <SpecRow label="Contact" value={user?.name || "—"} />
+            <SpecRow label="Email" value={user?.email || "—"} />
+          </View>
+          <Pressable
+            onPress={() => router.push("/shop-location")}
+            accessibilityRole="button"
+            accessibilityLabel="Change where your shop is"
+            className="gg-touch flex-row items-center gap-3 rounded-card border border-outline bg-surface px-4 py-3"
+            style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+          >
+            <View className="min-w-0 flex-1 gap-0.5">
+              <Text className="text-caption text-text-muted">Where you print</Text>
+              <Text className="text-body text-text-primary" numberOfLines={2}>
+                {user?.shop?.label || "No pin yet"}
+              </Text>
+            </View>
+            <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+          </Pressable>
         </View>
 
         {ranked.length ? (
@@ -121,21 +211,26 @@ export default function AccreditationScreen() {
         ) : null}
 
         <View className="mt-8 gap-3">
-          <SecondaryButton
-            label={checking ? "Checking…" : "Check again"}
-            disabled={checking}
-            onPress={() => void reload()}
-          />
+          {/* One yellow: whichever of the two actually moves things along. */}
+          {canSend ? (
+            <PrimaryButton label="Send my papers" onPress={() => void sendDocuments()} />
+          ) : (
+            <PrimaryButton
+              label={checking ? "Checking…" : "Check again"}
+              disabled={checking}
+              onPress={() => void reload()}
+            />
+          )}
+          {canSend ? (
+            <SecondaryButton
+              label={checking ? "Checking…" : "Check again"}
+              disabled={checking}
+              onPress={() => void reload()}
+            />
+          ) : null}
           <SecondaryButton label="Settings" onPress={() => router.push("/settings")} />
+          <SecondaryButton label="Sign out" onPress={() => void logout()} />
         </View>
-
-        <Pressable
-          onPress={() => void logout()}
-          accessibilityRole="button"
-          className="gg-btn-secondary mt-6"
-        >
-          <Text className="text-button text-text-primary">Sign out</Text>
-        </Pressable>
       </ScrollView>
     </View>
   );
@@ -183,7 +278,7 @@ function presentVerification(
         tone: "warning",
         icon: "clock",
         headline: "Operations is checking your shop",
-        body: "Your account exists and everything you sent is with GRIDGO. No job will be matched to you until they approve it, so there is nothing on your floor yet. They will let you know, and this screen updates when it clears.",
+        body: "Your account exists and everything you sent is with GRIDGO. No job will be matched to you until they approve it, so there is nothing on your floor yet. They usually come back within a working day, and this screen updates when it clears.",
       };
   }
 }

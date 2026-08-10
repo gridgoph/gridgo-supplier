@@ -111,10 +111,11 @@ describe("milestone stages", () => {
     expect(printing?.stage).toBe("not_reached");
     expect(printing?.statusLabel).toBe("Not started");
     expect(printing?.statusLabel).not.toBe("Proof needed");
-    // Still the shop's money, still counted as waiting on the shop.
-    expect(earningsSplit(job({ id: "e2", state: "awaiting_downpayment" })).needsProofMinor).toBe(
-      100000,
-    );
+    // Still the shop's money, but nothing it can act on — so it is counted as
+    // later in the job, not as evidence the shop is sitting on.
+    const early = earningsSplit(job({ id: "e2", state: "awaiting_downpayment" }));
+    expect(early.needsProofMinor).toBe(0);
+    expect(early.laterMinor).toBe(100000);
   });
 
   it("moves a filed proof to GRIDGO rather than calling it done", () => {
@@ -190,10 +191,15 @@ describe("earningsSplit", () => {
     );
     expect(split.releasedMinor).toBe(50000);
     expect(split.awaitingReleaseMinor).toBe(15000);
-    // Delivered and retention are the rider's evidence, still to come.
-    expect(split.needsProofMinor).toBe(35000);
+    // Delivered and retention are the rider's evidence, not the shop's.
+    expect(split.needsProofMinor).toBe(0);
+    expect(split.laterMinor).toBe(35000);
     expect(
-      split.releasedMinor + split.awaitingReleaseMinor + split.needsProofMinor + split.heldMinor,
+      split.releasedMinor +
+        split.awaitingReleaseMinor +
+        split.needsProofMinor +
+        split.laterMinor +
+        split.heldMinor,
     ).toBe(split.totalMinor);
   });
 

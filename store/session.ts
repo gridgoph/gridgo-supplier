@@ -129,7 +129,7 @@ export const useSession = create<SessionState>((set, get) => ({
       set({
         loading: false,
         error:
-          "Cannot reach GRIDGO from this device. Check this device's connection, then try again — the connection GRIDGO is using is on the Account screen once you are in.",
+          "Cannot reach GRIDGO from this device. Check this device's connection, then try again — the address this app is calling is on the Settings screen once you are in.",
       });
     }
   },

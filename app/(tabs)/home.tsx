@@ -4,25 +4,15 @@ import { ChevronRight } from "lucide-react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";
-import { GridgoLogo } from "@/components/GridgoLogo";
+import { ObligationRow } from "@/components/ObligationRow";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SkeletonBlock } from "@/components/Skeleton";
-import { StatTile } from "@/components/StatTile";
 import { StatusChip } from "@/components/StatusChip";
-import { formatDeadlineFull } from "@/lib/dates";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
-import {
-  isAwaitingDecision,
-  isInProductionPipeline,
-  mostUrgentJob,
-  presentOrderState,
-  primaryAction,
-  routeForAction,
-} from "@/lib/jobState";
-import { summarizePayouts, unreleasedMinor } from "@/lib/payout";
-import { deadlineUrgency } from "@/lib/urgency";
+import { buildObligations, greeting, homeHeadline, type Obligation } from "@/lib/homeBoard";
+import { buildSchedule } from "@/lib/schedule";
 import { useAlertsStore } from "@/store/alerts";
 import { useSession } from "@/store/session";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -31,8 +21,13 @@ import { useThemeColors } from "@/hooks/useTheme";
 /**
  * The floor at a glance.
  *
- * The one job that needs the shop comes first and carries the screen's only
- * yellow action; counts and money sit underneath it, quiet.
+ * A greeting and one figure, then everything the shop has to do today. The
+ * trade is deliberate and the captain made it: the fold is smaller, so the top
+ * of the screen has to earn its space in one line and one number.
+ *
+ * The figure is the shop's own money that has stopped moving — see the note in
+ * `lib/homeBoard`. Underneath it, obligations in the order they should be
+ * worked through, with the sharpest one carrying the screen's only yellow.
  */
 export default function HomeScreen() {
   const { user } = useSession();
@@ -69,16 +64,20 @@ export default function HomeScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const firstLoad = loading && !loaded;
-  const pending = jobs.filter(isAwaitingDecision).length;
-  const inProduction = jobs.filter(isInProductionPipeline).length;
-  const payout = summarizePayouts(jobs);
-  const outstanding = unreleasedMinor(payout);
-  const urgent = mostUrgentJob(jobs);
-  const urgentAction = urgent ? primaryAction(urgent) : null;
-  const urgentStatus = urgent ? presentOrderState(urgent.state) : null;
-  const urgency = urgent
-    ? deadlineUrgency(urgent.promisedDate || urgent.deadline)
-    : null;
+
+  const headline = homeHeadline(jobs);
+  const obligations = buildObligations(jobs);
+  const [first, ...rest] = obligations;
+  const summary = buildSchedule(jobs, "today").summary;
+
+  function open(obligation: Obligation) {
+    router.push({
+      pathname: obligation.route,
+      params: obligation.actionKind
+        ? { id: obligation.orderId, action: obligation.actionKind }
+        : { id: obligation.orderId },
+    });
+  }
 
   return (
     <View className="gg-screen">
@@ -94,49 +93,61 @@ export default function HomeScreen() {
           />
         }
       >
+        {/*
+          The mark is not here on purpose. A shop on its own floor knows whose
+          app this is; what it does not know is what today looks like. So the
+          header carries the shop's own name and the one fact that changes what
+          it does next — what is promised today, and whether anything is late.
+          The lockup lives at the door: sign-in, onboarding, accreditation.
+        */}
         <ScreenHeader
-          title={user?.supplierName || "Supplier"}
-          subtitle="Your floor right now"
-          right={<GridgoLogo size={40} role="supplier" />}
+          eyebrow={greeting(user?.name)}
+          title={user?.supplierName || "Your shop"}
+          right={
+            firstLoad ? null : (
+              <StatusChip
+                tone={summary.late > 0 ? "error" : summary.today > 0 ? "info" : "neutral"}
+                icon={summary.late > 0 ? "triangle-alert" : "clock"}
+                label={
+                  summary.late > 0
+                    ? `${summary.late} late`
+                    : summary.today > 0
+                      ? `${summary.today} due today`
+                      : "Nothing due today"
+                }
+              />
+            )
+          }
         />
 
         {/*
-          Shaped to the screen that replaces it — the job card with its action,
-          the two tiles, the payment row — so the floor does not grow under the
-          shop's thumb the moment it lands.
+          Shaped to the screen that replaces it — the figure, the card with its
+          action, two rows — so the floor does not grow under the shop's thumb
+          the moment it lands.
         */}
         {firstLoad ? (
           <View accessibilityRole="progressbar" accessibilityLabel="Loading your floor">
-            <View className="gg-card gap-5">
-              <View className="gap-3">
-                <View className="flex-row items-center justify-between gap-3">
-                  <SkeletonBlock className="h-4 w-28" />
-                  <SkeletonBlock className="h-6 w-24 rounded-pill" />
-                </View>
-                <SkeletonBlock className="h-7 w-3/4" />
-                <View className="gap-1">
-                  <SkeletonBlock className="h-5 w-2/3" />
-                  <SkeletonBlock className="h-5 w-2/5" />
-                </View>
-              </View>
-              <SkeletonBlock className="h-11 w-full" />
-            </View>
-
-            <View className="mt-6 flex-row gap-3">
-              <View className="flex-1 gap-2 rounded-card border border-outline bg-surface px-4 py-3">
-                <SkeletonBlock className="h-7 w-12" />
-                <SkeletonBlock className="h-3 w-4/5" />
-              </View>
-              <View className="flex-1 gap-2 rounded-card border border-outline bg-surface px-4 py-3">
-                <SkeletonBlock className="h-7 w-12" />
-                <SkeletonBlock className="h-3 w-4/5" />
-              </View>
-            </View>
-
-            <View className="gg-card mt-3 gap-2">
-              <SkeletonBlock className="h-4 w-32" />
-              <SkeletonBlock className="h-6 w-2/5" />
+            <View className="gg-card gap-2">
+              <SkeletonBlock className="h-4 w-40" />
+              <SkeletonBlock className="h-10 w-2/3" />
+              <SkeletonBlock className="h-4 w-full" />
               <SkeletonBlock className="h-4 w-4/5" />
+            </View>
+            <View className="mt-6 gap-2">
+              <SkeletonBlock className="h-4 w-16" />
+              <View className="gg-card gap-5">
+                <View className="gap-3">
+                  <View className="flex-row items-center justify-between gap-3">
+                    <SkeletonBlock className="h-4 w-28" />
+                    <SkeletonBlock className="h-6 w-24 rounded-pill" />
+                  </View>
+                  <SkeletonBlock className="h-7 w-3/4" />
+                  <SkeletonBlock className="h-5 w-2/3" />
+                </View>
+                <SkeletonBlock className="h-11 w-full" />
+              </View>
+              <SkeletonBlock className="h-16 w-full rounded-card" />
+              <SkeletonBlock className="h-16 w-full rounded-card" />
             </View>
           </View>
         ) : null}
@@ -152,83 +163,63 @@ export default function HomeScreen() {
 
         {!firstLoad && !(error && !loaded) ? (
           <>
-            {urgent && urgentAction && urgentStatus ? (
-              <View className="gg-card gap-5">
-                <View className="gap-3">
-                  <View className="flex-row items-center justify-between gap-3">
-                    <Text className="text-overline text-text-muted">NEEDS YOU NEXT</Text>
-                    <StatusChip
-                      tone={urgentStatus.tone}
-                      label={urgentStatus.label}
-                      icon={urgentStatus.icon}
-                    />
-                  </View>
-                  <Text className="text-h2 text-text-primary">{urgent.title}</Text>
-                  <View className="gap-0.5">
-                    <Text className="text-body text-text-secondary">
-                      {formatDeadlineFull(urgent.promisedDate || urgent.deadline)}
-                    </Text>
-                    {urgency && urgency.level !== "undated" ? (
-                      <Text
-                        className={
-                          urgency.level === "overdue"
-                            ? "text-body font-medium text-error"
-                            : urgency.level === "urgent"
-                              ? "text-body font-medium text-warning"
-                              : "text-body text-text-muted"
-                        }
-                      >
-                        {urgency.label}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-                <PrimaryButton
-                  label={urgentAction.label}
-                  onPress={() =>
-                    router.push({
-                      pathname: routeForAction(urgentAction.kind),
-                      params: { id: urgent.id, action: urgentAction.kind },
-                    })
-                  }
-                />
-              </View>
-            ) : (
-              <EmptyState
-                title="Floor is clear"
-                body="Nothing needs a decision right now. Check Schedule for what is coming, or Jobs when GRIDGO matches new work."
-                actionLabel="Open schedule"
-                onAction={() => router.push("/(tabs)/schedule")}
-              />
-            )}
-
-            <View className="mt-6 flex-row gap-3">
-              <StatTile label="Awaiting your decision" value={pending} />
-              <StatTile label="In production" value={inProduction} />
-            </View>
-
+            {/* One figure, in the same place every day. */}
             <Pressable
               onPress={() => router.push("/payout")}
               accessibilityRole="button"
-              accessibilityLabel="Open earnings"
-              className="gg-touch mt-3 flex-row items-center gap-3 rounded-card border border-outline bg-surface p-4"
+              accessibilityLabel={`${headline.label}. Open earnings.`}
+              className="gg-card flex-row items-start gap-3"
               style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
             >
               <View className="min-w-0 flex-1 gap-1">
-                <Text className="text-caption text-text-muted">Earnings still to reach you</Text>
-                <Text className="text-h3 text-text-primary">
-                  {payout.jobCount === 0 ? "Nothing owed yet" : api.formatPhp(outstanding)}
+                <Text className="text-caption text-text-muted">{headline.label}</Text>
+                {/*
+                  Monochrome, deliberately. This is the biggest type on the
+                  screen and its label says exactly what it is; painting it
+                  yellow as well would put a second attention magnet next to
+                  the one action the screen wants pressed.
+                */}
+                <Text
+                  className="text-display text-text-primary"
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {api.formatPhp(headline.amountMinor)}
                 </Text>
-                <Text className="text-caption text-text-muted">
-                  {payout.jobCount === 0
-                    ? "Accept a job and name your price, and what you are owed appears here."
-                    : payout.needsProofMinor > 0
-                      ? `${api.formatPhp(payout.needsProofMinor)} of it is waiting on evidence from you.`
-                      : "Everything you owe evidence for is filed. GRIDGO releases the rest."}
-                </Text>
+                <Text className="text-body text-text-secondary">{headline.detail}</Text>
               </View>
-              <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+              <View className="pt-0.5">
+                <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+              </View>
             </Pressable>
+
+            {first ? (
+              <View className="mt-6 gap-2">
+                <Text className="text-overline text-text-muted">TODAY</Text>
+                <NextCard obligation={first} onPress={() => open(first)} />
+                {rest.map((obligation) => (
+                  <ObligationRow
+                    key={obligation.id}
+                    obligation={obligation}
+                    onPress={() => open(obligation)}
+                  />
+                ))}
+                {rest.length === 0 ? (
+                  <Text className="mt-1 text-caption text-text-muted">
+                    Nothing else needs you today. Schedule shows what is coming.
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
+              <View className="mt-6">
+                <EmptyState
+                  title="Nothing owed today"
+                  body="No job is waiting on a decision, a proof or a handover from you. Check Schedule for what is coming, or Jobs when GRIDGO matches new work."
+                  actionLabel="Open schedule"
+                  onAction={() => router.push("/(tabs)/schedule")}
+                />
+              </View>
+            )}
 
             {error ? (
               <Text className="mt-4 text-caption text-text-muted">
@@ -239,6 +230,43 @@ export default function HomeScreen() {
           </>
         ) : null}
       </ScrollView>
+    </View>
+  );
+}
+
+/**
+ * The one thing to do next, with the screen's only yellow.
+ *
+ * It states the job, where the job stands, what is owed, and what pressing the
+ * button commits the shop to — the same sentence the flow screen will repeat,
+ * so nothing is a surprise on the other side of the tap.
+ */
+function NextCard({ obligation, onPress }: { obligation: Obligation; onPress: () => void }) {
+  return (
+    <View className="gg-card gap-5">
+      <View className="gap-3">
+        <View className="flex-row items-center justify-between gap-3">
+          <Text className="text-overline text-text-muted">
+            {obligation.kind === "proof" ? "MONEY WAITING ON YOU" : "NEEDS YOU NEXT"}
+          </Text>
+          <StatusChip
+            tone={obligation.status.tone}
+            icon={obligation.status.icon}
+            label={obligation.status.label}
+          />
+        </View>
+        <Text className="text-h2 text-text-primary">{obligation.title}</Text>
+        {obligation.kind === "proof" && obligation.amountMinor != null ? (
+          <Text className="text-body-lg font-medium text-text-primary">
+            {api.formatPhp(obligation.amountMinor)} waits on this photo
+          </Text>
+        ) : null}
+        <Text className="text-body text-text-secondary">{obligation.detail}</Text>
+        {obligation.urgency === "overdue" ? (
+          <Text className="text-body font-medium text-error">Past the promised time</Text>
+        ) : null}
+      </View>
+      <PrimaryButton label={obligation.actionLabel} onPress={onPress} />
     </View>
   );
 }

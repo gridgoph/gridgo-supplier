@@ -242,13 +242,25 @@ export function findMilestoneView(
   return milestoneViews(order).find((view) => view.code === code) ?? null;
 }
 
-/** What a job is worth to this shop, split by where each part has got to. */
+/**
+ * What a job is worth to this shop, split by where each part has got to.
+ *
+ * `needsProofMinor` is the sharp one and it means exactly one thing: money the
+ * shop could release **today** by photographing something. A part the job has
+ * not reached, and the rider's delivered share, are not that — they belong in
+ * `laterMinor`. Folding them together was quietly telling a shop that a print
+ * run it has not started is evidence it owes, which is how a real warning
+ * learns to be ignored.
+ */
 export type EarningsSplit = {
   /** Everything the four parts add up to — the shop's own price. */
   totalMinor: number;
   releasedMinor: number;
   awaitingReleaseMinor: number;
+  /** Only what this shop can evidence right now. */
   needsProofMinor: number;
+  /** Not reached yet, or the rider's to evidence. Nothing for the shop to do. */
+  laterMinor: number;
   heldMinor: number;
   /** True when a claim is holding whatever has not been released. */
   held: boolean;
@@ -260,6 +272,7 @@ export function earningsSplit(order: Order): EarningsSplit {
     releasedMinor: 0,
     awaitingReleaseMinor: 0,
     needsProofMinor: 0,
+    laterMinor: 0,
     heldMinor: 0,
     held: order.payoutHold === true,
   };
@@ -269,7 +282,8 @@ export function earningsSplit(order: Order): EarningsSplit {
     if (view.stage === "released") split.releasedMinor += view.amountMinor;
     else if (view.stage === "held") split.heldMinor += view.amountMinor;
     else if (view.stage === "awaiting_release") split.awaitingReleaseMinor += view.amountMinor;
-    else split.needsProofMinor += view.amountMinor;
+    else if (view.stage === "needs_shop_proof") split.needsProofMinor += view.amountMinor;
+    else split.laterMinor += view.amountMinor;
   }
 
   return split;
@@ -282,6 +296,7 @@ export function addSplits(splits: EarningsSplit[]): EarningsSplit {
       releasedMinor: sum.releasedMinor + s.releasedMinor,
       awaitingReleaseMinor: sum.awaitingReleaseMinor + s.awaitingReleaseMinor,
       needsProofMinor: sum.needsProofMinor + s.needsProofMinor,
+      laterMinor: sum.laterMinor + s.laterMinor,
       heldMinor: sum.heldMinor + s.heldMinor,
       held: sum.held || s.held,
     }),
@@ -290,6 +305,7 @@ export function addSplits(splits: EarningsSplit[]): EarningsSplit {
       releasedMinor: 0,
       awaitingReleaseMinor: 0,
       needsProofMinor: 0,
+      laterMinor: 0,
       heldMinor: 0,
       held: false,
     },

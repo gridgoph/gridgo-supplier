@@ -103,6 +103,26 @@ describe("every stack screen keeps a way back", () => {
     expect(chrome).toContain('headerBackButtonDisplayMode: "minimal"');
   });
 
+  /**
+   * The captain wants the chevron every other pushed screen has. A modal is
+   * dismissed rather than navigated back from, so it drew its own "Cancel" —
+   * the honest way to give the chevron was to stop being a modal, not to put a
+   * chevron on one. Nothing depended on the presentation: both entry points
+   * push it, there is no dismiss guard, and its date picker is its own sheet
+   * route either way.
+   */
+  it("gives the closure form the stack's own back control, not a drawn one", () => {
+    const root = fs.readFileSync(path.join(ROOT, "app/_layout.tsx"), "utf8");
+    const closure = stackScreens(root).find((element) => nameOf(element) === "shop-closure");
+
+    expect(closure).toBeDefined();
+    expect(closure).not.toContain('presentation: "modal"');
+    expect(closure).toContain('headerBackButtonDisplayMode: "minimal"');
+
+    const screen = fs.readFileSync(path.join(ROOT, "app/shop-closure.tsx"), "utf8");
+    expect(screen).not.toContain("headerLeft");
+  });
+
   it("swaps tab content instantly, under a bar that does not move", () => {
     const tabs = fs.readFileSync(path.join(ROOT, "app/(tabs)/_layout.tsx"), "utf8");
 

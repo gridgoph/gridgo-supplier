@@ -121,6 +121,22 @@ export default function PayoutScreen() {
                 />
               </>
             ) : null}
+            {total.laterMinor > 0 ? (
+              <>
+                <View className="gg-divider" />
+                {/*
+                  Parts the job has not reached, and the rider's delivered
+                  share. Counted separately because nothing here is work the
+                  shop can do today — folding it into the row above turned a
+                  real prompt into a number that never went down.
+                */}
+                <SplitRow
+                  label="Later in the job"
+                  amountMinor={total.laterMinor}
+                  hint="Not reached yet, or waiting on the rider. Nothing for you to file."
+                />
+              </>
+            ) : null}
           </View>
         ) : null}
 

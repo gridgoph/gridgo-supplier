@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { Stack, router, useLocalSearchParams } from "expo-router";
+import { ScrollView, Text, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
 
 import { DangerButton } from "@/components/DangerButton";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -81,26 +81,12 @@ export default function ShopClosureScreen() {
   return (
     <View className="gg-screen">
       {/*
-        A modal is not pushed, so it has no back chevron — the way out has to be
-        drawn. It belongs in the header, where it stays visible while the form
-        scrolls and while the keyboard is up, rather than at the foot of a form
-        a shop has to scroll past the note field to reach.
+        No drawn way out. This is a pushed screen, so the stack's own back
+        control is the way back — a bare chevron with the platform's accessible
+        name and its own 44dp target, identical to every other pushed screen
+        here. Nothing is committed until the action below is pressed, which is
+        what the old "Cancel" was really saying.
       */}
-      <Stack.Screen
-        options={{
-          headerLeft: () => (
-            <Pressable
-              onPress={() => router.back()}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel and close"
-              className="gg-touch justify-center pr-4"
-              style={({ pressed }) => (pressed ? { opacity: 0.6 } : undefined)}
-            >
-              <Text className="text-button text-text-primary">Cancel</Text>
-            </Pressable>
-          ),
-        }}
-      />
       <ScrollView
         className="flex-1"
         contentContainerClassName="gg-page pb-16 pt-4"

@@ -6,7 +6,6 @@ import {
   isInProductionPipeline,
   JOB_JOURNEY,
   journeyIndex,
-  mostUrgentJob,
   needsSupplierAction,
   presentOrderState,
   presentTimelineActor,
@@ -208,25 +207,9 @@ describe("job urgency helpers", () => {
     expect(isInProductionPipeline(job({ id: "c", state: "awaiting_downpayment" }))).toBe(false);
   });
 
-  it("picks the most urgent actionable job by rank then deadline", () => {
-    const urgent = mostUrgentJob([
-      job({ id: "later-assigned", state: "supplier_assigned", deadline: "2026-08-20T10:00:00+08:00" }),
-      job({ id: "soon-assigned", state: "supplier_assigned", deadline: "2026-08-10T10:00:00+08:00" }),
-      job({ id: "production", state: "production", deadline: "2026-08-09T10:00:00+08:00" }),
-    ]);
-    expect(urgent?.id).toBe("soon-assigned");
-  });
-
-  it("puts money sitting still ahead of a job that is merely running", () => {
-    const urgent = mostUrgentJob([
-      filed({ id: "just-running", state: "production", deadline: "2026-08-09T10:00:00+08:00" }),
-      job({ id: "owes-proof", state: "supplier_self_qc", deadline: "2026-08-20T10:00:00+08:00" }),
-    ]);
-    expect(urgent?.id).toBe("owes-proof");
-  });
-
-  it("returns null when nothing needs supplier action", () => {
-    expect(mostUrgentJob([filed({ id: "x", state: "ready_for_dispatch" })])).toBeNull();
+  /** Ranking moved to `lib/homeBoard` — one ordering, tested there. */
+  it("knows when nothing needs supplier action", () => {
+    expect(needsSupplierAction(filed({ id: "x", state: "ready_for_dispatch" }))).toBe(false);
     expect(needsSupplierAction(job({ id: "y", state: "awaiting_downpayment" }))).toBe(false);
   });
 });

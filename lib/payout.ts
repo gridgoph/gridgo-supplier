@@ -89,5 +89,7 @@ export function summarizePayouts(jobs: Order[]): EarningsSplit & { jobCount: num
 
 /** Everything not yet in the shop's hands, however it is stuck. */
 export function unreleasedMinor(split: EarningsSplit): number {
-  return split.needsProofMinor + split.awaitingReleaseMinor + split.heldMinor;
+  return (
+    split.needsProofMinor + split.awaitingReleaseMinor + split.heldMinor + split.laterMinor
+  );
 }

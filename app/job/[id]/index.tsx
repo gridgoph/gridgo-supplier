@@ -19,6 +19,7 @@ import { actionsForJob, presentOrderState, routeForAction, waitingOn } from "@/l
 import { earningsSplit, milestoneViews } from "@/lib/milestones";
 import { unreleasedMinor } from "@/lib/payout";
 import { deadlineUrgency } from "@/lib/urgency";
+import { useViewing } from "@/store/toasts";
 import { useJob } from "@/hooks/useJob";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -39,6 +40,18 @@ export default function JobWorkspaceScreen() {
     useCallback(() => {
       void reload();
     }, [reload]),
+  );
+
+  /*
+    Declare which job is on screen, so a live alert about this one does not
+    interrupt with news the shop is already reading. Alerts about other jobs
+    still toast.
+  */
+  useFocusEffect(
+    useCallback(() => {
+      useViewing.getState().setOrder(id ?? null);
+      return () => useViewing.getState().setOrder(null);
+    }, [id]),
   );
 
   useEffect(() => {
