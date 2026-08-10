@@ -18,6 +18,7 @@ import { blackoutOnDay } from "@/lib/blackouts";
 import { shopDailyCapacity } from "@/lib/capacity";
 import { buildSchedule, SCHEDULE_RANGES, type ScheduleRange } from "@/lib/schedule";
 import { useShopPlan } from "@/store/shopPlan";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 
 /**
@@ -73,6 +74,7 @@ export default function ScheduleScreen() {
     schedule.days.some((d) => d.jobs.length > 0) ||
     schedule.lateJobs.length > 0 ||
     schedule.undatedJobs.length > 0;
+  const { refreshing, onRefresh } = usePullToRefresh(reload);
   const firstLoad = loading && !loaded;
 
   function openJob(jobId: string) {
@@ -87,8 +89,8 @@ export default function ScheduleScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={loading && loaded}
-            onRefresh={() => void reload()}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             tintColor={colors.textMuted}
           />
         }
@@ -96,7 +98,7 @@ export default function ScheduleScreen() {
         <ScreenHeader title="Schedule" subtitle="What is due, what is late, what is next" />
 
         <SegmentedControl
-          options={SCHEDULE_RANGES.map((r) => ({ value: r.value, label: r.label }))}
+          options={SCHEDULE_RANGES}
           value={range}
           onChange={setRange}
           accessibilityLabel="Schedule range"
@@ -110,7 +112,7 @@ export default function ScheduleScreen() {
 
         {firstLoad ? (
           <View className="mt-8">
-            <SkeletonList label="Loading your week" variant="row" count={4} />
+            <SkeletonList label="Loading your week" variant="row" count={4} sectioned />
           </View>
         ) : null}
 

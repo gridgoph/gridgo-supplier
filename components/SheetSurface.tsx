@@ -29,8 +29,11 @@ export function SheetSurface({ title, body, children, footer }: Props) {
   const surface = (
     <View
       className="rounded-t-card border-t border-outline bg-surface px-4 pb-4"
-      // A sheet floats over the screen behind it, which is the one case a
-      // border cannot carry on its own.
+      // The only deliberate platform split in this component: iOS draws its
+      // grabber inside the sheet's own top edge, so the heading needs a further
+      // 8pt to clear it. Android's bottom sheet puts the handle in its own strip
+      // above the content. Everything else — radius, colour, spacing — is one
+      // value on both.
       style={{
         paddingTop: Platform.OS === "ios" ? 24 : 16,
         paddingBottom: Math.max(insets.bottom, 16),

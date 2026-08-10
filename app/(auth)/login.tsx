@@ -49,6 +49,9 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
+      // Only iOS needs this: Android resizes the window for the keyboard itself
+      // (`adjustResize` under edge-to-edge), and padding on top of that would
+      // push the fields twice as far. Same behaviour, one platform's work.
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View className="gg-screen">

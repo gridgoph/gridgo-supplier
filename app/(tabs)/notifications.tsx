@@ -11,6 +11,7 @@ import { formatTimelineAt } from "@/lib/dates";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { useAlertsStore } from "@/store/alerts";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 
 /**
@@ -50,6 +51,7 @@ export default function NotificationsScreen() {
 
   const unread = items.filter((n) => !n.read);
   const read = items.filter((n) => n.read);
+  const { refreshing, onRefresh } = usePullToRefresh(reload);
   const firstLoad = loading && !loaded;
 
   return (
@@ -60,8 +62,8 @@ export default function NotificationsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={loading && loaded}
-            onRefresh={() => void reload()}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             tintColor={colors.textMuted}
           />
         }
@@ -71,7 +73,9 @@ export default function NotificationsScreen() {
           subtitle="Assignments, SLA risk, and payout notices"
         />
 
-        {firstLoad ? <SkeletonList label="Loading your alerts" count={3} compact /> : null}
+        {firstLoad ? (
+          <SkeletonList label="Loading your alerts" count={3} compact sectioned />
+        ) : null}
 
         {error && !loaded ? (
           <EmptyState

@@ -1,6 +1,5 @@
 import { useCallback, useEffect } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
-import Animated, { FadeInDown, useReducedMotion } from "react-native-reanimated";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 
 import { ArtworkPanel } from "@/components/ArtworkPanel";
@@ -19,6 +18,7 @@ import { actionsForJob, presentOrderState, routeForAction, waitingOn } from "@/l
 import { lastChangeRequest } from "@/lib/proof";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useJob } from "@/hooks/useJob";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 
 /**
@@ -29,8 +29,8 @@ export default function JobWorkspaceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
   const colors = useThemeColors();
-  const reduceMotion = useReducedMotion();
   const { job, loading, error, reload } = useJob(id);
+  const { refreshing, onRefresh } = usePullToRefresh(reload);
 
   // Coming back from a flow screen must show the state the flow produced.
   useFocusEffect(
@@ -101,22 +101,20 @@ export default function JobWorkspaceScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={loading}
-            onRefresh={() => void reload()}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             tintColor={colors.textMuted}
           />
         }
       >
         {/*
-          The one considered moment in this flow: the header re-enters when the
-          job's state changes, so a step the shop just took is visibly the thing
-          that moved. Keyed on state so nothing animates on a plain refresh.
+          This header does not animate, deliberately. It used to enter from
+          below on a state change — the only content in the app that arrived
+          from the bottom, and keyed so that merely opening a job ran it too.
+          The chip and the journey track already say the state in words, so the
+          motion carried nothing the screen does not state. Do not put it back.
         */}
-        <Animated.View
-          key={job.state}
-          entering={reduceMotion ? undefined : FadeInDown.duration(200)}
-          className="gap-3"
-        >
+        <View className="gap-3">
           <View className="flex-row">
             <StatusChip tone={status.tone} label={status.label} icon={status.icon} />
           </View>
@@ -138,7 +136,7 @@ export default function JobWorkspaceScreen() {
               {urgency.label}
             </Text>
           ) : null}
-        </Animated.View>
+        </View>
 
         <View className="mt-6">
           <JourneyTrack state={job.state} />

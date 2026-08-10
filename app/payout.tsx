@@ -16,6 +16,7 @@ import {
   presentPaymentMethod,
   type PayoutFilter,
 } from "@/lib/payout";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 
 /**
@@ -56,6 +57,7 @@ export default function PayoutScreen() {
     () => allRows.filter((row) => matchesPayoutFilter(row, filter)),
     [allRows, filter],
   );
+  const { refreshing, onRefresh } = usePullToRefresh(reload);
   const heldTotal = allRows
     .filter((row) => matchesPayoutFilter(row, "held"))
     .reduce((sum, row) => sum + row.grossMinor, 0);
@@ -68,8 +70,8 @@ export default function PayoutScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={loading}
-            onRefresh={() => void reload()}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             tintColor={colors.textMuted}
           />
         }
@@ -85,7 +87,7 @@ export default function PayoutScreen() {
 
         <View className="mt-6">
           <SegmentedControl
-            options={PAYOUT_FILTERS.map((f) => ({ value: f.value, label: f.label }))}
+            options={PAYOUT_FILTERS}
             value={filter}
             onChange={setFilter}
             accessibilityLabel="Protected payment filter"

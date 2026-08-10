@@ -9,6 +9,11 @@ import { useThemeColors } from "@/hooks/useTheme";
  *
  * Five destinations, no raised action disc. The bar is drawn from the tokens
  * on every platform — see `GridgoTabBar`. Headers are off; each tab draws its own.
+ *
+ * A tab is a place the shop already is, not a step it takes, so the content
+ * swaps under a bar that never moves. `none` is the library's current default;
+ * it is stated here so an upgrade cannot quietly slide or cross-fade five
+ * destinations a supplier switches between all day.
  */
 export default function TabsLayout() {
   const colors = useThemeColors();
@@ -18,6 +23,7 @@ export default function TabsLayout() {
       tabBar={(props) => <GridgoTabBar {...props} />}
       screenOptions={{
         headerShown: false,
+        animation: "none",
         sceneStyle: { backgroundColor: colors.canvas },
       }}
     >

@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
+import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import {
   setThemePreference,
   useThemePreference,
@@ -34,34 +35,17 @@ export default function SettingsScreen() {
           <Text className="text-body text-text-secondary">
             Light and Dark are the same product. Follow the system, or pin one.
           </Text>
-          <View className="flex-row gap-2">
-            {THEME_OPTIONS.map((option) => {
-              const selected = option.value === preference;
-              return (
-                <Pressable
-                  key={option.value}
-                  onPress={() => setThemePreference(option.value)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  className={
-                    selected
-                      ? "gg-chip gg-touch border-accent bg-accent px-4"
-                      : "gg-chip gg-touch bg-surface px-4"
-                  }
-                >
-                  <Text
-                    className={
-                      selected
-                        ? "text-button text-accent-on"
-                        : "text-button text-text-secondary"
-                    }
-                  >
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          {/*
+            One choice from a fixed set of three — the segmented control, the
+            same one Schedule and Protected payment use, rather than a third
+            hand-built row of chips.
+          */}
+          <SegmentedControl
+            options={THEME_OPTIONS}
+            value={preference}
+            onChange={setThemePreference}
+            accessibilityLabel="Theme"
+          />
         </View>
 
         <View className="mt-8 gap-3">
