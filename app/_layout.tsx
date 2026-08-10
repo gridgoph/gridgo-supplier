@@ -14,7 +14,9 @@ import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 
+import { ToastHost } from "@/components/ToastHost";
 import { colors, type ThemeName } from "@/constants/theme";
+import { useAlertStream } from "@/hooks/useAlertStream";
 import { useAppFonts } from "@/hooks/useAppFonts";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
 import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions";
@@ -72,6 +74,12 @@ export default function RootLayout() {
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <ThemeProvider value={navigationTheme(scheme)}>
           <RootStack />
+          {/*
+            Above the navigator so an alert can arrive on any screen, and at
+            the top of it so it can never sit on the action a screen wants
+            pressed — see `components/ToastHost`.
+          */}
+          <ToastHost />
           <StatusBar style={scheme === "dark" ? "light" : "dark"} />
         </ThemeProvider>
       </SafeAreaProvider>
@@ -97,6 +105,9 @@ function RootStack() {
   const scheme = useThemeName();
   const signedIn = isSignedIn(user);
   const matchable = signedIn && isMatchable(user);
+
+  // Live alerts for as long as there is a session to receive them.
+  useAlertStream(signedIn);
 
   return (
     <Stack screenOptions={stackScreenOptions(scheme)}>
@@ -124,6 +135,27 @@ function RootStack() {
             headerBackButtonDisplayMode: "minimal",
           }}
         />
+        {/*
+          The shop's pin is reachable from both signed-in states on purpose: a
+          shop waiting on accreditation is exactly the shop most likely to have
+          put its pin on the wrong corner, and making it wait for approval to
+          fix that would price its first jobs wrong.
+        */}
+        <Stack.Screen
+          name="shop-location"
+          options={{
+            title: "Where you print",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
+          Sheets the app asks for and waits on. Both are routes so the platform
+          owns the presentation — see `sheetScreenOptions`. They sit with the
+          signed-in guard rather than the matchable one because a waiting shop
+          confirms moving its pin the same way an accredited one does.
+        */}
+        <Stack.Screen name="confirm" options={sheetScreenOptions(scheme)} />
+        <Stack.Screen name="pick-date" options={sheetScreenOptions(scheme)} />
       </Stack.Protected>
 
       <Stack.Protected guard={matchable}>
@@ -161,15 +193,20 @@ function RootStack() {
         {/* The catalogue draws its own headers for the list and one category. */}
         <Stack.Screen name="services" options={{ headerShown: false }} />
         {/*
-          A closure is a self-contained task with its own save and cancel, not a
-          place in the app — so it is presented as a modal rather than pushed,
-          and dismissing it abandons the edit exactly as a person expects.
+          A closure used to be presented as a modal, which is why it drew its
+          own "Cancel" in the header — a modal is dismissed, not navigated back
+          from. The captain wants the chevron every other screen in this app
+          has, and nothing here needed the modal: both entry points push it, it
+          has no dismiss guard, and its date picker is its own sheet route
+          either way. So it is an ordinary pushed screen and takes the stack's
+          own back control, rather than a modal wearing a chevron it should not
+          have.
         */}
         <Stack.Screen
           name="shop-closure"
           options={{
             title: "Shop closure",
-            presentation: "modal",
+            headerBackButtonDisplayMode: "minimal",
           }}
         />
         <Stack.Screen
@@ -179,13 +216,6 @@ function RootStack() {
             headerBackButtonDisplayMode: "minimal",
           }}
         />
-
-        {/*
-          Sheets the app asks for and waits on. Both are routes so the platform
-          owns the presentation — see `sheetScreenOptions`.
-        */}
-        <Stack.Screen name="confirm" options={sheetScreenOptions(scheme)} />
-        <Stack.Screen name="pick-date" options={sheetScreenOptions(scheme)} />
       </Stack.Protected>
     </Stack>
   );

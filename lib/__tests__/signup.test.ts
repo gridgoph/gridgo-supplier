@@ -1,79 +1,24 @@
 import {
   categoryRanks,
-  EMPTY_SIGNUP_FORM,
-  hasErrors,
   promoteCategory,
   toggleCategory,
   toSignupRequest,
-  validateSignup,
-  type SignupForm,
 } from "@/lib/signup";
-import { DAVAO_AREAS } from "@/data/davaoAreas";
+import { EMPTY_SIGNUP_DRAFT, type SignupDraft } from "@/store/signupDraft";
 
-function form(partial: Partial<SignupForm> = {}): SignupForm {
+function draft(partial: Partial<SignupDraft> = {}): SignupDraft {
   return {
+    ...EMPTY_SIGNUP_DRAFT,
     shopName: "PrintRight Davao",
     contactName: "Ben Santos",
     email: "ben@printright.ph",
     phone: "0917 123 4567",
     password: "at-least-8",
-    areaCode: DAVAO_AREAS[0].code,
-    streetAddress: "C.M. Recto St",
+    pin: { lat: 7.0644, lng: 125.6085, label: "C.M. Recto St, Poblacion, Davao City" },
     categoryCodes: ["marketing_collateral"],
     ...partial,
   };
 }
-
-describe("validateSignup", () => {
-  it("accepts a complete form", () => {
-    expect(validateSignup(form())).toEqual({});
-    expect(hasErrors(validateSignup(form()))).toBe(false);
-  });
-
-  it("names every missing field on an empty form", () => {
-    const errors = validateSignup(EMPTY_SIGNUP_FORM);
-    expect(Object.keys(errors).sort()).toEqual(
-      [
-        "areaCode",
-        "categoryCodes",
-        "contactName",
-        "email",
-        "password",
-        "phone",
-        "shopName",
-        "streetAddress",
-      ].sort(),
-    );
-  });
-
-  it("rejects a password the platform would reject anyway, before sending it", () => {
-    expect(validateSignup(form({ password: "short" })).password).toContain("8");
-    expect(validateSignup(form({ password: "12345678" })).password).toBeUndefined();
-  });
-
-  it("catches an email typo without inventing a rule the platform does not have", () => {
-    expect(validateSignup(form({ email: "ben" })).email).toBeTruthy();
-    expect(validateSignup(form({ email: "ben@shop" })).email).toBeTruthy();
-    expect(validateSignup(form({ email: "ben+jobs@shop.com.ph" })).email).toBeUndefined();
-  });
-
-  it("accepts a phone number however it is punctuated", () => {
-    for (const phone of ["09171234567", "0917 123 4567", "+63 917 123 4567"]) {
-      expect(validateSignup(form({ phone })).phone).toBeUndefined();
-    }
-    expect(validateSignup(form({ phone: "12345" })).phone).toBeTruthy();
-  });
-
-  it("requires at least one kind of work, because a rank of nothing is nothing", () => {
-    expect(validateSignup(form({ categoryCodes: [] })).categoryCodes).toBeTruthy();
-  });
-
-  it("never puts an error message in the platform's own words", () => {
-    for (const message of Object.values(validateSignup(EMPTY_SIGNUP_FORM))) {
-      expect(message).not.toMatch(/_/);
-    }
-  });
-});
 
 /**
  * The captain's model is that a shop declares what it does **best first**, and
@@ -117,23 +62,33 @@ describe("ranking", () => {
 });
 
 describe("toSignupRequest", () => {
-  it("sends the shop's pin from the area it picked, with the street in the label", () => {
-    const request = toSignupRequest(form());
-    expect(request?.shop.lat).toBe(DAVAO_AREAS[0].lat);
-    expect(request?.shop.lng).toBe(DAVAO_AREAS[0].lng);
-    expect(request?.shop.label).toContain("C.M. Recto St");
-    expect(request?.shop.label).toContain("Davao City");
+  it("sends the pin the shop placed on the map, with its own label", () => {
+    const request = toSignupRequest(draft());
+    expect(request?.shop).toEqual({
+      lat: 7.0644,
+      lng: 125.6085,
+      label: "C.M. Recto St, Poblacion, Davao City",
+    });
   });
 
   it("trims what a phone keyboard leaves behind", () => {
-    const request = toSignupRequest(form({ email: "  ben@shop.ph  ", shopName: " Shop " }));
+    const request = toSignupRequest(draft({ email: "  ben@shop.ph  ", shopName: " Shop " }));
     expect(request?.email).toBe("ben@shop.ph");
     expect(request?.supplierName).toBe("Shop");
   });
 
-  /** An unknown area would otherwise pin the shop at the origin of the map. */
-  it("refuses to build a request from an area it does not know", () => {
-    expect(toSignupRequest(form({ areaCode: "atlantis" }))).toBeNull();
-    expect(toSignupRequest(form({ areaCode: null }))).toBeNull();
+  /**
+   * A missing pin would otherwise price every delivery from the origin of the
+   * map, which is in the Gulf of Guinea.
+   */
+  it("refuses to build a request without a placed pin", () => {
+    expect(toSignupRequest(draft({ pin: null }))).toBeNull();
+    expect(toSignupRequest(draft({ pin: { lat: 0, lng: 0, label: "Nowhere" } }))).toBeNull();
+  });
+
+  it("refuses a pin with no address on it", () => {
+    expect(
+      toSignupRequest(draft({ pin: { lat: 7.06, lng: 125.6, label: "   " } })),
+    ).toBeNull();
   });
 });

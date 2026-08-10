@@ -1,8 +1,9 @@
-import { Check } from "lucide-react-native";
+import { Check, Trash2 } from "lucide-react-native";
+import { useRef } from "react";
 import { Pressable, Text, View } from "react-native";
-import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
-import type { SharedValue } from "react-native-reanimated";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import ReanimatedSwipeable, {
+  type SwipeableMethods,
+} from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { AlertStageTrack } from "@/components/AlertStageTrack";
 import type { Notification } from "@/lib/api";
@@ -15,6 +16,8 @@ type Props = {
   /** Index into `ALERT_STAGES`, or -1 when the alert is not about a job. */
   stageIndex: number;
   onMarkRead: () => void;
+  /** Asks first — deleting an alert loses something a shop may still need. */
+  onDelete: () => void;
   /** Absent when the alert is not about a job the shop can open. */
   onOpen?: () => void;
 };
@@ -23,125 +26,197 @@ type Props = {
  * One alert, after the legacy GRIDGO card.
  *
  * What that card got right and this keeps: an unread one looks different at a
- * glance, the stamp says the day as well as the time, a swipe clears it, and
- * the job's own stage is drawn inline so a shop can see where the work is
- * without opening anything.
+ * glance, the stamp says the day as well as the time, and the job's own stage
+ * is drawn inline so a shop can see where the work is without opening
+ * anything.
  *
- * What it does not keep: a hard-coded dark card and a yellow rail. Those were a
- * second visual identity living inside a screen, and this app has one.
+ * ## Every action has two ways in
  *
- * Swiping and tapping both mark it read on this device — see `store/alerts` for
- * why that is the honest limit of what GRIDGO can be told.
+ * The swipe **reveals** buttons rather than firing on release. A gesture that
+ * commits on release has to guess how far is far enough, and getting it wrong
+ * deletes something; revealing is also what lets the same two buttons carry
+ * their own labels. Neither action is swipe-only: reading is what a tap on the
+ * card already does, deleting has its own control in the card, and both are
+ * published as accessibility actions so a screen reader reaches them from the
+ * rotor without a gesture at all.
+ *
+ * ## The hang this must not reintroduce
+ *
+ * The swipeable stays mounted whether or not the alert is still unread.
+ * Wrapping only the unread ones tore the gesture handler out of the tree from
+ * inside its own open callback — marking read re-rendered this card into the
+ * plain branch mid-animation — and the app hung on the swipe. Everything that
+ * changes state here closes the row first and defers off the gesture's frame.
  */
-export function AlertCard({ alert, unread, stageIndex, onMarkRead, onOpen }: Props) {
+export function AlertCard({
+  alert,
+  unread,
+  stageIndex,
+  onMarkRead,
+  onDelete,
+  onOpen,
+}: Props) {
   const colors = useThemeColors();
+  const row = useRef<SwipeableMethods>(null);
+
+  /** Close the revealed panel, then act — never inside the gesture's frame. */
+  const runFromRow = (action: () => void) => {
+    row.current?.close();
+    setTimeout(action, 0);
+  };
 
   const card = (
-    <Pressable
-      onPress={() => {
-        onMarkRead();
-        onOpen?.();
-      }}
-      accessibilityRole="button"
-      accessibilityLabel={`${unread ? "Unread. " : ""}${alert.title}. ${alert.body}`}
-      accessibilityHint={onOpen ? "Opens the job and marks this read" : "Marks this read"}
+    <View
       className={
         unread
-          ? "gg-touch gap-3 rounded-card border border-outline bg-surface-high p-4"
-          : "gg-touch gg-card gap-3"
+          ? "flex-row items-start gap-2 rounded-card border border-outline bg-surface-high p-4"
+          : "flex-row items-start gap-2 rounded-card border border-outline bg-surface p-4"
       }
-      style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
     >
-      <View className="gap-1">
-        <View className="flex-row items-start justify-between gap-3">
+      <Pressable
+        onPress={() => {
+          onMarkRead();
+          onOpen?.();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={`${unread ? "Unread. " : ""}${alert.title}. ${alert.body}`}
+        accessibilityHint={onOpen ? "Opens the job and marks this read" : "Marks this read"}
+        // Published so a screen reader reaches both without the swipe.
+        accessibilityActions={[
+          ...(unread ? [{ name: "markRead", label: "Mark read" }] : []),
+          { name: "delete", label: "Delete this alert" },
+        ]}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === "markRead") onMarkRead();
+          if (event.nativeEvent.actionName === "delete") onDelete();
+        }}
+        className="gg-touch min-w-0 flex-1 gap-3"
+        style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+      >
+        <View className="gap-1">
           <Text
             className={
               unread
-                ? "min-w-0 flex-1 text-body-lg font-medium text-text-primary"
-                : "min-w-0 flex-1 text-body font-medium text-text-secondary"
+                ? "text-body-lg font-medium text-text-primary"
+                : "text-body font-medium text-text-secondary"
             }
           >
             {alert.title}
           </Text>
-          {unread ? (
-            <View
-              className="mt-1.5 h-2 w-2 rounded-pill bg-brand"
-              accessibilityElementsHidden
-              importantForAccessibility="no-hide-descendants"
-            />
-          ) : null}
+          <Text
+            className={unread ? "text-body text-text-secondary" : "text-body text-text-muted"}
+          >
+            {alert.body}
+          </Text>
+          <Text className="text-caption text-text-muted">{formatNotificationAt(alert.at)}</Text>
         </View>
-        <Text
-          className={unread ? "text-body text-text-secondary" : "text-body text-text-muted"}
-        >
-          {alert.body}
-        </Text>
-        <Text className="text-caption text-text-muted">
-          {formatNotificationAt(alert.at)}
-        </Text>
-      </View>
 
-      {stageIndex >= 0 ? (
-        <>
-          <View className="gg-divider" />
-          <AlertStageTrack index={stageIndex} />
-        </>
-      ) : null}
-    </Pressable>
+        {stageIndex >= 0 ? (
+          <>
+            <View className="gg-divider" />
+            <AlertStageTrack index={stageIndex} />
+          </>
+        ) : null}
+      </Pressable>
+
+      <View className="items-center gap-2">
+        {unread ? (
+          <View
+            className="mt-1.5 h-2 w-2 rounded-pill bg-brand"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          />
+        ) : null}
+        {/*
+          The non-swipe route to deleting. Quiet, but always there — a swipe is
+          a shortcut for people who know it exists, never the only door.
+        */}
+        <Pressable
+          onPress={onDelete}
+          accessibilityRole="button"
+          accessibilityLabel={`Delete the alert: ${alert.title}`}
+          className="gg-touch items-center justify-center"
+          style={({ pressed }) => (pressed ? { opacity: 0.6 } : undefined)}
+        >
+          <Trash2 size={18} color={colors.textMuted} strokeWidth={2} />
+        </Pressable>
+      </View>
+    </View>
   );
 
-  /*
-    The swipeable stays mounted whether or not the alert is still unread.
-    Wrapping only the unread ones tore the gesture handler out of the tree from
-    inside its own open callback — marking read re-rendered this card into the
-    plain branch mid-animation — and the app hung on the swipe. An already-read
-    card simply offers no action, which is the same result without the unmount.
-  */
   return (
     <ReanimatedSwipeable
+      ref={row}
       friction={2}
-      rightThreshold={48}
-      renderRightActions={
-        unread
-          ? (_progress, translation) => (
-              <MarkReadAction translation={translation} color={colors.textSecondary} />
-            )
-          : undefined
-      }
-      onSwipeableOpen={(direction) => {
-        if (direction !== "right" || !unread) return;
-        // Off the gesture's own callback frame. Re-rendering the list from
-        // inside it is what the hang came from, and letting the swipe settle
-        // first also means the tick is on screen before the card restyles.
-        setTimeout(onMarkRead, 0);
-      }}
+      rightThreshold={40}
+      // Never fires an action on release; the revealed buttons do that.
+      renderRightActions={() => (
+        /*
+          Hidden from assistive technology on purpose. These buttons are a
+          shortcut for a thumb that already knows the gesture; a screen reader
+          reaches the same two actions on the card itself, and publishing them
+          twice would read every alert out with duplicate controls.
+        */
+        <View
+          className="ml-2 flex-row items-stretch gap-2"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          {unread ? (
+            <SwipeAction
+              label="Read"
+              onPress={() => runFromRow(onMarkRead)}
+              accessibilityLabel={`Mark read: ${alert.title}`}
+            >
+              <Check size={20} color={colors.textSecondary} strokeWidth={2} />
+            </SwipeAction>
+          ) : null}
+          <SwipeAction
+            label="Delete"
+            tone="error"
+            onPress={() => runFromRow(onDelete)}
+            accessibilityLabel={`Delete the alert: ${alert.title}`}
+          >
+            <Trash2 size={20} color={colors.error} strokeWidth={2} />
+          </SwipeAction>
+        </View>
+      )}
     >
       {card}
     </ReanimatedSwipeable>
   );
 }
 
-/**
- * What sits behind the card as it slides. It names the outcome — a tick and
- * "Read" — so the gesture is not a guess the first time someone tries it.
- */
-function MarkReadAction({
-  translation,
-  color,
+/** One revealed button. Icon plus label, so it reads in greyscale. */
+function SwipeAction({
+  label,
+  onPress,
+  accessibilityLabel,
+  tone = "default",
+  children,
 }: {
-  translation: SharedValue<number>;
-  color: string;
+  label: string;
+  onPress: () => void;
+  accessibilityLabel: string;
+  tone?: "default" | "error";
+  children: React.ReactNode;
 }) {
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateX: translation.value + 96 }],
-  }));
-
   return (
-    <View className="w-24 items-center justify-center rounded-card bg-surface-variant">
-      <Animated.View style={style} className="items-center gap-1">
-        <Check size={20} color={color} strokeWidth={2} />
-        <Text className="text-caption text-text-secondary">Read</Text>
-      </Animated.View>
-    </View>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      className={
+        tone === "error"
+          ? "gg-touch w-20 items-center justify-center gap-1 rounded-card border border-error bg-surface"
+          : "gg-touch w-20 items-center justify-center gap-1 rounded-card bg-surface-variant"
+      }
+      style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+    >
+      {children}
+      <Text className={tone === "error" ? "text-caption text-error" : "text-caption text-text-secondary"}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }

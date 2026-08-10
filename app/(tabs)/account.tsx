@@ -3,31 +3,75 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { router, type Href } from "expo-router";
 
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { SpecRow } from "@/components/SpecRow";
-import { getApiBase } from "@/lib/api";
+import { SecondaryButton } from "@/components/SecondaryButton";
+import { StatusChip } from "@/components/StatusChip";
 import { useThemeColors } from "@/hooks/useTheme";
+import { askConfirm } from "@/store/sheets";
 import { useSession } from "@/store/session";
 
+/**
+ * The shop's own account.
+ *
+ * Deliberately short. A screen that lists every setting at once is a screen
+ * people scan instead of read, and almost nothing here is looked at twice a
+ * year — so it leads with the two facts that change what the shop can do today
+ * (who GRIDGO thinks it is, and that GRIDGO will match work to it) and puts
+ * everything routine one clear tap away, grouped by what it is about.
+ *
+ * Recognition over recall: every destination says what is behind it in a line,
+ * so a shop chooses from what it can see rather than remembering where a
+ * setting lives. And the one action that undoes the session asks first — a
+ * counter phone gets handed around, and signing out by accident on a Saturday
+ * means finding a password on a Saturday.
+ */
 export default function AccountScreen() {
   const user = useSession((s) => s.user);
   const logout = useSession((s) => s.logout);
-  const apiBase = getApiBase();
+
+  async function signOut() {
+    const confirmed = await askConfirm({
+      question: "Sign out of GRIDGO on this phone?",
+      consequence:
+        "Your jobs and earnings stay with GRIDGO. You will need your email and password to get back in, and no job alerts will reach this phone until you do.",
+      confirmLabel: "Sign out",
+      cancelLabel: "Stay signed in",
+      destructive: true,
+    });
+    if (confirmed) void logout();
+  }
 
   return (
     <View className="gg-screen">
-      <ScrollView className="flex-1" contentContainerClassName="gg-page pb-10" showsVerticalScrollIndicator={false}>
-        <ScreenHeader title="Account" subtitle="Identity and connection" />
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="gg-page pb-10"
+        showsVerticalScrollIndicator={false}
+      >
+        <ScreenHeader title="Account" />
 
-        <View className="gg-card">
-          <SpecRow label="Name" value={user?.name || "—"} />
-          <SpecRow label="Email" value={user?.email || "—"} />
-          <SpecRow label="Shop" value={user?.supplierName || "—"} />
-          <SpecRow label="Role" value="Supplier" />
+        {/* Identity first, and the one status that governs everything else. */}
+        <View className="gg-card gap-3">
+          <View className="gap-1">
+            <Text className="text-h3 text-text-primary">{user?.supplierName || "Your shop"}</Text>
+            <Text className="text-body text-text-secondary">{user?.name || "—"}</Text>
+            <Text className="text-caption text-text-muted">{user?.email || "—"}</Text>
+          </View>
+          <View className="flex-row">
+            <StatusChip tone="success" icon="circle-check" label="Accredited" />
+          </View>
+          <Text className="text-caption text-text-muted">
+            GRIDGO matches work to your shop. Operations can pause that, and this screen says so
+            if they ever do.
+          </Text>
         </View>
 
-        {/* Destination rows — not primary actions. Full-row target, label + chevron. */}
         <View className="mt-6 gap-2">
-          <Text className="text-overline text-text-muted">SHOP</Text>
+          <Text className="text-overline text-text-muted">YOUR SHOP</Text>
+          <DestinationRow
+            title="Where you print"
+            detail={user?.shop?.label || "Set the pin every delivery fee is measured from"}
+            onPress={() => router.push("/shop-location")}
+          />
           <DestinationRow
             title="Services you offer"
             detail="The work GRIDGO may send you, and how each one is verified"
@@ -38,6 +82,10 @@ export default function AccountScreen() {
             detail="What you can take on each day, and the days you are shut"
             onPress={() => router.push("/capacity")}
           />
+        </View>
+
+        <View className="mt-6 gap-2">
+          <Text className="text-overline text-text-muted">MONEY</Text>
           <DestinationRow
             title="Earnings"
             detail="What each job pays you, and what each part is waiting on"
@@ -49,23 +97,14 @@ export default function AccountScreen() {
           <Text className="text-overline text-text-muted">APP</Text>
           <DestinationRow
             title="Settings"
-            detail="Theme and onboarding"
+            detail="Theme, the product tour, and the connection this app is using"
             onPress={() => router.push("/settings" as Href)}
           />
         </View>
 
-        <View className="gg-card mt-6">
-          <Text className="mb-1 text-overline text-text-muted">BACKEND</Text>
-          <SpecRow label="API base" value={apiBase} />
+        <View className="mt-8">
+          <SecondaryButton label="Sign out" onPress={() => void signOut()} />
         </View>
-
-        <Pressable
-          onPress={() => void logout()}
-          accessibilityRole="button"
-          className="gg-btn-secondary mt-8"
-        >
-          <Text className="text-button text-text-primary">Sign out</Text>
-        </Pressable>
       </ScrollView>
     </View>
   );
@@ -92,7 +131,9 @@ function DestinationRow({
     >
       <View className="min-w-0 flex-1 gap-0.5">
         <Text className="text-body font-medium text-text-primary">{title}</Text>
-        <Text className="text-caption text-text-muted">{detail}</Text>
+        <Text className="text-caption text-text-muted" numberOfLines={2}>
+          {detail}
+        </Text>
       </View>
       <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
     </Pressable>

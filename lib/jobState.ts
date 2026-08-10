@@ -273,32 +273,6 @@ export function needsSupplierAction(
 }
 
 /**
- * Most urgent pending job: needs decision first, then unfiled proof (that is
- * money sitting still), then the rest by deadline.
- */
-export function mostUrgentJob(jobs: Order[]): Order | null {
-  const actionable = jobs.filter(needsSupplierAction);
-  if (!actionable.length) return null;
-
-  const rank = (j: Order): number => {
-    if (j.state === "supplier_assigned") return 0;
-    if (primaryAction(j)?.kind === "add_proof") return 1;
-    if (j.state === "payment_authorized") return 2;
-    if (j.state === "production") return 3;
-    if (j.state === "supplier_self_qc") return 4;
-    return 5;
-  };
-
-  return [...actionable].sort((a, b) => {
-    const byRank = rank(a) - rank(b);
-    if (byRank !== 0) return byRank;
-    const da = a.deadline || a.promisedDate || "9999";
-    const db = b.deadline || b.promisedDate || "9999";
-    return da.localeCompare(db);
-  })[0];
-}
-
-/**
  * What the shop is waiting for when it has no action of its own. A screen that
  * only says "nothing to do" leaves a supplier guessing whose move it is.
  */

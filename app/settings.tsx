@@ -2,6 +2,8 @@ import { router } from "expo-router";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
+import { SpecRow } from "@/components/SpecRow";
+import { getApiBase } from "@/lib/api";
 import {
   setThemePreference,
   useThemePreference,
@@ -69,6 +71,19 @@ export default function SettingsScreen() {
               ›
             </Text>
           </Pressable>
+        </View>
+
+        {/*
+          The address of the GRIDGO this build is talking to. It lives here
+          rather than on Account because it is a fact about the app, not about
+          the shop — and it is what someone reads out when a phone on a shop's
+          wifi cannot reach the platform.
+        */}
+        <View className="mt-8 gap-3">
+          <Text className="text-overline text-text-muted">CONNECTION</Text>
+          <View className="gg-card">
+            <SpecRow label="GRIDGO address" value={getApiBase()} />
+          </View>
         </View>
       </ScrollView>
     </View>

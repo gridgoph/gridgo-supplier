@@ -1,10 +1,22 @@
 import { Redirect } from "expo-router";
 
-import { isSignedIn, useSession } from "@/store/session";
+import { isMatchable, isSignedIn, useSession } from "@/store/session";
 
-/** Launch: demo login or the supplier tab shell. Live session changes are handled by `Stack.Protected` in the root layout. */
+/**
+ * Launch: the door, the waiting room, or the floor.
+ *
+ * Three states, matching the three the root guard draws — a shop that has just
+ * signed itself up is signed in and **not** matchable, and sending it to the
+ * tab shell points at a group `Stack.Protected` has not mounted, which lands on
+ * nothing at all. That is exactly the shop least able to work out what
+ * happened, so it goes to the screen that explains the wait.
+ *
+ * Live session changes are still handled by the guard in the root layout; this
+ * only decides where a cold start begins.
+ */
 export default function Index() {
   const user = useSession((s) => s.user);
-  if (isSignedIn(user)) return <Redirect href="/(tabs)/home" />;
-  return <Redirect href="/(auth)/login" />;
+  if (!isSignedIn(user)) return <Redirect href="/(auth)/login" />;
+  if (!isMatchable(user)) return <Redirect href="/accreditation" />;
+  return <Redirect href="/(tabs)/home" />;
 }

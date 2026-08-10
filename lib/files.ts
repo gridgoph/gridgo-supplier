@@ -129,7 +129,17 @@ const UPLOAD_MESSAGES: Record<string, string> = {
 
 export type UploadResult =
   | { ok: true; fileId: string }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      /**
+       * The API's own failure code, for the one caller that has to tell two
+       * failures apart rather than only show a sentence: a purpose the platform
+       * does not know yet is a route that has not landed, not a bad file.
+       * Never shown on screen.
+       */
+      code?: string;
+    };
 
 /**
  * Stream one file to `POST /files`.
@@ -187,7 +197,11 @@ export async function uploadFile(
       return { ok: true, fileId };
     }
 
-    return { ok: false, error: messageFor(body, response.status) };
+    return {
+      ok: false,
+      error: messageFor(body, response.status),
+      code: typeof body?.error === "string" ? body.error : undefined,
+    };
   } catch {
     return {
       ok: false,

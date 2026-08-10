@@ -33,10 +33,10 @@ describe("AlertCard", () => {
    */
   it("wraps read and unread alike, so marking one read cannot unmount the gesture", async () => {
     const unreadTree = (await render(
-      <AlertCard alert={alert()} unread stageIndex={1} onMarkRead={jest.fn()} />,
+      <AlertCard alert={alert()} unread stageIndex={1} onMarkRead={jest.fn()} onDelete={jest.fn()} />,
     )).toJSON();
     const readTree = (await render(
-      <AlertCard alert={alert()} unread={false} stageIndex={1} onMarkRead={jest.fn()} />,
+      <AlertCard alert={alert()} unread={false} stageIndex={1} onMarkRead={jest.fn()} onDelete={jest.fn()} />,
     )).toJSON();
 
     expect(rootType(readTree)).toEqual(rootType(unreadTree));
@@ -51,26 +51,63 @@ describe("AlertCard", () => {
         unread
         stageIndex={1}
         onMarkRead={onMarkRead}
+        onDelete={jest.fn()}
         onOpen={onOpen}
       />,
     );
-    fireEvent.press(screen.getByRole("button", { name: /Printing evidence still owed/ }));
+    // The delete control names the same alert, so target the card itself.
+    fireEvent.press(screen.getByRole("button", { name: /^Unread\. Printing evidence still owed/ }));
     expect(onMarkRead).toHaveBeenCalledTimes(1);
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
+  it("offers both actions without a swipe, for a screen reader and a thumb", async () => {
+    const onMarkRead = jest.fn();
+    const onDelete = jest.fn();
+    await render(
+      <AlertCard
+        alert={alert()}
+        unread
+        stageIndex={1}
+        onMarkRead={onMarkRead}
+        onDelete={onDelete}
+      />,
+    );
+
+    // A visible control, not only a gesture.
+    fireEvent.press(screen.getByRole("button", { name: /^Delete the alert/ }));
+    expect(onDelete).toHaveBeenCalledTimes(1);
+
+    // And published to assistive technology on the card itself.
+    const card = screen.getByRole("button", { name: /^Unread\./ });
+    expect(card.props.accessibilityActions).toEqual([
+      { name: "markRead", label: "Mark read" },
+      { name: "delete", label: "Delete this alert" },
+    ]);
+    /*
+      Invoked through the prop rather than `fireEvent(node,
+      "accessibilityAction")`: that helper leaves this renderer unable to mount
+      anything afterwards, and every later test in this file fails on a tree
+      that is not there. The wiring under test is the same.
+    */
+    card.props.onAccessibilityAction({ nativeEvent: { actionName: "markRead" } });
+    expect(onMarkRead).toHaveBeenCalledTimes(1);
+    card.props.onAccessibilityAction({ nativeEvent: { actionName: "delete" } });
+    expect(onDelete).toHaveBeenCalledTimes(2);
+  });
+
   it("says it is unread to a screen reader, not only with a dot", async () => {
-    await render(<AlertCard alert={alert()} unread stageIndex={1} onMarkRead={jest.fn()} />);
+    await render(<AlertCard alert={alert()} unread stageIndex={1} onMarkRead={jest.fn()} onDelete={jest.fn()} />);
     expect(screen.getByRole("button", { name: /^Unread\./ })).toBeTruthy();
   });
 
   it("drops that from one that has been read", async () => {
-    await render(<AlertCard alert={alert()} unread={false} stageIndex={1} onMarkRead={jest.fn()} />);
+    await render(<AlertCard alert={alert()} unread={false} stageIndex={1} onMarkRead={jest.fn()} onDelete={jest.fn()} />);
     expect(screen.queryByRole("button", { name: /^Unread\./ })).toBeNull();
   });
 
   it("shows the day as well as the time", async () => {
-    await render(<AlertCard alert={alert()} unread stageIndex={1} onMarkRead={jest.fn()} />);
+    await render(<AlertCard alert={alert()} unread stageIndex={1} onMarkRead={jest.fn()} onDelete={jest.fn()} />);
     expect(screen.getByText(/Aug 10, 2026/)).toBeTruthy();
   });
 
@@ -82,13 +119,14 @@ describe("AlertCard", () => {
         unread
         stageIndex={-1}
         onMarkRead={jest.fn()}
+        onDelete={jest.fn()}
       />,
     );
     expect(screen.queryByRole("progressbar")).toBeNull();
   });
 
   it("draws the job's stage when there is one", async () => {
-    await render(<AlertCard alert={alert()} unread stageIndex={2} onMarkRead={jest.fn()} />);
+    await render(<AlertCard alert={alert()} unread stageIndex={2} onMarkRead={jest.fn()} onDelete={jest.fn()} />);
     expect(screen.getByRole("progressbar", { name: /Pickup/ })).toBeTruthy();
   });
 
@@ -98,7 +136,7 @@ describe("AlertCard", () => {
    * their own, and the labels under the icons are inside the container.
    */
   it("says where the job stands in words, not only by which dots are filled", async () => {
-    await render(<AlertCard alert={alert()} unread stageIndex={1} onMarkRead={jest.fn()} />);
+    await render(<AlertCard alert={alert()} unread stageIndex={1} onMarkRead={jest.fn()} onDelete={jest.fn()} />);
     const track = screen.getByRole("progressbar");
     expect(track.props.accessibilityLabel).toBe("Job stage 2 of 4, Printing");
     expect(track.props.accessibilityValue).toEqual({ min: 1, max: 4, now: 2 });
