@@ -29,6 +29,18 @@ export default function NotificationsScreen() {
   const syncFrom = useAlertsStore((s) => s.syncFrom);
   const [items, setItems] = useState<api.Notification[]>([]);
   const [jobs, setJobs] = useState<api.Order[]>([]);
+  /**
+   * Which alerts were new when this list last loaded.
+   *
+   * Sections are frozen against this rather than recomputed from the live
+   * dismissal set, for two reasons. A card that jumps from New to Earlier the
+   * instant your thumb leaves it is disorienting — you lose the thing you were
+   * looking at. And moving it between sections changes its parent, which
+   * unmounts it mid-swipe: the same class of hang as wrapping only the unread
+   * ones in a gesture handler. The card restyles in place and moves on the
+   * next load, which is when a person expects a list to reorganise.
+   */
+  const [newAtLoad, setNewAtLoad] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +54,10 @@ export default function NotificationsScreen() {
         api.listNotifications(),
         api.listJobs().catch(() => [] as api.Order[]),
       ]);
+      const seen = useAlertsStore.getState().dismissed;
       setItems(list);
       setJobs(jobList);
+      setNewAtLoad(list.filter((a) => isAlertUnread(a, seen)).map((a) => a.id));
       syncFrom(list);
       setError(null);
       setLoaded(true);
@@ -60,24 +74,26 @@ export default function NotificationsScreen() {
     }, [reload]),
   );
 
-  const { unread, read } = useMemo(() => {
-    const isUnread = (alert: api.Notification) => isAlertUnread(alert, dismissed);
-    return {
-      unread: items.filter(isUnread),
-      read: items.filter((alert) => !isUnread(alert)),
-    };
-  }, [items, dismissed]);
+  const { unread, read } = useMemo(
+    () => ({
+      unread: items.filter((alert) => newAtLoad.includes(alert.id)),
+      read: items.filter((alert) => !newAtLoad.includes(alert.id)),
+    }),
+    [items, newAtLoad],
+  );
 
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const firstLoad = loading && !loaded;
 
-  const renderAlert = (alert: api.Notification, isUnread: boolean) => {
+  // Appearance follows the live dismissal set even though position does not,
+  // so clearing one is visibly acknowledged where it sits.
+  const renderAlert = (alert: api.Notification) => {
     const job = alert.orderId ? jobs.find((candidate) => candidate.id === alert.orderId) : null;
     return (
       <AlertCard
         key={alert.id}
         alert={alert}
-        unread={isUnread}
+        unread={isAlertUnread(alert, dismissed)}
         stageIndex={stageForAlert(alert, jobs)}
         onMarkRead={() => markRead(alert.id)}
         onOpen={
@@ -137,14 +153,14 @@ export default function NotificationsScreen() {
         {unread.length ? (
           <View className="gap-3">
             <SectionHeader title="NEW" count={unread.length} hint="Swipe one aside to clear it." />
-            {unread.map((alert) => renderAlert(alert, true))}
+            {unread.map(renderAlert)}
           </View>
         ) : null}
 
         {read.length ? (
           <View className={unread.length ? "mt-8 gap-3" : "gap-3"}>
             <SectionHeader title="EARLIER" count={read.length} />
-            {read.map((alert) => renderAlert(alert, false))}
+            {read.map(renderAlert)}
           </View>
         ) : null}
 

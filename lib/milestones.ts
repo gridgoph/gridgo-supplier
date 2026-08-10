@@ -91,6 +91,8 @@ export type MilestoneStage =
   | "held"
   | "awaiting_release"
   | "needs_shop_proof"
+  /** The shop's to evidence, but the job has not got there yet. */
+  | "not_reached"
   | "waiting_on_delivery";
 
 export type MilestoneView = {
@@ -183,17 +185,29 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
   }
 
   if (shopProof) {
-    const reached = reachedForProof(milestone.code, order.state);
+    // "Proof needed" on a job that has not started printing reads as a job the
+    // shop is behind on. It is not — there is nothing to photograph yet, and a
+    // chip that asks for work nobody can do is the kind of thing a shop learns
+    // to ignore, taking the real ones with it.
+    if (!reachedForProof(milestone.code, order.state)) {
+      return {
+        ...base,
+        stage: "not_reached",
+        statusLabel: "Not started",
+        tone: "neutral",
+        icon: "clock",
+        detail: `${definition.proofLabel} releases this part, once the job gets there.`,
+        canAddProof: false,
+      };
+    }
     return {
       ...base,
       stage: "needs_shop_proof",
       statusLabel: "Proof needed",
       tone: "warning",
       icon: "square-pen",
-      detail: reached
-        ? `${definition.proofLabel} releases this part. GRIDGO cannot pay it without one.`
-        : "You can file this once the job reaches this stage.",
-      canAddProof: reached,
+      detail: `${definition.proofLabel} releases this part. GRIDGO cannot pay it without one.`,
+      canAddProof: true,
     };
   }
 

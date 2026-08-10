@@ -90,19 +90,30 @@ export function AlertCard({ alert, unread, stageIndex, onMarkRead, onOpen }: Pro
     </Pressable>
   );
 
-  // Nothing left to clear on one that is already read, and a swipe that does
-  // nothing is worse than no swipe at all.
-  if (!unread) return card;
-
+  /*
+    The swipeable stays mounted whether or not the alert is still unread.
+    Wrapping only the unread ones tore the gesture handler out of the tree from
+    inside its own open callback — marking read re-rendered this card into the
+    plain branch mid-animation — and the app hung on the swipe. An already-read
+    card simply offers no action, which is the same result without the unmount.
+  */
   return (
     <ReanimatedSwipeable
       friction={2}
       rightThreshold={48}
-      renderRightActions={(_progress, translation) => (
-        <MarkReadAction translation={translation} color={colors.textSecondary} />
-      )}
+      renderRightActions={
+        unread
+          ? (_progress, translation) => (
+              <MarkReadAction translation={translation} color={colors.textSecondary} />
+            )
+          : undefined
+      }
       onSwipeableOpen={(direction) => {
-        if (direction === "right") onMarkRead();
+        if (direction !== "right" || !unread) return;
+        // Off the gesture's own callback frame. Re-rendering the list from
+        // inside it is what the hang came from, and letting the swipe settle
+        // first also means the tick is on screen before the card restyles.
+        setTimeout(onMarkRead, 0);
       }}
     >
       {card}

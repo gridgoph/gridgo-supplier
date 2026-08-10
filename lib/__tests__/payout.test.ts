@@ -100,9 +100,21 @@ describe("milestone stages", () => {
     expect(views.find((v) => v.code === "retention")?.canAddProof).toBe(false);
   });
 
-  it("holds off asking before the job has reached the stage", () => {
+  /**
+   * A chip asking for a photo of a print run that has not started reads as a
+   * job the shop is behind on, and a shop learns to ignore chips like that.
+   */
+  it("says a part is not started rather than asking for evidence early", () => {
     const views = milestoneViews(job({ id: "e", state: "awaiting_downpayment" }));
     expect(views.every((v) => !v.canAddProof)).toBe(true);
+    const printing = views.find((v) => v.code === "printing");
+    expect(printing?.stage).toBe("not_reached");
+    expect(printing?.statusLabel).toBe("Not started");
+    expect(printing?.statusLabel).not.toBe("Proof needed");
+    // Still the shop's money, still counted as waiting on the shop.
+    expect(earningsSplit(job({ id: "e2", state: "awaiting_downpayment" })).needsProofMinor).toBe(
+      100000,
+    );
   });
 
   it("moves a filed proof to GRIDGO rather than calling it done", () => {

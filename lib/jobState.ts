@@ -366,6 +366,38 @@ export function presentTimelineState(state: string): string {
   return presentOrderState(state).label;
 }
 
+/**
+ * The rider's six pickup checks, in the words a shop would use for them.
+ *
+ * These reach this app inside a timeline note the platform writes — a failed
+ * pickup is recorded as "Pickup blocked and escalated: visible_defects" — so a
+ * raw code lands on a shop's screen unless it is translated on the way past.
+ */
+const PICKUP_CHECK_LABELS: Record<string, string> = {
+  quantity_match: "the count against the order",
+  specification_match: "the item against the spec",
+  visible_defects: "visible defects",
+  packaging_integrity: "the packing",
+  documentation: "the paperwork",
+  supplier_sign_off: "your sign-off",
+};
+
+/**
+ * A timeline note, with anything the platform wrote in its own vocabulary
+ * turned into the shop's.
+ *
+ * Notes are mostly written by people and pass through untouched. The exception
+ * is the ones the platform composes from codes, and those are the ones a shop
+ * cannot read.
+ */
+export function presentTimelineNote(note: string): string {
+  let out = note;
+  for (const [code, label] of Object.entries(PICKUP_CHECK_LABELS)) {
+    out = out.replaceAll(code, label);
+  }
+  return out;
+}
+
 /** Self-QC checklist items implied by production handoff. */
 export const SELF_QC_CHECKS = [
   { id: "artwork", label: "Print matches approved artwork" },

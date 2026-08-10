@@ -10,6 +10,7 @@ import {
   needsSupplierAction,
   presentOrderState,
   presentTimelineActor,
+  presentTimelineNote,
   primaryAction,
   routeForAction,
   SELF_QC_CHECKS,
@@ -244,6 +245,39 @@ describe("timeline presentation", () => {
     expect(presentTimelineActor("user_supplier")).toBe("You");
     expect(presentTimelineActor("system")).toBe("GRIDGO");
     expect(presentTimelineActor("user_client")).toBe("Client");
+  });
+
+  /**
+   * Seen on a real job: the platform composes a failed-pickup note from the
+   * rider's check codes, so "Pickup blocked and escalated: visible_defects"
+   * put a snake_case identifier on a shop's timeline.
+   */
+  it("translates the platform's pickup check codes out of a note", () => {
+    const note = presentTimelineNote(
+      "Pickup blocked and escalated: visible_defects, packaging_integrity",
+    );
+    expect(note).not.toMatch(/_/);
+    expect(note).toContain("visible defects");
+    expect(note).toContain("the packing");
+  });
+
+  it("leaves a note a person wrote alone", () => {
+    const written = "Colours matched the proof; packed flat in two tubes.";
+    expect(presentTimelineNote(written)).toBe(written);
+  });
+
+  it("covers every one of the rider's six checks", () => {
+    const codes = [
+      "quantity_match",
+      "specification_match",
+      "visible_defects",
+      "packaging_integrity",
+      "documentation",
+      "supplier_sign_off",
+    ];
+    expect(presentTimelineNote(`Pickup blocked and escalated: ${codes.join(", ")}`)).not.toMatch(
+      /_/,
+    );
   });
 });
 

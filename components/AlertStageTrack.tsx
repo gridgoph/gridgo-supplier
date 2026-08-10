@@ -39,6 +39,9 @@ export function AlertStageTrack({ index }: Props) {
   return (
     <View
       className="gap-2"
+      // One element to a screen reader, not eight: the label below says which
+      // stage the job is on, which is the whole content of the track.
+      accessible
       accessibilityRole="progressbar"
       accessibilityValue={{ min: 1, max: ALERT_STAGES.length, now: index + 1 }}
       accessibilityLabel={`Job stage ${index + 1} of ${ALERT_STAGES.length}, ${stage.label}`}

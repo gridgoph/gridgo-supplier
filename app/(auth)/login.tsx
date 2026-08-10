@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
-import { Redirect } from "expo-router";
+import { Redirect, router } from "expo-router";
 
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { GridgoLogo } from "@/components/GridgoLogo";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { SecondaryButton } from "@/components/SecondaryButton";
 import { StatusChip } from "@/components/StatusChip";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { TextField } from "@/components/controls/TextField";
@@ -18,6 +19,10 @@ type HealthState = "checking" | "reachable" | "unreachable";
  *
  * Only shops sign in here — client, rider and Operations accounts have their
  * own apps, and the error says which one rather than naming a platform role.
+ * A shop that has no account opens one itself now; Operations used to create
+ * every account, and the copy that said so was the last thing in this app still
+ * claiming it.
+ *
  * The connection line at the foot is for the person holding the phone: on a
  * demo build, "GRIDGO is not answering on this network" is the difference
  * between a wrong password and a laptop that went to sleep.
@@ -102,17 +107,22 @@ export default function LoginScreen() {
             </View>
           ) : null}
 
-          <View className="mt-6">
+          <View className="mt-6 gap-3">
             <PrimaryButton
               label={loading ? "Signing in…" : "Sign in"}
               disabled={loading}
               onPress={() => void login(email.trim(), password)}
             />
+            <SecondaryButton
+              label="Open a shop account"
+              disabled={loading}
+              onPress={() => router.push("/(auth)/signup")}
+            />
           </View>
 
           <Text className="mt-4 text-caption text-text-muted">
-            Shops are invited by GRIDGO Operations. If you cannot get in, ask them to check your
-            shop&apos;s accreditation.
+            Opening an account takes a few minutes. GRIDGO will not match work to your shop until
+            Operations has checked it.
           </Text>
         </ScrollView>
 
