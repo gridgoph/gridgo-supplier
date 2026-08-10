@@ -50,7 +50,7 @@ export default function DeclineJobScreen() {
     });
     if (!confirmed) return;
 
-    const step = findAction(job.state, "decline");
+    const step = findAction(job, "decline");
     const updated = await action.run({
       jobId: job.id,
       targetState: step?.targetState ?? "approved_for_matching",

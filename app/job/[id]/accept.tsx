@@ -21,9 +21,14 @@ import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
 import { useShopPlan } from "@/store/shopPlan";
 
 /**
- * Accepting is a commitment, so it is never a row tap: the shop states when it
- * will finish and what the client pays, and sees both against the client's own
- * deadline before the yellow action is available.
+ * Accepting is a commitment, so it is never a row tap: the shop names its own
+ * price and when it will finish, and sees both against the client's deadline
+ * before it commits.
+ *
+ * The price is the shop's, not the client's. GRIDGO adds its own charge on top
+ * to reach what the client pays, and that figure is never sent to this app —
+ * so nothing here may present the shop's price as the client's total. Naming a
+ * price is what tells the client what to pay, so it is required, not optional.
  */
 export default function AcceptJobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -47,7 +52,11 @@ export default function AcceptJobScreen() {
   }, [draft.accept.promisedAt, job?.deadline]);
 
   const money = parseMoney(draft.accept.finalTotal);
-  const moneyError = money.ok ? null : money.error;
+  const moneyError = money.ok
+    ? money.minor == null
+      ? "Name your price for this job — the client is told it the moment you accept."
+      : null
+    : money.error;
 
   const deadline = job?.deadline ? new Date(job.deadline) : null;
   const lateAgainstDeadline =
@@ -55,23 +64,25 @@ export default function AcceptJobScreen() {
   const closure = promisedAt ? blackoutOnDay(blackouts, toDayKey(promisedAt)) : null;
 
   const missingPromise = promisedAt == null;
+  const priceMinor = money.ok ? money.minor : null;
 
   // The action stays pressable while the form is incomplete: a dead yellow
   // button teaches nothing, whereas pressing it names the field that is missing.
   async function submit() {
-    if (!job || !promisedAt || !money.ok) {
+    if (!job || !promisedAt || priceMinor == null) {
       setShowErrors(true);
       return;
     }
-    const commitment = findAction(job.state, "accept");
-    const extra: Record<string, unknown> = { promisedDate: promisedAt.toISOString() };
-    if (money.minor != null) extra.finalTotalMinor = money.minor;
+    const commitment = findAction(job, "accept");
 
     const updated = await action.run({
       jobId: job.id,
       targetState: commitment?.targetState ?? "supplier_accepted",
-      note: `Accepted — promised ${formatDeadlineFull(promisedAt.toISOString())}`,
-      extra,
+      note: `Accepted at ${api.formatPhp(priceMinor)} — promised ${formatDeadlineFull(promisedAt.toISOString())}`,
+      extra: {
+        promisedDate: promisedAt.toISOString(),
+        supplierPriceMinor: priceMinor,
+      },
     });
     if (!updated) return;
     clearDraft(job.id);
@@ -85,7 +96,7 @@ export default function AcceptJobScreen() {
       onRetry={() => void reload()}
       title="Accept this job"
       subject={job?.title}
-      lede="Your shop commits to producing this job by the finish time you promise. The client sees that time straight away."
+      lede="Your shop commits to producing this job at the price you name, by the finish time you promise. GRIDGO tells the client both straight away and asks them to pay."
       actionError={action.error}
       footer={
         <>
@@ -110,8 +121,34 @@ export default function AcceptJobScreen() {
             <SpecRow label="Material" value={job.material || "—"} />
             <SpecRow label="Quantity" value={`${job.quantity}`} />
             <SpecRow label="Client needs it by" value={formatDeadlineFull(job.deadline)} />
-            <SpecRow label="Quoted print total" value={api.formatPhp(job.totalMinor)} />
           </View>
+
+          <FieldShell
+            label="Your price for this job"
+            hint="What your shop is paid, in pesos. GRIDGO adds its own charge and the delivery fee on top to reach what the client pays — neither comes out of this."
+            error={showErrors ? moneyError : null}
+          >
+            <MoneyField
+              value={draft.accept.finalTotal}
+              onChange={(value) => setAccept(job.id, { finalTotal: value })}
+              accessibilityLabel="Your price for this job in pesos"
+            />
+          </FieldShell>
+
+          {priceMinor != null ? (
+            <View className="gg-panel gap-2">
+              <Text className="text-body font-medium text-text-primary">
+                How {api.formatPhp(priceMinor)} reaches you
+              </Text>
+              <Text className="text-body text-text-secondary">
+                GRIDGO pays it in four parts as the job moves — printing, packing and quality
+                check, delivery, and a retention part that lands once the client&apos;s window to
+                report a problem closes. Each part needs evidence before it is released, and you
+                file the first two here. You will see what each is worth on the job as soon as
+                you accept.
+              </Text>
+            </View>
+          ) : null}
 
           <FieldShell
             label="Promised finish"
@@ -145,17 +182,6 @@ export default function AcceptJobScreen() {
             </View>
           ) : null}
 
-          <FieldShell
-            label="Final print total"
-            hint="Leave blank to accept the quoted total. Delivery is charged separately and is not shop revenue."
-            error={showErrors ? moneyError : null}
-          >
-            <MoneyField
-              value={draft.accept.finalTotal}
-              onChange={(value) => setAccept(job.id, { finalTotal: value })}
-              accessibilityLabel="Final print total in pesos"
-            />
-          </FieldShell>
         </>
       ) : null}
     </FlowScreen>

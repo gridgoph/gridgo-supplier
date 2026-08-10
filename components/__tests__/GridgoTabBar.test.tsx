@@ -1,6 +1,7 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { fireEvent, render, screen } from "@testing-library/react-native";
 import type { ReactElement } from "react";
+import { Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import {
@@ -134,33 +135,55 @@ describe("GridgoTabBar", () => {
     expect(screen.getByRole("tab", { name: "Alerts, 12 unread" })).toBeTruthy();
     expect(screen.getByText("9+")).toBeTruthy();
 
-    // Geometry regression guard: client-canonical pt-2/pb-2 leaves 20dp top
-    // slack inside min-h-20 for the badge's -top-1 overhang. A tight fixed
-    // height (h-13) clips; MD3 floor is min-h-20. Label-to-bottom-edge = 8dp.
+    // The column grows with its content: a fixed height clips the badge's
+    // overhang and a label that has grown under dynamic type.
     const alertsTab = screen.getByRole("tab", { name: "Alerts, 12 unread" });
     const className = String(alertsTab.props.className ?? "");
-    expect(className).toContain("pt-2");
-    expect(className).toContain("pb-2");
-    expect(className).toContain("min-h-20");
     expect(className).toContain("justify-end");
     expect(className).not.toContain("h-13");
-    expect(className).not.toMatch(/\bpt-4\b/);
-    expect(className).not.toMatch(/\bpb-4\b/);
-    expect(TAB_BAR_CONTENT_MIN_HEIGHT).toBe(80);
+    expect(flattenStyle(alertsTab.props.style).minHeight).toBe(
+      TAB_BAR_CONTENT_MIN_HEIGHT,
+    );
+  });
+
+  /**
+   * The captain's report: the bar sat too high above the safe area on iOS.
+   *
+   * It was using Material's 80dp content region on both platforms, so a
+   * home-indicator iPhone got 80 + 34 + 8 = 122pt where Apple's tab bar plus
+   * its inset is 83. The two platforms specify genuinely different bars, so the
+   * content region and the design pad are per-platform — while the system inset
+   * still stacks on top of whatever that region is.
+   *
+   *   Apple: tab bar 49pt, home-indicator inset 34pt (83pt together).
+   *   Material Design 3: navigation bar 80dp, system inset below it.
+   */
+  it("takes the content region from the platform's own bottom-bar spec", () => {
+    if (Platform.OS === "ios") {
+      expect(TAB_BAR_CONTENT_MIN_HEIGHT).toBe(49);
+      // Apple's inset is the breathing room; a design pad on top is what made
+      // the bar stand off the bottom of the screen.
+      expect(TAB_BAR_BOTTOM_DESIGN_PAD).toBe(0);
+    } else {
+      expect(TAB_BAR_CONTENT_MIN_HEIGHT).toBe(80);
+      expect(TAB_BAR_BOTTOM_DESIGN_PAD).toBe(8);
+    }
   });
 
   /**
    * System bottom inset is a keep-out zone; design pad is intentional spacing.
    * They must be added. Math.max silently drops the design pad on every modern
-   * Android device where inset > 8.
+   * Android device where inset > 8, which spends the whole gap on the notch.
    *
-   * Representative Android bottoms:
-   * - 48: gesture navigation (large keep-out)
+   * Representative bottoms:
+   * - 48: Android gesture navigation (large keep-out)
+   * - 34: iPhone home indicator
    * - 24: three-button / mid OEM inset
-   * - 0:  zero inset reported
+   * - 0:  device without either
    */
   it.each([
     { bottom: 48, label: "gesture / large inset" },
+    { bottom: 34, label: "home indicator" },
     { bottom: 24, label: "three-button / mid inset" },
     { bottom: 0, label: "zero inset" },
   ])(
@@ -176,12 +199,11 @@ describe("GridgoTabBar", () => {
       const bar = screen.getByTestId("gridgo-tab-bar");
       const paddingBottom = flattenStyle(bar.props.style).paddingBottom;
 
-      expect(TAB_BAR_BOTTOM_DESIGN_PAD).toBe(8);
       // Additive composition — not Math.max.
       expect(paddingBottom).toBe(bottom + TAB_BAR_BOTTOM_DESIGN_PAD);
 
-      if (bottom > TAB_BAR_BOTTOM_DESIGN_PAD) {
-        // Math.max(bottom, 8) === bottom when bottom > 8; addition is larger.
+      if (bottom > TAB_BAR_BOTTOM_DESIGN_PAD && TAB_BAR_BOTTOM_DESIGN_PAD > 0) {
+        // Math.max(bottom, pad) === bottom when bottom > pad; addition is larger.
         expect(paddingBottom).not.toBe(Math.max(bottom, TAB_BAR_BOTTOM_DESIGN_PAD));
         expect(paddingBottom).toBeGreaterThan(bottom);
       }
@@ -198,28 +220,21 @@ describe("GridgoTabBar", () => {
   });
 
   /**
-   * Visible bar height is driven by where the surface starts, not column min-height.
-   * Client paints with top-4 (16dp): visible = 64 + inset + 8. Painting at top-0
-   * makes a 16dp-taller slab (80 + inset + 8) without changing touch columns.
+   * The surface fills the container, so the bar a person sees is exactly
+   * `content region + design pad + system inset`. It used to be offset 16dp
+   * from the top so that a raised action disc could overhang the paint — this
+   * app has never had one, and the offset only made every height two numbers.
    */
-  it("offsets the painted surface by top-4 so the visible bar matches client", async () => {
+  it("paints the whole bar, so its height needs nothing subtracted", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
     const surface = screen.getByTestId("gridgo-tab-bar-surface");
     const className = String(surface.props.className ?? "");
     expect(className).toContain("absolute");
-    expect(className).toContain("inset-x-0");
-    expect(className).toContain("bottom-0");
-    expect(className).toContain("top-4");
+    expect(className).toContain("inset-0");
     expect(className).toContain("border-t");
     expect(className).toContain("border-outline");
     expect(className).toContain("bg-surface");
-    expect(className).not.toMatch(/\btop-0\b/);
-
-    // Column geometry unchanged: pressable stays min-h-20; only the paint shifts.
-    const homeTab = screen.getByRole("tab", { name: "Home" });
-    const tabClass = String(homeTab.props.className ?? "");
-    expect(tabClass).toContain("min-h-20");
-    expect(TAB_BAR_CONTENT_MIN_HEIGHT).toBe(80);
+    expect(className).not.toMatch(/\btop-4\b/);
   });
 });

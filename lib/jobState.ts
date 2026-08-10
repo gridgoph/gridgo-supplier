@@ -1,20 +1,25 @@
-import type { Order } from "@/lib/api";
+import type { MilestoneCode, Order } from "@/lib/api";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
+import { nextShopProof } from "@/lib/milestones";
 
 /**
- * Supplier-facing order state: plain labels, tones, and the single next action
- * the mobile surface may offer. No API snake_case reaches the UI.
+ * Supplier-facing order state: plain labels, tones, and the steps the mobile
+ * surface may offer. No API snake_case reaches the UI.
+ *
+ * Two things a shop used to do here are gone with operational model v2: it no
+ * longer sends the client a proof to approve, and it no longer asks for
+ * payment. The client pays 75% up front and 25% on the balance, both handled
+ * outside this app, and the shop's evidence now buys its own money back one
+ * milestone at a time rather than unlocking the press.
  */
 
 export type SupplierActionKind =
   | "accept"
   | "decline"
-  | "send_proof"
-  | "resend_proof"
-  | "request_payment"
   | "start_production"
   | "self_qc"
-  | "ready_for_pickup";
+  | "ready_for_pickup"
+  | "add_proof";
 
 export type SupplierAction = {
   kind: SupplierActionKind;
@@ -22,7 +27,7 @@ export type SupplierAction = {
   label: string;
   /**
    * Target state for POST /orders/:id/transition, or null when the step is not
-   * a transition at all — sending a proof moves the order by attaching a file.
+   * a transition at all — filing a Proof of Fulfilment moves money, not state.
    */
   targetState: string | null;
   /** Primary (yellow) vs secondary (monochrome). Only one primary is valid. */
@@ -33,6 +38,8 @@ export type SupplierAction = {
   consequence: string;
   /** The state name the shop will see afterwards — same verb, past tense. */
   resultLabel: string;
+  /** Set on `add_proof`: which part of the payout the evidence backs. */
+  milestoneCode?: MilestoneCode;
 };
 
 export type StatePresentation = {
@@ -46,20 +53,14 @@ export function presentOrderState(state: string): StatePresentation {
   switch (state) {
     case "supplier_assigned":
       return { label: "Needs decision", tone: "warning", icon: "triangle-alert" };
-    case "supplier_accepted":
-      return { label: "Proof needed", tone: "warning", icon: "square-pen" };
-    case "supplier_proof_review":
-      return { label: "Proof with client", tone: "info", icon: "clock" };
-    case "supplier_proof_changes_requested":
-      return { label: "Changes requested", tone: "warning", icon: "triangle-alert" };
-    case "supplier_proof_approved":
-      return { label: "Proof approved", tone: "success", icon: "circle-check" };
-    case "awaiting_payment":
-      return { label: "Awaiting payment", tone: "warning", icon: "clock" };
+    case "awaiting_downpayment":
+      return { label: "Awaiting downpayment", tone: "warning", icon: "clock" };
+    case "downpayment_review":
+      return { label: "Checking payment", tone: "info", icon: "clock" };
     case "payment_authorized":
       // A status says where the job stands; the button says what to do about
       // it. Naming the next action here made both read the same words twice.
-      return { label: "Paid", tone: "info", icon: "circle-check" };
+      return { label: "Downpayment in", tone: "success", icon: "circle-check" };
     case "production":
       return { label: "In production", tone: "info", icon: "square-pen" };
     case "supplier_self_qc":
@@ -75,11 +76,11 @@ export function presentOrderState(state: string): StatePresentation {
     case "delivered":
       return { label: "Delivered", tone: "success", icon: "circle-check" };
     case "issue_window_open":
-      return { label: "Delivery issue window", tone: "warning", icon: "clock" };
+      return { label: "Client can still report", tone: "warning", icon: "clock" };
     case "completed":
       return { label: "Completed", tone: "success", icon: "circle-check" };
     case "payout_released":
-      return { label: "Payout released", tone: "success", icon: "circle-check" };
+      return { label: "Paid in full", tone: "success", icon: "circle-check" };
     case "approved_for_matching":
       return { label: "Returned for rematch", tone: "neutral", icon: "circle-x" };
     default:
@@ -88,10 +89,30 @@ export function presentOrderState(state: string): StatePresentation {
 }
 
 /**
- * The single set of actions valid for a job in its current state.
- * An invalid action must not be rendered as an enabled control.
+ * The steps valid for a job right now. An invalid one must not be rendered as
+ * an enabled control.
+ *
+ * Where the shop owes evidence, that comes first and takes the yellow: the
+ * proof is what releases half the job's money, and a shop that walks the job
+ * forward without it has quietly worked for nothing. The forward step stays
+ * available underneath — the platform lets a job move without its proof, so
+ * this app warns rather than blocks.
  */
-export function actionsForJob(state: string): SupplierAction[] {
+export function actionsForJob(order: Pick<Order, "state" | "payoutMilestones" | "payoutHold">): SupplierAction[] {
+  const state = order.state;
+  const owed = nextShopProof(order as Order);
+  const proofStep: SupplierAction | null = owed
+    ? {
+        kind: "add_proof",
+        label: `Add ${owed.label.toLowerCase()} proof`,
+        targetState: null,
+        primary: true,
+        consequence: `GRIDGO releases ${percentText(owed.sharePercent)} of your earnings on this job once it has your evidence for ${owed.label.toLowerCase()}.`,
+        resultLabel: "Proof filed",
+        milestoneCode: owed.code,
+      }
+    : null;
+
   switch (state) {
     case "supplier_assigned":
       return [
@@ -101,7 +122,7 @@ export function actionsForJob(state: string): SupplierAction[] {
           targetState: "supplier_accepted",
           primary: true,
           consequence:
-            "Your shop commits to producing this job by the finish time you promise.",
+            "Your shop commits to producing this job at the price you name, by the finish time you promise. The client is told both straight away.",
           resultLabel: "Accepted",
         },
         {
@@ -113,42 +134,6 @@ export function actionsForJob(state: string): SupplierAction[] {
           consequence:
             "The job returns to GRIDGO for rematching and is not offered to your shop again.",
           resultLabel: "Declined",
-        },
-      ];
-    case "supplier_accepted":
-      return [
-        {
-          kind: "send_proof",
-          label: "Send proof to client",
-          targetState: null,
-          primary: true,
-          consequence:
-            "The client reviews your proof before anything is printed. They can approve it or ask for changes.",
-          resultLabel: "Proof with client",
-        },
-      ];
-    case "supplier_proof_changes_requested":
-      return [
-        {
-          kind: "resend_proof",
-          label: "Send a corrected proof",
-          targetState: null,
-          primary: true,
-          consequence:
-            "The client sees the corrected proof and reviews it again. Read what they asked for on the timeline first.",
-          resultLabel: "Proof with client",
-        },
-      ];
-    case "supplier_proof_approved":
-      return [
-        {
-          kind: "request_payment",
-          label: "Send for payment",
-          targetState: "awaiting_payment",
-          primary: true,
-          consequence:
-            "The client is asked to pay. Production starts once payment clears.",
-          resultLabel: "Sent for payment",
         },
       ];
     case "payment_authorized":
@@ -164,39 +149,46 @@ export function actionsForJob(state: string): SupplierAction[] {
         },
       ];
     case "production":
-      return [
-        {
-          kind: "self_qc",
-          label: "Complete self-QC",
-          targetState: "supplier_self_qc",
-          primary: true,
-          consequence:
-            "Your checks become the quality record Operations and the client rely on.",
-          resultLabel: "Self-QC done",
-        },
-      ];
+      return demote(proofStep, {
+        kind: "self_qc",
+        label: "Complete self-QC",
+        targetState: "supplier_self_qc",
+        primary: true,
+        consequence:
+          "Your checks become the quality record Operations and the client rely on.",
+        resultLabel: "Self-QC done",
+      });
     case "supplier_self_qc":
-      return [
-        {
-          kind: "ready_for_pickup",
-          label: "Mark ready for pickup",
-          targetState: "ready_for_dispatch",
-          primary: true,
-          consequence:
-            "GRIDGO assigns a rider to collect from your shop. The job must be packed and staged before you confirm.",
-          resultLabel: "Ready for pickup",
-        },
-      ];
+      return demote(proofStep, {
+        kind: "ready_for_pickup",
+        label: "Mark ready for pickup",
+        targetState: "ready_for_dispatch",
+        primary: true,
+        consequence:
+          "GRIDGO assigns a rider to collect from your shop. The job must be packed and staged before you confirm.",
+        resultLabel: "Ready for pickup",
+      });
     default:
-      return [];
+      // Past the shop's floor, an unfiled proof is still the shop's money.
+      return proofStep ? [proofStep] : [];
   }
+}
+
+/** Put the outstanding proof first and hand the forward step the quiet slot. */
+function demote(proof: SupplierAction | null, forward: SupplierAction): SupplierAction[] {
+  if (!proof) return [forward];
+  return [proof, { ...forward, primary: false }];
+}
+
+function percentText(share: number): string {
+  return `${share}%`;
 }
 
 /** Flow-screen routes. Literal so Expo Router's typed routes can check them. */
 export type SupplierActionRoute =
   | "/job/[id]/accept"
   | "/job/[id]/decline"
-  | "/job/[id]/proof"
+  | "/job/[id]/fulfilment"
   | "/job/[id]/advance"
   | "/job/[id]/self-qc"
   | "/job/[id]/handoff";
@@ -208,9 +200,8 @@ export function routeForAction(kind: SupplierActionKind): SupplierActionRoute {
       return "/job/[id]/accept";
     case "decline":
       return "/job/[id]/decline";
-    case "send_proof":
-    case "resend_proof":
-      return "/job/[id]/proof";
+    case "add_proof":
+      return "/job/[id]/fulfilment";
     case "self_qc":
       return "/job/[id]/self-qc";
     case "ready_for_pickup":
@@ -220,8 +211,11 @@ export function routeForAction(kind: SupplierActionKind): SupplierActionRoute {
   }
 }
 
-export function findAction(state: string, kind: string): SupplierAction | null {
-  return actionsForJob(state).find((a) => a.kind === kind) ?? null;
+export function findAction(
+  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold">,
+  kind: string,
+): SupplierAction | null {
+  return actionsForJob(order).find((a) => a.kind === kind) ?? null;
 }
 
 /**
@@ -230,31 +224,19 @@ export function findAction(state: string, kind: string): SupplierAction | null {
  */
 export const JOB_JOURNEY = [
   { id: "decision", label: "Decision", states: ["supplier_assigned"] },
-  { id: "accepted", label: "Accepted", states: ["supplier_accepted"] },
   {
-    id: "proof",
-    label: "Proof",
-    states: [
-      "supplier_proof_review",
-      "supplier_proof_changes_requested",
-      "supplier_proof_approved",
-    ],
+    id: "downpayment",
+    label: "Downpayment",
+    states: ["supplier_accepted", "awaiting_downpayment", "downpayment_review"],
   },
-  { id: "payment", label: "Payment", states: ["awaiting_payment", "payment_authorized"] },
-  { id: "production", label: "Production", states: ["production"] },
+  { id: "production", label: "Production", states: ["payment_authorized", "production"] },
   { id: "self_qc", label: "Self-QC", states: ["supplier_self_qc"] },
   { id: "pickup", label: "Pickup", states: ["ready_for_dispatch", "rider_assigned"] },
+  { id: "delivery", label: "Delivery", states: ["picked_up", "out_for_delivery", "delivered"] },
   {
-    id: "delivery",
-    label: "Delivery",
-    states: [
-      "picked_up",
-      "out_for_delivery",
-      "delivered",
-      "issue_window_open",
-      "completed",
-      "payout_released",
-    ],
+    id: "settled",
+    label: "Payout",
+    states: ["issue_window_open", "completed", "payout_released"],
   },
 ] as const;
 
@@ -263,8 +245,10 @@ export function journeyIndex(state: string): number {
   return JOB_JOURNEY.findIndex((step) => step.states.some((s) => s === state));
 }
 
-export function primaryAction(state: string): SupplierAction | null {
-  return actionsForJob(state).find((a) => a.primary) ?? null;
+export function primaryAction(
+  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold">,
+): SupplierAction | null {
+  return actionsForJob(order).find((a) => a.primary) ?? null;
 }
 
 /** Jobs still waiting on the supplier to accept or decline. */
@@ -272,7 +256,7 @@ export function isAwaitingDecision(order: Pick<Order, "state">): boolean {
   return order.state === "supplier_assigned";
 }
 
-/** Jobs the shop is actively producing (paid through self-QC). */
+/** Jobs the shop is actively producing (downpayment in, through self-QC). */
 export function isInProductionPipeline(order: Pick<Order, "state">): boolean {
   return (
     order.state === "payment_authorized" ||
@@ -282,13 +266,15 @@ export function isInProductionPipeline(order: Pick<Order, "state">): boolean {
 }
 
 /** Jobs that still need a supplier action on this device. */
-export function needsSupplierAction(order: Pick<Order, "state">): boolean {
-  return actionsForJob(order.state).some((a) => a.primary);
+export function needsSupplierAction(
+  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold">,
+): boolean {
+  return actionsForJob(order).some((a) => a.primary);
 }
 
 /**
- * Most urgent pending job: needs decision first (by earliest deadline), then
- * other actionable states by deadline.
+ * Most urgent pending job: needs decision first, then unfiled proof (that is
+ * money sitting still), then the rest by deadline.
  */
 export function mostUrgentJob(jobs: Order[]): Order | null {
   const actionable = jobs.filter(needsSupplierAction);
@@ -296,13 +282,11 @@ export function mostUrgentJob(jobs: Order[]): Order | null {
 
   const rank = (j: Order): number => {
     if (j.state === "supplier_assigned") return 0;
-    if (j.state === "supplier_proof_changes_requested") return 1;
-    if (j.state === "supplier_accepted") return 2;
-    if (j.state === "payment_authorized") return 3;
-    if (j.state === "production") return 4;
-    if (j.state === "supplier_self_qc") return 5;
-    if (j.state === "supplier_proof_approved") return 6;
-    return 7;
+    if (primaryAction(j)?.kind === "add_proof") return 1;
+    if (j.state === "payment_authorized") return 2;
+    if (j.state === "production") return 3;
+    if (j.state === "supplier_self_qc") return 4;
+    return 5;
   };
 
   return [...actionable].sort((a, b) => {
@@ -320,15 +304,16 @@ export function mostUrgentJob(jobs: Order[]): Order | null {
  */
 export function waitingOn(state: string): { title: string; body: string } {
   switch (state) {
-    case "supplier_proof_review":
+    case "supplier_accepted":
+    case "awaiting_downpayment":
       return {
-        title: "Waiting on the client",
-        body: "They are reviewing your proof. You will see here whether they approve it or ask for changes — do not start printing yet.",
+        title: "Waiting on the client's downpayment",
+        body: "The client has your price and has been asked to pay 75% of their total. Production opens up once GRIDGO confirms it — do not start printing yet.",
       };
-    case "awaiting_payment":
+    case "downpayment_review":
       return {
-        title: "Waiting on payment",
-        body: "The client has been asked to pay. Production opens up as soon as it clears.",
+        title: "GRIDGO is checking the payment",
+        body: "The client has sent their downpayment and Operations is confirming it. You will be able to start production here as soon as they do.",
       };
     case "ready_for_dispatch":
       return {
@@ -338,19 +323,19 @@ export function waitingOn(state: string): { title: string; body: string } {
     case "rider_assigned":
       return {
         title: "Rider on the way",
-        body: "Hand the job over and let the rider confirm the pickup before they leave.",
+        body: "Hand the job over and let the rider work through their six pickup checks before they leave.",
       };
     case "picked_up":
     case "out_for_delivery":
       return {
         title: "With the rider",
-        body: "The job has left your shop. Protected payment settles after delivery.",
+        body: "The job has left your shop. The delivered part of your earnings releases on the rider's evidence.",
       };
     case "delivered":
     case "issue_window_open":
       return {
         title: "Delivered",
-        body: "The client has the job. Operations settles protected payment after the issue window closes.",
+        body: "The client has the job and a window to report a problem. Retention releases once that window closes.",
       };
     case "completed":
     case "payout_released":

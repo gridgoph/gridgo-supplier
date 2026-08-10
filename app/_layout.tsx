@@ -11,13 +11,14 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { useEffect } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 
 import { colors, type ThemeName } from "@/constants/theme";
 import { useAppFonts } from "@/hooks/useAppFonts";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
 import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions";
-import { isSignedIn, useSession } from "@/store/session";
+import { isMatchable, isSignedIn, useSession } from "@/store/session";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -63,28 +64,39 @@ export default function RootLayout() {
     // Without the metrics the platform already knows at launch, the provider
     // renders nothing until native reports its insets — one empty frame between
     // the splash screen going and the first screen arriving.
-    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <ThemeProvider value={navigationTheme(scheme)}>
-        <RootStack />
-        <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-      </ThemeProvider>
-    </SafeAreaProvider>
+    // Gesture Handler needs its own root above everything that uses a gesture,
+    // and on Android nothing it draws responds to touch without one. The alert
+    // list's swipe-to-clear is the first gesture in this app that is ours
+    // rather than the navigator's.
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <ThemeProvider value={navigationTheme(scheme)}>
+          <RootStack />
+          <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 /**
  * Session-driven root stack.
  *
- * `Stack.Protected` is the SDK 54 idiomatic guard: when the signed-in group’s
- * guard flips to false (logout, rejected role, 401), those screens are removed
- * from history — not merely covered — so Android back cannot re-enter them.
- * Login is the complementary half of the pair so the navigator always has an
- * unauthenticated landing route.
+ * `Stack.Protected` is the SDK 54 idiomatic guard: when a group's guard flips
+ * to false (logout, rejected role, 401), those screens are removed from history
+ * — not merely covered — so Android back cannot re-enter them.
+ *
+ * There are three states here, not two. A shop can sign itself up, so it can be
+ * signed in and still not be one GRIDGO sends work to; that shop gets the
+ * accreditation screen rather than a tab shell whose every tab would be empty
+ * for a reason none of them explains. Settings stays reachable from both so a
+ * waiting shop is not locked out of its own theme and sign-out.
  */
 function RootStack() {
   const user = useSession((s) => s.user);
   const scheme = useThemeName();
   const signedIn = isSignedIn(user);
+  const matchable = signedIn && isMatchable(user);
 
   return (
     <Stack screenOptions={stackScreenOptions(scheme)}>
@@ -94,9 +106,27 @@ function RootStack() {
 
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/signup" options={{ headerShown: false }} />
+      </Stack.Protected>
+
+      <Stack.Protected guard={signedIn && !matchable}>
+        <Stack.Screen
+          name="accreditation"
+          options={{ headerShown: false, title: "Accreditation" }}
+        />
       </Stack.Protected>
 
       <Stack.Protected guard={signedIn}>
+        <Stack.Screen
+          name="settings"
+          options={{
+            title: "Settings",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+      </Stack.Protected>
+
+      <Stack.Protected guard={matchable}>
         {/*
           The tab shell draws its own headers per tab. It still needs a title:
           a pushed screen's back control falls back to the previous route's
@@ -117,7 +147,7 @@ function RootStack() {
         <Stack.Screen
           name="payout"
           options={{
-            title: "Protected payment",
+            title: "Earnings",
             headerBackButtonDisplayMode: "minimal",
           }}
         />
@@ -140,13 +170,6 @@ function RootStack() {
           options={{
             title: "Shop closure",
             presentation: "modal",
-          }}
-        />
-        <Stack.Screen
-          name="settings"
-          options={{
-            title: "Settings",
-            headerBackButtonDisplayMode: "minimal",
           }}
         />
         <Stack.Screen

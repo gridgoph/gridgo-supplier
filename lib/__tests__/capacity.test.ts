@@ -59,7 +59,6 @@ function job(partial: Partial<Order> & Pick<Order, "id">): Order {
     deliveryFeeMinor: 100,
     paymentMethod: null,
     paymentStatus: "unpaid",
-    codEligible: true,
     promisedDate: null,
     artworkName: null,
     createdAt: "2026-08-01T00:00:00.000Z",

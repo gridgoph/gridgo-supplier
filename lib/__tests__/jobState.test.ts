@@ -15,7 +15,29 @@ import {
   SELF_QC_CHECKS,
   waitingOn,
 } from "@/lib/jobState";
-import type { Order } from "@/lib/api";
+import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
+
+const SHARES: Record<MilestoneCode, number> = {
+  printing: 50,
+  packaging_qc: 15,
+  delivered: 25,
+  retention: 10,
+};
+
+/** Milestones as the platform creates them: split the shop's own price. */
+function milestones(
+  overrides: Partial<Record<MilestoneCode, PayoutMilestone["status"]>> = {},
+  supplierPriceMinor = 100000,
+): PayoutMilestone[] {
+  return (Object.keys(SHARES) as MilestoneCode[]).map((code) => ({
+    code,
+    sharePercent: SHARES[code],
+    amountMinor: Math.round((supplierPriceMinor * SHARES[code]) / 100),
+    status: overrides[code] ?? "pending_pof",
+    pofFileIds: overrides[code] && overrides[code] !== "pending_pof" ? ["file_1"] : [],
+    releasedAt: null,
+  }));
+}
 
 function job(partial: Partial<Order> & Pick<Order, "id" | "state">): Order {
   return {
@@ -30,11 +52,16 @@ function job(partial: Partial<Order> & Pick<Order, "id" | "state">): Order {
     deadline: "2026-08-12T10:00:00+08:00",
     address: "Davao",
     zone: "davao_central",
-    totalMinor: 10000,
-    deliveryFeeMinor: 1000,
-    paymentMethod: null,
+    supplierPriceMinor: 100000,
+    subtotalMinor: 110000,
+    totalMinor: 112500,
+    deliveryFeeMinor: 2500,
+    downpaymentMinor: 84375,
+    balanceMinor: 28125,
+    paymentMethod: "qr_manual",
     paymentStatus: "unpaid",
-    codEligible: true,
+    payoutMilestones: milestones(),
+    payoutHold: false,
     promisedDate: null,
     artworkName: null,
     createdAt: "2026-08-07T00:00:00.000Z",
@@ -44,10 +71,18 @@ function job(partial: Partial<Order> & Pick<Order, "id" | "state">): Order {
   };
 }
 
+/** A job whose evidence is all filed, so only the forward step is offered. */
+function filed(partial: Partial<Order> & Pick<Order, "id" | "state">): Order {
+  return job({
+    ...partial,
+    payoutMilestones: milestones({ printing: "pof_attached", packaging_qc: "pof_attached" }),
+  });
+}
+
 describe("presentOrderState", () => {
   it("maps supplier states to plain labels without snake_case", () => {
     expect(presentOrderState("supplier_assigned").label).toBe("Needs decision");
-    expect(presentOrderState("payment_authorized").label).toBe("Paid");
+    expect(presentOrderState("awaiting_downpayment").label).toBe("Awaiting downpayment");
     expect(presentOrderState("ready_for_dispatch").label).toBe("Ready for pickup");
     expect(presentOrderState("supplier_assigned").label).not.toMatch(/_/);
   });
@@ -57,45 +92,111 @@ describe("presentOrderState", () => {
     expect(p.tone).toBeTruthy();
     expect(p.icon).toBeTruthy();
   });
+
+  it("has plain language for every v2 state a shop can reach", () => {
+    const states = [
+      "supplier_assigned",
+      "awaiting_downpayment",
+      "downpayment_review",
+      "payment_authorized",
+      "production",
+      "supplier_self_qc",
+      "ready_for_dispatch",
+      "rider_assigned",
+      "picked_up",
+      "out_for_delivery",
+      "delivered",
+      "issue_window_open",
+      "completed",
+      "payout_released",
+    ];
+    for (const state of states) {
+      expect(presentOrderState(state).label).not.toMatch(/_/);
+    }
+  });
 });
 
 describe("actionsForJob", () => {
   it("offers accept and decline only when assigned", () => {
-    const actions = actionsForJob("supplier_assigned");
+    const actions = actionsForJob(job({ id: "a", state: "supplier_assigned" }));
     expect(actions.map((a) => a.kind)).toEqual(["accept", "decline"]);
     expect(actions.filter((a) => a.primary)).toHaveLength(1);
     expect(actions.find((a) => a.kind === "decline")?.destructive).toBe(true);
   });
 
-  it("sends an accepted job to the client as a proof, not straight to payment", () => {
-    const next = primaryAction("supplier_accepted");
-    expect(next?.kind).toBe("send_proof");
-    // A proof moves the order by attaching a file, so there is no target state.
-    expect(next?.targetState).toBeNull();
+  it("has nothing for the shop to do while the client pays", () => {
+    expect(primaryAction(job({ id: "b", state: "awaiting_downpayment" }))).toBeNull();
+    expect(primaryAction(job({ id: "c", state: "downpayment_review" }))).toBeNull();
   });
 
-  it("asks for a corrected proof when the client rejected one", () => {
-    expect(primaryAction("supplier_proof_changes_requested")?.kind).toBe("resend_proof");
+  it("starts production once the downpayment is confirmed", () => {
+    expect(primaryAction(job({ id: "d", state: "payment_authorized" }))?.label).toBe(
+      "Start production",
+    );
   });
 
-  it("only offers payment once the client has approved the proof", () => {
-    expect(primaryAction("supplier_proof_review")).toBeNull();
-    expect(primaryAction("supplier_proof_approved")?.targetState).toBe("awaiting_payment");
+  /**
+   * The whole point of the v2 model: half the job's money waits on a photo, so
+   * that photo outranks walking the job forward without it.
+   */
+  it("puts an owed proof ahead of the forward step, and keeps both", () => {
+    const actions = actionsForJob(job({ id: "e", state: "production" }));
+    expect(actions.map((a) => a.kind)).toEqual(["add_proof", "self_qc"]);
+    expect(actions[0].primary).toBe(true);
+    expect(actions[0].milestoneCode).toBe("printing");
+    // Filing a proof is not a transition — it moves money, not state.
+    expect(actions[0].targetState).toBeNull();
+    // Exactly one primary, so the screen keeps one yellow control.
+    expect(actions.filter((a) => a.primary)).toHaveLength(1);
   });
 
-  it("starts production only after payment is authorized", () => {
-    expect(primaryAction("payment_authorized")?.label).toBe("Start production");
-    expect(primaryAction("awaiting_payment")).toBeNull();
+  it("asks for the packing proof once printing is filed", () => {
+    const actions = actionsForJob(
+      job({ id: "f", state: "supplier_self_qc", payoutMilestones: milestones({ printing: "pof_attached" }) }),
+    );
+    expect(actions[0].kind).toBe("add_proof");
+    expect(actions[0].milestoneCode).toBe("packaging_qc");
   });
 
-  it("walks production → self-QC → ready for pickup", () => {
-    expect(primaryAction("production")?.targetState).toBe("supplier_self_qc");
-    expect(primaryAction("supplier_self_qc")?.targetState).toBe("ready_for_dispatch");
+  it("walks production → self-QC → ready for pickup once evidence is filed", () => {
+    expect(primaryAction(filed({ id: "g", state: "production" }))?.targetState).toBe(
+      "supplier_self_qc",
+    );
+    expect(primaryAction(filed({ id: "h", state: "supplier_self_qc" }))?.targetState).toBe(
+      "ready_for_dispatch",
+    );
   });
 
-  it("returns no actions for terminal handoff states", () => {
-    expect(actionsForJob("ready_for_dispatch")).toEqual([]);
-    expect(actionsForJob("completed")).toEqual([]);
+  it("still offers an unfiled proof after the job has left the floor", () => {
+    const actions = actionsForJob(job({ id: "i", state: "rider_assigned" }));
+    expect(actions.map((a) => a.kind)).toEqual(["add_proof"]);
+  });
+
+  it("offers nothing once every proof is filed and the job has moved on", () => {
+    expect(actionsForJob(filed({ id: "j", state: "ready_for_dispatch" }))).toEqual([]);
+    expect(actionsForJob(filed({ id: "k", state: "completed" }))).toEqual([]);
+  });
+
+  /** A claim freezes the payout; filing more evidence would change nothing. */
+  it("stops asking for evidence while a claim holds the payout", () => {
+    expect(actionsForJob(job({ id: "l", state: "production", payoutHold: true }))).toEqual([
+      expect.objectContaining({ kind: "self_qc", primary: true }),
+    ]);
+  });
+
+  it("never offers the retired proof loop or a payment request", () => {
+    const kinds = new Set(
+      [
+        "supplier_assigned",
+        "awaiting_downpayment",
+        "payment_authorized",
+        "production",
+        "supplier_self_qc",
+        "ready_for_dispatch",
+      ].flatMap((state) => actionsForJob(job({ id: state, state })).map((a) => a.kind)),
+    );
+    expect(kinds.has("send_proof" as never)).toBe(false);
+    expect(kinds.has("request_payment" as never)).toBe(false);
   });
 });
 
@@ -103,33 +204,29 @@ describe("job urgency helpers", () => {
   it("flags awaiting decision and production pipeline", () => {
     expect(isAwaitingDecision(job({ id: "a", state: "supplier_assigned" }))).toBe(true);
     expect(isInProductionPipeline(job({ id: "b", state: "production" }))).toBe(true);
-    expect(isInProductionPipeline(job({ id: "c", state: "supplier_accepted" }))).toBe(false);
+    expect(isInProductionPipeline(job({ id: "c", state: "awaiting_downpayment" }))).toBe(false);
   });
 
   it("picks the most urgent actionable job by rank then deadline", () => {
     const urgent = mostUrgentJob([
-      job({
-        id: "later-assigned",
-        state: "supplier_assigned",
-        deadline: "2026-08-20T10:00:00+08:00",
-      }),
-      job({
-        id: "soon-assigned",
-        state: "supplier_assigned",
-        deadline: "2026-08-10T10:00:00+08:00",
-      }),
-      job({
-        id: "production",
-        state: "production",
-        deadline: "2026-08-09T10:00:00+08:00",
-      }),
+      job({ id: "later-assigned", state: "supplier_assigned", deadline: "2026-08-20T10:00:00+08:00" }),
+      job({ id: "soon-assigned", state: "supplier_assigned", deadline: "2026-08-10T10:00:00+08:00" }),
+      job({ id: "production", state: "production", deadline: "2026-08-09T10:00:00+08:00" }),
     ]);
     expect(urgent?.id).toBe("soon-assigned");
   });
 
+  it("puts money sitting still ahead of a job that is merely running", () => {
+    const urgent = mostUrgentJob([
+      filed({ id: "just-running", state: "production", deadline: "2026-08-09T10:00:00+08:00" }),
+      job({ id: "owes-proof", state: "supplier_self_qc", deadline: "2026-08-20T10:00:00+08:00" }),
+    ]);
+    expect(urgent?.id).toBe("owes-proof");
+  });
+
   it("returns null when nothing needs supplier action", () => {
-    expect(mostUrgentJob([job({ id: "x", state: "ready_for_dispatch" })])).toBeNull();
-    expect(needsSupplierAction(job({ id: "y", state: "awaiting_payment" }))).toBe(false);
+    expect(mostUrgentJob([filed({ id: "x", state: "ready_for_dispatch" })])).toBeNull();
+    expect(needsSupplierAction(job({ id: "y", state: "awaiting_downpayment" }))).toBe(false);
   });
 });
 
@@ -154,13 +251,13 @@ describe("action copy", () => {
   it("gives every action a consequence and a matching result label", () => {
     for (const state of [
       "supplier_assigned",
-      "supplier_accepted",
       "payment_authorized",
       "production",
       "supplier_self_qc",
     ]) {
-      for (const action of actionsForJob(state)) {
+      for (const action of actionsForJob(job({ id: state, state }))) {
         expect(action.consequence.length).toBeGreaterThan(0);
+        expect(action.label).not.toMatch(/_/);
         expect(action.resultLabel).not.toMatch(/_/);
       }
     }
@@ -171,20 +268,22 @@ describe("routeForAction", () => {
   it("sends every action to its own flow screen", () => {
     expect(routeForAction("accept")).toBe("/job/[id]/accept");
     expect(routeForAction("decline")).toBe("/job/[id]/decline");
+    expect(routeForAction("add_proof")).toBe("/job/[id]/fulfilment");
     expect(routeForAction("self_qc")).toBe("/job/[id]/self-qc");
     expect(routeForAction("ready_for_pickup")).toBe("/job/[id]/handoff");
   });
 
   it("sends plain stage moves to the shared update screen", () => {
     expect(routeForAction("start_production")).toBe("/job/[id]/advance");
-    expect(routeForAction("request_payment")).toBe("/job/[id]/advance");
   });
 });
 
 describe("findAction", () => {
   it("only finds an action that is valid in the job's current state", () => {
-    expect(findAction("supplier_assigned", "accept")?.targetState).toBe("supplier_accepted");
-    expect(findAction("production", "accept")).toBeNull();
+    expect(findAction(job({ id: "a", state: "supplier_assigned" }), "accept")?.targetState).toBe(
+      "supplier_accepted",
+    );
+    expect(findAction(job({ id: "b", state: "production" }), "accept")).toBeNull();
   });
 });
 
@@ -192,41 +291,44 @@ describe("journeyIndex", () => {
   it("moves forward through the shop's sequence", () => {
     const order = [
       "supplier_assigned",
-      "supplier_accepted",
-      "supplier_proof_review",
-      "awaiting_payment",
-      "production",
+      "awaiting_downpayment",
+      "payment_authorized",
       "supplier_self_qc",
       "ready_for_dispatch",
       "delivered",
+      "completed",
     ];
-    expect(order.map(journeyIndex)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(order.map(journeyIndex)).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
-  it("keeps the proof round trip on one step rather than going backwards", () => {
-    expect(journeyIndex("supplier_proof_changes_requested")).toBe(
-      journeyIndex("supplier_proof_review"),
-    );
-    expect(journeyIndex("supplier_proof_approved")).toBe(journeyIndex("supplier_proof_review"));
+  it("keeps the payment round trip on one step rather than going backwards", () => {
+    expect(journeyIndex("downpayment_review")).toBe(journeyIndex("awaiting_downpayment"));
+    expect(journeyIndex("production")).toBe(journeyIndex("payment_authorized"));
   });
 
   it("covers every step so the track never has a gap", () => {
-    expect(JOB_JOURNEY).toHaveLength(8);
+    expect(JOB_JOURNEY).toHaveLength(7);
     expect(journeyIndex("approved_for_matching")).toBe(-1);
+  });
+
+  it("has no step for the retired proof round trip", () => {
+    expect(journeyIndex("supplier_proof_review")).toBe(-1);
+    expect(journeyIndex("awaiting_payment")).toBe(-1);
   });
 });
 
 describe("waitingOn", () => {
   it("names whose move it is when the shop has nothing to do", () => {
-    expect(waitingOn("supplier_proof_review").title).toContain("client");
-    expect(waitingOn("awaiting_payment").title).toContain("payment");
+    expect(waitingOn("awaiting_downpayment").title).toContain("client");
+    expect(waitingOn("downpayment_review").title).toContain("GRIDGO");
     expect(waitingOn("ready_for_dispatch").title).toContain("rider");
   });
 
   it("never leaks a state string into the copy", () => {
     for (const state of [
-      "supplier_proof_review",
-      "awaiting_payment",
+      "supplier_accepted",
+      "awaiting_downpayment",
+      "downpayment_review",
       "ready_for_dispatch",
       "picked_up",
       "completed",

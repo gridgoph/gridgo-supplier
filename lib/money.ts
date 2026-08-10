@@ -22,8 +22,9 @@ export type MoneyParse =
   | { ok: false; error: string };
 
 /**
- * Pesos as typed → centavos. An empty field is a valid "leave it as quoted",
- * which is why `minor` can be null on success.
+ * Pesos as typed → centavos. An empty field parses as "nothing entered", which
+ * is why `minor` can be null on success — the screen decides whether that is
+ * allowed, since a price is required to accept a job but a filter is not.
  */
 export function parseMoney(value: string): MoneyParse {
   const trimmed = value.trim();
@@ -35,7 +36,7 @@ export function parseMoney(value: string): MoneyParse {
   }
   const minor = Math.round(pesos * 100);
   if (minor < MONEY_BOUNDS.minMinor) {
-    return { ok: false, error: "The print total must be at least ₱1.00." };
+    return { ok: false, error: "Your price must be at least ₱1.00." };
   }
   if (minor > MONEY_BOUNDS.maxMinor) {
     return {

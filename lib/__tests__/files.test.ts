@@ -69,12 +69,17 @@ describe("uploadStageLabel", () => {
     );
   });
 
-  it("distinguishes saved to GRIDGO from sent to the client", () => {
+  /**
+   * Storing the bytes and filing them against a payout milestone are two
+   * different things, and only the second one is what GRIDGO pays on. The
+   * labels have to keep them apart or a shop reads "saved" as "claimed".
+   */
+  it("distinguishes saved to GRIDGO from filed against a milestone", () => {
     expect(uploadStageLabel(item({ stage: "stored", fileId: "file_1" }))).toContain(
-      "Ready to send",
+      "Ready to file",
     );
     expect(uploadStageLabel(item({ stage: "attached", fileId: "file_1" }))).toBe(
-      "Sent to the client",
+      "Filed with GRIDGO",
     );
   });
 
@@ -91,7 +96,11 @@ describe("messageFor", () => {
     expect(heic).toContain("JPEG");
     expect(heic).not.toContain("heic_not_supported");
 
-    expect(messageFor({ error: "proof_upload_not_allowed" }, 409)).toContain("refresh");
+    const wrongMilestone = messageFor({ error: "invalid_milestone_code" }, 400);
+    expect(wrongMilestone).toContain("part of the job");
+    expect(wrongMilestone).not.toContain("invalid_milestone_code");
+
+    expect(messageFor({ error: "milestone_not_found" }, 409)).toContain("refresh");
     expect(messageFor({ error: "minio_unavailable" }, 503)).toContain("try sending");
   });
 

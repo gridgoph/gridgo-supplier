@@ -96,7 +96,7 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
     if (!permission.granted) {
       failWith(
         "Camera",
-        "GRIDGO needs camera access to photograph a proof. Turn it on for this app in your phone's settings.",
+        "GRIDGO needs camera access to photograph your work. Turn it on for this app in your phone's settings.",
       );
       return;
     }
@@ -105,7 +105,7 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
     if (!asset) return;
     await accept({
       uri: asset.uri,
-      fileName: asset.fileName || `proof-${counter.current + 1}.jpg`,
+      fileName: asset.fileName || `evidence-${counter.current + 1}.jpg`,
       mimeType: asset.mimeType ?? null,
       sizeBytes: asset.fileSize ?? null,
     });
@@ -120,7 +120,7 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
     if (!asset) return;
     await accept({
       uri: asset.uri,
-      fileName: asset.fileName || `proof-${counter.current + 1}.jpg`,
+      fileName: asset.fileName || `evidence-${counter.current + 1}.jpg`,
       mimeType: asset.mimeType ?? null,
       sizeBytes: asset.fileSize ?? null,
     });

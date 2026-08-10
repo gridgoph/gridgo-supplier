@@ -39,8 +39,8 @@ export default function AccountScreen() {
             onPress={() => router.push("/capacity")}
           />
           <DestinationRow
-            title="Protected payment"
-            detail="Gross, settlement state, and hold reasons"
+            title="Earnings"
+            detail="What each job pays you, and what each part is waiting on"
             onPress={() => router.push("/payout")}
           />
         </View>

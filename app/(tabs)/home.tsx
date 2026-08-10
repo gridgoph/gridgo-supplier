@@ -21,7 +21,7 @@ import {
   primaryAction,
   routeForAction,
 } from "@/lib/jobState";
-import { summarizePayouts } from "@/lib/payout";
+import { summarizePayouts, unreleasedMinor } from "@/lib/payout";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useAlertsStore } from "@/store/alerts";
 import { useSession } from "@/store/session";
@@ -37,7 +37,7 @@ import { useThemeColors } from "@/hooks/useTheme";
 export default function HomeScreen() {
   const { user } = useSession();
   const colors = useThemeColors();
-  const setUnreadCount = useAlertsStore((s) => s.setUnreadCount);
+  const syncAlerts = useAlertsStore((s) => s.syncFrom);
   const [jobs, setJobs] = useState<api.Order[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -51,7 +51,7 @@ export default function HomeScreen() {
         api.listNotifications().catch(() => [] as api.Notification[]),
       ]);
       setJobs(list);
-      setUnreadCount(notifications.filter((n) => !n.read).length);
+      syncAlerts(notifications);
       setError(null);
       setLoaded(true);
     } catch (e) {
@@ -59,7 +59,7 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  }, [setUnreadCount]);
+  }, [syncAlerts]);
 
   useFocusEffect(
     useCallback(() => {
@@ -72,8 +72,9 @@ export default function HomeScreen() {
   const pending = jobs.filter(isAwaitingDecision).length;
   const inProduction = jobs.filter(isInProductionPipeline).length;
   const payout = summarizePayouts(jobs);
+  const outstanding = unreleasedMinor(payout);
   const urgent = mostUrgentJob(jobs);
-  const urgentAction = urgent ? primaryAction(urgent.state) : null;
+  const urgentAction = urgent ? primaryAction(urgent) : null;
   const urgentStatus = urgent ? presentOrderState(urgent.state) : null;
   const urgency = urgent
     ? deadlineUrgency(urgent.promisedDate || urgent.deadline)
@@ -209,21 +210,21 @@ export default function HomeScreen() {
             <Pressable
               onPress={() => router.push("/payout")}
               accessibilityRole="button"
-              accessibilityLabel="Open protected payment"
+              accessibilityLabel="Open earnings"
               className="gg-touch mt-3 flex-row items-center gap-3 rounded-card border border-outline bg-surface p-4"
               style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
             >
               <View className="min-w-0 flex-1 gap-1">
-                <Text className="text-caption text-text-muted">Protected payment</Text>
+                <Text className="text-caption text-text-muted">Earnings still to reach you</Text>
                 <Text className="text-h3 text-text-primary">
-                  {payout.heldCount === 0
-                    ? "Nothing held"
-                    : api.formatPhp(payout.heldGrossMinor)}
+                  {payout.jobCount === 0 ? "Nothing owed yet" : api.formatPhp(outstanding)}
                 </Text>
                 <Text className="text-caption text-text-muted">
-                  {payout.heldCount === 0
-                    ? "Money appears here once a client pays for a job you accepted."
-                    : `Held across ${payout.heldCount} job${payout.heldCount === 1 ? "" : "s"} until each one settles.`}
+                  {payout.jobCount === 0
+                    ? "Accept a job and name your price, and what you are owed appears here."
+                    : payout.needsProofMinor > 0
+                      ? `${api.formatPhp(payout.needsProofMinor)} of it is waiting on evidence from you.`
+                      : "Everything you owe evidence for is filed. GRIDGO releases the rest."}
                 </Text>
               </View>
               <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
