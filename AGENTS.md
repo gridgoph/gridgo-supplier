@@ -247,6 +247,8 @@ Use the NativeWind version installed in this project. Check package.json. Do not
 
 Reuse class patterns through utilities in global.css.
 
+**A class that names a token this project never defined is not an error — it compiles to nothing.** `global.css` resets Tailwind's colour, type, radius, weight and shadow scales to `initial`, so `text-2xl`, `font-satoshi-bold`, `font-semibold`, `rounded-full` and `bg-blue-500` are silent no-ops: the element renders in the system font at the browser's default size. This shipped on the login screen of all three GRIDGO apps before anyone noticed. `lib/__tests__/designSystem.test.ts` now reads `global.css` and fails when any class in `app/` or `components/` cannot resolve — run the tests before believing a screen looks the way you wrote it.
+
 ### Style Exception List
 
 Use StyleSheet or inline styles for:

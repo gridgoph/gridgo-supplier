@@ -246,7 +246,7 @@ export function GridgoLogo({ size = 40, role }: Props) {
               style={{ height: metrics.roleLineHeight }}
             >
               <View
-                className="self-start rounded-full bg-action-yellow"
+                className="self-start rounded-pill bg-action-yellow"
                 style={{
                   paddingHorizontal: Math.round(metrics.roleSize * 0.5),
                   paddingVertical: Math.round(metrics.roleSize * 0.15),
