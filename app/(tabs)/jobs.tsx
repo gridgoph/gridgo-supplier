@@ -11,6 +11,7 @@ import { SkeletonList } from "@/components/Skeleton";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { needsSupplierAction } from "@/lib/jobState";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 
 /**
@@ -56,6 +57,7 @@ export default function JobsScreen() {
     };
   }, [jobs]);
 
+  const { refreshing, onRefresh } = usePullToRefresh(reload);
   const firstLoad = loading && !loaded;
 
   return (
@@ -66,8 +68,8 @@ export default function JobsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={loading && loaded}
-            onRefresh={() => void reload()}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             tintColor={colors.textMuted}
           />
         }
@@ -77,7 +79,9 @@ export default function JobsScreen() {
           subtitle="Accept, produce, self-QC, hand off to the rider"
         />
 
-        {firstLoad ? <SkeletonList label="Loading your assignments" count={3} /> : null}
+        {firstLoad ? (
+          <SkeletonList label="Loading your assignments" count={3} sectioned />
+        ) : null}
 
         {error && !loaded ? (
           <EmptyState

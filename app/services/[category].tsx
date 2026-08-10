@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 
+import { BusyOverlay } from "@/components/BusyOverlay";
 import { ChipMultiSelect } from "@/components/ChipMultiSelect";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -335,6 +336,12 @@ export default function ServiceCategoryScreen() {
           </>
         ) : null}
       </ScrollView>
+
+      {/*
+        Offering, withdrawing and saving each write to GRIDGO and then re-read
+        the shop's lines, so the screen holds while both round trips land.
+      */}
+      <BusyOverlay visible={busy} label="Saving what your shop offers…" />
     </View>
   );
 }

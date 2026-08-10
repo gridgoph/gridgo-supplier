@@ -76,14 +76,16 @@ Prefer these modules over burying logic in screens:
 - `lib/apiErrors.ts` / `lib/files.ts` — the only places that read an API error code. No `snake_case`, status code, or state string may reach a screen.
 - `lib/schedule.ts` + `lib/capacity.ts` + `lib/blackouts.ts` + `lib/day.ts` — agenda grouping, capacity arithmetic, and closures. Day comparisons go through `toDayKey` (local calendar), never UTC slicing.
 - `store/jobDrafts.ts` / `store/shopPlan.ts` — persisted through `lib/persistStorage.ts`, which uses AsyncStorage in every real runtime and inert storage only when `typeof window === "undefined"` during web SSR. Never gate persistence on `Platform.OS`.
-- `lib/navigationOptions.ts` — header chrome for the root stack and the nested `app/job/[id]` stack; both must look identical.
+- `lib/navigationOptions.ts` — header chrome for the root stack and the nested `app/job/[id]` stack; both must look identical. Every pushed screen carries a `title`, or iOS labels its back control with the route group and a shop hears "(tabs)"; `app/__tests__/navigationChrome.test.ts` fails when one does not.
+- `hooks/usePullToRefresh.ts` — the only thing that may drive a `RefreshControl`'s `refreshing`. Every list here reloads on focus, and binding that flag to the screen's own `loading` put the platform refresh indicator on screen at every tab switch — on iOS it insets the scroll view to make room and takes it back again, so the page slid down and settled on every visit. A focus reload refreshes silently.
+- Safe-area insets **stack** with design spacing, never `Math.max` with it: the inset is the OS keep-out zone and the padding is breathing room (`components/ScreenHeader.tsx` at the top, `components/GridgoTabBar.tsx` at the bottom). Taking the larger spends the whole gap on the notch.
 
 ## Controls
 
-Every input uses the control its data calls for, and the native one where the platform has it (all are bundled in Expo Go for SDK 54 — check `node_modules/expo/bundledNativeModules.json` before adding another):
+Every input uses the control its data calls for, and the platform's own where the platform's *behaviour* is the point — a calendar, a keyboard, a sheet's physics. Not where it only brings geometry: a native control paints itself from the OS and cannot be told to use these radii, so it reads as borrowed, and differently borrowed on each platform. (Native modules bundled in Expo Go for SDK 54 are listed in `node_modules/expo/bundledNativeModules.json` — check it before adding another.)
 
 - Dates → `components/controls/DateTimeField.tsx` (`@react-native-community/datetimepicker`; Android opens the dialog imperatively, iOS confirms in a sheet). Never a text box a date is typed into.
-- Fixed small sets → `components/controls/SegmentedControl.tsx`; longer fixed sets → `OptionList`.
+- Fixed small sets → `components/controls/SegmentedControl.tsx`; longer fixed sets → `OptionList`. The segmented control is built from tokens on purpose — `@react-native-segmented-control` was removed because iOS kept `UISegmentedControl`'s own rounding and Android's recreation hard-codes 9pt, on a screen of 12pt fields. Client and rider hold the same shape. Do not reinstall it.
 - Bounded counts → `Stepper`. Money → `MoneyField` + `lib/money.ts`. Free text stays free text (`NoteField`).
 - Anything irreversible → `await askConfirm({...})` from `store/sheets.ts`, with a question naming the thing. Never a bare "Are you sure?".
 
@@ -210,7 +212,9 @@ Color never carries meaning alone. Every status is **icon + label + color**: "Ap
 
 ### The states that are actually shipped
 
-Loading, empty and failed are most of what a shop sees on a bad connection, so they are components rather than improvised per screen: `components/Skeleton.tsx` (placeholders in the shape of what is coming — never a bare spinner), `components/EmptyState.tsx` (an invitation to act), `components/ErrorNotice.tsx` (inline, when the screen still has something to show). A screen that has loaded once keeps its content and states the failure quietly; a screen with nothing yet gets the full empty state.
+Loading, empty and failed are most of what a shop sees on a bad connection, so they are components rather than improvised per screen: `components/Skeleton.tsx` (placeholders in the shape of what is coming — never a bare spinner), `components/EmptyState.tsx` (an invitation to act), `components/ErrorNotice.tsx` (inline, when the screen still has something to show), `components/BusyOverlay.tsx` (a scrim over a screen that stays, for a commit of several requests).
+
+A skeleton must hold the height of the content that replaces it, or the page grows under the thumb on arrival and reads as a jump. Its shimmer is a highlight travelling across the shape at about a second a pass: the 160–240ms budget governs transitions, where slowness reads as lag, and this is ambient — run at transition speed it would strobe, which is why a still placeholder was tried first. Reduced motion leaves the placeholder and drops the sweep. A screen that has loaded once keeps its content and states the failure quietly; a screen with nothing yet gets the full empty state.
 
 A disabled yellow button is not a state — if there is nothing to save, do not draw the action at all.
 
@@ -230,6 +234,7 @@ Scale: display 32/38, H1 28/34, H2 24/30, H3 20/26, body large 16/24, body 14/20
 | Elevation | Border first. Use a subtle shadow only when a border cannot carry the separation |
 | Touch target | 44 × 44px minimum for every tappable control |
 | Motion | 160–240ms ease-out; respect reduced motion |
+| Loading shimmer | ~1s sweep — ambient, not a transition (`components/Skeleton.tsx`) |
 
 No essential state may be communicated by animation alone.
 

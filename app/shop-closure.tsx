@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { Stack, router, useLocalSearchParams } from "expo-router";
 
 import { DangerButton } from "@/components/DangerButton";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { SecondaryButton } from "@/components/SecondaryButton";
 import { DateTimeField } from "@/components/controls/DateTimeField";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { NoteField } from "@/components/controls/NoteField";
@@ -81,6 +80,27 @@ export default function ShopClosureScreen() {
 
   return (
     <View className="gg-screen">
+      {/*
+        A modal is not pushed, so it has no back chevron — the way out has to be
+        drawn. It belongs in the header, where it stays visible while the form
+        scrolls and while the keyboard is up, rather than at the foot of a form
+        a shop has to scroll past the note field to reach.
+      */}
+      <Stack.Screen
+        options={{
+          headerLeft: () => (
+            <Pressable
+              onPress={() => router.back()}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel and close"
+              className="gg-touch justify-center pr-4"
+              style={({ pressed }) => (pressed ? { opacity: 0.6 } : undefined)}
+            >
+              <Text className="text-button text-text-primary">Cancel</Text>
+            </Pressable>
+          ),
+        }}
+      />
       <ScrollView
         className="flex-1"
         contentContainerClassName="gg-page pb-16 pt-4"
@@ -156,7 +176,6 @@ export default function ShopClosureScreen() {
             label={existing ? "Save closure" : "Add closure"}
             onPress={save}
           />
-          <SecondaryButton label="Cancel" onPress={() => router.back()} />
           {existing ? (
             <DangerButton label="Remove closure" onPress={() => void remove()} />
           ) : null}

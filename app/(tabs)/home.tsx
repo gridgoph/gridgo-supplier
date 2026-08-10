@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { GridgoLogo } from "@/components/GridgoLogo";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { JobCardSkeleton, SkeletonBlock } from "@/components/Skeleton";
+import { SkeletonBlock } from "@/components/Skeleton";
 import { StatTile } from "@/components/StatTile";
 import { StatusChip } from "@/components/StatusChip";
 import { formatDeadlineFull } from "@/lib/dates";
@@ -25,6 +25,7 @@ import { summarizePayouts } from "@/lib/payout";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useAlertsStore } from "@/store/alerts";
 import { useSession } from "@/store/session";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 
 /**
@@ -66,6 +67,7 @@ export default function HomeScreen() {
     }, [reload]),
   );
 
+  const { refreshing, onRefresh } = usePullToRefresh(reload);
   const firstLoad = loading && !loaded;
   const pending = jobs.filter(isAwaitingDecision).length;
   const inProduction = jobs.filter(isInProductionPipeline).length;
@@ -85,8 +87,8 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={loading && loaded}
-            onRefresh={() => void reload()}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             tintColor={colors.textMuted}
           />
         }
@@ -97,14 +99,29 @@ export default function HomeScreen() {
           right={<GridgoLogo size={40} role="supplier" />}
         />
 
+        {/*
+          Shaped to the screen that replaces it — the job card with its action,
+          the two tiles, the payment row — so the floor does not grow under the
+          shop's thumb the moment it lands.
+        */}
         {firstLoad ? (
-          <View
-            className="gap-6"
-            accessibilityRole="progressbar"
-            accessibilityLabel="Loading your floor"
-          >
-            <JobCardSkeleton />
-            <View className="flex-row gap-3">
+          <View accessibilityRole="progressbar" accessibilityLabel="Loading your floor">
+            <View className="gg-card gap-5">
+              <View className="gap-3">
+                <View className="flex-row items-center justify-between gap-3">
+                  <SkeletonBlock className="h-4 w-28" />
+                  <SkeletonBlock className="h-6 w-24 rounded-pill" />
+                </View>
+                <SkeletonBlock className="h-7 w-3/4" />
+                <View className="gap-1">
+                  <SkeletonBlock className="h-5 w-2/3" />
+                  <SkeletonBlock className="h-5 w-2/5" />
+                </View>
+              </View>
+              <SkeletonBlock className="h-11 w-full" />
+            </View>
+
+            <View className="mt-6 flex-row gap-3">
               <View className="flex-1 gap-2 rounded-card border border-outline bg-surface px-4 py-3">
                 <SkeletonBlock className="h-7 w-12" />
                 <SkeletonBlock className="h-3 w-4/5" />
@@ -113,6 +130,12 @@ export default function HomeScreen() {
                 <SkeletonBlock className="h-7 w-12" />
                 <SkeletonBlock className="h-3 w-4/5" />
               </View>
+            </View>
+
+            <View className="gg-card mt-3 gap-2">
+              <SkeletonBlock className="h-4 w-32" />
+              <SkeletonBlock className="h-6 w-2/5" />
+              <SkeletonBlock className="h-4 w-4/5" />
             </View>
           </View>
         ) : null}

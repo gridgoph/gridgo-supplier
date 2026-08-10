@@ -11,7 +11,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { useEffect } from "react";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 
 import { colors, type ThemeName } from "@/constants/theme";
 import { useAppFonts } from "@/hooks/useAppFonts";
@@ -60,7 +60,10 @@ export default function RootLayout() {
   if (!fontsReady) return null;
 
   return (
-    <SafeAreaProvider>
+    // Without the metrics the platform already knows at launch, the provider
+    // renders nothing until native reports its insets — one empty frame between
+    // the splash screen going and the first screen arriving.
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <ThemeProvider value={navigationTheme(scheme)}>
         <RootStack />
         <StatusBar style={scheme === "dark" ? "light" : "dark"} />

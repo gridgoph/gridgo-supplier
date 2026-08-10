@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { router, useFocusEffect } from "expo-router";
 
+import { BusyOverlay } from "@/components/BusyOverlay";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -253,6 +254,12 @@ export default function CapacityScreen() {
           />
         </View>
       </ScrollView>
+
+      {/*
+        One save can be several requests — one per changed service — so the
+        screen stays put and says so rather than blanking into placeholders.
+      */}
+      <BusyOverlay visible={saving} label="Saving your capacity…" />
     </View>
   );
 }

@@ -1,11 +1,11 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ScrollView, Text, View } from "react-native";
 
 import { GridgoLogo, type GridgoLogoRole } from "@/components/GridgoLogo";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SpecRow } from "@/components/SpecRow";
 import { StatusChip } from "@/components/StatusChip";
+import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import type { ColorToken } from "@/constants/theme";
 import {
   setThemePreference,
@@ -144,45 +144,28 @@ function InkGroup({ title, inks }: { title: string; inks: Ink[] }) {
 function ThemeSwitch() {
   const preference = useThemePreference();
 
+  // Three mutually exclusive options is what the segmented control is for, and
+  // using the real one here keeps this route an honest specimen of it.
   return (
-    <View className="flex-row gap-2 pt-4">
-      {THEME_OPTIONS.map((option) => {
-        const selected = option.value === preference;
-        return (
-          <Pressable
-            key={option.value}
-            onPress={() => setThemePreference(option.value)}
-            accessibilityRole="button"
-            accessibilityState={{ selected }}
-            // Selected uses the monochrome accent. A theme switch is a routine
-            // control, so it never spends the screen's yellow.
-            className={
-              selected
-                ? "gg-chip gg-touch border-accent bg-accent px-4"
-                : "gg-chip gg-touch bg-surface px-4"
-            }
-            style={({ pressed }) => (pressed ? { opacity: 0.9 } : undefined)}
-          >
-            <Text
-              className={
-                selected ? "text-button text-accent-on" : "text-button text-text-secondary"
-              }
-            >
-              {option.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+    <View className="pt-4">
+      <SegmentedControl
+        options={THEME_OPTIONS}
+        value={preference}
+        onChange={setThemePreference}
+        accessibilityLabel="Theme"
+      />
     </View>
   );
 }
 
 export default function DesignSystemScreen() {
   const scheme = useThemeName();
-  const colors = useThemeColors();
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top"]}>
+    // No safe-area edge here: this route is pushed under the root stack header,
+    // which has already cleared the status bar. Insetting again would push the
+    // masthead down by the notch a second time.
+    <View className="gg-screen">
       <ScrollView className="gg-screen" showsVerticalScrollIndicator={false}>
         <View className="gg-page gap-10 pb-16 pt-6">
           {/* Masthead — the job ticket for the system itself. */}
@@ -351,6 +334,6 @@ export default function DesignSystemScreen() {
           </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }

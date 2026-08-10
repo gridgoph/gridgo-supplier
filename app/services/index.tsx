@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 
+import { BusyOverlay } from "@/components/BusyOverlay";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -13,6 +14,7 @@ import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { catalogTotals, declarationsFor, submittableLineIds } from "@/lib/supplierServices";
 import { useServiceCatalog } from "@/hooks/useServiceCatalog";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 
 /**
@@ -43,6 +45,8 @@ export default function ServicesScreen() {
     [catalog, services],
   );
 
+  const { refreshing, onRefresh } = usePullToRefresh(reload);
+
   async function submitAll() {
     setSubmitting(true);
     setSubmitError(null);
@@ -68,8 +72,8 @@ export default function ServicesScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={loading && catalog != null}
-            onRefresh={() => void reload()}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             tintColor={colors.textMuted}
           />
         }
@@ -179,6 +183,12 @@ export default function ServicesScreen() {
           </Text>
         ) : null}
       </ScrollView>
+
+      {/*
+        Submitting sends one request per category, so the screen stays put and
+        states the wait rather than blanking into placeholders.
+      */}
+      <BusyOverlay visible={submitting} label="Sending these to Operations…" />
     </View>
   );
 }
