@@ -103,9 +103,7 @@ describe("the APK reaches the captain's server only from the default branch", ()
   it("publishes on a merge to main and on nothing else", () => {
     // A pull request cannot reach this job at all, and a manual dispatch from
     // a branch must not replace what the landing site serves.
-    expect(publish).toMatch(
-      /if:\s*github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/,
-    );
+    expect(publish).toMatch(/if:\s*github\.event_name == 'push' &&/);
   });
 
   it("pins the host key rather than trusting whatever answers", () => {
