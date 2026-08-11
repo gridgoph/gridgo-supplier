@@ -1,5 +1,7 @@
+import { useHeaderHeight } from "@react-navigation/elements";
 import { useState } from "react";
 import { Text, View } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router } from "expo-router";
 
 import { BusyOverlay } from "@/components/BusyOverlay";
@@ -18,10 +20,18 @@ import { useSession } from "@/store/session";
  * second layout for it would teach a shop two maps. What is different is the
  * stakes: this pin is already pricing live jobs, so the change is confirmed
  * before it is sent and nothing is drawn to press until something has moved.
+ *
+ * There is no scroll view to move here — the map is the content — so the screen
+ * shortens for the keyboard and the map gives up the space, which keeps both
+ * the address field and the save action above the keys. Unlike the sign-up
+ * step, this one is pushed under a header, and the avoiding view measures
+ * against its own parent: without the header's height it would lift by that
+ * much too little.
  */
 export default function ShopLocationScreen() {
   const user = useSession((s) => s.user);
   const refresh = useSession((s) => s.refresh);
+  const headerHeight = useHeaderHeight();
 
   const saved: ShopPin | null = user?.shop ?? null;
   const [pin, setPin] = useState<ShopPin | null>(saved);
@@ -56,27 +66,33 @@ export default function ShopLocationScreen() {
 
   return (
     <View className="gg-screen">
-      <ShopLocationPicker pin={pin} onChange={setPin} />
+      <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={headerHeight}
+        style={{ flex: 1 }}
+      >
+        <ShopLocationPicker pin={pin} onChange={setPin} />
 
-      <View className="gg-page gap-3 pb-6 pt-3">
-        {notice ? <ErrorNotice message={notice} /> : null}
-        {unchanged ? (
-          // Nothing to save is not a state worth drawing a dead yellow button
-          // for — the screen says so instead.
-          <Text className="text-caption text-text-muted">
-            This is where GRIDGO already has you. Move the pin to change it.
-          </Text>
-        ) : (
-          <PrimaryButton
-            label={saving ? "Saving…" : "Save this pin"}
-            disabled={saving || Boolean(problem)}
-            onPress={() => void save()}
-          />
-        )}
-        {problem && !unchanged ? (
-          <Text className="text-caption text-error">{problem}</Text>
-        ) : null}
-      </View>
+        <View className="gg-page gap-3 pb-6 pt-3">
+          {notice ? <ErrorNotice message={notice} /> : null}
+          {unchanged ? (
+            // Nothing to save is not a state worth drawing a dead yellow button
+            // for — the screen says so instead.
+            <Text className="text-caption text-text-muted">
+              This is where GRIDGO already has you. Move the pin to change it.
+            </Text>
+          ) : (
+            <PrimaryButton
+              label={saving ? "Saving…" : "Save this pin"}
+              disabled={saving || Boolean(problem)}
+              onPress={() => void save()}
+            />
+          )}
+          {problem && !unchanged ? (
+            <Text className="text-caption text-error">{problem}</Text>
+          ) : null}
+        </View>
+      </KeyboardAvoidingView>
 
       <BusyOverlay visible={saving} label="Saving your shop's pin" />
     </View>

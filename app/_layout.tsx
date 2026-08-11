@@ -12,6 +12,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 
 import { ToastHost } from "@/components/ToastHost";
@@ -71,18 +72,32 @@ export default function RootLayout() {
     // list's swipe-to-clear is the first gesture in this app that is ours
     // rather than the navigator's.
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-        <ThemeProvider value={navigationTheme(scheme)}>
-          <RootStack />
-          {/*
-            Above the navigator so an alert can arrive on any screen, and at
-            the top of it so it can never sit on the action a screen wants
-            pressed — see `components/ToastHost`.
-          */}
-          <ToastHost />
-          <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-        </ThemeProvider>
-      </SafeAreaProvider>
+      {/*
+        One keyboard, one behaviour. Without this provider the two platforms
+        disagree about what a keyboard even is — Android resizes the window and
+        iOS does not — and every screen has to hold a `Platform.OS` split it can
+        only get right on one of them. With it, Android stops resizing and both
+        platforms report the same frame-by-frame keyboard geometry, which is
+        what `components/FormScrollView` and the two shells are built on.
+
+        `preserveEdgeToEdge` matters here: this app is edge-to-edge on Android
+        (Android 15 enforces it), the tab bar's geometry is measured against
+        that, and the module must not quietly take it away.
+      */}
+      <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
+        <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+          <ThemeProvider value={navigationTheme(scheme)}>
+            <RootStack />
+            {/*
+              Above the navigator so an alert can arrive on any screen, and at
+              the top of it so it can never sit on the action a screen wants
+              pressed — see `components/ToastHost`.
+            */}
+            <ToastHost />
+            <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

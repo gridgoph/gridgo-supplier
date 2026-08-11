@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { router } from "expo-router";
 
 import { DocumentSlot } from "@/components/DocumentSlot";
@@ -51,6 +51,7 @@ export default function DocumentsStep() {
       lede={step.lede}
       onBack={() => router.back()}
       backLabel="Back to what you print"
+      contentClassName="gap-3 pb-4 pt-4"
       footer={
         <PrimaryButton
           label="Continue"
@@ -58,39 +59,33 @@ export default function DocumentsStep() {
         />
       }
     >
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="gap-3 pb-4 pt-4"
-        showsVerticalScrollIndicator={false}
-      >
-        {VERIFICATION_DOCUMENTS.map((definition) => (
-          <DocumentSlot
-            key={definition.kind}
-            definition={definition}
-            picked={draft.documents[definition.kind]}
-            problem={problems[definition.kind]}
-            onTakePhoto={() => void takePhoto().then((o) => apply(definition.kind, o))}
-            onChooseFile={() => void chooseFile().then((o) => apply(definition.kind, o))}
-            onRemove={() => setDocument(definition.kind, null)}
-          />
-        ))}
+      {VERIFICATION_DOCUMENTS.map((definition) => (
+        <DocumentSlot
+          key={definition.kind}
+          definition={definition}
+          picked={draft.documents[definition.kind]}
+          problem={problems[definition.kind]}
+          onTakePhoto={() => void takePhoto().then((o) => apply(definition.kind, o))}
+          onChooseFile={() => void chooseFile().then((o) => apply(definition.kind, o))}
+          onRemove={() => setDocument(definition.kind, null)}
+        />
+      ))}
 
-        {/* The constraint, explained before it is hit rather than after. */}
-        <View className="gg-panel gap-1">
-          <Text className="text-body font-medium text-text-primary">
-            {missingExpected.length === 0
-              ? "Operations has what they usually ask for"
-              : "You can send these later"}
-          </Text>
-          <Text className="text-body text-text-secondary">
-            {missingExpected.length === 0
-              ? `${chosen} ${chosen === 1 ? "file" : "files"} will go to GRIDGO the moment your account opens.`
-              : `Your account opens either way, but Operations cannot accredit a shop without ${missingExpected
-                  .map((d) => d.title.toLowerCase())
-                  .join(" and ")}. You can add them from your account screen while you wait.`}
-          </Text>
-        </View>
-      </ScrollView>
+      {/* The constraint, explained before it is hit rather than after. */}
+      <View className="gg-panel gap-1">
+        <Text className="text-body font-medium text-text-primary">
+          {missingExpected.length === 0
+            ? "Operations has what they usually ask for"
+            : "You can send these later"}
+        </Text>
+        <Text className="text-body text-text-secondary">
+          {missingExpected.length === 0
+            ? `${chosen} ${chosen === 1 ? "file" : "files"} will go to GRIDGO the moment your account opens.`
+            : `Your account opens either way, but Operations cannot accredit a shop without ${missingExpected
+                .map((d) => d.title.toLowerCase())
+                .join(" and ")}. You can add them from your account screen while you wait.`}
+        </Text>
+      </View>
     </OnboardingStep>
   );
 }

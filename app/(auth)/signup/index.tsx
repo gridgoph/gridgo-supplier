@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { router } from "expo-router";
 
 import { OnboardingStep } from "@/components/OnboardingStep";
@@ -35,98 +34,83 @@ export default function ShopIdentityStep() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      // Only iOS needs this: Android resizes the window for the keyboard itself.
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <OnboardingStep
+      id="shop"
+      title={step.title}
+      lede={step.lede}
+      onBack={() => router.back()}
+      backLabel="Back to sign in"
+      contentClassName="gap-6 pb-4 pt-4"
+      footer={
+        <>
+          <PrimaryButton label="Continue" onPress={next} />
+          <SecondaryButton label="I already have an account" onPress={() => router.back()} />
+        </>
+      }
     >
-      <OnboardingStep
-        id="shop"
-        title={step.title}
-        lede={step.lede}
-        onBack={() => router.back()}
-        backLabel="Back to sign in"
-        footer={
-          <>
-            <PrimaryButton label="Continue" onPress={next} />
-            <SecondaryButton
-              label="I already have an account"
-              onPress={() => router.back()}
-            />
-          </>
-        }
+      <FieldShell label="Shop name" error={problem("shopName")}>
+        <TextField
+          value={draft.shopName}
+          onChange={(shopName) => patch({ shopName })}
+          kind="name"
+          placeholder="PrintRight Davao"
+          accessibilityLabel="Shop name"
+        />
+      </FieldShell>
+
+      <FieldShell
+        label="Your name"
+        hint="Who GRIDGO calls when a job needs a decision."
+        error={problem("contactName")}
       >
-        <ScrollView
-          className="flex-1"
-          contentContainerClassName="gap-6 pb-4 pt-4"
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <FieldShell label="Shop name" error={problem("shopName")}>
-            <TextField
-              value={draft.shopName}
-              onChange={(shopName) => patch({ shopName })}
-              kind="name"
-              placeholder="PrintRight Davao"
-              accessibilityLabel="Shop name"
-            />
-          </FieldShell>
+        <TextField
+          value={draft.contactName}
+          onChange={(contactName) => patch({ contactName })}
+          kind="name"
+          placeholder="Ben Santos"
+          accessibilityLabel="Your name"
+        />
+      </FieldShell>
 
-          <FieldShell
-            label="Your name"
-            hint="Who GRIDGO calls when a job needs a decision."
-            error={problem("contactName")}
-          >
-            <TextField
-              value={draft.contactName}
-              onChange={(contactName) => patch({ contactName })}
-              kind="name"
-              placeholder="Ben Santos"
-              accessibilityLabel="Your name"
-            />
-          </FieldShell>
+      <FieldShell label="Email" error={problem("email")}>
+        <TextField
+          value={draft.email}
+          onChange={(email) => patch({ email })}
+          kind="email"
+          placeholder="you@yourshop.ph"
+          accessibilityLabel="Email"
+        />
+      </FieldShell>
 
-          <FieldShell label="Email" error={problem("email")}>
-            <TextField
-              value={draft.email}
-              onChange={(email) => patch({ email })}
-              kind="email"
-              placeholder="you@yourshop.ph"
-              accessibilityLabel="Email"
-            />
-          </FieldShell>
+      <FieldShell
+        label="Mobile number"
+        hint="The rider collecting from you gets this number."
+        error={problem("phone")}
+      >
+        <TextField
+          value={draft.phone}
+          onChange={(phone) => patch({ phone })}
+          kind="phone"
+          placeholder="0917 123 4567"
+          accessibilityLabel="Mobile number"
+        />
+      </FieldShell>
 
-          <FieldShell
-            label="Mobile number"
-            hint="The rider collecting from you gets this number."
-            error={problem("phone")}
-          >
-            <TextField
-              value={draft.phone}
-              onChange={(phone) => patch({ phone })}
-              kind="phone"
-              placeholder="0917 123 4567"
-              accessibilityLabel="Mobile number"
-            />
-          </FieldShell>
-
-          <FieldShell
-            label="Password"
-            hint="At least 8 characters. This is the only thing GRIDGO does not keep while you finish signing up."
-            error={problem("password")}
-          >
-            <TextField
-              value={draft.password}
-              onChange={(password) => patch({ password })}
-              kind="new-password"
-              placeholder="Choose a password"
-              accessibilityLabel="Password"
-              returnKeyType="done"
-              onSubmit={next}
-            />
-          </FieldShell>
-        </ScrollView>
-      </OnboardingStep>
-    </KeyboardAvoidingView>
+      <FieldShell
+        label="Password"
+        hint="At least 8 characters. This is the only thing GRIDGO does not keep while you finish signing up."
+        error={problem("password")}
+      >
+        <TextField
+          value={draft.password}
+          onChange={(password) => patch({ password })}
+          kind="new-password"
+          placeholder="Choose a password"
+          accessibilityLabel="Password"
+          returnKeyType="done"
+          onSubmit={next}
+        />
+      </FieldShell>
+    </OnboardingStep>
   );
 }

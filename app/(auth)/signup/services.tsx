@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ScrollView, Text } from "react-native";
+import { Text } from "react-native";
 import { router } from "expo-router";
 
 import { CategoryRankList } from "@/components/CategoryRankList";
@@ -44,6 +44,7 @@ export default function ServicesStep() {
       lede={step.lede}
       onBack={() => router.back()}
       backLabel="Back to your pin"
+      contentClassName="pb-4 pt-4"
       footer={
         <>
           {showProblem && problems.categoryCodes ? (
@@ -53,22 +54,16 @@ export default function ServicesStep() {
         </>
       }
     >
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="pb-4 pt-4"
-        showsVerticalScrollIndicator={false}
-      >
-        <CategoryRankList
-          categories={PUBLISHED_CATALOG.map((category) => ({
-            code: category.code,
-            name: category.name,
-            bestFor: category.audience,
-          }))}
-          value={draft.categoryCodes}
-          onToggle={(code) => patch({ categoryCodes: toggleCategory(draft.categoryCodes, code) })}
-          onPromote={(code) => patch({ categoryCodes: promoteCategory(draft.categoryCodes, code) })}
-        />
-      </ScrollView>
+      <CategoryRankList
+        categories={PUBLISHED_CATALOG.map((category) => ({
+          code: category.code,
+          name: category.name,
+          bestFor: category.audience,
+        }))}
+        value={draft.categoryCodes}
+        onToggle={(code) => patch({ categoryCodes: toggleCategory(draft.categoryCodes, code) })}
+        onPromote={(code) => patch({ categoryCodes: promoteCategory(draft.categoryCodes, code) })}
+      />
     </OnboardingStep>
   );
 }
