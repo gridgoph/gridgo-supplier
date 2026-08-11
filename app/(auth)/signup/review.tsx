@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react-native";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 
 import { BusyOverlay } from "@/components/BusyOverlay";
@@ -67,6 +67,13 @@ export default function ReviewStep() {
       lede={step.lede}
       onBack={() => router.back()}
       backLabel="Back to your papers"
+      contentClassName="gap-3 pb-4 pt-4"
+      overlay={
+        <BusyOverlay
+          visible={loading}
+          label="Opening your shop account. Do not close the app."
+        />
+      }
       footer={
         <>
           {error ? <ErrorNotice message={error} /> : null}
@@ -78,64 +85,53 @@ export default function ReviewStep() {
         </>
       }
     >
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="gap-3 pb-4 pt-4"
-        showsVerticalScrollIndicator={false}
-      >
-        <ReviewCard
-          step={stepAt("shop")}
-          lines={[draft.shopName, draft.contactName, draft.email, draft.phone].filter(Boolean)}
-          missing={incomplete?.id === "shop"}
-        />
-
-        <ReviewCard
-          step={stepAt("location")}
-          lines={
-            isPlaced(draft.pin)
-              ? [draft.pin.label || "No address on the pin yet", coordinateText(draft.pin)]
-              : []
-          }
-          missing={!isPlaced(draft.pin)}
-        />
-
-        <ReviewCard
-          step={stepAt("services")}
-          lines={draft.categoryCodes.map(
-            (code, index) => `${index + 1}. ${categoryName(code)}`,
-          )}
-          missing={draft.categoryCodes.length === 0}
-        />
-
-        <ReviewCard
-          step={stepAt("documents")}
-          lines={chosenDocuments.map(
-            (definition) =>
-              `${definition.title} — ${draft.documents[definition.kind]?.fileName ?? ""}`,
-          )}
-          emptyLine="Nothing added. Operations will ask you for these."
-        />
-
-        {/* What actually happens next. The last word on this flow. */}
-        <View className="gg-panel gap-2">
-          <Text className="text-body font-medium text-text-primary">
-            What happens after you press this
-          </Text>
-          <Text className="text-body text-text-secondary">
-            GRIDGO opens your account straight away and signs you in. No job is matched to your
-            shop until Operations has read all of this and approved it — so your floor stays
-            empty until then, and the app will say so rather than looking like a quiet day.
-          </Text>
-          <Text className="text-body text-text-secondary">
-            They usually come back within a working day. You will not need to sign up again.
-          </Text>
-        </View>
-      </ScrollView>
-
-      <BusyOverlay
-        visible={loading}
-        label="Opening your shop account. Do not close the app."
+      <ReviewCard
+        step={stepAt("shop")}
+        lines={[draft.shopName, draft.contactName, draft.email, draft.phone].filter(Boolean)}
+        missing={incomplete?.id === "shop"}
       />
+
+      <ReviewCard
+        step={stepAt("location")}
+        lines={
+          isPlaced(draft.pin)
+            ? [draft.pin.label || "No address on the pin yet", coordinateText(draft.pin)]
+            : []
+        }
+        missing={!isPlaced(draft.pin)}
+      />
+
+      <ReviewCard
+        step={stepAt("services")}
+        lines={draft.categoryCodes.map(
+          (code, index) => `${index + 1}. ${categoryName(code)}`,
+        )}
+        missing={draft.categoryCodes.length === 0}
+      />
+
+      <ReviewCard
+        step={stepAt("documents")}
+        lines={chosenDocuments.map(
+          (definition) =>
+            `${definition.title} — ${draft.documents[definition.kind]?.fileName ?? ""}`,
+        )}
+        emptyLine="Nothing added. Operations will ask you for these."
+      />
+
+      {/* What actually happens next. The last word on this flow. */}
+      <View className="gg-panel gap-2">
+        <Text className="text-body font-medium text-text-primary">
+          What happens after you press this
+        </Text>
+        <Text className="text-body text-text-secondary">
+          GRIDGO opens your account straight away and signs you in. No job is matched to your
+          shop until Operations has read all of this and approved it — so your floor stays
+          empty until then, and the app will say so rather than looking like a quiet day.
+        </Text>
+        <Text className="text-body text-text-secondary">
+          They usually come back within a working day. You will not need to sign up again.
+        </Text>
+      </View>
     </OnboardingStep>
   );
 }
@@ -162,27 +158,27 @@ function ReviewCard({
       className="gg-card flex-row items-start gap-3"
       style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
     >
-      <View className="min-w-0 flex-1 gap-1">
-        <Text className="text-caption text-text-muted">{step.title}</Text>
-        {lines.length ? (
-          lines.map((line) => (
-            <Text key={line} className="text-body text-text-primary">
-              {line}
-            </Text>
-          ))
-        ) : (
-          <Text className={missing ? "text-body text-error" : "text-body text-text-muted"}>
-            {missing ? "Still needed — tap to fill this in" : (emptyLine ?? "Nothing added")}
+    <View className="min-w-0 flex-1 gap-1">
+      <Text className="text-caption text-text-muted">{step.title}</Text>
+      {lines.length ? (
+        lines.map((line) => (
+          <Text key={line} className="text-body text-text-primary">
+            {line}
           </Text>
-        )}
-      </View>
-      <View className="pt-0.5">
-        <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
-      </View>
-    </Pressable>
-  );
+        ))
+      ) : (
+        <Text className={missing ? "text-body text-error" : "text-body text-text-muted"}>
+          {missing ? "Still needed — tap to fill this in" : (emptyLine ?? "Nothing added")}
+        </Text>
+      )}
+    </View>
+    <View className="pt-0.5">
+      <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+    </View>
+  </Pressable>
+);
 }
 
 function categoryName(code: string): string {
-  return PUBLISHED_CATALOG.find((category) => category.code === code)?.name ?? code;
+return PUBLISHED_CATALOG.find((category) => category.code === code)?.name ?? code;
 }

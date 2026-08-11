@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { FormScrollView } from "@/components/FormScrollView";
 import { SkeletonBlock } from "@/components/Skeleton";
 
 type Props = {
@@ -28,6 +29,12 @@ type Props = {
  * Every flow reads the same way: what you are about to do, the job it applies
  * to, the fields it needs, then one action with room around it. Keeping the
  * rhythm here is what stops four screens drifting into four layouts.
+ *
+ * The action lives *inside* the scroll view rather than pinned under it, and
+ * that is what makes the keyboard case simple: one surface moves, so the
+ * focused field and the button it leads to are reachable by the same scroll.
+ * A production update is this shell inside a form sheet — the scroll surface
+ * measures against the window, so it is right there too.
  */
 export function FlowScreen({
   loading,
@@ -75,39 +82,26 @@ export function FlowScreen({
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      // Only iOS needs this: Android resizes the window for the keyboard itself
-      // (`adjustResize` under edge-to-edge), and padding on top of that would
-      // push the fields twice as far. Same behaviour, one platform's work.
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <View className="gg-screen">
-        <ScrollView
-          className="flex-1"
-          contentContainerClassName="gg-page pb-16 pt-4"
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View className="gap-2">
-            <Text className="text-h2 text-text-primary">{title}</Text>
-            {subject ? (
-              <Text className="text-body-lg font-medium text-text-primary">{subject}</Text>
-            ) : null}
-            <Text className="text-body text-text-secondary">{lede}</Text>
-          </View>
-
-          <View className="mt-8 gap-6">{children}</View>
-
-          {actionError ? (
-            <View className="mt-6">
-              <ErrorNotice message={actionError} />
-            </View>
+    <View className="gg-screen">
+      <FormScrollView contentClassName="gg-page pb-16 pt-4">
+        <View className="gap-2">
+          <Text className="text-h2 text-text-primary">{title}</Text>
+          {subject ? (
+            <Text className="text-body-lg font-medium text-text-primary">{subject}</Text>
           ) : null}
+          <Text className="text-body text-text-secondary">{lede}</Text>
+        </View>
 
-          <View className="mt-8 gap-3">{footer}</View>
-        </ScrollView>
-      </View>
-    </KeyboardAvoidingView>
+        <View className="mt-8 gap-6">{children}</View>
+
+        {actionError ? (
+          <View className="mt-6">
+            <ErrorNotice message={actionError} />
+          </View>
+        ) : null}
+
+        <View className="mt-8 gap-3">{footer}</View>
+      </FormScrollView>
+    </View>
   );
 }

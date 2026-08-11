@@ -92,6 +92,45 @@ describe("resolveApiBase", () => {
     ).toBe("http://10.0.0.4:9000");
   });
 
+  /**
+   * A hosted build is configuration, not code: `EXPO_PUBLIC_API_URL` is set at
+   * build time and nothing else may win. These pin the two ways that could
+   * quietly break — a dev-server hostname leaking into a shipped binary, and a
+   * store build with no hostUri at all falling back to loopback.
+   */
+  it("a production build points at its own domain over https, on both platforms", () => {
+    for (const platformOS of ["ios", "android"] as const) {
+      expect(
+        resolveApiBase({
+          envUrl: "https://api.example.com",
+          hostCandidates: [],
+          platformOS,
+        }),
+      ).toBe("https://api.example.com");
+    }
+  });
+
+  it("never falls back to the dev server or loopback while that variable is set", () => {
+    const base = resolveApiBase({
+      envUrl: "https://api.example.com",
+      envPort: "8787",
+      // A build run from a developer's machine still carries these.
+      hostCandidates: ["192.168.1.55:8081", "localhost:8081"],
+      platformOS: "android",
+    });
+
+    expect(base).toBe("https://api.example.com");
+    expect(base).not.toContain("10.0.2.2");
+    expect(base).not.toContain("127.0.0.1");
+    expect(base).not.toContain("8787");
+  });
+
+  it("keeps a path prefix, so the API can live under one", () => {
+    expect(
+      resolveApiBase({ envUrl: "https://example.com/gridgo/", hostCandidates: [] }),
+    ).toBe("https://example.com/gridgo");
+  });
+
   it("walks host candidates until one parses", () => {
     expect(
       resolveApiBase({

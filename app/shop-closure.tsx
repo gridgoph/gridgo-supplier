@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { DangerButton } from "@/components/DangerButton";
+import { FormScrollView } from "@/components/FormScrollView";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { DateTimeField } from "@/components/controls/DateTimeField";
 import { FieldShell } from "@/components/controls/FieldShell";
@@ -87,12 +88,7 @@ export default function ShopClosureScreen() {
         here. Nothing is committed until the action below is pressed, which is
         what the old "Cancel" was really saying.
       */}
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="gg-page pb-16 pt-4"
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+      <FormScrollView contentClassName="gg-page pb-16 pt-4">
         <View className="gap-2">
           <Text className="text-h2 text-text-primary">
             {existing ? "Edit closure" : "Add a closure"}
@@ -166,7 +162,7 @@ export default function ShopClosureScreen() {
             <DangerButton label="Remove closure" onPress={() => void remove()} />
           ) : null}
         </View>
-      </ScrollView>
+      </FormScrollView>
     </View>
   );
 }
