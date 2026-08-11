@@ -358,6 +358,14 @@ This app serves `supplier`. Check the role once, at the door, and hand a non-sup
 
 ---
 
+## Shipping the APK
+
+- **The APK shops sideload is built, proved, and published by CI.** `.github/workflows/android-release.yml`: a merge to `main` (or a manual dispatch) runs `expo prebuild` → `assembleRelease` → `scripts/verify-release-apk.sh` → run artifact, GitHub Release, and an upload to the captain's server over the deploy key's forced command (`upload-apk supplier`, bytes on stdin). `android/` is generated, never committed — `.gitignore` keeps it out and a checked-in copy drifts from `app.json` on every Expo upgrade — so `npx expo config --type public` has to gate the build. Two failures are invisible in a green log and both are asserted against the built APK rather than trusted: Expo's generated `android/app/build.gradle` points the release build type at `signingConfigs.debug`, so signing comes from AGP's injected config and the APK's certificate is then compared to the keystore alias; and **`EXPO_PUBLIC_*` values are inlined by Babel at bundle time, not read at runtime**, so `EXPO_PUBLIC_API_URL` must be in the environment of the gradle command itself — set on the runner earlier, or in any later step, the APK silently falls back to the loopback base in `lib/api.ts`. The URL is grepped out of `assets/index.android.bundle` inside the APK, and **every** `EXPO_PUBLIC_*` name is asserted absent (this app also reads `EXPO_PUBLIC_API_PORT`, and Babel inlines an unset one as `undefined`, so a surviving name of any kind means nothing was inlined). `__tests__/releaseWorkflow.test.ts` fails the build if any of that moves. Triggers earn different outputs: a pull request gets config, typecheck and tests and references no secret at all; only the default branch names a Release or replaces what the download page serves. This mirrors `gridgo-rider`'s workflow deliberately — fix a fleet-wide release problem in both, not one.
+
+- **A sideloaded build must not call itself 1.0.0 forever.** There is no store listing to tell two APKs apart, and Android refuses to install over an equal `versionCode`. So `app.config.ts` — which now sits over `app.json` and is the config Expo actually evaluates — stamps a build identity: `app.json` keeps MAJOR.MINOR as the release line, CI's run number owns the patch segment and the `versionCode` (`GRIDGO_BUILD_NUMBER`). Locally the `app.json` version stands unchanged, so nothing on a developer's machine pretends to be a release. The rule lives in `app.config.ts` rather than `lib/` because @expo/config's loader will not resolve an extensionless relative `.ts` import and the `.ts` spelling that does resolve is a `tsc` error; `__tests__/appConfigVersion.test.ts` tests it where it runs.
+
+---
+
 ## Communication
 
 Be concise. Explain what changed and how to test it.
