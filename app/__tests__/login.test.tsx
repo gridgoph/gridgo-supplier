@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn() },
@@ -21,19 +21,24 @@ jest.mock("@/store/session", () => ({
 }));
 
 import LoginScreen from "@/app/(auth)/login";
+import { DEV_LOGIN } from "@/lib/devLogin";
 
 /**
  * The door is on a public address in the hosted pilot, so anything this screen
- * shows, it shows to anyone who opens the app. It used to arrive with the pilot
- * account's email and password already typed in — a convenience on a laptop and
- * a way in on a hosted build.
+ * shows, it shows to anyone who opens the app. A release build must arrive with
+ * empty fields. Jest runs with `__DEV__ === true`, so the development prefill
+ * is visible here — that is the captain's one-tap path. The production strip
+ * is proved separately by `devLoginDisclosure.test.ts` and the export assert.
  */
 describe("Sign in", () => {
-  it("hands nobody a credential", async () => {
+  it("prefills the pilot supplier only while __DEV__ is true", async () => {
     await render(<LoginScreen />);
 
-    expect(screen.getByLabelText("Email").props.value).toBe("");
-    expect(screen.getByLabelText("Password").props.value).toBe("");
+    // Jest is a development runtime, so the guarded branch is live.
+    expect(DEV_LOGIN).not.toBeNull();
+    expect(screen.getByLabelText("Email").props.value).toBe(DEV_LOGIN!.email);
+    expect(screen.getByLabelText("Password").props.value).toBe(DEV_LOGIN!.password);
+    expect(DEV_LOGIN!.email).toBe("supplier@gridgo.ph");
   });
 
   it("still says which host it is talking to, and what to do next", async () => {
@@ -41,5 +46,20 @@ describe("Sign in", () => {
 
     expect(screen.getByText(/gridgo\.example/)).toBeTruthy();
     expect(screen.getByText("Open a shop account")).toBeTruthy();
+  });
+
+  it("exposes a show/hide control on the password field", async () => {
+    await render(<LoginScreen />);
+
+    expect(screen.getByLabelText("Password").props.secureTextEntry).toBe(true);
+    expect(screen.getByLabelText("Show password")).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText("Show password"));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Password").props.secureTextEntry).toBe(false);
+    });
+    expect(screen.getByLabelText("Hide password")).toBeTruthy();
+    expect(screen.getByLabelText("Password").props.value).toBe(DEV_LOGIN!.password);
   });
 });

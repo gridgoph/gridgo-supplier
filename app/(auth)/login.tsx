@@ -9,9 +9,12 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { StatusChip } from "@/components/StatusChip";
 import { FieldShell } from "@/components/controls/FieldShell";
+import { PasswordField } from "@/components/controls/PasswordField";
 import { TextField } from "@/components/controls/TextField";
 import { getApiBase, health } from "@/lib/api";
 import { isSignedIn, useSession } from "@/store/session";
+
+import { DEV_LOGIN } from "@/lib/devLogin";
 
 type HealthState = "checking" | "reachable" | "unreachable";
 
@@ -30,16 +33,15 @@ type HealthState = "checking" | "reachable" | "unreachable";
  * and nothing else — this screen is on a public address now, so anything it
  * shows, it shows to whoever opens the app.
  *
- * Both fields start empty for the same reason. They used to arrive carrying the
- * pilot account and its password, which was a convenience on a laptop and a way
- * in on a hosted build; the passwords themselves now come from deployment
- * configuration rather than this repository, so a typed-in hint would be stale
- * as well as unsafe.
+ * Credentials start empty on a release build for the same reason. In a
+ * development build only, `DEV_LOGIN` prefills the pilot supplier so the captain
+ * can sign in with one tap; Metro strips that branch from production, proved by
+ * the disclosure tests and the production-export assertion.
  */
 export default function LoginScreen() {
   const { user, login, loading, error } = useSession();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(() => DEV_LOGIN?.email ?? "");
+  const [password, setPassword] = useState(() => DEV_LOGIN?.password ?? "");
   const [apiHost] = useState(() => hostOf(getApiBase()));
   const [healthState, setHealthState] = useState<HealthState>("checking");
 
@@ -86,10 +88,9 @@ export default function LoginScreen() {
           </FieldShell>
 
           <FieldShell label="Password">
-            <TextField
+            <PasswordField
               value={password}
               onChange={setPassword}
-              kind="password"
               placeholder="Your password"
               accessibilityLabel="Password"
               returnKeyType="go"

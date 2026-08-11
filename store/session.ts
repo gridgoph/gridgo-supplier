@@ -6,7 +6,6 @@ import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 
 /** Expected role for this binary — mismatched login is rejected. */
 export const APP_ROLE = "supplier" as const;
-export const DEMO_EMAIL = "supplier@gridgo.local";
 
 /**
  * Single source for `Stack.Protected` and launch redirects.

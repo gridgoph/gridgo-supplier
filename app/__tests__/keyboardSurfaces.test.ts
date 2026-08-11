@@ -19,7 +19,7 @@ function relative(file: string): string {
 }
 
 /** Anything that opens a soft keyboard when it is tapped. */
-const OPENS_A_KEYBOARD = /<(TextInput|TextField|NoteField|MoneyField)\b/;
+const OPENS_A_KEYBOARD = /<(TextInput|TextField|PasswordField|NoteField|MoneyField)\b/;
 
 /**
  * Somewhere in this file's own tree, the keyboard is accounted for: either the
