@@ -8,6 +8,7 @@ import { JobTimeline } from "@/components/JobTimeline";
 import { JourneyTrack } from "@/components/JourneyTrack";
 import { MilestoneList } from "@/components/MilestoneList";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { PushEnableCard } from "@/components/PushEnableCard";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SpecRow } from "@/components/SpecRow";
@@ -266,10 +267,21 @@ export default function JobWorkspaceScreen() {
             ))}
           </View>
         ) : (
-          <View className="gg-panel mt-8 gap-1">
-            <Text className="text-body font-medium text-text-primary">{waiting.title}</Text>
-            <Text className="text-body text-text-secondary">{waiting.body}</Text>
-          </View>
+          <>
+            <View className="gg-panel mt-8 gap-1">
+              <Text className="text-body font-medium text-text-primary">{waiting.title}</Text>
+              <Text className="text-body text-text-secondary">{waiting.body}</Text>
+            </View>
+            {/*
+              The other moment the ask earns itself. This branch is the job with
+              nothing for the shop to do — it has accepted, or printed, or filed
+              its evidence, and is now waiting on a client's payment or a rider
+              at the door. "We will tell your phone" is the answer to the
+              question the panel above has just raised. When there *is* an
+              action the screen belongs to it, so nothing is offered.
+            */}
+            <PushEnableCard spacing="above" />
+          </>
         )}
       </ScrollView>
     </View>

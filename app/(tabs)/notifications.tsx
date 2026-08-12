@@ -5,6 +5,7 @@ import { router, useFocusEffect } from "expo-router";
 import { AlertCard } from "@/components/AlertCard";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { PushEnableCard } from "@/components/PushEnableCard";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SectionHeader } from "@/components/SectionHeader";
 import { SkeletonList } from "@/components/Skeleton";
@@ -199,6 +200,14 @@ export default function NotificationsScreen() {
           title="Alerts"
           subtitle="New work, production news, and what your jobs have paid"
         />
+
+        {/*
+          The one place in this app that may raise the permission dialog, and
+          the obvious one: a shop reading this screen is reading exactly what
+          push would have put on its lock screen. It draws itself only when
+          there is something to offer — see `pushOffer`.
+        */}
+        <PushEnableCard spacing="below" />
 
         {firstLoad ? (
           <SkeletonList label="Loading your alerts" count={3} sectioned />

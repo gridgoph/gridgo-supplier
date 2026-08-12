@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type { User } from "@/lib/api";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import { usePush } from "@/store/push";
 
 /** Expected role for this binary — mismatched login is rejected. */
 export const APP_ROLE = "supplier" as const;
@@ -133,8 +134,20 @@ export const useSession = create<SessionState>((set, get) => ({
     }
   },
   logout: async () => {
-    await api.logout();
+    // The device token rides along with the sign-out rather than being
+    // unregistered separately: afterwards the bearer token is dead, so a phone
+    // that signed out first could no longer authenticate the unregister and
+    // would keep waking up for the previous shop's job offers. The server
+    // accepts a sign-out with no token exactly as before, so a phone that never
+    // got one is unaffected.
+    //
+    // Afterwards the phone goes back on the unclaimed list rather than off it
+    // entirely: a shop that signs out has not uninstalled GRIDGO, and "there is
+    // a new version" still has to reach it.
+    const deviceToken = usePush.getState().token;
+    await api.logout(deviceToken);
     set({ user: null });
+    void usePush.getState().release();
   },
 }));
 

@@ -97,6 +97,41 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "GRIDGO Supplier $version (versionCode $code)"
 
+      # The captain's Firebase config for ph.gridgo.supplier (project
+      # gridgo-c2ce9), which is what registers this build with FCM. It is
+      # deliberately not in the repository — .gitignore keeps it out — so it
+      # arrives here as a secret and is written outside the workspace, where no
+      # artifact upload of a repo path can sweep it up. app.config.ts reads
+      # GOOGLE_SERVICES_JSON.
+      #
+      # Missing is a hard failure, not a fallback: an APK built without it
+      # installs, signs in, and silently never receives an alert — the exact
+      # failure nobody reports because nothing looks wrong.
+      - name: Stage the Firebase config
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ -z "${GOOGLE_SERVICES_JSON_BASE64:-}" ]; then
+            echo "::error::GOOGLE_SERVICES_JSON_BASE64 is not set; the APK would ship without push"
+            exit 1
+          fi
+          printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > "$RUNNER_TEMP/google-services.json"
+          # Prove it is the config for this app before a 20-minute build, not
+          # after: a client or rider file would prebuild happily and then never
+          # receive anything addressed to ph.gridgo.supplier.
+          node -e '
+            const c = require(process.env.RUNNER_TEMP + "/google-services.json");
+            const pkgs = c.client.map((x) => x.client_info.android_client_info.package_name);
+            if (!pkgs.includes("ph.gridgo.supplier")) {
+              console.error("::error::google-services.json has no entry for ph.gridgo.supplier");
+              process.exit(1);
+            }
+            console.log("Firebase project " + c.project_info.project_id + " covers " + pkgs.join(", "));
+          '
+          echo "GOOGLE_SERVICES_JSON=$RUNNER_TEMP/google-services.json" >> "$GITHUB_ENV"
+
       # Generated at build time rather than committed: .gitignore already keeps
       # /android out of the repo, and a checked-in copy drifts silently from
       # app.json on every Expo upgrade. The cost is that config correctness has
@@ -271,5 +306,6 @@ jobs:
         run: |
           rm -f "$RUNNER_TEMP/release.jks" \
                 "$HOME/.gradle/gradle.properties" \
+                "$RUNNER_TEMP/google-services.json" \
                 "$RUNNER_TEMP/deploy_key" \
                 "$RUNNER_TEMP/deploy_known_hosts"
