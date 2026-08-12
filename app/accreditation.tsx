@@ -7,6 +7,7 @@ import { DocumentSlot } from "@/components/DocumentSlot";
 import { GridgoLogo } from "@/components/GridgoLogo";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { PushEnableCard } from "@/components/PushEnableCard";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SpecRow } from "@/components/SpecRow";
 import { StatusChip } from "@/components/StatusChip";
@@ -209,6 +210,13 @@ export default function AccreditationScreen() {
             </Text>
           </View>
         ) : null}
+
+        {/*
+          This whole screen is a shop waiting to hear from Operations, with
+          nothing else it can do — so "we will tell your phone" is the answer to
+          the question the screen exists to raise, rather than an interruption.
+        */}
+        <PushEnableCard spacing="above" />
 
         <View className="mt-8 gap-3">
           {/* One yellow: whichever of the two actually moves things along. */}

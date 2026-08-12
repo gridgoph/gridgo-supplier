@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
 /**
@@ -62,6 +65,58 @@ export function buildVersion(
   return { versionName: `${line[1]}.${line[2]}.${versionCode}`, versionCode };
 }
 
+/**
+ * Where this build's `google-services.json` comes from.
+ *
+ * Push on Android needs the Firebase config for `ph.gridgo.supplier` in project
+ * `gridgo-c2ce9`. One file covers all three GRIDGO packages and the Expo plugin
+ * picks the entry by package name. That file is the captain's and is **never
+ * committed** — `.gitignore` keeps it out — so it reaches a build as
+ * configuration:
+ *
+ * - `GOOGLE_SERVICES_JSON` names a path (what CI sets, from a repository
+ *   secret written to a file outside the workspace);
+ * - otherwise a `google-services.json` dropped in the repo root is used, which
+ *   is how a developer's machine and a local release build get it;
+ * - otherwise the key is omitted entirely.
+ *
+ * Omitting is deliberate rather than fatal: `npx expo start`, `npx tsc`, the
+ * test suite and `npx expo config --type public` all have to work on a machine
+ * that has never seen the file, and they do — the build simply has no Firebase,
+ * `getDevicePushTokenAsync` throws, and `store/push.ts` treats push as
+ * unavailable and shows no card. What must never happen quietly is a *release*
+ * built without it, so `.github/workflows/android-release.yml` asserts the file
+ * is present, and is this app's, before it calls prebuild.
+ *
+ * A path that is named and missing is always an error: it means the wiring is
+ * broken, and falling back would ship an APK that silently never receives
+ * anything.
+ *
+ * @param envPath `process.env.GOOGLE_SERVICES_JSON`.
+ * @param projectRoot directory the repo-root fallback is resolved against.
+ * @param fileExists injected for the test; defaults to a real filesystem check.
+ */
+export function googleServicesFile(
+  envPath: string | null | undefined,
+  projectRoot: string,
+  fileExists: (path: string) => boolean = existsSync,
+): string | undefined {
+  const named = (envPath ?? "").trim();
+  if (named) {
+    const path = resolve(projectRoot, named);
+    if (!fileExists(path)) {
+      throw new Error(
+        `GOOGLE_SERVICES_JSON points at "${named}", which does not exist. ` +
+          "A build with a broken Firebase path would install and never receive an alert.",
+      );
+    }
+    return path;
+  }
+
+  const local = resolve(projectRoot, "google-services.json");
+  return fileExists(local) ? local : undefined;
+}
+
 export default ({ config }: ConfigContext): ExpoConfig => {
   const { name, slug, version } = config;
   if (!name || !slug || !version) {
@@ -73,11 +128,19 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     process.env.GRIDGO_BUILD_NUMBER,
   );
 
+  const googleServices = googleServicesFile(process.env.GOOGLE_SERVICES_JSON, __dirname);
+
   return {
     ...config,
     name,
     slug,
     version: versionName,
-    android: { ...config.android, versionCode },
+    android: {
+      ...config.android,
+      versionCode,
+      // Spread rather than assigned: `googleServicesFile: undefined` is a key
+      // the Expo plugin still sees, and it resolves it as a path.
+      ...(googleServices ? { googleServicesFile: googleServices } : {}),
+    },
   };
 };

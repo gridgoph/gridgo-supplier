@@ -122,6 +122,50 @@ describe("the APK reaches the captain's server only from the default branch", ()
   });
 });
 
+describe("the release APK is built with Firebase, or not at all", () => {
+  const stage = apkSteps.find((step) => step.includes("GOOGLE_SERVICES_JSON_BASE64"));
+
+  it("stages the captain's config from a secret, never from the repository", () => {
+    // The file is gitignored on purpose. If this step ever disappears,
+    // app.config.ts finds nothing, omits `googleServicesFile`, and the build
+    // stays green while the APK can never receive an alert.
+    expect(stage).toBeDefined();
+    expect(stage).toMatch(
+      /GOOGLE_SERVICES_JSON_BASE64:\s*\$\{\{\s*secrets\.GOOGLE_SERVICES_JSON_BASE64\s*\}\}/,
+    );
+  });
+
+  it("fails loudly when the secret is missing instead of shipping without push", () => {
+    expect(stage).toContain("::error::");
+    expect(stage).toMatch(/exit 1/);
+  });
+
+  it("checks the file is this app's before spending twenty minutes on a build", () => {
+    // One google-services.json covers all three GRIDGO apps; a file without an
+    // entry for this package prebuilds happily and receives nothing.
+    expect(stage).toContain("ph.gridgo.supplier");
+  });
+
+  it("writes it outside the workspace and hands the path to the config", () => {
+    expect(stage).toContain('"$RUNNER_TEMP/google-services.json"');
+    expect(stage).toMatch(/GOOGLE_SERVICES_JSON=\$RUNNER_TEMP\/google-services\.json/);
+  });
+
+  it("stages it before prebuild reads the config", () => {
+    const staged = apkSteps.findIndex((step) => step.includes("GOOGLE_SERVICES_JSON_BASE64"));
+    const prebuild = apkSteps.findIndex((step) => step.includes("expo prebuild"));
+    expect(staged).toBeGreaterThanOrEqual(0);
+    expect(prebuild).toBeGreaterThan(staged);
+  });
+
+  it("deletes it however the job ends", () => {
+    const cleanup = apkSteps.find(
+      (step) => step.includes("rm -f") && step.includes("release.jks"),
+    );
+    expect(cleanup).toContain("google-services.json");
+  });
+});
+
 describe("a pull request never produces a signed release build", () => {
   it("fences the signing job off from the pull_request trigger", () => {
     expect(apk).toMatch(/if:\s*github\.event_name\s*!=\s*'pull_request'/);

@@ -39,3 +39,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase config for push. The captain's, never this repository's: it reaches
+# a build through GOOGLE_SERVICES_JSON (CI) or by being dropped here (local).
+# See app.config.ts.
+google-services.json
+GoogleService-Info.plist

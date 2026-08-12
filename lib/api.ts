@@ -1,6 +1,8 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
+import type { DevicePlatform } from "@/lib/push";
+
 /**
  * GRIDGO demo API client.
  *
@@ -194,6 +196,22 @@ export type Notification = {
   body: string;
   read: boolean;
   at: string;
+};
+
+/**
+ * A phone registered to receive push.
+ *
+ * The raw token is never returned by any route: `tokenTail` is its last eight
+ * characters, which is enough to recognise a registration in a support
+ * conversation and not enough to send to it.
+ */
+export type Device = {
+  id: string;
+  userId: string;
+  platform: DevicePlatform;
+  tokenTail: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 /** One entry of the platform-wide vocabulary served by `GET /taxonomy`. */
@@ -545,12 +563,118 @@ export async function attachVerificationDocument(
   return result.file;
 }
 
-export async function logout(): Promise<void> {
+/**
+ * Sign out, and stop this phone receiving the account's push in the same call.
+ *
+ * The device token goes with the sign-out rather than through
+ * `POST /devices/unregister` for a sequencing reason the contract is explicit
+ * about: after logout the bearer token is invalid, so a phone that signs out
+ * first can no longer authenticate an unregister and would keep waking for the
+ * previous shop's job offers. Sending no token stays valid and behaves exactly
+ * as it did before push existed.
+ *
+ * `deviceUnregistered` is `false` — with a `200` and a completed sign-out —
+ * when no token was sent, the session had already expired, or the token now
+ * belongs to somebody else. None of those is a failure worth showing anyone.
+ */
+export async function logout(deviceToken?: string | null): Promise<void> {
   try {
-    await request("/auth/logout", { method: "POST" });
+    await request("/auth/logout", {
+      method: "POST",
+      body: JSON.stringify(deviceToken ? { deviceToken } : {}),
+    });
   } finally {
     setToken(null);
   }
+}
+
+/**
+ * Register this installation's FCM token against the signed-in shop.
+ *
+ * Idempotent and cheap by design, so it is called on every launch and on every
+ * token refresh: re-registering the same token under the same account updates
+ * the one record, and registering a token held by another account **moves** it,
+ * which is what a counter handset shared between a shop and its owner
+ * produces. `201` means the token was new, `200` that it was updated or moved
+ * — both are success, so only the body is read.
+ */
+export async function registerDevice(
+  token: string,
+  platform: DevicePlatform,
+): Promise<{ device: Device; created: boolean; reassigned: boolean }> {
+  return request<{ device: Device; created: boolean; reassigned: boolean }>("/devices", {
+    method: "POST",
+    body: JSON.stringify({ token, platform }),
+  });
+}
+
+/**
+ * Provisional. Register this phone **before anyone has signed in**.
+ *
+ * A shop that installs GRIDGO and does not sign in for a week is still a phone
+ * GRIDGO needs to reach — "there is a new version, update your app" is exactly
+ * the announcement that must land on a handset with no session. `POST /devices`
+ * requires a bearer today; the platform is opening it to an unauthenticated
+ * caller in parallel with this app, registering the token **unclaimed**. Signing
+ * in then claims it through the ordinary {@link registerDevice}, because the
+ * contract already moves a token from one owner to another on registration.
+ *
+ * Two deliberate differences from every other call in this module:
+ *
+ * - It never sends a bearer, even when one exists. A claimed registration is
+ *   {@link registerDevice}'s job, and mixing the two would make which one ran
+ *   depend on timing.
+ * - It does not go through `request()`, so its `401` cannot clear the session.
+ *   A deployment without this route answers `401`, and routing that through the
+ *   unauthorized handler would sign a shop out because a *provisional* route is
+ *   not live yet. `lib/push.ts`'s caller reads the status and treats `401`,
+ *   `403`, `404` and `405` as "not open yet" rather than a failure.
+ *
+ * Throws {@link ApiError} exactly as `request()` would, so callers read one
+ * shape.
+ */
+export async function registerDeviceUnclaimed(
+  token: string,
+  platform: DevicePlatform,
+): Promise<void> {
+  const res = await fetch(`${getApiBase()}/devices`, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ token, platform }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let data: unknown = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+    }
+    throw new ApiError(res.status, data);
+  }
+}
+
+/** The caller's own registrations, always — there is no route to anyone else's. */
+export async function listDevices(): Promise<Device[]> {
+  const result = await request<{ devices: Device[] }>("/devices");
+  return result.devices;
+}
+
+/**
+ * Drop one registration.
+ *
+ * Prefer passing the token to {@link logout}. This exists for the case where
+ * the session is still valid and only push is being turned off. A token
+ * registered to a different account returns `404`, exactly as an unregistered
+ * one does, so that asking cannot answer "is this token someone else's?".
+ */
+export async function unregisterDevice(token: string): Promise<void> {
+  await request("/devices/unregister", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
 }
 
 export async function me(): Promise<User> {

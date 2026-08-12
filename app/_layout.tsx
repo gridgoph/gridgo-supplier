@@ -19,6 +19,7 @@ import { ToastHost } from "@/components/ToastHost";
 import { colors, type ThemeName } from "@/constants/theme";
 import { useAlertStream } from "@/hooks/useAlertStream";
 import { useAppFonts } from "@/hooks/useAppFonts";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
 import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions";
 import { isMatchable, isSignedIn, useSession } from "@/store/session";
@@ -123,6 +124,11 @@ function RootStack() {
 
   // Live alerts for as long as there is a session to receive them.
   useAlertStream(signedIn);
+  // The third delivery leg: the same alerts, on the phone, with GRIDGO closed.
+  // Mounted here so registration, token rotation and a tapped alert are wired
+  // once. It never raises the permission dialog — only `PushEnableCard` does
+  // that, and only from a tap.
+  usePushNotifications();
 
   return (
     <Stack screenOptions={stackScreenOptions(scheme)}>
