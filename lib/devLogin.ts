@@ -16,9 +16,8 @@
  * would sit outside the branch the compiler discards and would survive on tree
  * shaking rather than on the guard.
  *
- * Source of truth: gridgo-api `src/demo-fixtures.js` (supplier identity and
- * `DEMO_PASSWORD`). Domain taken from the in-flight `@gridgo.local` →
- * `@gridgo.ph` migration fixtures.
+ * Source of truth: gridgo-api `src/demo-fixtures.js` (`DEMO_PASSWORD`). The
+ * address is the official Clerk supplier, not a `@gridgo.ph` shop fixture.
  *
  * Lives under `lib/`, not `app/`, so Expo Router never mounts it as a route.
  *
@@ -32,7 +31,7 @@ export type DevLogin = {
 
 export const DEV_LOGIN: DevLogin | null = __DEV__
   ? {
-      email: "supplier@gridgo.ph",
+      email: "markdavidprado@gmail.com",
       // gridgo-api DEMO_PASSWORD — local fixture only; never a hosted secret.
       password: "Ilovegridgo-0990",
     }
