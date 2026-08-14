@@ -282,6 +282,8 @@ export type SupplierServicePatch = {
 };
 
 let tokenMemory: string | null = null;
+export type TokenProvider = () => Promise<string | null>;
+let tokenProvider: TokenProvider | null = null;
 
 /** Inputs for pure API-base resolution (exported for unit tests). */
 export type ResolveApiBaseInput = {
@@ -392,6 +394,24 @@ export function getToken(): string | null {
   return tokenMemory;
 }
 
+/**
+ * Let Clerk own token issuance without changing the API surface screens call.
+ * Passing a provider also drops any legacy bearer, so a missing Clerk token can
+ * never fall back to a different identity left in memory.
+ */
+export function setTokenProvider(provider: TokenProvider | null): void {
+  tokenProvider = provider;
+  if (provider) tokenMemory = null;
+}
+
+/** Fresh for every request; Clerk session JWTs rotate while the app is open. */
+export async function getAuthToken(): Promise<string | null> {
+  if (!tokenProvider) return tokenMemory;
+  const token = await tokenProvider();
+  tokenMemory = token;
+  return token;
+}
+
 /** Fired when an authenticated request gets HTTP 401 (token gone or invalid). */
 export type UnauthorizedHandler = () => void;
 
@@ -425,7 +445,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...(init.headers as Record<string, string> | undefined),
   };
   if (init.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
-  if (tokenMemory) headers.Authorization = `Bearer ${tokenMemory}`;
+  const token = await getAuthToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(`${getApiBase()}${path}`, { ...init, headers });
   const text = await res.text();
@@ -459,7 +480,7 @@ export async function login(email: string, password: string): Promise<{ token: s
   return result;
 }
 
-/** What a shop tells GRIDGO to open an account. Ranks are 1..n, best first. */
+/** Retired self-signup draft shape, kept only for the pure legacy draft tests. */
 export type SupplierSignup = {
   email: string;
   password: string;
@@ -470,24 +491,6 @@ export type SupplierSignup = {
   categoryRanks: CategoryRank[];
 };
 
-/**
- * Open a shop account.
- *
- * The account exists immediately and is signed in, but it starts unapproved:
- * GRIDGO will not match work to it until Operations says so. The bearer is set
- * here so the shop lands inside the app rather than back on the door.
- */
-export async function signupSupplier(
-  input: SupplierSignup,
-): Promise<{ token: string; user: User }> {
-  const result = await request<{ token: string; user: User }>("/auth/signup", {
-    method: "POST",
-    body: JSON.stringify({ role: "supplier", ...input }),
-  });
-  setToken(result.token);
-  return result;
-}
-
 /* --------------------------------------------------------------------------
    Provisional routes
 
@@ -495,7 +498,7 @@ export async function signupSupplier(
    parallel with this app: moving its own pin, and sending Operations the
    papers that accredit it. Neither is in `docs/OPERATIONAL_MODEL_V2_API.md`
    yet, so the shapes below are the documented ones extended the obvious way —
-   `shop { lat, lng, label }` exactly as `POST /auth/signup` already accepts it,
+   `shop { lat, lng, label }` exactly as the supplier projection returns it,
    and the storage contract's own upload-then-attach pair.
 
    `lib/verification.ts` is the only caller and it treats a missing route as a

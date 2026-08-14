@@ -1,5 +1,6 @@
+import * as api from "@/lib/api";
 import { parseSseChunk, reconnectDelayMs } from "@/lib/eventStream";
-import { readNotificationEvent } from "@/lib/alertStream";
+import { openAlertStream, readNotificationEvent } from "@/lib/alertStream";
 
 const FRAME =
   'id: ntf_1\nevent: notification\ndata: {"notification":{"id":"ntf_1","title":"New job","body":"b"}}\n\n';
@@ -93,5 +94,42 @@ describe("reconnecting", () => {
     expect(reconnectDelayMs(1, 4500)).toBe(4500);
     expect(reconnectDelayMs(1, 0)).toBe(1000);
     expect(reconnectDelayMs(1, 10 * 60_000)).toBe(60_000);
+  });
+});
+
+describe("stream authentication", () => {
+  const OriginalXHR = global.XMLHttpRequest;
+
+  afterEach(() => {
+    global.XMLHttpRequest = OriginalXHR;
+    api.setToken(null);
+    api.setTokenProvider(null);
+  });
+
+  it("opens with a fresh Clerk token", async () => {
+    const headers: Record<string, string> = {};
+    const xhr = {
+      readyState: 1,
+      status: 0,
+      responseText: "",
+      onreadystatechange: null as (() => void) | null,
+      open: jest.fn(),
+      setRequestHeader: jest.fn((name: string, value: string) => {
+        headers[name] = value;
+      }),
+      send: jest.fn(),
+      abort: jest.fn(),
+    };
+    global.XMLHttpRequest = jest.fn(() => xhr) as never;
+    api.setToken("legacy-token");
+    api.setTokenProvider(async () => "fresh-clerk-token");
+
+    const stream = openAlertStream({ onNotification: jest.fn() });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(headers.Authorization).toBe("Bearer fresh-clerk-token");
+    expect(xhr.send).toHaveBeenCalledTimes(1);
+    stream.close();
   });
 });

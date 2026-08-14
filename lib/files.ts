@@ -154,7 +154,15 @@ export async function uploadFile(
   purpose: api.StoredFile["purpose"],
   onProgress: (fraction: number) => void,
 ): Promise<UploadResult> {
-  const token = api.getToken();
+  let token: string | null;
+  try {
+    token = await api.getAuthToken();
+  } catch {
+    return {
+      ok: false,
+      error: "The file could not be sent. Check this device's connection and try again.",
+    };
+  }
   if (!token) {
     return { ok: false, error: "Your session ended. Sign in again to send this file." };
   }

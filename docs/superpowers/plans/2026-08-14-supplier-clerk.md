@@ -6,7 +6,7 @@
 
 **Architecture:** Clerk owns identity and session issuance; `gridgo-api` continues to project the supplier user and authorize every domain operation. A root bridge classifies Clerk metadata, provides fresh Clerk Bearer tokens to the existing API module, and hydrates the existing Zustand session only after `/auth/me` returns a supplier.
 
-**Tech Stack:** Expo SDK 54, Expo Router 6, React Native 0.81, TypeScript, `@clerk/expo` v3, Clerk custom flows, SecureStore token cache, Zustand, Jest.
+**Tech Stack:** Expo SDK 54, Expo Router 6, React Native 0.81, TypeScript, `@clerk/expo` v4, Clerk custom flows, SecureStore token cache, Zustand, Jest.
 
 ## Global Constraints
 
@@ -77,7 +77,7 @@
 
 **Interfaces:**
 - Sign-in uses current `signIn.password()` and `signIn.finalize()`; Google alone uses `useSSO()` and its required `setActive()` result.
-- Invitation acceptance consumes only `__clerk_ticket` through `signUp.ticket()` and never sends role metadata.
+- Invitation acceptance consumes only `__clerk_ticket` through `signUp.create({ strategy: "ticket", ... })` and never sends role metadata. The one-shot call is required because this Clerk instance requires a password and the v4 factor-specific `ticket()` method does not accept one.
 
 - [ ] Write screen tests proving the mockup hierarchy, Google button, recovery link, no public sign-up, ticket-required invitation behavior, and the development-only legacy action.
 - [ ] Run focused screen tests and confirm expected failures.
@@ -98,4 +98,3 @@
 - [ ] Export Android, iOS, and web bundles with a release-form `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`; scan outputs for forbidden secrets/test keys and the expected configured host.
 - [ ] Run `clerk doctor --json`, inspect the staged diff, and confirm `.env.local` is ignored.
 - [ ] Commit, push `fm/gridgo-supplier-clerk`, open a direct PR with `gh-axi`, and report the PR URL without merging.
-

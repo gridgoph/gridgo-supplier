@@ -39,6 +39,12 @@ require_env ANDROID_KEYSTORE_PATH
 require_env ANDROID_KEYSTORE_PASSWORD
 require_env ANDROID_KEY_ALIAS
 require_env EXPO_PUBLIC_API_URL
+require_env EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+
+case "$EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY" in
+  pk_live_*) ;;
+  *) fail "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is not a production pk_live_ key" ;;
+esac
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -97,6 +103,9 @@ unzip -p "$apk" "$bundle" >"$work/bundle.bin" 2>/dev/null ||
 grep -aqF -- "$EXPO_PUBLIC_API_URL" "$work/bundle.bin" ||
   fail "the deployed API URL is not in $bundle — EXPO_PUBLIC_API_URL was not set for the build step, so this APK points at loopback"
 
+grep -aqF -- "$EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY" "$work/bundle.bin" ||
+  fail "the production Clerk publishable key is not in $bundle"
+
 # Not just the URL's own name: this app also reads EXPO_PUBLIC_API_PORT, and
 # Babel inlines every EXPO_PUBLIC_* read — an unset one becomes `undefined`.
 # So a surviving name of any kind means the inlining did not happen and the
@@ -106,5 +115,5 @@ if survivor="$(grep -aoE 'EXPO_PUBLIC_[A-Z0-9_]*' "$work/bundle.bin" | sort -u |
   fail "these variable names survive in $bundle, so nothing was inlined at bundle time: $(echo "$survivor" | tr '\n' ' ')"
 fi
 
-echo "OK: the deployed API URL is inlined in $bundle, and no EXPO_PUBLIC_* name survives it"
+echo "OK: the deployed API URL and Clerk production key are inlined, and no EXPO_PUBLIC_* name survives $bundle"
 echo "OK: $(basename "$apk") is a real signed release build"

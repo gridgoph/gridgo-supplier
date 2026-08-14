@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import * as api from "@/lib/api";
-import { isSignedIn, useSession } from "@/store/session";
+import {
+  isSignedIn,
+  setClerkSignOutHandler,
+  useSession,
+} from "@/store/session";
 
 const supplierUser = {
   id: "u1",
@@ -22,13 +26,29 @@ describe("isSignedIn (Stack.Protected guard source)", () => {
 
 describe("session clearing paths feed the same guard", () => {
   beforeEach(() => {
-    useSession.setState({ user: null, loading: false, error: null });
+    useSession.setState({
+      user: null,
+      loading: false,
+      error: null,
+      authSource: "none",
+      identity: { kind: "signed_out" },
+    });
     api.setToken(null);
+    api.setTokenProvider(null);
+    setClerkSignOutHandler(null);
   });
 
   afterEach(() => {
-    useSession.setState({ user: null, loading: false, error: null });
+    useSession.setState({
+      user: null,
+      loading: false,
+      error: null,
+      authSource: "none",
+      identity: { kind: "signed_out" },
+    });
     api.setToken(null);
+    api.setTokenProvider(null);
+    setClerkSignOutHandler(null);
     jest.restoreAllMocks();
   });
 
@@ -92,6 +112,77 @@ describe("session clearing paths feed the same guard", () => {
     expect(error).not.toMatch(/\brole\b/i);
     expect(error).not.toContain("client\"");
   });
+
+  it("adopts only a supplier projected by the API", () => {
+    useSession.getState().setClerkIdentity({ kind: "loading" });
+
+    expect(useSession.getState().adoptClerkUser(supplierUser)).toBe(true);
+    expect(useSession.getState().authSource).toBe("clerk");
+    expect(useSession.getState().identity).toEqual({ kind: "supplier" });
+
+    expect(
+      useSession.getState().adoptClerkUser({ ...supplierUser, role: "client" }),
+    ).toBe(false);
+    expect(useSession.getState().user).toBeNull();
+    expect(useSession.getState().identity).toEqual({
+      kind: "mismatch",
+      destination: "GRIDGO for clients",
+    });
+  });
+
+  it("signs out Clerk after sending GRIDGO the device release", async () => {
+    const clerkSignOut = jest.fn(async () => undefined);
+    setClerkSignOutHandler(clerkSignOut);
+    useSession.setState({
+      user: supplierUser,
+      authSource: "clerk",
+      identity: { kind: "supplier" },
+    });
+    api.setTokenProvider(async () => "clerk-token");
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => "",
+    } as Response);
+
+    await useSession.getState().logout();
+
+    expect(clerkSignOut).toHaveBeenCalledTimes(1);
+    expect(useSession.getState()).toMatchObject({
+      user: null,
+      authSource: "none",
+      identity: { kind: "signed_out" },
+    });
+  });
+
+  it("signs out an unassigned Clerk identity without inventing a GRIDGO session", async () => {
+    const clerkSignOut = jest.fn(async () => undefined);
+    const fetch = jest.spyOn(global, "fetch");
+    setClerkSignOutHandler(clerkSignOut);
+    useSession.setState({
+      user: null,
+      authSource: "clerk",
+      identity: { kind: "unassigned", email: "shop@example.com" },
+    });
+
+    await useSession.getState().logout();
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(clerkSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let Clerk's signed-out state erase the local demo session", () => {
+    useSession.setState({
+      user: supplierUser,
+      authSource: "legacy",
+      identity: { kind: "supplier" },
+    });
+
+    useSession.getState().clearClerkIdentity();
+
+    expect(useSession.getState().user).toEqual(supplierUser);
+    expect(useSession.getState().authSource).toBe("legacy");
+  });
 });
 
 describe("root stack auth guard wiring", () => {
@@ -107,6 +198,8 @@ describe("root stack auth guard wiring", () => {
     expect(src).toMatch(/Stack\.Protected[\s\S]*name="payout"/);
     expect(src).toMatch(/Stack\.Protected[\s\S]*name="design-system"/);
     // Login is the complementary unauthenticated half of the pair.
-    expect(src).toMatch(/guard=\{!signedIn\}[\s\S]*name="\(auth\)\/login"/);
+    expect(src).toContain('const signedOut = !signedIn && identity.kind === "signed_out"');
+    expect(src).toMatch(/guard=\{signedOut\}[\s\S]*name="\(auth\)\/login"/);
+    expect(src).toMatch(/guard=\{accessBlocked\}[\s\S]*name="access"/);
   });
 });

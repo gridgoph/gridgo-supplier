@@ -16,7 +16,16 @@ import { isMatchable, isSignedIn, useSession } from "@/store/session";
  */
 export default function Index() {
   const user = useSession((s) => s.user);
-  if (!isSignedIn(user)) return <Redirect href="/(auth)/login" />;
+  const identity = useSession((s) => s.identity);
+  if (identity.kind === "loading") return null;
+  if (
+    identity.kind === "unassigned" ||
+    identity.kind === "mismatch" ||
+    identity.kind === "error"
+  ) {
+    return <Redirect href="/access" />;
+  }
+  if (!isSignedIn(user)) return <Redirect href="/(auth)/welcome" />;
   if (!isMatchable(user)) return <Redirect href="/accreditation" />;
   return <Redirect href="/(tabs)/home" />;
 }

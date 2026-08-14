@@ -80,7 +80,9 @@ describe("every field a shop types into sits in a keyboard-aware surface", () =>
       /<ShopLocationPicker\b/.test(fs.readFileSync(file, "utf8")),
     );
 
-    expect(users.length).toBeGreaterThanOrEqual(2);
+    // Supplier location remains; the second caller was the retired public
+    // self-signup flow, which now redirects to invitation acceptance.
+    expect(users.length).toBeGreaterThanOrEqual(1);
     for (const file of users) {
       const source = fs.readFileSync(file, "utf8");
       expect({ file: relative(file), handled: HANDLES_A_KEYBOARD.test(source) }).toEqual({

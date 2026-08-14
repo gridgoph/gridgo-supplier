@@ -82,6 +82,8 @@ describe("dev login credential disclosure", () => {
             ...process.env,
             NODE_ENV: "production",
             CI: "1",
+            EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:
+              "pk_live_Z3JpZGdvLmV4YW1wbGUuY29tJA",
           },
           stdio: ["ignore", "pipe", "pipe"],
           timeout: 180_000,

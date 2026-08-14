@@ -70,6 +70,10 @@ describe("the release workflow bakes the deployed API URL into the bundle", () =
     // The env: block of this step, up to the run: that consumes it.
     const env = /\n\s+env:\n([\s\S]*?)\n\s+run:/.exec(build as string)?.[1] ?? "";
     expect(env).toMatch(/EXPO_PUBLIC_API_URL:\s*\$\{\{\s*secrets\.EXPO_PUBLIC_API_URL\s*\}\}/);
+    expect(env).toMatch(
+      /EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:\s*\$\{\{\s*secrets\.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY\s*\}\}/,
+    );
+    expect(build).toContain("pk_live_*");
   });
 
   it("verifies the built APK rather than trusting the build", () => {

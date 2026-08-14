@@ -2,11 +2,29 @@ import { create } from "zustand";
 
 import type { User } from "@/lib/api";
 import * as api from "@/lib/api";
-import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { usePush } from "@/store/push";
 
 /** Expected role for this binary — mismatched login is rejected. */
 export const APP_ROLE = "supplier" as const;
+
+export type AuthSource = "none" | "legacy" | "clerk";
+
+export type IdentityState =
+  | { kind: "loading" }
+  | { kind: "signed_out" }
+  | { kind: "supplier" }
+  | { kind: "unassigned"; email?: string | null }
+  | { kind: "mismatch"; destination: string; email?: string | null }
+  | { kind: "error"; message: string; email?: string | null };
+
+let clerkSignOutHandler: (() => Promise<void>) | null = null;
+
+/** Registered by the Clerk bridge so the store can keep logout sequencing in one place. */
+export function setClerkSignOutHandler(
+  handler: (() => Promise<void>) | null,
+): void {
+  clerkSignOutHandler = handler;
+}
 
 /**
  * Single source for `Stack.Protected` and launch redirects.
@@ -19,8 +37,8 @@ export function isSignedIn(user: User | null | undefined): boolean {
 /**
  * Whether GRIDGO will actually send this shop work.
  *
- * A shop signs itself up and is signed in immediately, but it is not matchable
- * until Operations approves it — the platform enforces that, and `/jobs` simply
+ * An invited shop is signed in immediately, but it is not matchable until
+ * Operations approves it — the platform enforces that, and `/jobs` simply
  * returns nothing meanwhile. A floor screen reading "nothing needs you" would
  * be a lie in that state, so the app routes an unapproved shop somewhere that
  * says what is actually happening.
@@ -55,9 +73,12 @@ type SessionState = {
   user: User | null;
   loading: boolean;
   error: string | null;
+  authSource: AuthSource;
+  identity: IdentityState;
+  setClerkIdentity: (identity: IdentityState) => void;
+  adoptClerkUser: (user: User) => boolean;
+  clearClerkIdentity: () => void;
   login: (email: string, password: string) => Promise<void>;
-  /** Resolves true when the account was created and the shop is signed in. */
-  signup: (input: api.SupplierSignup) => Promise<boolean>;
   /** Re-read the account, so an approval that lands is picked up on return. */
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
@@ -68,23 +89,52 @@ export const useSession = create<SessionState>((set, get) => ({
   user: null,
   loading: false,
   error: null,
+  authSource: "none",
+  identity: { kind: "signed_out" },
   clearError: () => set({ error: null }),
-  signup: async (input) => {
-    set({ loading: true, error: null });
-    try {
-      const { user } = await api.signupSupplier(input);
-      set({ user, loading: false });
-      return true;
-    } catch (e) {
+  setClerkIdentity: (identity) =>
+    set({
+      user: null,
+      loading: identity.kind === "loading",
+      error: null,
+      authSource: "clerk",
+      identity,
+    }),
+  adoptClerkUser: (user) => {
+    if (user.role !== APP_ROLE) {
       set({
+        user: null,
         loading: false,
-        error: humanizeApiError(
-          e,
-          offlineMessage("open your GRIDGO account"),
-        ),
+        error: null,
+        authSource: "clerk",
+        identity: {
+          kind: "mismatch",
+          destination: appForRole(user.role),
+        },
       });
       return false;
     }
+
+    set({
+      user,
+      loading: false,
+      error: null,
+      authSource: "clerk",
+      identity: { kind: "supplier" },
+    });
+    return true;
+  },
+  clearClerkIdentity: () => {
+    if (get().authSource !== "clerk") return;
+    api.setTokenProvider(null);
+    api.setToken(null);
+    set({
+      user: null,
+      loading: false,
+      error: null,
+      authSource: "none",
+      identity: { kind: "signed_out" },
+    });
   },
   refresh: async () => {
     if (!get().user) return;
@@ -109,7 +159,12 @@ export const useSession = create<SessionState>((set, get) => ({
         });
         return;
       }
-      set({ user, loading: false });
+      set({
+        user,
+        loading: false,
+        authSource: "legacy",
+        identity: { kind: "supplier" },
+      });
     } catch (e) {
       if (e instanceof api.ApiError) {
         if (e.status === 401) {
@@ -145,9 +200,27 @@ export const useSession = create<SessionState>((set, get) => ({
     // entirely: a shop that signs out has not uninstalled GRIDGO, and "there is
     // a new version" still has to reach it.
     const deviceToken = usePush.getState().token;
-    await api.logout(deviceToken);
-    set({ user: null });
-    void usePush.getState().release();
+    const clerkOwned = get().authSource === "clerk";
+    const hadDomainSession = Boolean(get().user);
+    try {
+      // Unassigned and mismatched Clerk identities never opened or claimed a
+      // GRIDGO domain session, so there is nothing server-side to release.
+      if (hadDomainSession) await api.logout(deviceToken);
+    } finally {
+      if (clerkOwned && clerkSignOutHandler) {
+        await clerkSignOutHandler();
+      }
+      api.setTokenProvider(null);
+      api.setToken(null);
+      set({
+        user: null,
+        loading: false,
+        error: null,
+        authSource: "none",
+        identity: { kind: "signed_out" },
+      });
+      void usePush.getState().release();
+    }
   },
 }));
 
@@ -156,5 +229,24 @@ export const useSession = create<SessionState>((set, get) => ({
  * guard then drops signed-in routes; call sites must not sprinkle redirects.
  */
 api.setUnauthorizedHandler(() => {
-  useSession.setState({ user: null });
+  const { authSource } = useSession.getState();
+  api.setToken(null);
+  useSession.setState(
+    authSource === "clerk"
+      ? {
+          user: null,
+          loading: false,
+          identity: {
+            kind: "error",
+            message:
+              "GRIDGO could not open this supplier account. Ask Operations to check the invitation.",
+          },
+        }
+      : {
+          user: null,
+          loading: false,
+          authSource: "none",
+          identity: { kind: "signed_out" },
+        },
+  );
 });

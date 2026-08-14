@@ -102,12 +102,19 @@ export function openAlertStream(handlers: AlertStreamHandlers): AlertStreamHandl
   const scheduleRetry = (suggested: number | null) => {
     if (closed) return;
     attempt += 1;
-    timer = setTimeout(connect, reconnectDelayMs(attempt, suggested));
+    timer = setTimeout(() => void connect(), reconnectDelayMs(attempt, suggested));
   };
 
-  function connect() {
+  async function connect() {
     if (closed) return;
-    const token = api.getToken();
+    let token: string | null;
+    try {
+      token = await api.getAuthToken();
+    } catch {
+      scheduleRetry(null);
+      return;
+    }
+    if (closed) return;
     if (!token) {
       // Signed out mid-flight. Nothing to listen to, and no reason to retry.
       handlers.onStatus?.(false);
@@ -183,7 +190,7 @@ export function openAlertStream(handlers: AlertStreamHandlers): AlertStreamHandl
     }
   }
 
-  connect();
+  void connect();
 
   return {
     close: () => {
@@ -193,7 +200,7 @@ export function openAlertStream(handlers: AlertStreamHandlers): AlertStreamHandl
     wake: () => {
       if (closed) return;
       attempt = 0;
-      connect();
+      void connect();
     },
   };
 }
