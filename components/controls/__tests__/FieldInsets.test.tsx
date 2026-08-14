@@ -24,7 +24,7 @@ jest.mock("react-native-webview", () => {
 });
 
 const ROOT = path.resolve(__dirname, "../../..");
-const MINIMUM_TEXT_INSET = 24;
+const MINIMUM_TEXT_INSET = 16;
 
 function flattenedInputStyle(accessibilityLabel: string): Record<string, unknown> {
   return StyleSheet.flatten(screen.getByLabelText(accessibilityLabel).props.style) ?? {};

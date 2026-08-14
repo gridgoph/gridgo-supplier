@@ -142,8 +142,8 @@ export const spacing = {
  * the stroke. Multiline notes keep their copy aligned to the top of the box.
  */
 export const singleLineFieldTextStyle = {
-  paddingStart: spacing.xl,
-  paddingEnd: spacing.xl,
+  paddingStart: spacing.lg,
+  paddingEnd: spacing.lg,
   includeFontPadding: false,
   textAlignVertical: "center",
 } satisfies TextStyle;
