@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 
 import { MapFrame, type MapFrameHandle } from "@/components/MapFrame";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { spacing } from "@/constants/theme";
 import {
   geocodeFailureMessage,
   isSearchable,
@@ -304,6 +305,7 @@ export function ShopLocationPicker({ pin, onChange }: Props) {
                 placeholderTextColor={colors.textMuted}
                 accessibilityLabel="Address at this pin"
                 className="gg-field"
+                style={{ paddingHorizontal: spacing.xl }}
               />
             </View>
           ) : (
