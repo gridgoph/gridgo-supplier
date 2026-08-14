@@ -7,7 +7,6 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { FormScrollView } from "@/components/FormScrollView";
 import { GridgoLogo } from "@/components/GridgoLogo";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { SecondaryButton } from "@/components/SecondaryButton";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { PasswordField } from "@/components/controls/PasswordField";
 import { TextField } from "@/components/controls/TextField";
@@ -74,7 +73,7 @@ export default function RecoverPasswordScreen() {
 
   return (
     <View className="gg-screen">
-      <FormScrollView fillHeight contentClassName="gg-page grow justify-center pb-10 pt-16">
+      <FormScrollView fillHeight contentClassName="gg-page grow justify-center pb-10 pt-6">
         <GridgoLogo size={48} role="supplier" />
         <View className="mt-8 gap-2">
           <Text className="text-h1 text-text-primary">Recover Password</Text>
@@ -143,7 +142,6 @@ export default function RecoverPasswordScreen() {
             disabled={busy || fetchStatus === "fetching"}
             onPress={() => void (step === "email" ? sendCode() : step === "code" ? verifyCode() : savePassword())}
           />
-          <SecondaryButton label="Back to sign in" onPress={() => router.replace("/(auth)/login")} />
         </View>
       </FormScrollView>
     </View>

@@ -10,7 +10,6 @@ import { FormScrollView } from "@/components/FormScrollView";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { GridgoLogo } from "@/components/GridgoLogo";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { PushEnableCard } from "@/components/PushEnableCard";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { StatusChip } from "@/components/StatusChip";
 import { FieldShell } from "@/components/controls/FieldShell";
@@ -135,7 +134,7 @@ export default function LoginScreen() {
 
   return (
     <View className="gg-screen">
-      <FormScrollView fillHeight contentClassName="gg-page grow justify-center pb-8 pt-16">
+      <FormScrollView fillHeight contentClassName="gg-page grow justify-center pb-8 pt-6">
         <GridgoLogo size={48} role="supplier" />
 
         <View className="mt-8 gap-1">
@@ -190,10 +189,13 @@ export default function LoginScreen() {
           {DevDemoLogin ? <DevDemoLogin /> : null}
         </View>
 
-        <Text className="mt-5 text-caption text-text-muted">
-          Need supplier access? Ask Operations to invite this email.
-        </Text>
-        <PushEnableCard spacing="above" />
+        <Pressable
+          onPress={() => router.push("/(auth)/signup")}
+          accessibilityRole="link"
+          className="gg-touch mt-5 items-center justify-center"
+        >
+          <Text className="text-button text-brand">New shop? Sign up</Text>
+        </Pressable>
       </FormScrollView>
 
       {DevConnectionLine ? (

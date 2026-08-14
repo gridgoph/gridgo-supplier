@@ -191,13 +191,11 @@ export type PushOffer = "hidden" | "ask" | "settings" | "retry";
  * so, so the card stays on screen and says it.
  *
  * **Signed out is an offer, not a silence** — this is the one rule that differs
- * from the client app. A shop that installs GRIDGO and does not sign in for a
- * week still has to hear "there is a new version, update your app", and on
- * Android 13+ that is impossible unless the permission has been asked for by
- * then. So the door may ask. It may ask *only*: a signed-out phone is never
- * told it is blocked or that a registration failed, because neither is
- * something a person standing at a sign-in screen can act on, and neither is
- * about them yet.
+ * from the client app. A granted phone still registers unclaimed so GRIDGO can
+ * announce an update. Sign-in itself does not draw the card; if a signed-out
+ * surface ever does, it may ask *only*: a signed-out phone is never told it is
+ * blocked or that a registration failed, because neither is something a person
+ * at the door can act on, and neither is about them yet.
  */
 export function pushOffer(input: {
   supported: boolean;

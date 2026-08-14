@@ -1,4 +1,3 @@
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { create } from "zustand";
 
@@ -96,6 +95,27 @@ type PushState = {
  * a shop did, or can do anything about, so none reaches a screen: the phone
  * simply registers for real the moment somebody signs in.
  */
+type NotificationsModule = typeof import("expo-notifications");
+
+/**
+ * Load the native module only when a push call actually runs.
+ *
+ * A static `import` evaluates `ExpoPushTokenManager` as this file is first
+ * required — which is launch, via the root layout. Expo Go on Android SDK 53
+ * has no remote push and **throws** at that moment, taking the app down before
+ * any try/catch in this store can run. `require` inside a function is what
+ * lets the catch below turn a missing module into "push is unavailable".
+ */
+function notifications(): NotificationsModule | null {
+  try {
+    // Metro still bundles the module; evaluation is deferred until a call.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require("expo-notifications") as NotificationsModule;
+  } catch {
+    return null;
+  }
+}
+
 function isUnclaimedRouteAbsent(error: unknown): boolean {
   return (
     error instanceof api.ApiError &&
@@ -113,6 +133,8 @@ function isUnclaimedRouteAbsent(error: unknown): boolean {
  */
 async function ensureChannel(): Promise<void> {
   if (Platform.OS !== "android") return;
+  const Notifications = notifications();
+  if (!Notifications) return;
   await Notifications.setNotificationChannelAsync(PUSH_CHANNEL_ID, {
     name: PUSH_CHANNEL.name,
     description: PUSH_CHANNEL.description,
@@ -125,6 +147,8 @@ async function ensureChannel(): Promise<void> {
 
 /** The raw FCM token for this installation, or null if it cannot be had. */
 async function fetchToken(): Promise<string | null> {
+  const Notifications = notifications();
+  if (!Notifications) return null;
   const { data } = await Notifications.getDevicePushTokenAsync();
   return typeof data === "string" && data ? data : null;
 }
@@ -141,6 +165,11 @@ export const usePush = create<PushState>((set, get) => ({
     if (!get().supported) return "unknown";
     try {
       await ensureChannel();
+      const Notifications = notifications();
+      if (!Notifications) {
+        set({ permission: "unknown" });
+        return "unknown";
+      }
       const permission = readPushPermission(await Notifications.getPermissionsAsync());
       set({ permission });
       return permission;
@@ -157,6 +186,11 @@ export const usePush = create<PushState>((set, get) => ({
     set({ busy: true, error: null });
     try {
       await ensureChannel();
+      const Notifications = notifications();
+      if (!Notifications) {
+        set({ busy: false, permission: "unknown" });
+        return false;
+      }
       // The dialog. Android 13+ shows it once and a refusal is effectively
       // permanent, which is why nothing calls this except an explicit tap on a
       // card that has already said what will arrive.

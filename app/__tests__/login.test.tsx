@@ -63,8 +63,9 @@ describe("Sign in", () => {
     // Jest is a development runtime, so the guarded connection line is live.
     expect(screen.getByText(/gridgo\.example/)).toBeTruthy();
     expect(screen.getByText("Continue with Google")).toBeTruthy();
-    expect(screen.getByText(/Ask Operations to invite this email/)).toBeTruthy();
-    expect(screen.queryByText("Open a shop account")).toBeNull();
+    expect(screen.getByText("New shop? Sign up")).toBeTruthy();
+    expect(screen.queryByText(/Ask Operations to invite this email/)).toBeNull();
+    expect(screen.queryByText("Turn on alerts")).toBeNull();
   });
 
   it("puts the host behind the same compile-time guard as the credentials", () => {

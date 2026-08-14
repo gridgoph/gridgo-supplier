@@ -36,6 +36,8 @@ const MESSAGES: Record<string, string> = {
     "That email already has a GRIDGO account. Sign in with it instead, or use a different address.",
   invalid_category_ranks:
     "Pick at least one kind of work and rank it. If a category has just been retired, close this and open it again to see the current list.",
+  invitation_required:
+    "This GRIDGO is not taking public shop applications. Ask Operations for an invitation link.",
   invalid_signup:
     "Some required details are missing or too short. Check every field, then try again.",
   invalid_password:

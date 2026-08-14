@@ -17,7 +17,7 @@ import { isSignedIn, useSession } from "@/store/session";
  * drawn where the value is already obvious and states in one line what will
  * arrive; the dialog follows a deliberate tap and nothing else.
  *
- * Where it is drawn is this app's decision, and it is four places:
+ * Where it is drawn is this app's decision, and it is three places:
  *
  * - **The Alerts tab**, where a shop is already reading the things push would
  *   deliver.
@@ -27,11 +27,9 @@ import { isSignedIn, useSession } from "@/store/session";
  *   worth something rather than an interruption.
  * - **The accreditation screen**, where the whole screen is a shop waiting to
  *   hear from Operations and there is nothing else it can do.
- * - **The sign-in screen**, which is the only surface a shop that installs
- *   GRIDGO and does not sign in will ever see. On Android 13+ the permission
- *   can only be asked once and only while the app is open, so a door that never
- *   asks is a phone GRIDGO can never tell to update. Its copy promises only
- *   what an unclaimed phone actually gets — see `pushOfferCopy`.
+ *
+ * Not on sign-in. A shop at the door has not asked a question alerts would
+ * answer, and the permission dialog would spend the one ask on a stranger.
  *
  * Refusal is a first-class outcome. Nothing is blocked, no screen changes, and
  * the Alerts tab keeps every update: the card simply becomes a pointer to the

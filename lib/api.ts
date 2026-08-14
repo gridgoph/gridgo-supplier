@@ -480,7 +480,7 @@ export async function login(email: string, password: string): Promise<{ token: s
   return result;
 }
 
-/** Retired self-signup draft shape, kept only for the pure legacy draft tests. */
+/** Public shop application — `POST /auth/signup` with `role: "supplier"`. */
 export type SupplierSignup = {
   email: string;
   password: string;
@@ -491,6 +491,24 @@ export type SupplierSignup = {
   categoryRanks: CategoryRank[];
 };
 
+/**
+ * Open a shop account.
+ *
+ * Works while `gridgo-api` is in `AUTH_MODE=legacy`. Dual/Clerk answers
+ * `invitation_required` — do not invent a client-side Clerk create path; the
+ * review screen already maps that code to a sentence.
+ */
+export async function signupSupplier(
+  input: SupplierSignup,
+): Promise<{ token: string; user: User }> {
+  const result = await request<{ token: string; user: User }>("/auth/signup", {
+    method: "POST",
+    body: JSON.stringify({ role: "supplier", ...input }),
+  });
+  setToken(result.token);
+  return result;
+}
+
 /* --------------------------------------------------------------------------
    Provisional routes
 
@@ -498,7 +516,7 @@ export type SupplierSignup = {
    parallel with this app: moving its own pin, and sending Operations the
    papers that accredit it. Neither is in `docs/OPERATIONAL_MODEL_V2_API.md`
    yet, so the shapes below are the documented ones extended the obvious way —
-   `shop { lat, lng, label }` exactly as the supplier projection returns it,
+   `shop { lat, lng, label }` exactly as `POST /auth/signup` already accepts it,
    and the storage contract's own upload-then-attach pair.
 
    `lib/verification.ts` is the only caller and it treats a missing route as a

@@ -13,7 +13,7 @@ export default function AccessScreen() {
       ? `This account belongs in ${identity.destination}. Supplier work stays closed here.`
       : identity.kind === "error"
         ? identity.message
-        : "GRIDGO supplier access has not been assigned. Ask Operations to invite this email.";
+        : "GRIDGO supplier access has not been assigned. Sign out and apply as a shop, or ask Operations if you already have an invitation.";
   const email = "email" in identity ? identity.email : null;
 
   return (

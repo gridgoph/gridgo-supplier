@@ -159,10 +159,10 @@ function RootStack() {
 
       <Stack.Protected guard={signedOut}>
         <Stack.Screen name="(auth)/welcome" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)/accept-invitation" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)/recover-password" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)/signup" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/login" options={{ title: "Sign in" }} />
+        <Stack.Screen name="(auth)/accept-invitation" options={{ title: "Invitation" }} />
+        <Stack.Screen name="(auth)/recover-password" options={{ title: "Recover password" }} />
+        <Stack.Screen name="(auth)/signup" options={{ headerShown: false, title: "Sign up" }} />
       </Stack.Protected>
 
       <Stack.Protected guard={accessBlocked}>
