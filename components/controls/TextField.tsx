@@ -1,5 +1,6 @@
 import { TextInput, View, type TextInputProps } from "react-native";
 
+import { singleLineFieldTextStyle } from "@/constants/theme";
 import { useThemeColors } from "@/hooks/useTheme";
 
 type Props = {
@@ -51,6 +52,7 @@ export function TextField({
         secureTextEntry={secure}
         textContentType={CONTENT_TYPE[kind]}
         className="gg-field"
+        style={singleLineFieldTextStyle}
       />
     </View>
   );

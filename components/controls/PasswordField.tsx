@@ -2,6 +2,7 @@ import { Eye, EyeOff } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, TextInput, View, type TextInputProps } from "react-native";
 
+import { singleLineFieldTextStyle } from "@/constants/theme";
 import { useThemeColors } from "@/hooks/useTheme";
 
 type Props = {
@@ -50,8 +51,8 @@ export function PasswordField({
     <View
       className={
         editable
-          ? "gg-field flex-row items-center pr-0"
-          : "gg-field gg-disabled flex-row items-center pr-0"
+          ? "gg-field flex-row items-center"
+          : "gg-field gg-disabled flex-row items-center"
       }
     >
       <TextInput
@@ -70,7 +71,7 @@ export function PasswordField({
         secureTextEntry={!visible}
         // Room for the trailing control so glyphs never sit under the icon.
         className="min-w-0 flex-1 text-body text-text-primary"
-        style={{ paddingRight: 4 }}
+        style={singleLineFieldTextStyle}
       />
       <Pressable
         onPress={() => setVisible((current) => !current)}

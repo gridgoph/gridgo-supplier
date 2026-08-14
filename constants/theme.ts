@@ -9,6 +9,8 @@
  * The two files must stay in step. Change a value here and change it there.
  */
 
+import type { TextStyle } from "react-native";
+
 import { fontFamily } from "@/constants/fonts";
 
 export type ThemeName = "light" | "dark";
@@ -131,6 +133,25 @@ export const spacing = {
   xl: 24,
   xxl: 32,
 } as const;
+
+/**
+ * Native text insets for editable fields.
+ *
+ * These stay out of NativeWind because Android's inner EditText can resolve a
+ * className padding declaration after `style`, putting the glyphs back against
+ * the stroke. Multiline notes keep their copy aligned to the top of the box.
+ */
+export const singleLineFieldTextStyle = {
+  paddingStart: spacing.xl,
+  paddingEnd: spacing.xl,
+  includeFontPadding: false,
+  textAlignVertical: "center",
+} satisfies TextStyle;
+
+export const multilineFieldTextStyle = {
+  ...singleLineFieldTextStyle,
+  textAlignVertical: "top",
+} satisfies TextStyle;
 
 /** 16px page padding on mobile. */
 export const pagePadding = 16;

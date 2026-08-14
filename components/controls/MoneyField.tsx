@@ -1,5 +1,6 @@
 import { Text, TextInput, View } from "react-native";
 
+import { singleLineFieldTextStyle } from "@/constants/theme";
 import { sanitizeMoneyInput } from "@/lib/money";
 import { useThemeColors } from "@/hooks/useTheme";
 
@@ -24,8 +25,8 @@ export function MoneyField({ value, onChange, accessibilityLabel, editable = tru
     <View
       className={
         editable
-          ? "gg-field flex-row items-center gap-2"
-          : "gg-field gg-disabled flex-row items-center gap-2"
+          ? "gg-field flex-row items-center ps-6"
+          : "gg-field gg-disabled flex-row items-center ps-6"
       }
     >
       <Text className="text-body text-text-muted">₱</Text>
@@ -39,6 +40,7 @@ export function MoneyField({ value, onChange, accessibilityLabel, editable = tru
         placeholder="0.00"
         placeholderTextColor={colors.textMuted}
         className="flex-1 text-body text-text-primary"
+        style={singleLineFieldTextStyle}
       />
     </View>
   );

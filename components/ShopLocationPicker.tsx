@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 
 import { MapFrame, type MapFrameHandle } from "@/components/MapFrame";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { singleLineFieldTextStyle } from "@/constants/theme";
 import {
   geocodeFailureMessage,
   isSearchable,
@@ -162,6 +163,7 @@ export function ShopLocationPicker({ pin, onChange }: Props) {
               autoCorrect={false}
               onSubmitEditing={() => void runSearch()}
               className="h-12 min-w-0 flex-1 text-body text-text-primary"
+              style={singleLineFieldTextStyle}
             />
             {query ? (
               <Pressable
@@ -304,6 +306,7 @@ export function ShopLocationPicker({ pin, onChange }: Props) {
                 placeholderTextColor={colors.textMuted}
                 accessibilityLabel="Address at this pin"
                 className="gg-field"
+                style={singleLineFieldTextStyle}
               />
             </View>
           ) : (

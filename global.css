@@ -320,7 +320,7 @@
 
 /** Text field / select shell. */
 @utility gg-field {
-  @apply h-12 rounded-field border border-outline bg-surface px-3 text-body text-text-primary;
+  @apply h-12 rounded-field border border-outline bg-surface text-body text-text-primary;
 }
 
 /** Shared button box. Compose with a fill below. */
