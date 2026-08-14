@@ -97,7 +97,7 @@ export default function AcceptInvitationScreen() {
 
   return (
     <View className="gg-screen">
-      <FormScrollView fillHeight contentClassName="gg-page grow justify-center pb-10 pt-16">
+      <FormScrollView fillHeight contentClassName="gg-page grow justify-center pb-10 pt-6">
         <GridgoLogo size={48} role="supplier" />
         <View className="mt-8 gap-2">
           <Text className="text-h1 text-text-primary">Open the shop</Text>
@@ -159,7 +159,6 @@ export default function AcceptInvitationScreen() {
             }
             onPress={() => void accept()}
           />
-          <SecondaryButton label="Back to welcome" onPress={() => router.replace("/(auth)/welcome")} />
         </View>
       </FormScrollView>
     </View>

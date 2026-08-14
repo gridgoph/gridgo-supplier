@@ -1,4 +1,3 @@
-import * as Notifications from "expo-notifications";
 import { useRouter, type Href } from "expo-router";
 import { useEffect, useRef } from "react";
 
@@ -44,6 +43,18 @@ function withoutNativeModule<T>(call: () => T): T | null {
   }
 }
 
+type NotificationsModule = typeof import("expo-notifications");
+
+/** Deferred: a static import crashes Expo Go Android at launch. */
+function notifications(): NotificationsModule | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require("expo-notifications") as NotificationsModule;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * What a push does while the app is open and in front of the person.
  *
@@ -53,11 +64,12 @@ function withoutNativeModule<T>(call: () => T): T | null {
  * app. It runs only in the foreground, so a closed or backgrounded app is
  * untouched and Android draws the server's own title and body.
  */
-withoutNativeModule(() =>
-  Notifications.setNotificationHandler({
+withoutNativeModule(() => {
+  const Notifications = notifications();
+  Notifications?.setNotificationHandler({
     handleNotification: async () => ({ ...PUSH_FOREGROUND_BEHAVIOR }),
-  }),
-);
+  });
+});
 
 /**
  * Make the unread badge agree with the platform.
@@ -148,9 +160,11 @@ export function usePushNotifications(): void {
       router.push(target as Href);
     };
 
+    const Notifications = notifications();
+
     // A tap while the app is running or backgrounded.
     const tap = withoutNativeModule(() =>
-      Notifications.addNotificationResponseReceivedListener((response) => {
+      Notifications?.addNotificationResponseReceivedListener((response) => {
         route(
           response.notification.request.identifier,
           response.notification.request.content.data,
@@ -160,7 +174,7 @@ export function usePushNotifications(): void {
 
     // A tap that launched the app. The listener above does not replay it.
     withoutNativeModule(() =>
-      Notifications.getLastNotificationResponseAsync().then((response) => {
+      Notifications?.getLastNotificationResponseAsync().then((response) => {
         if (!response) return;
         route(
           response.notification.request.identifier,
@@ -172,7 +186,7 @@ export function usePushNotifications(): void {
     // A push landing in the foreground shows nothing (see the handler above);
     // its whole effect is that the unread badge catches up.
     const received = withoutNativeModule(() =>
-      Notifications.addNotificationReceivedListener(() => {
+      Notifications?.addNotificationReceivedListener(() => {
         void refreshUnread();
       }),
     );
@@ -180,7 +194,7 @@ export function usePushNotifications(): void {
     // Firebase can reissue a token while the app is running. A stale one stops
     // delivering silently, which is the failure nobody reports.
     const rotated = withoutNativeModule(() =>
-      Notifications.addPushTokenListener((token) => {
+      Notifications?.addPushTokenListener((token) => {
         if (typeof token.data === "string" && token.data) {
           void usePush.getState().adoptToken(token.data);
         }

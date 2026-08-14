@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import type { User } from "@/lib/api";
 import * as api from "@/lib/api";
+import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { usePush } from "@/store/push";
 
 /** Expected role for this binary — mismatched login is rejected. */
@@ -37,11 +38,11 @@ export function isSignedIn(user: User | null | undefined): boolean {
 /**
  * Whether GRIDGO will actually send this shop work.
  *
- * An invited shop is signed in immediately, but it is not matchable until
- * Operations approves it — the platform enforces that, and `/jobs` simply
- * returns nothing meanwhile. A floor screen reading "nothing needs you" would
- * be a lie in that state, so the app routes an unapproved shop somewhere that
- * says what is actually happening.
+ * A shop that has just applied is signed in immediately, but it is not
+ * matchable until Operations approves it — the platform enforces that, and
+ * `/jobs` simply returns nothing meanwhile. A floor screen reading "nothing
+ * needs you" would be a lie in that state, so the app routes an unapproved
+ * shop somewhere that says what is actually happening.
  *
  * The API backfills a status onto every supplier account, so a missing one is
  * not a legacy shop that should be let through — it is an account the platform
@@ -79,6 +80,8 @@ type SessionState = {
   adoptClerkUser: (user: User) => boolean;
   clearClerkIdentity: () => void;
   login: (email: string, password: string) => Promise<void>;
+  /** Public apply. Lands pending; Operations still has to approve matching. */
+  signupSupplier: (input: api.SupplierSignup) => Promise<boolean>;
   /** Re-read the account, so an approval that lands is picked up on return. */
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
@@ -144,6 +147,36 @@ export const useSession = create<SessionState>((set, get) => ({
       // A 401 already clears the session through the unauthorized handler, and
       // anything else leaves the account as last known rather than signing a
       // shop out because one request did not land.
+    }
+  },
+  signupSupplier: async (input) => {
+    set({ loading: true, error: null });
+    try {
+      const { user } = await api.signupSupplier(input);
+      if (user.role !== APP_ROLE) {
+        await api.logout();
+        set({
+          user: null,
+          loading: false,
+          error: `This account is not a print shop. Open ${appForRole(user.role)} to sign in with it.`,
+          authSource: "none",
+          identity: { kind: "signed_out" },
+        });
+        return false;
+      }
+      set({
+        user,
+        loading: false,
+        authSource: "legacy",
+        identity: { kind: "supplier" },
+      });
+      return true;
+    } catch (e) {
+      set({
+        loading: false,
+        error: humanizeApiError(e, offlineMessage("open your GRIDGO account")),
+      });
+      return false;
     }
   },
   login: async (email, password) => {
