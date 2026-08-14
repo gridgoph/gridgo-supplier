@@ -13,8 +13,9 @@
 #      inlined by Babel when the JS bundle is built, not read at runtime, so if
 #      the variable was not in the environment of the bundling command the app
 #      silently falls back to the dev-server/loopback base in `lib/api.ts`.
-#      The Clerk publishable key is baked the same way, via
-#      `extra.clerkPublishableKey` in app.config.ts.
+#      The Clerk publishable key is baked the same way: extra at prebuild,
+#      and a static process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY read in
+#      lib/clerk.ts so Babel can still inline the value at Gradle time.
 #
 # Neither is visible from the build log, so both are asserted here against the
 # actual artifact. Nothing this script prints contains a password, a key, or
