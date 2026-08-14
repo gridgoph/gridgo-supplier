@@ -6,6 +6,8 @@ import {
   ThemeProvider,
   type Theme,
 } from "@react-navigation/native";
+import { ClerkProvider } from "@clerk/expo";
+import { tokenCache } from "@clerk/expo/token-cache";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -16,15 +18,22 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 
 import { ToastHost } from "@/components/ToastHost";
+import { ClerkSessionBridge } from "@/components/ClerkSessionBridge";
 import { colors, type ThemeName } from "@/constants/theme";
 import { useAlertStream } from "@/hooks/useAlertStream";
 import { useAppFonts } from "@/hooks/useAppFonts";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
 import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions";
+import { clerkPublishableKey } from "@/lib/clerk";
 import { isMatchable, isSignedIn, useSession } from "@/store/session";
 
 SplashScreen.preventAutoHideAsync();
+
+const publishableKey = clerkPublishableKey(
+  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  __DEV__,
+);
 
 /** React Navigation reads plain colours, so it gets them from the token file. */
 function navigationTheme(scheme: ThemeName): Theme {
@@ -72,34 +81,40 @@ export default function RootLayout() {
     // and on Android nothing it draws responds to touch without one. The alert
     // list's swipe-to-clear is the first gesture in this app that is ours
     // rather than the navigator's.
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      {/*
-        One keyboard, one behaviour. Without this provider the two platforms
-        disagree about what a keyboard even is — Android resizes the window and
-        iOS does not — and every screen has to hold a `Platform.OS` split it can
-        only get right on one of them. With it, Android stops resizing and both
-        platforms report the same frame-by-frame keyboard geometry, which is
-        what `components/FormScrollView` and the two shells are built on.
-
-        `preserveEdgeToEdge` matters here: this app is edge-to-edge on Android
-        (Android 15 enforces it), the tab bar's geometry is measured against
-        that, and the module must not quietly take it away.
-      */}
-      <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
-        <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-          <ThemeProvider value={navigationTheme(scheme)}>
-            <RootStack />
+    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+      <ClerkSessionBridge>
+        <GestureHandlerRootView style={{ flex: 1 }}>
             {/*
-              Above the navigator so an alert can arrive on any screen, and at
-              the top of it so it can never sit on the action a screen wants
-              pressed — see `components/ToastHost`.
+              One keyboard, one behaviour. Without this provider the two
+              platforms disagree about what a keyboard even is — Android
+              resizes the window and iOS does not — and every screen has to
+              hold a `Platform.OS` split it can only get right on one of them.
+              With it, Android stops resizing and both platforms report the
+              same frame-by-frame keyboard geometry, which is what
+              `components/FormScrollView` and the two shells are built on.
+
+              `preserveEdgeToEdge` matters here: this app is edge-to-edge on
+              Android (Android 15 enforces it), the tab bar's geometry is
+              measured against that, and the module must not quietly take it
+              away.
             */}
-            <ToastHost />
-            <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-          </ThemeProvider>
-        </SafeAreaProvider>
-      </KeyboardProvider>
-    </GestureHandlerRootView>
+          <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
+            <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+              <ThemeProvider value={navigationTheme(scheme)}>
+                <RootStack />
+                {/*
+                  Above the navigator so an alert can arrive on any screen,
+                  and at the top of it so it can never sit on the action a
+                  screen wants pressed — see `components/ToastHost`.
+                */}
+                <ToastHost />
+                <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+              </ThemeProvider>
+            </SafeAreaProvider>
+          </KeyboardProvider>
+        </GestureHandlerRootView>
+      </ClerkSessionBridge>
+    </ClerkProvider>
   );
 }
 
@@ -118,9 +133,15 @@ export default function RootLayout() {
  */
 function RootStack() {
   const user = useSession((s) => s.user);
+  const identity = useSession((s) => s.identity);
   const scheme = useThemeName();
   const signedIn = isSignedIn(user);
   const matchable = signedIn && isMatchable(user);
+  const accessBlocked =
+    identity.kind === "unassigned" ||
+    identity.kind === "mismatch" ||
+    identity.kind === "error";
+  const signedOut = !signedIn && identity.kind === "signed_out";
 
   // Live alerts for as long as there is a session to receive them.
   useAlertStream(signedIn);
@@ -136,9 +157,16 @@ function RootStack() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
 
-      <Stack.Protected guard={!signedIn}>
+      <Stack.Protected guard={signedOut}>
+        <Stack.Screen name="(auth)/welcome" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/accept-invitation" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/recover-password" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)/signup" options={{ headerShown: false }} />
+      </Stack.Protected>
+
+      <Stack.Protected guard={accessBlocked}>
+        <Stack.Screen name="access" options={{ headerShown: false, title: "Supplier access" }} />
       </Stack.Protected>
 
       <Stack.Protected guard={signedIn && !matchable}>

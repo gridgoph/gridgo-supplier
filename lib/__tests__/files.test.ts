@@ -1,3 +1,11 @@
+jest.mock("expo-file-system/legacy", () => ({
+  createUploadTask: jest.fn(),
+  FileSystemUploadType: { MULTIPART: 1 },
+}));
+
+import * as FileSystem from "expo-file-system/legacy";
+
+import * as api from "@/lib/api";
 import {
   isUploadBusy,
   messageFor,
@@ -5,6 +13,7 @@ import {
   storedUploads,
   tooLargeMessage,
   uploadStageLabel,
+  uploadFile,
   type UploadItem,
 } from "@/lib/files";
 
@@ -120,5 +129,38 @@ describe("tooLargeMessage", () => {
     const message = tooLargeMessage(250 * 1024 * 1024);
     expect(message).toContain("250.0 MB");
     expect(message).toContain("200 MB");
+  });
+});
+
+describe("upload authentication", () => {
+  afterEach(() => {
+    api.setToken(null);
+    api.setTokenProvider(null);
+    jest.clearAllMocks();
+  });
+
+  it("streams with a fresh Clerk token instead of a stale legacy bearer", async () => {
+    api.setToken("legacy-token");
+    api.setTokenProvider(async () => "fresh-clerk-token");
+    jest.mocked(FileSystem.createUploadTask).mockReturnValue({
+      uploadAsync: jest.fn(async () => ({
+        status: 201,
+        body: JSON.stringify({ file: { fileId: "file_1" } }),
+      })),
+    } as never);
+
+    await expect(uploadFile(item(), "fulfilment_proof", jest.fn())).resolves.toEqual({
+      ok: true,
+      fileId: "file_1",
+    });
+
+    expect(FileSystem.createUploadTask).toHaveBeenCalledWith(
+      expect.stringContaining("/files"),
+      "file:///proof.pdf",
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: "Bearer fresh-clerk-token" }),
+      }),
+      expect.any(Function),
+    );
   });
 });

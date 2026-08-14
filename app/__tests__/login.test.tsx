@@ -4,8 +4,22 @@ import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 jest.mock("expo-router", () => ({
-  router: { push: jest.fn() },
+  router: { push: jest.fn(), replace: jest.fn() },
   Redirect: () => null,
+}));
+
+jest.mock("@clerk/expo", () => ({
+  useSignIn: () => ({
+    signIn: {
+      password: jest.fn(),
+      finalize: jest.fn(),
+    },
+    fetchStatus: "idle",
+  }),
+}));
+
+jest.mock("@clerk/expo/experimental", () => ({
+  useSSO: () => ({ startSSOFlow: jest.fn() }),
 }));
 
 jest.mock("@/lib/api", () => ({
@@ -14,13 +28,13 @@ jest.mock("@/lib/api", () => ({
 }));
 
 jest.mock("@/store/session", () => ({
-  isSignedIn: () => false,
-  useSession: () => ({
-    user: null,
-    login: jest.fn(),
-    loading: false,
-    error: null,
-  }),
+  isSignedIn: (user: unknown) => user != null,
+  useSession: (selector: (state: object) => unknown) =>
+    selector({
+      user: null,
+      login: jest.fn(),
+      loading: false,
+    }),
 }));
 
 import LoginScreen from "@/app/(auth)/login";
@@ -28,20 +42,19 @@ import { DEV_LOGIN } from "@/lib/devLogin";
 
 /**
  * The door is on a public address in the hosted pilot, so anything this screen
- * shows, it shows to anyone who opens the app. A release build must arrive with
- * empty fields. Jest runs with `__DEV__ === true`, so the development prefill
- * is visible here — that is the captain's one-tap path. The production strip
- * is proved separately by `devLoginDisclosure.test.ts` and the export assert.
+ * shows, it shows to anyone who opens the app. Clerk fields always start empty;
+ * the replaceable local demo is a separate development-only action. The
+ * production strip is proved separately by `devLoginDisclosure.test.ts` and
+ * the export assert.
  */
 describe("Sign in", () => {
-  it("prefills the pilot supplier only while __DEV__ is true", async () => {
+  it("keeps Clerk fields empty and the pilot supplier in a separate dev action", async () => {
     await render(<LoginScreen />);
 
-    // Jest is a development runtime, so the guarded branch is live.
     expect(DEV_LOGIN).not.toBeNull();
-    expect(screen.getByLabelText("Email").props.value).toBe(DEV_LOGIN!.email);
-    expect(screen.getByLabelText("Password").props.value).toBe(DEV_LOGIN!.password);
-    expect(DEV_LOGIN!.email).toBe("supplier@gridgo.ph");
+    expect(screen.getByLabelText("Email").props.value).toBe("");
+    expect(screen.getByLabelText("Password").props.value).toBe("");
+    expect(screen.getByText("Use local supplier demo")).toBeTruthy();
   });
 
   it("still says which host it is talking to, and what to do next", async () => {
@@ -49,7 +62,9 @@ describe("Sign in", () => {
 
     // Jest is a development runtime, so the guarded connection line is live.
     expect(screen.getByText(/gridgo\.example/)).toBeTruthy();
-    expect(screen.getByText("Open a shop account")).toBeTruthy();
+    expect(screen.getByText("Continue with Google")).toBeTruthy();
+    expect(screen.getByText(/Ask Operations to invite this email/)).toBeTruthy();
+    expect(screen.queryByText("Open a shop account")).toBeNull();
   });
 
   it("puts the host behind the same compile-time guard as the credentials", () => {
@@ -83,6 +98,6 @@ describe("Sign in", () => {
       expect(screen.getByLabelText("Password").props.secureTextEntry).toBe(false);
     });
     expect(screen.getByLabelText("Hide password")).toBeTruthy();
-    expect(screen.getByLabelText("Password").props.value).toBe(DEV_LOGIN!.password);
+    expect(screen.getByLabelText("Password").props.value).toBe("");
   });
 });

@@ -45,6 +45,11 @@ const DEMO_PASSWORD = "Ilovegridgo-0990";
  * is a check that gets deleted.
  */
 const DEV_ONLY_UI = ["on this network at", "No answer", "Answering"];
+/** Secrets never belong in an Expo artefact; test publishable keys never belong in a release. */
+const CLERK_SECRET_KEY = /sk_(?:test|live)_[A-Za-z0-9_-]{20,}/;
+const CLERK_TEST_KEY = /pk_test_[A-Za-z0-9_-]{20,}/;
+const THIS_APP_TEST_KEY = "pk_test_Y2FzdWFsLWNyYWItOS5jbGVyay5hY2NvdW50cy5kZXYk";
+const CLERK_LIVE_KEY = /pk_live_[A-Za-z0-9_-]{20,}/;
 
 /** Text artefacts plus Hermes bytecode (string literals stay readable in .hbc). */
 const SCANNED_EXTENSIONS = [
@@ -104,6 +109,9 @@ if (files.length === 0) {
 const addressHits = [];
 const passwordHits = [];
 const devUiHits = [];
+const clerkSecretHits = [];
+const clerkTestKeyHits = [];
+let hasLiveClerkKey = false;
 
 for (const file of files) {
   const text = readFileSync(file, "utf8");
@@ -121,6 +129,21 @@ for (const file of files) {
   if (devUi.length > 0) {
     devUiHits.push({ file: relative(outDir, file), found: devUi });
   }
+  // Hermes stores unrelated string-table entries beside each other, so a
+  // prefix example inside Clerk can appear concatenated with the next entry.
+  // Generic key-shape checks are reliable in text bundles; Hermes is checked
+  // against this app's exact development publishable key instead.
+  const isHermes = file.endsWith(".hbc");
+  if (!isHermes && CLERK_SECRET_KEY.test(text)) {
+    clerkSecretHits.push(relative(outDir, file));
+  }
+  if (
+    (!isHermes && CLERK_TEST_KEY.test(text)) ||
+    text.includes(THIS_APP_TEST_KEY)
+  ) {
+    clerkTestKeyHits.push(relative(outDir, file));
+  }
+  if (CLERK_LIVE_KEY.test(text)) hasLiveClerkKey = true;
 }
 
 if (addressHits.length > 0 || passwordHits.length > 0) {
@@ -143,7 +166,23 @@ if (devUiHits.length > 0) {
   );
 }
 
+if (clerkSecretHits.length > 0 || clerkTestKeyHits.length > 0) {
+  fail(
+    "production export contains a forbidden Clerk key.",
+    "A release may contain only its public pk_live_ key.",
+    ...clerkSecretHits.map((file) => `${file}: secret Clerk key marker`),
+    ...clerkTestKeyHits.map((file) => `${file}: test Clerk publishable key marker`),
+  );
+}
+
+if (!hasLiveClerkKey) {
+  fail(
+    "production export has no Clerk production publishable key.",
+    "Build with EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY set to pk_live_…",
+  );
+}
+
 console.log(
   `assert-no-dev-credentials: OK — no demo credentials and no development ` +
-    `connection line in ${files.length} artefacts under ${outDir}.`,
+    `connection line or forbidden Clerk key in ${files.length} artefacts under ${outDir}.`,
 );

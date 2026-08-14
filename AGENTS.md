@@ -18,7 +18,7 @@ GRIDGO ships one app per role. Client, Rider, Operations, and Super Admin surfac
 
 The app includes:
 
-- Self sign-up, with categories ranked best-first, and an approval a shop waits for
+- Invitation-first supplier access, followed by the accreditation wait
 - Assignment inbox with accept / decline inside SLA, where accepting names the shop's own price
 - Approved specification and artwork review (read-only of QA-approved files)
 - Production progress, self-QC, and Proof of Fulfilment against each payout milestone
@@ -27,7 +27,7 @@ The app includes:
 
 **Cross-cutting**
 
-- Auth via the replaceable local demo API (`gridgo-api`). Role must be `supplier`.
+- Clerk identity with a `gridgo-api` supplier projection. Role must be `supplier`.
 - Light and Dark themes with identical labels, states, and workflows.
 - Shared design tokens with the client starter (`constants/theme.ts`, `global.css`, logo assets).
 
@@ -42,7 +42,8 @@ The app includes:
 - Zustand
 - AsyncStorage
 - Zustand for client session state
-- Local **custom auth + domain API** via `gridgo-api` (MVP — not Clerk/Supabase/PayMongo; replaceable later)
+- Clerk Expo with SecureStore token caching
+- Local **domain API** via `gridgo-api`; a replaceable local auth fixture remains in development only
 
 Do not introduce new major libraries unless there is a strong reason. Ask before installing anything new.
 
@@ -51,19 +52,18 @@ Do not introduce new major libraries unless there is a strong reason. Ask before
 
 ## MVP stack (current phase)
 
-For this MVP we **do not** integrate Clerk, Supabase, PayMongo, or other production SaaS.
+Clerk owns production identity and session issuance. `gridgo-api` remains the domain and authorization boundary; Supabase and PayMongo are not part of this app.
 
 Every screen that needs network uses **`lib/api.ts`** against the shared local **`gridgo-api`**:
 
 - **Operational model v2** — `gridgo-api`'s `docs/OPERATIONAL_MODEL_V2_API.md` is the authoritative contract for routes, states, role authorization and money. Read it before changing any flow; it supersedes anything older that disagrees. The supplier proof-to-client loop, cash on delivery, and Pilot Credits as a payment method are all **retired** — do not reintroduce them.
-- **Custom auth** — email/password → bearer token; role enforced in Zustand session (`store/session.ts`). Mismatched role is rejected (no role switcher). Shops **sign themselves up** (`POST /auth/signup`); Operations no longer creates accounts. The pilot's demo accounts still exist; production passwords come from deployment configuration. A **development** build may prefill the supplier fixture behind `__DEV__` in `lib/devLogin.ts` (Metro strips the branch, proved by `app/__tests__/devLoginDisclosure.test.ts` and `scripts/assert-no-dev-credentials.mjs`); a release build ships empty fields and no demo address or password in the bundle. **The door's connection line is behind the same guard**: a development build shows `GRIDGO on <host>` with a Checking/Answering/No answer chip, and a release build shows neither the host nor a chip — just one plain "Can't reach GRIDGO right now" when the health check actually fails. A hostname is infrastructure a shop owner cannot act on, and a red chip beside it reads as the app being broken. The API address stays on Settings, which is behind sign-in.
+- **Clerk identity** — `ClerkProvider` uses `@clerk/expo/token-cache` (SecureStore), while `components/ClerkSessionBridge.tsx` accepts only server-written `publicMetadata.gridgoRole === "supplier"` before hydrating `gridgo-api`'s `/auth/me` projection. Missing or mismatched access fails closed on `app/access.tsx`; never write role metadata client-side. Supplier creation is invitation-first through `__clerk_ticket`; the legacy signup routes redirect there. Google may authenticate or create an identity, but never grants supplier access. A **development** build retains the replaceable local supplier fixture behind `__DEV__` in `lib/devLogin.ts`; Metro strips its credential and connection-line literals, proved by `app/__tests__/devLoginDisclosure.test.ts` and `scripts/assert-no-dev-credentials.mjs`.
 
-- **Session → routes** — `Stack.Protected` in `app/_layout.tsx` (SDK 54) guards on three states, not two: signed out, signed in but **not accredited**, and matchable. A shop that has signed up is signed in while `verificationStatus !== "approved"`, and `/jobs` returns nothing for it — so it gets `app/accreditation.tsx` rather than a tab shell whose every tab would be empty for a reason none of them explains (`isMatchable` in `store/session.ts`). Do not sprinkle `router.replace` on logout/401; clearing `user` is enough.
+- **Session → routes** — `Stack.Protected` in `app/_layout.tsx` (SDK 54) guards Clerk restoring, signed out, access mismatch/unassigned, signed in but **not accredited**, and matchable states. A supplier with `verificationStatus !== "approved"` gets `app/accreditation.tsx` rather than an empty tab shell (`isMatchable` in `store/session.ts`). Do not sprinkle logout/401 redirects through domain screens; session state owns the guards.
 - **Files** — `gridgo-api`'s `docs/STORAGE_API.md` is the authoritative contract; read it before touching `lib/files.ts`. Upload streams from the device URI (`expo-file-system/legacy` `createUploadTask`) and a file is stored only when a `201` returns `file.fileId`. Attaching a `fulfilment_proof` names a `milestoneCode` and moves **money, not state** — the order does not transition.
 - **API base** — `getApiBase()` / `resolveApiBase()` in `lib/api.ts`: `EXPO_PUBLIC_API_URL` override, else hostname from Expo `hostUri` (so physical Expo Go uses the LAN IP), Android loopback remapped to `10.0.2.2`, port from `EXPO_PUBLIC_API_PORT` (default `8787`). Do not hardcode a developer LAN IP or a deployment's domain — **pointing a build at a hosted API is configuration, not code**: set `EXPO_PUBLIC_API_URL` in the build's environment (EAS: an `env` entry on the profile in `eas.json`; a local export: on the `npx expo export` command) and it wins over everything, on both platforms, with or without a dev server in reach. Expo inlines `process.env.EXPO_PUBLIC_*` at bundle time, so the value is baked into the binary and there is nothing to fall back *to* — verify a build by grepping the exported bundle for the host. `lib/__tests__/apiBase.test.ts` pins the precedence.
 - **Zustand** — session and feature stores (not React Context for global session).
 - **Money** — PHP minor units only, formatted at the edge. The client pays a 75% digital downpayment then a 25% digital balance; neither is this app's business. What **is**: the shop's own `supplierPriceMinor` and its milestone `amountMinor`. GRIDGO's commission is withheld from this app by the server's role projection, so if a field here ever looks like commission, the wrong field was read. Milestone shares split the shop's price, never the client's total.
-- **Replace later** — keep the same `lib/api.ts` surface when Clerk/Supabase/PayMongo land.
 - **`expo start --web`** — the web bundle throws `Cannot use 'import.meta' outside a module` before it hydrates: zustand v5's devtools middleware ships `import.meta.env`, and Metro emits it into a classic `<script>`. Only web is affected; iOS/Android are fine. To render the app in a browser (screenshots, visual review) put a proxy in front of the dev server that rewrites that token. Signed-in routes also bounce to `/login` on a hard reload because the guard runs before the session rehydrates, so navigate in-app rather than reloading a deep link. The in-app theme override is a **no-op on web** (`Appearance.setColorScheme` does not exist there — see `hooks/useTheme.ts`), so capture Light and Dark by launching the browser under each `prefers-color-scheme`, not by tapping Settings.
 
 Product scope for this binary: **`PRD.md`**. Fleet blueprint: `gridgo-tinker`.
@@ -74,8 +74,7 @@ Prefer these modules over burying logic in screens:
 
 - `lib/jobState.ts` — the only place a raw order state becomes a label, an action, or a journey step. `actionsForJob` takes the **order**, not the state, because what a shop should do next depends on which evidence it still owes: an outstanding Proof of Fulfilment takes the yellow and demotes the forward step, since half a job's money waits on a photo. `targetState: null` means the step is not a transition. `waitingOn` says whose move it is when the shop has none. `presentTimelineNote` translates the check codes the platform composes into its own notes — a failed pickup arrives as `visible_defects` and would otherwise land on a shop's timeline verbatim.
 - `lib/milestones.ts` — the only place that reads `payoutMilestones`, and the source of the payout vocabulary. `earningsSplit`'s `needsProofMinor` means one thing only: money the shop could release **today** by photographing something. A part the job has not reached, and the rider's delivered share, are `laterMinor` — folding them together told a shop that a print run it had not started was evidence it owed, which is how a real prompt learns to be ignored. Two platform rules shape every screen built on it: shares split the **shop's** price, and **nobody in this app releases money** — a shop files evidence, Operations releases, so "done" here means *evidence filed* and no copy may imply the money has moved. Who owes which proof is fixed: the shop for printing and packing, the rider for delivery, and retention inherits the delivered proof. A milestone the job has not reached yet reads "Not started", never "Proof needed" — a chip asking for work nobody can do teaches a shop to ignore the chips that matter.
-- `lib/onboardingSteps.ts` + `store/signupDraft.ts` — sign-up is five routes under `app/(auth)/signup/`, not one form: identity, the map pin, ranked services, papers, review. The steps lib owns the order, the numbering and the per-step checks; the store owns everything typed, persisted so a shop can be interrupted by its own counter — **except the password, which is never written to disk**. Papers are deliberately not a gate: the account is unmatchable until Operations approves it either way, and blocking on a permit in a drawer turns a five-minute sign-up into a two-day one.
-- `lib/signup.ts` + `components/CategoryRankList.tsx` — a shop declares categories **best first**, and list position *is* the rank (the platform requires `1..n` with no gaps). Sign-up cannot read `GET /taxonomy` because that route needs a bearer and nobody has signed in yet, so the categories come from `data/serviceCatalog.ts`; the platform re-checks every code and is the authority.
+- `app/(auth)/signup/` — retired public self-signup routes, retained only as redirects to invitation acceptance so old links cannot create an account. Do not reconnect `lib/onboardingSteps.ts`, `lib/signup.ts`, or `store/signupDraft.ts` to public navigation.
 - `lib/homeBoard.ts` — the **only** place jobs are ranked by urgency, and the only place the floor's headline figure is chosen. Two rules it exists to hold: the figure is the shop's own money that has *stopped moving* (not earnings-to-date, which never goes down and which a shop cannot act on), and evidence owed outranks everything else on the list because it is the one stuck thing nobody else can unstick. An app with two rankings teaches a shop that list order means nothing — do not add a second.
 - `lib/shopLocation.ts` + `components/ShopLocationPicker.tsx` + `lib/mapHtml.ts` + `components/MapFrame*.tsx` — the shop's own pin, and nothing else a map could show. Leaflet over OpenStreetMap tiles inside `react-native-webview` (pinned to the version in `node_modules/expo/bundledNativeModules.json`, which is what the rider app ships), with an iframe fallback for Expo web. **No Google and no API key** — settled fleet-wide and reverted once. The picker is a full-height screen on purpose: a map inside a `ScrollView` fights the scroll for the same vertical pan.
 - `lib/geocode.ts` — Nominatim, OpenStreetMap's own geocoder. It is a donated service with a real policy this module exists to keep, because a screen calling `fetch` cannot: one request a second through a single shared gate, an identifying `User-Agent`, cached answers, and **no search-as-you-type** — autocomplete is forbidden outright, so there is deliberately no per-keystroke entry point and search fires on submit. Failure is a sentence telling the shop to tap the map instead, never a dead screen.
@@ -369,13 +368,13 @@ When building a feature:
 
 ## Authentication
 
-For the pilot this is the local `gridgo-api`, not Clerk — see **MVP stack** above, which is what the code does. Clerk is a later replacement behind the same `lib/api.ts` surface; do not build against it yet.
+Clerk owns production identity; `gridgo-api` owns the supplier projection and all domain authorization. `lib/api.ts` asks Clerk's token provider for a fresh JWT on each request, upload and stream connection, while the local bearer path exists only for the `__DEV__` fixture.
 
 One account serves a person across every GRIDGO app, and the platform role (`client`, `supplier`, `rider`, `ops_admin`, `super_admin`) is the server's to set — read it, never write it.
 
 This app serves `supplier`. Check the role once, at the door, and hand a non-supplier account off to its own app by name (`appForRole`), never by naming the platform's role string. That check decides what renders, nothing more: every read and write is authorized server-side, so removing it would grant no access.
 
-**Client, supplier and rider all sign themselves up.** Supplier and rider accounts then wait for Operations to approve them and are not matchable meanwhile — which is a state this app has to show honestly, not a reason to hide the sign-up path. Only Operations and Super Admin accounts are created by invitation.
+**Supplier access is invitation-first.** An invitation's server-written metadata is the only create path for this binary. A supplier then waits for Operations accreditation and is not matchable meanwhile. No public control or client payload may assign or request `supplier`.
 
 ---
 
