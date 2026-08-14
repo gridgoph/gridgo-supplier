@@ -178,7 +178,7 @@ if (clerkSecretHits.length > 0 || clerkTestKeyHits.length > 0) {
 if (!hasLiveClerkKey) {
   fail(
     "production export has no Clerk production publishable key.",
-    "Build with EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY set to pk_live_…",
+    "Build with a production pk_live_ Clerk publishable key.",
   );
 }
 

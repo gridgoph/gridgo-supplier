@@ -25,6 +25,11 @@ const workflow = readFileSync(
   "utf8",
 );
 
+const verifyScript = readFileSync(
+  join(__dirname, "..", "scripts", "verify-release-apk.sh"),
+  "utf8",
+);
+
 /** A job body: every line from its key to the next job's key. */
 function jobBody(name: string): string {
   const lines = workflow.split("\n");
@@ -167,6 +172,34 @@ describe("the release APK is built with Firebase, or not at all", () => {
       (step) => step.includes("rm -f") && step.includes("release.jks"),
     );
     expect(cleanup).toContain("google-services.json");
+  });
+});
+
+describe("the verify script requires baked values, not every env name", () => {
+  it("requires the live Clerk publishable value in the bundle", () => {
+    expect(verifyScript).toMatch(/require_env EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY/);
+    expect(verifyScript).toMatch(/pk_live_\*/);
+    expect(verifyScript).toMatch(/grep -aqF -- "\$EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY"/);
+  });
+
+  it("only treats a surviving EXPO_PUBLIC_API_URL identifier as not inlined", () => {
+    expect(verifyScript).toMatch(/grep -aqF -- 'EXPO_PUBLIC_API_URL'/);
+    expect(verifyScript).not.toMatch(/EXPO_PUBLIC_\[A-Z0-9_\]\*/);
+    expect(verifyScript).not.toMatch(/no EXPO_PUBLIC_\* name survives/);
+  });
+
+  it("does not fail a bake solely because an error string names the Clerk env", () => {
+    const identifierScan = verifyScript.match(/grep[^\n]+EXPO_PUBLIC_[A-Z0-9_[\]*]*/g) ?? [];
+    expect(identifierScan.some((line) => line.includes("$EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY"))).toBe(
+      true,
+    );
+    expect(
+      identifierScan.some(
+        (line) =>
+          line.includes("EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY") &&
+          !line.includes("$EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY"),
+      ),
+    ).toBe(false);
   });
 });
 

@@ -28,6 +28,24 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 
 const RELEASE_LINE = /^(\d+)\.(\d+)(?:\.|$)/;
 
+/**
+ * Keep Clerk's frontend key explicit at the Expo config boundary. A secret
+ * key can never be valid input here: everything under `extra` is readable
+ * from the installed supplier bundle.
+ */
+export function clerkPublishableKey(
+  value: string | null | undefined,
+): string | undefined {
+  const key = value?.trim();
+  if (!key) return undefined;
+  if (!key.startsWith("pk_")) {
+    throw new Error(
+      "The Clerk publishable key must start with pk_, never a secret key.",
+    );
+  }
+  return key;
+}
+
 export type BuildVersion = {
   /** Human-visible version string, e.g. "1.0.42". */
   versionName: string;
@@ -129,12 +147,17 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   );
 
   const googleServices = googleServicesFile(process.env.GOOGLE_SERVICES_JSON, __dirname);
+  const clerkKey = clerkPublishableKey(process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
   return {
     ...config,
     name,
     slug,
     version: versionName,
+    extra: {
+      ...config.extra,
+      ...(clerkKey ? { clerkPublishableKey: clerkKey } : {}),
+    },
     android: {
       ...config.android,
       versionCode,

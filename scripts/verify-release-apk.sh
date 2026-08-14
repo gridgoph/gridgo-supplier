@@ -9,18 +9,25 @@
 #      points the release build type at `signingConfigs.debug`, so a plain
 #      `assembleRelease` produces a debug-signed APK that installs happily and
 #      can never be upgraded by a real release.
-#   2. It points at localhost. `EXPO_PUBLIC_*` values are inlined by Babel when
-#      the JS bundle is built, not read at runtime, so if the variable was not
-#      in the environment of the bundling command the app silently falls back
-#      to the dev-server/loopback base in `lib/api.ts`.
+#   2. It points at localhost, or Clerk is missing. `EXPO_PUBLIC_*` values are
+#      inlined by Babel when the JS bundle is built, not read at runtime, so if
+#      the variable was not in the environment of the bundling command the app
+#      silently falls back to the dev-server/loopback base in `lib/api.ts`.
+#      The Clerk publishable key is baked the same way, via
+#      `extra.clerkPublishableKey` in app.config.ts.
 #
 # Neither is visible from the build log, so both are asserted here against the
 # actual artifact. Nothing this script prints contains a password, a key, or
 # the API URL — a certificate fingerprint is public (it ships inside the APK).
 #
+# Aligns with client/rider on the identifier scan: only a surviving
+# `EXPO_PUBLIC_API_URL` name means the URL was not inlined. Operator-facing
+# copy may still mention other env names even after their values baked.
+#
 # Usage:
 #   ANDROID_KEYSTORE_PATH=… ANDROID_KEYSTORE_PASSWORD=… ANDROID_KEY_ALIAS=… \
-#   EXPO_PUBLIC_API_URL=… scripts/verify-release-apk.sh path/to/app-release.apk
+#   EXPO_PUBLIC_API_URL=… EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=… \
+#   scripts/verify-release-apk.sh path/to/app-release.apk
 
 set -euo pipefail
 
@@ -93,7 +100,7 @@ key_digest="$(grep -im1 'SHA256:' "$work/keystore.txt" |
 
 echo "OK: signed by alias '$ANDROID_KEY_ALIAS' (cert SHA-256 $apk_digest)"
 
-# --- 2. the deployed API URL is baked into the bundle -----------------------
+# --- 2. the deployed API URL and Clerk live key are baked into the bundle ---
 
 bundle="assets/index.android.bundle"
 unzip -p "$apk" "$bundle" >"$work/bundle.bin" 2>/dev/null ||
@@ -103,17 +110,15 @@ unzip -p "$apk" "$bundle" >"$work/bundle.bin" 2>/dev/null ||
 grep -aqF -- "$EXPO_PUBLIC_API_URL" "$work/bundle.bin" ||
   fail "the deployed API URL is not in $bundle — EXPO_PUBLIC_API_URL was not set for the build step, so this APK points at loopback"
 
+# A surviving EXPO_PUBLIC_API_URL identifier means Babel did not inline the
+# URL. Other EXPO_PUBLIC_* names may appear in operator-facing error copy
+# even when their values were inlined — do not treat those as a failed bake.
+if grep -aqF -- 'EXPO_PUBLIC_API_URL' "$work/bundle.bin"; then
+  fail "the variable name survives in $bundle — the value was not inlined at bundle time"
+fi
+
 grep -aqF -- "$EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY" "$work/bundle.bin" ||
   fail "the production Clerk publishable key is not in $bundle"
 
-# Not just the URL's own name: this app also reads EXPO_PUBLIC_API_PORT, and
-# Babel inlines every EXPO_PUBLIC_* read — an unset one becomes `undefined`.
-# So a surviving name of any kind means the inlining did not happen and the
-# whole mechanism this build depends on is not running.
-if survivor="$(grep -aoE 'EXPO_PUBLIC_[A-Z0-9_]*' "$work/bundle.bin" | sort -u | head -3)" &&
-  [ -n "$survivor" ]; then
-  fail "these variable names survive in $bundle, so nothing was inlined at bundle time: $(echo "$survivor" | tr '\n' ' ')"
-fi
-
-echo "OK: the deployed API URL and Clerk production key are inlined, and no EXPO_PUBLIC_* name survives $bundle"
+echo "OK: the deployed API URL and Clerk production key are inlined in $bundle"
 echo "OK: $(basename "$apk") is a real signed release build"

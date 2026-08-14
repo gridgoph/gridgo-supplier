@@ -76,4 +76,22 @@ describe("clerkPublishableKey", () => {
       expect(() => clerkPublishableKey(value, true)).toThrow();
     }
   });
+
+  it("does not embed the env identifier in operator-facing errors", () => {
+    const messages: string[] = [];
+    for (const [value, development] of [
+      ["", true],
+      [testKey, false],
+    ] as const) {
+      try {
+        clerkPublishableKey(value, development);
+      } catch (error) {
+        messages.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+    expect(messages).toHaveLength(2);
+    for (const message of messages) {
+      expect(message).not.toContain("EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY");
+    }
+  });
 });
