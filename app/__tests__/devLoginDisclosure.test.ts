@@ -8,8 +8,10 @@ import { DEV_LOGIN } from "@/lib/devLogin";
 const ROOT = resolve(__dirname, "../..");
 const GUARDED_MODULE = resolve(ROOT, "lib/devLogin.ts");
 
-/** Demo domains — live and retired. No `g` flag: reused with `.test()`. */
-const ACCOUNT_ADDRESS = /[A-Za-z0-9._%+-]+@gridgo\.(?:ph|local)\b/;
+/** Official Clerk supplier used by the __DEV__ prefill. */
+const OFFICIAL_DEV_EMAIL = "markdavidprado@gmail.com";
+/** Retired demo domains. No `g` flag: reused with `.test()`. */
+const RETIRED_ACCOUNT_ADDRESS = /[A-Za-z0-9._%+-]+@gridgo\.(?:ph|local)\b/;
 /** The local fixture password from gridgo-api demo-fixtures. */
 const DEMO_PASSWORD = "Ilovegridgo-0990";
 
@@ -39,7 +41,11 @@ describe("dev login credential disclosure", () => {
         // Scripts that *assert* absence must name the strings they hunt for.
         if (file.startsWith(join(ROOT, "scripts"))) return false;
         const source = readFileSync(file, "utf8");
-        return ACCOUNT_ADDRESS.test(source) || source.includes(DEMO_PASSWORD);
+        return (
+          RETIRED_ACCOUNT_ADDRESS.test(source) ||
+          source.includes(OFFICIAL_DEV_EMAIL) ||
+          source.includes(DEMO_PASSWORD)
+        );
       })
       .map((file) => relative(ROOT, file));
 
@@ -55,14 +61,14 @@ describe("dev login credential disclosure", () => {
     expect(source).toMatch(/__DEV__\s*\?\s*\{/);
     expect(source).toMatch(/:\s*null/);
     // Inline in the true branch — not a hoisted module constant outside it.
-    expect(source).toContain("supplier@gridgo.ph");
+    expect(source).toContain(OFFICIAL_DEV_EMAIL);
     expect(source).toContain(DEMO_PASSWORD);
   });
 
-  it("uses the supplier fixture on the live domain", () => {
+  it("uses the official Clerk supplier", () => {
     // Jest is a development runtime, so the true branch is live.
     expect(DEV_LOGIN).not.toBeNull();
-    expect(DEV_LOGIN!.email).toBe("supplier@gridgo.ph");
+    expect(DEV_LOGIN!.email).toBe(OFFICIAL_DEV_EMAIL);
     expect(DEV_LOGIN!.password).toBe(DEMO_PASSWORD);
   });
 

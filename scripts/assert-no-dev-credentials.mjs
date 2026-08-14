@@ -30,8 +30,9 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
-/** Live and retired fixture domains. */
-const ACCOUNT_ADDRESS = /[A-Za-z0-9._%+-]+@gridgo\.(?:ph|local)\b/g;
+/** Retired fixture domains plus the official Clerk supplier used in __DEV__. */
+const ACCOUNT_ADDRESS =
+  /(?:[A-Za-z0-9._%+-]+@gridgo\.(?:ph|local)\b|markdavidprado@gmail\.com)/g;
 /** gridgo-api DEMO_PASSWORD — the local fixture only. */
 const DEMO_PASSWORD = "Ilovegridgo-0990";
 
