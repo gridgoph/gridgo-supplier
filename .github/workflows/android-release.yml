@@ -82,8 +82,15 @@ jobs:
 
       - run: npm ci
 
+      # extra.clerkPublishableKey is written when Expo evaluates this file.
+      # The Gradle step's env cannot fill extra that prebuild already stamped
+      # empty — and the JS no longer contains process.env.EXPO_PUBLIC_CLERK_*
+      # for Babel to inline unless lib/clerk.ts keeps that static read.
       - name: Resolve the public app config
         id: config
+        env:
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
         run: |
           set -euo pipefail
           npx expo config --type public --json > "$RUNNER_TEMP/app.config.json"
@@ -137,6 +144,9 @@ jobs:
       # app.json on every Expo upgrade. The cost is that config correctness has
       # to hold, which is what the step above enforces before the long build.
       - name: Generate the android project
+        env:
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
         run: npx expo prebuild --platform android --clean --no-install
 
       - name: Stage the release signing key

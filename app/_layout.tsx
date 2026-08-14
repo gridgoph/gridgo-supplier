@@ -26,13 +26,13 @@ import { useAppFonts } from "@/hooks/useAppFonts";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
 import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions";
-import { clerkPublishableKey } from "@/lib/clerk";
+import { resolveClerkPublishableKey } from "@/lib/clerk";
 import { isMatchable, isSignedIn, useSession } from "@/store/session";
 
 SplashScreen.preventAutoHideAsync();
 
-const publishableKey = clerkPublishableKey(
-  String(Constants.expoConfig?.extra?.clerkPublishableKey ?? ""),
+const publishableKey = resolveClerkPublishableKey(
+  Constants.expoConfig?.extra?.clerkPublishableKey,
   __DEV__,
 );
 

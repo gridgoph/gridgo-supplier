@@ -2,6 +2,7 @@ import {
   appForGridgoRole,
   clerkAccessFor,
   clerkPublishableKey,
+  resolveClerkPublishableKey,
 } from "@/lib/clerk";
 
 describe("clerkAccessFor", () => {
@@ -74,6 +75,19 @@ describe("clerkPublishableKey", () => {
   it("rejects missing, malformed, and secret keys", () => {
     for (const value of [undefined, null, "", "clerk", "sk_test_do-not-ship"]) {
       expect(() => clerkPublishableKey(value, true)).toThrow();
+    }
+  });
+
+  it("prefers extra and falls back to the static env read", () => {
+    const original = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = liveKey;
+    try {
+      expect(resolveClerkPublishableKey(testKey, true)).toBe(testKey);
+      expect(resolveClerkPublishableKey("", false)).toBe(liveKey);
+      expect(resolveClerkPublishableKey(undefined, false)).toBe(liveKey);
+    } finally {
+      if (original === undefined) delete process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+      else process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = original;
     }
   });
 

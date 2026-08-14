@@ -57,9 +57,11 @@ describe("Clerk Expo configuration", () => {
 });
 
 describe("the app reads the baked extra key", () => {
-  it("does not take the publishable key only from process.env at module scope", () => {
+  it("prefers extra and keeps a static env read so Gradle can still inline", () => {
     const layout = readFileSync(join(root, "app/_layout.tsx"), "utf8");
+    const clerk = readFileSync(join(root, "lib/clerk.ts"), "utf8");
     expect(layout).toMatch(/extra\?\.clerkPublishableKey/);
-    expect(layout).not.toMatch(/process\.env\.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY/);
+    expect(layout).toMatch(/resolveClerkPublishableKey/);
+    expect(clerk).toMatch(/process\.env\.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY/);
   });
 });

@@ -67,6 +67,23 @@ export function clerkPublishableKey(
   return key;
 }
 
+/**
+ * Extra is the preferred source (`app.config.ts` writes it at prebuild).
+ * The static `process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` read is the
+ * Gradle-time fallback: Babel inlines that identifier while bundling, so
+ * a release still ships the live value if extra was empty.
+ */
+export function resolveClerkPublishableKey(
+  extra: unknown,
+  development: boolean,
+): string {
+  const fromExtra = typeof extra === "string" ? extra : "";
+  return clerkPublishableKey(
+    fromExtra || process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
+    development,
+  );
+}
+
 /** Pick Clerk's person-readable message without exposing codes or payloads. */
 export function clerkErrorMessage(error: unknown, fallback: string): string {
   if (!error || typeof error !== "object") return fallback;
