@@ -8,6 +8,7 @@ import {
 } from "@react-navigation/native";
 import { ClerkProvider } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
+import Constants from "expo-constants";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -31,7 +32,7 @@ import { isMatchable, isSignedIn, useSession } from "@/store/session";
 SplashScreen.preventAutoHideAsync();
 
 const publishableKey = clerkPublishableKey(
-  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  String(Constants.expoConfig?.extra?.clerkPublishableKey ?? ""),
   __DEV__,
 );
 

@@ -59,10 +59,10 @@ export function clerkPublishableKey(
 ): string {
   const key = value?.trim() ?? "";
   if (!PUBLISHABLE_KEY.test(key)) {
-    throw new Error("Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY to a Clerk publishable key.");
+    throw new Error("Set a Clerk publishable key for this build.");
   }
   if (!development && !key.startsWith("pk_live_")) {
-    throw new Error("Release builds require an EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY starting pk_live_.");
+    throw new Error("Release builds require a Clerk publishable key starting pk_live_.");
   }
   return key;
 }
