@@ -1,6 +1,6 @@
 import { TextInput, View, type TextInputProps } from "react-native";
 
-import { spacing } from "@/constants/theme";
+import { singleLineFieldTextStyle } from "@/constants/theme";
 import { useThemeColors } from "@/hooks/useTheme";
 
 type Props = {
@@ -52,8 +52,7 @@ export function TextField({
         secureTextEntry={secure}
         textContentType={CONTENT_TYPE[kind]}
         className="gg-field"
-        // NativeWind can style the outer TextInput without moving native text.
-        style={{ paddingHorizontal: spacing.xl }}
+        style={singleLineFieldTextStyle}
       />
     </View>
   );

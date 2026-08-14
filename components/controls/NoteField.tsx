@@ -1,5 +1,6 @@
 import { Text, TextInput, View } from "react-native";
 
+import { multilineFieldTextStyle } from "@/constants/theme";
 import { useThemeColors } from "@/hooks/useTheme";
 
 type Props = {
@@ -37,8 +38,8 @@ export function NoteField({
         accessibilityLabel={accessibilityLabel}
         multiline
         maxLength={maxLength}
-        textAlignVertical="top"
-        className="min-h-24 rounded-field border border-outline bg-surface p-3 text-body text-text-primary"
+        className="min-h-24 rounded-field border border-outline bg-surface py-3 text-body text-text-primary"
+        style={multilineFieldTextStyle}
       />
       {remaining <= 40 ? (
         <Text className="text-caption text-text-muted">

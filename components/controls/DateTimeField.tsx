@@ -103,8 +103,8 @@ export function DateTimeField({
       accessibilityState={{ disabled: Boolean(disabled) }}
       className={
         disabled
-          ? "gg-field gg-disabled flex-row items-center justify-between"
-          : "gg-field flex-row items-center justify-between"
+          ? "gg-field gg-disabled flex-row items-center justify-between px-6"
+          : "gg-field flex-row items-center justify-between px-6"
       }
       style={({ pressed }) => (pressed && !disabled ? { opacity: 0.7 } : undefined)}
     >
