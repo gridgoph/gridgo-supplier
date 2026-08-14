@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+
+const mockSetActive = jest.fn(async () => undefined);
+const mockStartSSOFlow = jest.fn();
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), replace: jest.fn() },
@@ -9,6 +12,8 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("@clerk/expo", () => ({
+  useAuth: () => ({ isSignedIn: false }),
+  useClerk: () => ({ setActive: mockSetActive }),
   useSignIn: () => ({
     signIn: {
       password: jest.fn(),
@@ -19,7 +24,7 @@ jest.mock("@clerk/expo", () => ({
 }));
 
 jest.mock("@clerk/expo/experimental", () => ({
-  useSSO: () => ({ startSSOFlow: jest.fn() }),
+  useSSO: () => ({ startSSOFlow: mockStartSSOFlow }),
 }));
 
 jest.mock("@/lib/api", () => ({
@@ -40,6 +45,11 @@ jest.mock("@/store/session", () => ({
 import LoginScreen from "@/app/(auth)/login";
 import { DEV_LOGIN } from "@/lib/devLogin";
 
+const mockRouter = jest.requireMock("expo-router").router as {
+  push: jest.Mock;
+  replace: jest.Mock;
+};
+
 /**
  * The door is on a public address in the hosted pilot, so anything this screen
  * shows, it shows to anyone who opens the app. Clerk fields always start empty;
@@ -48,6 +58,10 @@ import { DEV_LOGIN } from "@/lib/devLogin";
  * the export assert.
  */
 describe("Sign in", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it("keeps Clerk fields empty and the pilot supplier in a separate dev action", async () => {
     await render(<LoginScreen />);
 
@@ -100,5 +114,28 @@ describe("Sign in", () => {
     });
     expect(screen.getByLabelText("Hide password")).toBeTruthy();
     expect(screen.getByLabelText("Password").props.value).toBe("");
+  });
+
+  it("activates Google's created session before leaving sign in", async () => {
+    mockStartSSOFlow.mockResolvedValue({
+      createdSessionId: "sess_google",
+      authSessionResult: { type: "success" },
+    });
+    await render(<LoginScreen />);
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText("Continue with Google"));
+    });
+
+    await waitFor(() => {
+      expect(mockSetActive).toHaveBeenCalledWith({ session: "sess_google" });
+      expect(mockRouter.replace).toHaveBeenCalledWith("/");
+      expect(
+        screen.getByLabelText("Continue with Google").props.accessibilityState.disabled,
+      ).toBe(false);
+    });
+    expect(mockSetActive.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRouter.replace.mock.invocationCallOrder[0],
+    );
   });
 });
