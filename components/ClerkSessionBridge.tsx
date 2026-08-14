@@ -2,6 +2,7 @@ import { useAuth, useClerk, useUser } from "@clerk/expo";
 import { useEffect, type ReactNode } from "react";
 
 import * as api from "@/lib/api";
+import { supplierProjectionErrorMessage } from "@/lib/apiErrors";
 import { clerkAccessFor } from "@/lib/clerk";
 import {
   setClerkSignOutHandler,
@@ -64,13 +65,12 @@ export function ClerkSessionBridge({ children }: Props) {
       try {
         const supplier = await api.me();
         if (!cancelled) useSession.getState().adoptClerkUser(supplier);
-      } catch {
+      } catch (error) {
         if (!cancelled) {
           useSession.getState().setClerkIdentity({
             kind: "error",
             email,
-            message:
-              "GRIDGO could not open this supplier account. Ask Operations to check the invitation.",
+            message: supplierProjectionErrorMessage(error),
           });
         }
       }

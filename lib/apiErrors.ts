@@ -83,6 +83,14 @@ export function humanizeApiError(error: unknown, fallback: string): string {
   return fallback;
 }
 
+/** Supplier-role Clerk identity that the domain API will not project. */
+export function supplierProjectionErrorMessage(error: unknown): string {
+  if (error instanceof api.ApiError && (error.status === 401 || error.status === 403)) {
+    return "No supplier account is connected to this sign-in. Sign out and apply as a shop, or ask Operations to check your invitation.";
+  }
+  return "GRIDGO could not open this supplier account. Try again, or ask Operations to check the invitation.";
+}
+
 /** Wording for a request that never reached the server at all. */
 export function offlineMessage(subject: string): string {
   return `Cannot reach GRIDGO to ${subject}. Check this device's connection, then try again.`;

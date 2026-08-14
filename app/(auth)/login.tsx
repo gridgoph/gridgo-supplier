@@ -1,4 +1,4 @@
-import { useSignIn } from "@clerk/expo";
+import { useAuth, useClerk, useSignIn } from "@clerk/expo";
 import { useSSO } from "@clerk/expo/experimental";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
@@ -18,6 +18,7 @@ import { TextField } from "@/components/controls/TextField";
 import { getApiBase, health } from "@/lib/api";
 import { clerkErrorMessage } from "@/lib/clerk";
 import { DEV_LOGIN } from "@/lib/devLogin";
+import { completeGoogleSso } from "@/lib/googleSso";
 import { useSession } from "@/store/session";
 
 type HealthState = "checking" | "reachable" | "unreachable";
@@ -63,6 +64,8 @@ const DevDemoLogin: (() => React.ReactElement) | null = __DEV__
 export default function LoginScreen() {
   const { signIn, fetchStatus } = useSignIn();
   const { startSSOFlow } = useSSO();
+  const { isSignedIn } = useAuth();
+  const { setActive } = useClerk();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -113,14 +116,15 @@ export default function LoginScreen() {
     setBusy(true);
     setProblem(null);
     try {
-      const result = await startSSOFlow({ strategy: "oauth_google" });
-      if (
-        result.authSessionResult?.type === "cancel" ||
-        result.authSessionResult?.type === "dismiss"
-      ) {
+      const outcome = await completeGoogleSso({
+        alreadySignedIn: Boolean(isSignedIn),
+        startSSOFlow: () => startSSOFlow({ strategy: "oauth_google" }),
+        setActive: (args) => setActive(args),
+      });
+      if (outcome.status === "cancelled") {
         return;
       }
-      if (result.createdSessionId) {
+      if (outcome.status === "activated" || outcome.status === "already_signed_in") {
         router.replace("/");
         return;
       }

@@ -156,6 +156,8 @@ function RootStack() {
     <Stack screenOptions={stackScreenOptions(scheme)}>
       {/* Launch redirect stays public so cold start always has an anchor. */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
+      {/* Clerk's default browser-SSO return must stay reachable before activation. */}
+      <Stack.Screen name="sso-callback" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
 
       <Stack.Protected guard={signedOut}>
