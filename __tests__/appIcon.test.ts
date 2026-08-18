@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -83,5 +84,28 @@ describe("GRIDGO app icon", () => {
     const names = readdirSync(images);
     expect(names.filter((name) => name.includes("react-logo"))).toEqual([]);
     expect(names).not.toContain("partial-react-logo.png");
+  });
+
+  it("paints yellow / muted / muted on the right column, whites elsewhere", () => {
+    const sampled = execFileSync(
+      "python3",
+      [
+        "-c",
+        [
+          "from pathlib import Path",
+          "import importlib.util, sys",
+          "root = sys.argv[1]",
+          "spec = importlib.util.spec_from_file_location('gen', root + '/scripts/generate-app-icon.py')",
+          "mod = importlib.util.module_from_spec(spec)",
+          "spec.loader.exec_module(mod)",
+          "print(mod.sample_grid(Path(root + '/assets/images/icon.png')))",
+        ].join("\n"),
+        root,
+      ],
+      { encoding: "utf8" },
+    ).trim();
+    expect(sampled).toBe(
+      "[['#FFFFFF', '#FFFFFF', '#FFDE58'], ['#FFFFFF', '#FFFFFF', '#8A8A8A'], ['#FFFFFF', '#FFFFFF', '#8A8A8A']]",
+    );
   });
 });
