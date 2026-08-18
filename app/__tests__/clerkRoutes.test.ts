@@ -43,14 +43,22 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(identity).toContain("OnboardingStep");
     expect(identity).not.toContain("Redirect");
 
-    for (const route of ["location", "services", "documents", "review"]) {
+    for (const route of ["location", "services", "review"]) {
       const screen = source(`app/(auth)/signup/${route}.tsx`);
       expect(screen).toContain("OnboardingStep");
       expect(screen).not.toContain("Redirect");
     }
-    expect(source("lib/api.ts")).toContain('"/auth/signup"');
-    expect(source("store/session.ts")).toContain("signupSupplier");
-    expect(source("app/(auth)/signup/review.tsx")).toContain("signupSupplier");
+    expect(source("app/(auth)/signup/_layout.tsx")).not.toContain("documents");
+    expect(source("lib/api.ts")).toContain("/auth/clerk/enroll/supplier");
+    expect(source("lib/api.ts")).not.toContain('"/auth/signup"');
+    expect(source("store/session.ts")).toContain("enrollSupplier");
+    expect(source("store/session.ts")).not.toContain("signupSupplier");
+    expect(source("app/(auth)/signup/review.tsx")).toContain("enrollSupplier");
+    expect(source("app/(auth)/signup/review.tsx")).not.toContain("signupSupplier");
+    expect(source("app/(auth)/signup/review.tsx")).toContain("signUp.password");
+    expect(source("app/(auth)/signup/review.tsx")).toContain("sendEmailCode");
+    expect(source("app/(auth)/signup/review.tsx")).not.toContain("prepareFirstFactor");
+    expect(source("app/(auth)/signup/review.tsx")).not.toContain("Your papers");
   });
 
   it("uses the Expo Router stack header for login and signup, not a drawn back control", () => {
@@ -88,7 +96,7 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(layout).toContain('from "@clerk/expo/token-cache"');
     expect(layout).toContain("tokenCache={tokenCache}");
     expect(bridge).toContain("clerkAccessFor(user.publicMetadata)");
-    expect(bridge).toContain("api.me()");
+    expect(bridge).toContain("api.me(");
     expect(access).toContain("Supplier work stays closed here");
   });
 

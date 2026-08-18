@@ -138,11 +138,12 @@ function RootStack() {
   const scheme = useThemeName();
   const signedIn = isSignedIn(user);
   const matchable = signedIn && isMatchable(user);
-  const accessBlocked =
-    identity.kind === "unassigned" ||
-    identity.kind === "mismatch" ||
-    identity.kind === "error";
-  const signedOut = !signedIn && identity.kind === "signed_out";
+  const accessBlocked = identity.kind === "mismatch" || identity.kind === "error";
+  // Unassigned Clerk (just created, not yet enrolled) stays on apply so
+  // Send can enroll without bouncing to the closed-shop screen.
+  const signedOut =
+    !signedIn &&
+    (identity.kind === "signed_out" || identity.kind === "unassigned");
 
   // Live alerts for as long as there is a session to receive them.
   useAlertStream(signedIn);

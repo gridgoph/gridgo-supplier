@@ -1,8 +1,9 @@
 import {
   categoryRanks,
+  enrollmentIdempotencyKey,
   promoteCategory,
   toggleCategory,
-  toSignupRequest,
+  toEnrollRequest,
 } from "@/lib/signup";
 import { EMPTY_SIGNUP_DRAFT, type SignupDraft } from "@/store/signupDraft";
 
@@ -61,20 +62,32 @@ describe("ranking", () => {
   });
 });
 
-describe("toSignupRequest", () => {
-  it("sends the pin the shop placed on the map, with its own label", () => {
-    const request = toSignupRequest(draft());
-    expect(request?.shop).toEqual({
-      lat: 7.0644,
-      lng: 125.6085,
-      label: "C.M. Recto St, Poblacion, Davao City",
+describe("toEnrollRequest", () => {
+  it("sends only the enroll body — shop, contact, pin, categories", () => {
+    const request = toEnrollRequest(draft());
+    expect(request).toEqual({
+      profile: {
+        shopName: "PrintRight Davao",
+        contactName: "Ben Santos",
+        phone: "0917 123 4567",
+        location: {
+          lat: 7.0644,
+          lng: 125.6085,
+          label: "C.M. Recto St, Poblacion, Davao City",
+        },
+      },
+      serviceCategories: ["marketing_collateral"],
     });
+    expect(request).not.toHaveProperty("role");
+    expect(request).not.toHaveProperty("password");
+    expect(request).not.toHaveProperty("email");
+    expect(request).not.toHaveProperty("categoryRanks");
   });
 
   it("trims what a phone keyboard leaves behind", () => {
-    const request = toSignupRequest(draft({ email: "  ben@shop.ph  ", shopName: " Shop " }));
-    expect(request?.email).toBe("ben@shop.ph");
-    expect(request?.supplierName).toBe("Shop");
+    const request = toEnrollRequest(draft({ shopName: " Shop ", contactName: " Ben " }));
+    expect(request?.profile.shopName).toBe("Shop");
+    expect(request?.profile.contactName).toBe("Ben");
   });
 
   /**
@@ -82,13 +95,26 @@ describe("toSignupRequest", () => {
    * map, which is in the Gulf of Guinea.
    */
   it("refuses to build a request without a placed pin", () => {
-    expect(toSignupRequest(draft({ pin: null }))).toBeNull();
-    expect(toSignupRequest(draft({ pin: { lat: 0, lng: 0, label: "Nowhere" } }))).toBeNull();
+    expect(toEnrollRequest(draft({ pin: null }))).toBeNull();
+    expect(toEnrollRequest(draft({ pin: { lat: 0, lng: 0, label: "Nowhere" } }))).toBeNull();
   });
 
   it("refuses a pin with no address on it", () => {
     expect(
-      toSignupRequest(draft({ pin: { lat: 7.06, lng: 125.6, label: "   " } })),
+      toEnrollRequest(draft({ pin: { lat: 7.06, lng: 125.6, label: "   " } })),
     ).toBeNull();
+  });
+});
+
+describe("enrollmentIdempotencyKey", () => {
+  it("keeps a valid key so a retry is the same application", () => {
+    expect(enrollmentIdempotencyKey("supplier-enroll-1")).toBe("supplier-enroll-1");
+  });
+
+  it("mints a key that the enroll route will accept", () => {
+    const key = enrollmentIdempotencyKey("");
+    expect(key).toMatch(/^[A-Za-z0-9._:-]+$/);
+    expect(key.length).toBeGreaterThan(0);
+    expect(key.length).toBeLessThanOrEqual(200);
   });
 });

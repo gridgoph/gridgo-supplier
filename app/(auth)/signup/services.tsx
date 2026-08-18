@@ -34,7 +34,7 @@ export default function ServicesStep() {
       setShowProblem(true);
       return;
     }
-    router.push("/(auth)/signup/documents");
+    router.push("/(auth)/signup/review");
   }
 
   return (

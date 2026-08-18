@@ -7,7 +7,7 @@ import type { ShopPin } from "@/lib/shopLocation";
 /**
  * A half-finished shop account survives the app closing.
  *
- * Onboarding is five screens, and a shop owner filling them in is standing in a
+ * Onboarding is four screens, and a shop owner filling them in is standing in a
  * working print shop: the phone rings, a customer walks in, the app goes to the
  * background. Losing four screens of typing at that point is how a sign-up
  * never gets finished, so every step writes here as it goes and each screen
@@ -41,6 +41,8 @@ export type SignupDraft = {
   pin: ShopPin | null;
   /** Category codes, best first. Position is the rank. */
   categoryCodes: string[];
+  /** Stable enroll key for this draft. Papers are collected after the account exists. */
+  enrollKey: string;
   documents: Partial<Record<DocumentKind, PickedDocument>>;
 };
 
@@ -52,6 +54,7 @@ export const EMPTY_SIGNUP_DRAFT: SignupDraft = {
   password: "",
   pin: null,
   categoryCodes: [],
+  enrollKey: "",
   documents: {},
 };
 

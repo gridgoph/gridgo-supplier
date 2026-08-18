@@ -84,6 +84,58 @@ export function resolveClerkPublishableKey(
   );
 }
 
+/** True when Clerk refused a second session because one is already live. */
+export function isAlreadySignedInError(error: unknown): boolean {
+  const message = clerkErrorMessage(error, "").toLowerCase();
+  return (
+    message.includes("already signed in") ||
+    message.includes("already logged in") ||
+    message.includes("currently signed in") ||
+    message.includes("currently logged in")
+  );
+}
+
+export type ClerkGetToken = (options?: { skipCache?: boolean }) => Promise<string | null | undefined>;
+
+/**
+ * Fresh JWT for gridgo-api. Cached leftovers are often expired or empty, and a
+ * signed-out Clerk throws rather than returning null — answer null either way.
+ */
+export async function clerkSessionToken(getToken: ClerkGetToken): Promise<string | null> {
+  try {
+    const token = (await getToken({ skipCache: true }))?.trim() ?? "";
+    return token || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A completing Clerk step does not mint a JWT in the same tick. Sending
+ * enroll with no Bearer is the same 401 an unmapped identity gets.
+ */
+export async function awaitClerkSessionToken(
+  getToken: ClerkGetToken,
+  attempts = 5,
+  delayMs = 120,
+): Promise<string | null> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const token = await clerkSessionToken(getToken);
+    if (token) return token;
+    if (attempt < attempts - 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  return null;
+}
+
+/** First word is the given name; the rest is the family name if any. */
+export function splitPersonName(value: string): { firstName: string; lastName?: string } {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  const firstName = parts.shift() ?? "";
+  return parts.length ? { firstName, lastName: parts.join(" ") } : { firstName };
+}
+
 /** Pick Clerk's person-readable message without exposing codes or payloads. */
 export function clerkErrorMessage(error: unknown, fallback: string): string {
   if (!error || typeof error !== "object") return fallback;

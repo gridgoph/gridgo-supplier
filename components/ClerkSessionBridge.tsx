@@ -50,7 +50,7 @@ export function ClerkSessionBridge({ children }: Props) {
 
     const email = user.primaryEmailAddress?.emailAddress ?? null;
     const access = clerkAccessFor(user.publicMetadata);
-    if (access.kind !== "supplier") {
+    if (access.kind === "mismatch") {
       api.setTokenProvider(null);
       api.setToken(null);
       session.setClerkIdentity({ ...access, email });
@@ -59,20 +59,29 @@ export function ClerkSessionBridge({ children }: Props) {
       };
     }
 
-    session.setClerkIdentity({ kind: "loading" });
+    const alreadyAdopted =
+      session.identity.kind === "supplier" && session.user != null;
+    if (!alreadyAdopted) session.setClerkIdentity({ kind: "loading" });
     api.setTokenProvider(getToken);
     void (async () => {
       try {
-        const supplier = await api.me();
+        const supplier = await api.me({
+          ignoreUnauthorized: access.kind !== "supplier",
+        });
         if (!cancelled) useSession.getState().adoptClerkUser(supplier);
       } catch (error) {
-        if (!cancelled) {
-          useSession.getState().setClerkIdentity({
+        if (cancelled) return;
+        const current = useSession.getState();
+        if (current.identity.kind === "supplier" && current.user) return;
+        if (access.kind === "supplier") {
+          current.setClerkIdentity({
             kind: "error",
             email,
             message: supplierProjectionErrorMessage(error),
           });
+          return;
         }
+        current.setClerkIdentity({ kind: "unassigned", email });
       }
     })();
 
