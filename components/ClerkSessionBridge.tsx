@@ -3,7 +3,7 @@ import { useEffect, type ReactNode } from "react";
 
 import * as api from "@/lib/api";
 import { supplierProjectionErrorMessage } from "@/lib/apiErrors";
-import { clerkAccessFor } from "@/lib/clerk";
+import { awaitClerkSessionToken, clerkAccessFor } from "@/lib/clerk";
 import {
   setClerkSignOutHandler,
   useSession,
@@ -65,6 +65,20 @@ export function ClerkSessionBridge({ children }: Props) {
     api.setTokenProvider(getToken);
     void (async () => {
       try {
+        const token = await awaitClerkSessionToken(getToken);
+        if (!token) {
+          if (cancelled) return;
+          if (access.kind === "supplier") {
+            useSession.getState().setClerkIdentity({
+              kind: "error",
+              email,
+              message: supplierProjectionErrorMessage(new Error("missing token")),
+            });
+            return;
+          }
+          useSession.getState().setClerkIdentity({ kind: "unassigned", email });
+          return;
+        }
         const supplier = await api.me({
           ignoreUnauthorized: access.kind !== "supplier",
         });

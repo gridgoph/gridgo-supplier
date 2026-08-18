@@ -9,6 +9,7 @@ import {
   useThemePreference,
   type ThemePreference,
 } from "@/hooks/useTheme";
+import { isMatchable, useSession } from "@/store/session";
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "system", label: "System" },
@@ -24,6 +25,8 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
  */
 export default function SettingsScreen() {
   const preference = useThemePreference();
+  const user = useSession((s) => s.user);
+  const waitingOnOps = !isMatchable(user);
 
   return (
     <View className="gg-screen">
@@ -49,6 +52,29 @@ export default function SettingsScreen() {
             accessibilityLabel="Theme"
           />
         </View>
+
+        {waitingOnOps ? (
+          <View className="mt-8 gap-3">
+            <Text className="text-overline text-text-muted">YOUR SHOP</Text>
+            <Pressable
+              onPress={() => router.push("/accreditation")}
+              accessibilityRole="button"
+              accessibilityLabel="Accreditation"
+              className="gg-card flex-row items-center justify-between"
+              style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+            >
+              <View className="min-w-0 flex-1 gap-1 py-1">
+                <Text className="text-body font-medium text-text-primary">Accreditation</Text>
+                <Text className="text-caption text-text-muted">
+                  Papers and the wait — what Operations still needs from you
+                </Text>
+              </View>
+              <Text className="pl-3 text-body text-text-muted" accessibilityElementsHidden>
+                ›
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <View className="mt-8 gap-3">
           <Text className="text-overline text-text-muted">ABOUT</Text>

@@ -40,9 +40,8 @@ export function isSignedIn(user: User | null | undefined): boolean {
  *
  * A shop that has just applied is signed in immediately, but it is not
  * matchable until Operations approves it — the platform enforces that, and
- * `/jobs` simply returns nothing meanwhile. A floor screen reading "nothing
- * needs you" would be a lie in that state, so the app routes an unapproved
- * shop somewhere that says what is actually happening.
+ * `/jobs` simply returns nothing meanwhile. Home still mounts and says
+ * Operations is reviewing the shop; it must not read "nothing needs you".
  *
  * The API backfills a status onto every supplier account, so a missing one is
  * not a legacy shop that should be let through — it is an account the platform

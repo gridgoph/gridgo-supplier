@@ -4,8 +4,6 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { router, useFocusEffect } from "expo-router";
 
 import { DocumentSlot } from "@/components/DocumentSlot";
-import { GridgoLogo } from "@/components/GridgoLogo";
-import { ScreenHeader } from "@/components/ScreenHeader";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { PushEnableCard } from "@/components/PushEnableCard";
 import { SecondaryButton } from "@/components/SecondaryButton";
@@ -25,16 +23,10 @@ import { useSession } from "@/store/session";
 /**
  * Where a shop waits.
  *
- * A shop that has signed itself up is signed in but not matchable: GRIDGO will
- * not send it work until Operations approves the account. The floor, the job
- * list and the schedule would all be empty in that state and every one of them
- * would read as "quiet today" rather than "you are not live yet".
- *
- * So this screen replaces the tab shell, and it has two jobs. It says the one
- * true thing — nobody is ignoring you, Operations is reading your account — and
- * it carries the only work left that can move the decision along: the papers,
- * and the pin. Everything else a waiting shop can do is a distraction from
- * those two.
+ * Papers and the wait. A shop opens this from Home or Settings while
+ * Operations reviews the account — it is not the post-auth trap. Home already
+ * said the floor is empty; this screen is the work that can still move the
+ * decision: the papers, and the pin.
  */
 export default function AccreditationScreen() {
   const user = useSession((s) => s.user);
@@ -111,17 +103,6 @@ export default function AccreditationScreen() {
           />
         }
       >
-        {/*
-          The logo belongs here. This is still the door — a shop that has not
-          been accredited has never seen the app proper, and the mark is what
-          says which GRIDGO it is waiting on.
-        */}
-        <ScreenHeader
-          title={user?.supplierName || "Your shop"}
-          subtitle="Accreditation"
-          right={<GridgoLogo size={40} role="supplier" />}
-        />
-
         <View className="gg-card gap-4">
           <View className="flex-row">
             <StatusChip tone={status.tone} label={status.label} icon={status.icon} />

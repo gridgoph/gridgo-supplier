@@ -12,12 +12,17 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("@clerk/expo", () => ({
-  useAuth: () => ({ isSignedIn: false }),
+  useAuth: () => ({ isSignedIn: false, getToken: jest.fn(async () => "clerk-jwt") }),
   useClerk: () => ({ setActive: mockSetActive }),
   useSignIn: () => ({
     signIn: {
+      status: "needs_first_factor",
       password: jest.fn(),
       finalize: jest.fn(),
+      mfa: {
+        sendEmailCode: jest.fn(),
+        verifyEmailCode: jest.fn(),
+      },
     },
     fetchStatus: "idle",
   }),
@@ -27,22 +32,18 @@ jest.mock("@clerk/expo/experimental", () => ({
   useSSO: () => ({ startSSOFlow: mockStartSSOFlow }),
 }));
 
-jest.mock("@/lib/api", () => ({
-  getApiBase: () => "https://gridgo.example",
-  health: jest.fn().mockResolvedValue({ ok: true }),
-}));
-
-jest.mock("@/store/session", () => ({
-  isSignedIn: (user: unknown) => user != null,
-  useSession: (selector: (state: object) => unknown) =>
-    selector({
-      user: null,
-      login: jest.fn(),
-      loading: false,
-    }),
-}));
+jest.mock("@/lib/api", () => {
+  const actual = jest.requireActual("@/lib/api") as typeof import("@/lib/api");
+  return {
+    ...actual,
+    getApiBase: () => "https://gridgo.example",
+    health: jest.fn().mockResolvedValue({ ok: true }),
+    me: jest.fn(),
+  };
+});
 
 import LoginScreen from "@/app/(auth)/login";
+import * as api from "@/lib/api";
 import { DEV_LOGIN } from "@/lib/devLogin";
 
 const mockRouter = jest.requireMock("expo-router").router as {
@@ -121,6 +122,14 @@ describe("Sign in", () => {
       createdSessionId: "sess_google",
       authSessionResult: { type: "success" },
     });
+    (api.me as jest.Mock).mockResolvedValue({
+      id: "u1",
+      email: "shop@example.com",
+      name: "Ben",
+      role: "supplier",
+      supplierName: "PrintRight",
+      verificationStatus: "approved",
+    });
     await render(<LoginScreen />);
 
     await act(async () => {
@@ -129,7 +138,7 @@ describe("Sign in", () => {
 
     await waitFor(() => {
       expect(mockSetActive).toHaveBeenCalledWith({ session: "sess_google" });
-      expect(mockRouter.replace).toHaveBeenCalledWith("/");
+      expect(mockRouter.replace).toHaveBeenCalledWith("/(tabs)/home");
       expect(
         screen.getByLabelText("Continue with Google").props.accessibilityState.disabled,
       ).toBe(false);

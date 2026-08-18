@@ -59,6 +59,20 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(source("app/(auth)/signup/review.tsx")).toContain("sendEmailCode");
     expect(source("app/(auth)/signup/review.tsx")).not.toContain("prepareFirstFactor");
     expect(source("app/(auth)/signup/review.tsx")).not.toContain("Your papers");
+    expect(source("app/(auth)/signup/review.tsx")).toContain("JobTicketCode");
+    expect(source("app/(auth)/signup/review.tsx")).toContain('router.replace("/(tabs)/home")');
+    expect(source("app/(auth)/signup/review.tsx")).not.toContain('label="Verification code"');
+  });
+
+  it("uses the same job-ticket code on login, signup, and recovery", () => {
+    expect(source("app/(auth)/login.tsx")).toContain("JobTicketCode");
+    expect(source("app/(auth)/login.tsx")).toContain("continuationAfterSignIn");
+    expect(source("lib/clerkSignIn.ts")).toContain("needs_second_factor");
+    expect(source("lib/clerkSignIn.ts")).toContain("needs_client_trust");
+    expect(source("app/(auth)/recover-password.tsx")).toContain("JobTicketCode");
+    expect(source("components/JobTicketCode.tsx")).toContain("Send another code");
+    expect(source("components/JobTicketCode.tsx")).toContain('textContentType="oneTimeCode"');
+    expect(source("components/JobTicketCode.tsx")).not.toContain("Verification code");
   });
 
   it("uses the Expo Router stack header for login and signup, not a drawn back control", () => {
@@ -86,6 +100,22 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(invitation).not.toContain("gridgoRole");
     expect(invitation).not.toContain("unsafeMetadata");
     expect(invitation).not.toContain("signupSupplier");
+  });
+
+  it("launches a signed-in shop on Home, including a pending one", () => {
+    const index = source("app/index.tsx");
+    const layout = source("app/_layout.tsx");
+    const launch = source("lib/launch.ts");
+    const home = source("app/(tabs)/home.tsx");
+
+    expect(index).toContain("launchHref");
+    expect(index).not.toContain("/accreditation");
+    expect(launch).toContain('"/(tabs)/home"');
+    expect(launch).not.toContain("/accreditation");
+    expect(layout).toMatch(/guard=\{signedIn\}[\s\S]*name="\(tabs\)"/);
+    expect(home).toContain("Operations is reviewing your shop");
+    expect(home).toContain("The floor stays empty until they approve.");
+    expect(home).not.toContain("nothing needs you");
   });
 
   it("uses Clerk's SecureStore cache at the root and fails closed on access", () => {

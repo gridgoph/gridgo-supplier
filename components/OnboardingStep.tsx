@@ -12,8 +12,8 @@ type Props = {
   title: string;
   lede: string;
   children: ReactNode;
-  /** The action zone. Exactly one primary control belongs here. */
-  footer: ReactNode;
+  /** The action zone. Exactly one primary control belongs here. Omit when the step owns its own. */
+  footer?: ReactNode;
   /** Spacing the step's own content wants inside the scroll view. */
   contentClassName?: string;
   /** Drawn over the whole step, not inside its scroll — a busy scrim. */
@@ -62,7 +62,7 @@ export function OnboardingStep({
   const onFooterLayout = (event: LayoutChangeEvent) =>
     setFooterHeight(event.nativeEvent.layout.height);
 
-  const footerBlock = (
+  const footerBlock = footer ? (
     <View
       className="gg-page gap-3 pt-4"
       style={{ paddingBottom: insets.bottom + spacing.lg }}
@@ -70,7 +70,7 @@ export function OnboardingStep({
     >
       {footer}
     </View>
-  );
+  ) : null;
 
   const heading = (
     <View className={fill ? "gg-page pb-2" : "pb-2"}>

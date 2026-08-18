@@ -19,6 +19,7 @@ export function PrimaryButton({ label, onPress, disabled }: Props) {
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ disabled: Boolean(disabled) }}
       className={disabled ? "gg-btn-primary gg-disabled" : "gg-btn-primary"}
     >

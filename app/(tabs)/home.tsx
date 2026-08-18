@@ -14,7 +14,7 @@ import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { buildObligations, greeting, homeHeadline, type Obligation } from "@/lib/homeBoard";
 import { buildSchedule } from "@/lib/schedule";
 import { useAlertsStore } from "@/store/alerts";
-import { useSession } from "@/store/session";
+import { isMatchable, useSession } from "@/store/session";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 
@@ -30,15 +30,20 @@ import { useThemeColors } from "@/hooks/useTheme";
  * worked through, with the sharpest one carrying the screen's only yellow.
  */
 export default function HomeScreen() {
-  const { user } = useSession();
+  const { user, refresh } = useSession();
   const colors = useThemeColors();
   const syncAlerts = useAlertsStore((s) => s.syncFrom);
   const [jobs, setJobs] = useState<api.Order[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const waitingOnOps = !isMatchable(user);
 
   const reload = useCallback(async () => {
+    if (waitingOnOps) {
+      await refresh();
+      return;
+    }
     setLoading(true);
     try {
       const [list, notifications] = await Promise.all([
@@ -54,7 +59,7 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  }, [syncAlerts]);
+  }, [refresh, syncAlerts, waitingOnOps]);
 
   useFocusEffect(
     useCallback(() => {
@@ -104,7 +109,7 @@ export default function HomeScreen() {
           eyebrow={greeting(user?.name)}
           title={user?.supplierName || "Your shop"}
           right={
-            firstLoad ? null : (
+            firstLoad || waitingOnOps ? null : (
               <StatusChip
                 tone={summary.late > 0 ? "error" : summary.today > 0 ? "info" : "neutral"}
                 icon={summary.late > 0 ? "triangle-alert" : "clock"}
@@ -125,7 +130,18 @@ export default function HomeScreen() {
           action, two rows — so the floor does not grow under the shop's thumb
           the moment it lands.
         */}
-        {firstLoad ? (
+        {waitingOnOps ? (
+          <View className="mt-2">
+            <EmptyState
+              title="Operations is reviewing your shop"
+              body="The floor stays empty until they approve."
+              actionLabel="Open accreditation"
+              onAction={() => router.push("/accreditation")}
+            />
+          </View>
+        ) : null}
+
+        {firstLoad && !waitingOnOps ? (
           <View accessibilityRole="progressbar" accessibilityLabel="Loading your floor">
             <View className="gg-card gap-2">
               <SkeletonBlock className="h-4 w-40" />
@@ -152,7 +168,7 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {error && !loaded ? (
+        {error && !loaded && !waitingOnOps ? (
           <EmptyState
             title="Your floor is not reachable"
             body={error}
@@ -161,7 +177,7 @@ export default function HomeScreen() {
           />
         ) : null}
 
-        {!firstLoad && !(error && !loaded) ? (
+        {!waitingOnOps && !firstLoad && !(error && !loaded) ? (
           <>
             {/* One figure, in the same place every day. */}
             <Pressable
