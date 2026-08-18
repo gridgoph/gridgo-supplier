@@ -36,7 +36,7 @@ describe("GRIDGO app icon", () => {
   it("points icon, adaptive layers, favicon and splash at the mark files", () => {
     expect(appJson.expo.icon).toBe("./assets/images/icon.png");
     expect(appJson.expo.android?.adaptiveIcon).toEqual({
-      backgroundColor: "#000000",
+      backgroundColor: "#111111",
       foregroundImage: "./assets/images/android-icon-foreground.png",
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
@@ -45,15 +45,15 @@ describe("GRIDGO app icon", () => {
 
     const splash = pluginOptions("expo-splash-screen");
     expect(splash.image).toBe("./assets/images/splash-icon.png");
-    expect(splash.backgroundColor).toBe("#000000");
+    expect(splash.backgroundColor).toBe("#111111");
     expect(splash.dark).toEqual({
       image: "./assets/images/splash-icon-dark.png",
-      backgroundColor: "#000000",
+      backgroundColor: "#111111",
     });
   });
 
-  it("does not keep a light plate (Expo blue or the rejected white)", () => {
-    expect(appJson.expo.android?.adaptiveIcon?.backgroundColor).toBe("#000000");
+  it("uses the legacy cockpit plate, not Expo blue, white, or #000000", () => {
+    expect(appJson.expo.android?.adaptiveIcon?.backgroundColor).toBe("#111111");
     const encoded = JSON.stringify(appJson);
     expect(encoded).not.toContain("#E6F4FE");
     expect(encoded).not.toContain("#e6f4fe");
