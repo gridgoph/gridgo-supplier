@@ -1,4 +1,4 @@
-import type { CategoryRank, SupplierSignup } from "@/lib/api";
+import type { CategoryRank, SupplierEnrollment } from "@/lib/api";
 import { isPlaced } from "@/lib/shopLocation";
 import type { SignupDraft } from "@/store/signupDraft";
 
@@ -23,20 +23,27 @@ export function categoryRanks(categoryCodes: string[]): CategoryRank[] {
   return categoryCodes.map((categoryCode, index) => ({ categoryCode, rank: index + 1 }));
 }
 
-export function toSignupRequest(draft: SignupDraft): SupplierSignup | null {
+export function toEnrollRequest(draft: SignupDraft): SupplierEnrollment | null {
   if (!isPlaced(draft.pin)) return null;
   const label = draft.pin.label.trim();
   if (!label) return null;
 
   return {
-    email: draft.email.trim(),
-    password: draft.password,
-    name: draft.contactName.trim(),
-    phone: draft.phone.trim(),
-    supplierName: draft.shopName.trim(),
-    shop: { lat: draft.pin.lat, lng: draft.pin.lng, label },
-    categoryRanks: categoryRanks(draft.categoryCodes),
+    profile: {
+      shopName: draft.shopName.trim(),
+      contactName: draft.contactName.trim(),
+      phone: draft.phone.trim(),
+      location: { lat: draft.pin.lat, lng: draft.pin.lng, label },
+    },
+    serviceCategories: [...draft.categoryCodes],
   };
+}
+
+/** One key per draft so a retry is the same application, not a conflict. */
+export function enrollmentIdempotencyKey(existing?: string): string {
+  const key = existing?.trim() ?? "";
+  if (key && key.length <= 200 && /^[A-Za-z0-9._:-]+$/.test(key)) return key;
+  return `supplier-enroll-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 /** Move a category one place towards "best". Ranks renumber themselves. */

@@ -80,8 +80,8 @@ type SessionState = {
   adoptClerkUser: (user: User) => boolean;
   clearClerkIdentity: () => void;
   login: (email: string, password: string) => Promise<void>;
-  /** Public apply. Lands pending; Operations still has to approve matching. */
-  signupSupplier: (input: api.SupplierSignup) => Promise<boolean>;
+  /** Public apply via Clerk enroll. Lands pending; Operations still has to approve matching. */
+  enrollSupplier: (input: api.SupplierEnrollment, idempotencyKey: string) => Promise<boolean>;
   /** Re-read the account, so an approval that lands is picked up on return. */
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
@@ -149,32 +149,22 @@ export const useSession = create<SessionState>((set, get) => ({
       // shop out because one request did not land.
     }
   },
-  signupSupplier: async (input) => {
+  enrollSupplier: async (input, idempotencyKey) => {
     set({ loading: true, error: null });
     try {
-      const { user } = await api.signupSupplier(input);
-      if (user.role !== APP_ROLE) {
-        await api.logout();
-        set({
-          user: null,
-          loading: false,
-          error: `This account is not a print shop. Open ${appForRole(user.role)} to sign in with it.`,
-          authSource: "none",
-          identity: { kind: "signed_out" },
-        });
-        return false;
-      }
-      set({
-        user,
-        loading: false,
-        authSource: "legacy",
-        identity: { kind: "supplier" },
-      });
-      return true;
+      const user = await api.enrollSupplier(input, idempotencyKey);
+      set({ loading: false });
+      return get().adoptClerkUser(user);
     } catch (e) {
       set({
         loading: false,
-        error: humanizeApiError(e, offlineMessage("open your GRIDGO account")),
+        error:
+          e instanceof api.ApiError
+            ? humanizeApiError(
+                e,
+                "GRIDGO could not open your shop account. Check your details and try again.",
+              )
+            : offlineMessage("open your GRIDGO account"),
       });
       return false;
     }

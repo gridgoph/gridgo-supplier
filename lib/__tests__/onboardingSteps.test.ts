@@ -29,14 +29,13 @@ describe("the sequence", () => {
       "shop",
       "location",
       "services",
-      "documents",
       "review",
     ]);
   });
 
   it("numbers itself honestly, because this really is a sequence", () => {
-    expect(stepProgressLabel("shop")).toBe("Step 1 of 5");
-    expect(stepProgressLabel("review")).toBe("Step 5 of 5");
+    expect(stepProgressLabel("shop")).toBe("Step 1 of 4");
+    expect(stepProgressLabel("review")).toBe("Step 4 of 4");
   });
 });
 
@@ -79,13 +78,8 @@ describe("what each step still needs", () => {
     expect(hasProblems(stepProblems("services", draft({ categoryCodes: [] })))).toBe(true);
   });
 
-  /**
-   * A permit lives in a drawer at the shop. Blocking the account on it turns a
-   * five-minute sign-up into a two-day one, and the account is not matchable
-   * until Operations approves it either way.
-   */
-  it("does not gate the account on papers nobody has to hand", () => {
-    expect(hasProblems(stepProblems("documents", draft({ documents: {} })))).toBe(false);
+  it("does not ask for papers on apply — a sendable draft has none", () => {
+    expect(ONBOARDING_STEPS.map((step) => step.title)).not.toContain("Your papers");
     expect(isSendable(draft({ documents: {} }))).toBe(true);
   });
 

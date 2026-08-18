@@ -439,16 +439,27 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+type RequestOptions = RequestInit & {
+  /**
+   * Skip the session-clearing 401 handler. Needed when a Clerk JWT is live
+   * but GRIDGO has not projected a supplier yet — enroll asks `/auth/me`
+   * first, and treating that 401 as "sign the shop out" would drop the
+   * session we are about to enroll.
+   */
+  ignoreUnauthorized?: boolean;
+};
+
+async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
+  const { ignoreUnauthorized, ...fetchInit } = init;
   const headers: Record<string, string> = {
     Accept: "application/json",
-    ...(init.headers as Record<string, string> | undefined),
+    ...(fetchInit.headers as Record<string, string> | undefined),
   };
-  if (init.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  if (fetchInit.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
   const token = await getAuthToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${getApiBase()}${path}`, { ...init, headers });
+  const res = await fetch(`${getApiBase()}${path}`, { ...fetchInit, headers });
   const text = await res.text();
   let data: unknown = null;
   if (text) {
@@ -462,7 +473,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     // Clear the bearer on any 401 so a stale token cannot keep calling APIs.
     // The session store's unauthorized handler then nulls `user` and the root
     // route guard unmounts the signed-in area (no per-screen redirects).
-    if (res.status === 401) {
+    if (res.status === 401 && !ignoreUnauthorized) {
       setToken(null);
       unauthorizedHandler?.();
     }
@@ -480,33 +491,39 @@ export async function login(email: string, password: string): Promise<{ token: s
   return result;
 }
 
-/** Public shop application — `POST /auth/signup` with `role: "supplier"`. */
-export type SupplierSignup = {
-  email: string;
-  password: string;
-  name: string;
-  phone: string;
-  supplierName: string;
-  shop: ShopLocation;
-  categoryRanks: CategoryRank[];
+/**
+ * Public shop application — `POST /auth/clerk/enroll/supplier`.
+ *
+ * Body is exact: extra fields (`role`, `password`, `email`, `categoryRanks`)
+ * are rejected. Clerk owns the identity; this only files the shop profile.
+ */
+export type SupplierEnrollment = {
+  profile: {
+    shopName: string;
+    contactName: string;
+    phone: string;
+    location: ShopLocation;
+  };
+  serviceCategories: string[];
 };
 
 /**
- * Open a shop account.
+ * Open a pending shop account from a live Clerk session.
  *
- * Works while `gridgo-api` is in `AUTH_MODE=legacy`. Dual/Clerk answers
- * `invitation_required` — do not invent a client-side Clerk create path; the
- * review screen already maps that code to a sentence.
+ * Caller must already have a Clerk JWT on the token provider. The enroll
+ * response is a membership projection, not the supplier `User` this app
+ * hydrates — `/auth/me` is the adopt step.
  */
-export async function signupSupplier(
-  input: SupplierSignup,
-): Promise<{ token: string; user: User }> {
-  const result = await request<{ token: string; user: User }>("/auth/signup", {
+export async function enrollSupplier(
+  input: SupplierEnrollment,
+  idempotencyKey: string,
+): Promise<User> {
+  await request("/auth/clerk/enroll/supplier", {
     method: "POST",
-    body: JSON.stringify({ role: "supplier", ...input }),
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(input),
   });
-  setToken(result.token);
-  return result;
+  return me({ ignoreUnauthorized: true });
 }
 
 /* --------------------------------------------------------------------------
@@ -516,7 +533,7 @@ export async function signupSupplier(
    parallel with this app: moving its own pin, and sending Operations the
    papers that accredit it. Neither is in `docs/OPERATIONAL_MODEL_V2_API.md`
    yet, so the shapes below are the documented ones extended the obvious way —
-   `shop { lat, lng, label }` exactly as `POST /auth/signup` already accepts it,
+   `shop { lat, lng, label }` exactly as enroll already accepts it,
    and the storage contract's own upload-then-attach pair.
 
    `lib/verification.ts` is the only caller and it treats a missing route as a
@@ -698,8 +715,10 @@ export async function unregisterDevice(token: string): Promise<void> {
   });
 }
 
-export async function me(): Promise<User> {
-  const result = await request<{ user: User }>("/auth/me");
+export async function me(options: { ignoreUnauthorized?: boolean } = {}): Promise<User> {
+  const result = await request<{ user: User }>("/auth/me", {
+    ignoreUnauthorized: options.ignoreUnauthorized,
+  });
   return result.user;
 }
 

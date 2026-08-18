@@ -6,16 +6,16 @@ import { MIN_PASSWORD_LENGTH } from "@/lib/signup";
  * Opening a shop account, as a sequence rather than one long form.
  *
  * The order is the one a print-shop owner would use standing at their own
- * counter: who you are, where you print from, what you print, and the papers
- * that prove it. Each step is a route, so the platform's own back gesture works
- * and nothing typed is lost — the draft is persisted, not held in a screen.
+ * counter: who you are, where you print from, what you print, then one
+ * read-through. Papers live on the accreditation screen after the account
+ * exists — they are not part of apply.
  *
  * The numbering is honest: this genuinely is a sequence, and a shop needs to
  * know how much is left. Nothing here promises work — the last step says
  * plainly that Operations reviews the account before any job arrives.
  */
 
-export type OnboardingStepId = "shop" | "location" | "services" | "documents" | "review";
+export type OnboardingStepId = "shop" | "location" | "services" | "review";
 
 export type OnboardingStep = {
   id: OnboardingStepId;
@@ -24,7 +24,6 @@ export type OnboardingStep = {
     | "/(auth)/signup"
     | "/(auth)/signup/location"
     | "/(auth)/signup/services"
-    | "/(auth)/signup/documents"
     | "/(auth)/signup/review";
   /** What the step is called in the header and the progress line. */
   title: string;
@@ -52,12 +51,6 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
     lede: "Best first. GRIDGO offers you work in the order you rank here.",
   },
   {
-    id: "documents",
-    route: "/(auth)/signup/documents",
-    title: "Your papers",
-    lede: "Operations checks these before they accredit a shop. Photos of the originals are fine.",
-  },
-  {
     id: "review",
     route: "/(auth)/signup/review",
     title: "Check and send",
@@ -77,7 +70,7 @@ export function nextStep(id: OnboardingStepId): OnboardingStep | null {
   return ONBOARDING_STEPS[stepIndex(id) + 1] ?? null;
 }
 
-/** "Step 2 of 5" — the sequence is real, so it is numbered. */
+/** "Step 2 of 4" — the sequence is real, so it is numbered. */
 export function stepProgressLabel(id: OnboardingStepId): string {
   return `Step ${stepIndex(id) + 1} of ${ONBOARDING_STEPS.length}`;
 }
@@ -122,18 +115,6 @@ export function servicesStepProblems(draft: SignupDraft): StepProblems {
     : { categoryCodes: "Pick at least one kind of work, starting with what you do best." };
 }
 
-/**
- * Papers are not a gate.
- *
- * Operations asks for them and a shop without them waits longer, but blocking
- * account creation on a permit somebody has to photograph at the office would
- * turn a five-minute sign-up into a two-day one — and the account is not
- * matchable until Operations approves it either way.
- */
-export function documentsStepProblems(): StepProblems {
-  return {};
-}
-
 export function stepProblems(id: OnboardingStepId, draft: SignupDraft): StepProblems {
   switch (id) {
     case "shop":
@@ -142,8 +123,6 @@ export function stepProblems(id: OnboardingStepId, draft: SignupDraft): StepProb
       return locationStepProblems(draft);
     case "services":
       return servicesStepProblems(draft);
-    case "documents":
-      return documentsStepProblems();
     default:
       return {};
   }
@@ -161,7 +140,7 @@ export function firstIncompleteStep(draft: SignupDraft): OnboardingStep | null {
   return null;
 }
 
-/** Whether the draft carries enough for `POST /auth/signup` to be worth sending. */
+/** Whether the draft carries enough for enroll to be worth sending. */
 export function isSendable(draft: SignupDraft): boolean {
   return firstIncompleteStep(draft) === null && isPlaced(draft.pin);
 }

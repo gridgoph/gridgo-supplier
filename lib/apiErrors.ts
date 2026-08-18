@@ -46,6 +46,20 @@ const MESSAGES: Record<string, string> = {
   invalid_phone: "Enter a mobile number GRIDGO and the rider can reach you on.",
   invalid_shop_location:
     "GRIDGO needs your shop's location to work out delivery. Fill in the address and try again.",
+  not_found:
+    "GRIDGO no longer offers this way of opening a shop account. Update the app or ask Operations.",
+  unexpected_field:
+    "GRIDGO rejected a field this app should not send. Update the app and try again.",
+  invalid_application:
+    "Some required shop details are missing or not valid. Check your shop, location, and services, then try again.",
+  idempotency_key_required:
+    "GRIDGO could not accept this application. Try sending it again.",
+  application_already_exists:
+    "This shop application is already open. Sign in with the same email to continue.",
+  clerk_unavailable:
+    "GRIDGO could not confirm your sign-in just now. Wait a moment and try again.",
+  supplier_account_not_found:
+    "No supplier account is connected to this sign-in. Apply as a shop, or ask Operations to check your invitation.",
 
   // Money and evidence.
   invalid_money:
@@ -74,6 +88,9 @@ export function humanizeApiError(error: unknown, fallback: string): string {
     if (known) return known;
     if (error.status === 401) {
       return "Your session ended. Sign in again to continue.";
+    }
+    if (error.status === 404) {
+      return MESSAGES.not_found;
     }
     if (error.status >= 500) {
       return "GRIDGO could not complete this. Wait a moment and try again.";

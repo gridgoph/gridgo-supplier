@@ -2,7 +2,9 @@ import {
   appForGridgoRole,
   clerkAccessFor,
   clerkPublishableKey,
+  isAlreadySignedInError,
   resolveClerkPublishableKey,
+  splitPersonName,
 } from "@/lib/clerk";
 
 describe("clerkAccessFor", () => {
@@ -46,6 +48,20 @@ describe("clerkAccessFor", () => {
     ]) {
       expect(clerkAccessFor(metadata)).toEqual({ kind: "unassigned" });
     }
+  });
+});
+
+describe("isAlreadySignedInError", () => {
+  it("recognises Clerk's leftover-session wording", () => {
+    expect(isAlreadySignedInError(new Error("You're already signed in"))).toBe(true);
+    expect(isAlreadySignedInError(new Error("That password is wrong"))).toBe(false);
+  });
+});
+
+describe("splitPersonName", () => {
+  it("keeps a single name as the first name", () => {
+    expect(splitPersonName("Ben")).toEqual({ firstName: "Ben" });
+    expect(splitPersonName("Ben Santos")).toEqual({ firstName: "Ben", lastName: "Santos" });
   });
 });
 

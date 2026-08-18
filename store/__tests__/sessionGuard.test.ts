@@ -113,6 +113,58 @@ describe("session clearing paths feed the same guard", () => {
     expect(error).not.toContain("client\"");
   });
 
+  it("adopts a Clerk supplier after enroll succeeds", async () => {
+    jest.spyOn(api, "enrollSupplier").mockResolvedValue({
+      ...supplierUser,
+      verificationStatus: "pending",
+    });
+
+    const ok = await useSession.getState().enrollSupplier(
+      {
+        profile: {
+          shopName: "PrintRight",
+          contactName: "Ben",
+          phone: "09171234567",
+          location: { lat: 7.06, lng: 125.6, label: "Davao" },
+        },
+        serviceCategories: ["marketing_collateral"],
+      },
+      "supplier-enroll-ok",
+    );
+
+    expect(ok).toBe(true);
+    expect(useSession.getState()).toMatchObject({
+      user: { id: "u1", role: "supplier" },
+      authSource: "clerk",
+      identity: { kind: "supplier" },
+    });
+  });
+
+  it("enrolls through Clerk and does not treat a 404 as offline", async () => {
+    const enroll = jest.spyOn(api, "enrollSupplier").mockRejectedValue(
+      new api.ApiError(404, { error: "not_found" }),
+    );
+
+    const ok = await useSession.getState().enrollSupplier(
+      {
+        profile: {
+          shopName: "PrintRight",
+          contactName: "Ben",
+          phone: "09171234567",
+          location: { lat: 7.06, lng: 125.6, label: "Davao" },
+        },
+        serviceCategories: ["marketing_collateral"],
+      },
+      "supplier-enroll-test",
+    );
+
+    expect(ok).toBe(false);
+    expect(enroll).toHaveBeenCalledTimes(1);
+    const error = useSession.getState().error ?? "";
+    expect(error).not.toMatch(/Cannot reach GRIDGO/);
+    expect(error).not.toMatch(/connection/);
+  });
+
   it("adopts only a supplier projected by the API", () => {
     useSession.getState().setClerkIdentity({ kind: "loading" });
 
@@ -198,7 +250,7 @@ describe("root stack auth guard wiring", () => {
     expect(src).toMatch(/Stack\.Protected[\s\S]*name="payout"/);
     expect(src).toMatch(/Stack\.Protected[\s\S]*name="design-system"/);
     // Login is the complementary unauthenticated half of the pair.
-    expect(src).toContain('const signedOut = !signedIn && identity.kind === "signed_out"');
+    expect(src).toContain("identity.kind === \"signed_out\" || identity.kind === \"unassigned\"");
     expect(src).toMatch(/guard=\{signedOut\}[\s\S]*name="\(auth\)\/login"/);
     expect(src).toMatch(/guard=\{accessBlocked\}[\s\S]*name="access"/);
   });

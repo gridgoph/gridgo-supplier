@@ -9,7 +9,7 @@ type Props = {
   placeholder: string;
   accessibilityLabel: string;
   /** Picks the keyboard, autofill and capitalisation the field really needs. */
-  kind?: "email" | "password" | "new-password" | "phone" | "name" | "text";
+  kind?: "email" | "password" | "new-password" | "phone" | "name" | "text" | "code";
   onSubmit?: () => void;
   returnKeyType?: TextInputProps["returnKeyType"];
   editable?: boolean;
@@ -75,6 +75,7 @@ const CAPITALIZE: Record<Kind, TextInputProps["autoCapitalize"]> = {
   phone: "none",
   name: "words",
   text: "sentences",
+  code: "none",
 };
 
 const AUTOCOMPLETE: Record<Kind, TextInputProps["autoComplete"]> = {
@@ -84,6 +85,7 @@ const AUTOCOMPLETE: Record<Kind, TextInputProps["autoComplete"]> = {
   phone: "tel",
   name: "name",
   text: "off",
+  code: "one-time-code",
 };
 
 const KEYBOARD: Record<Kind, TextInputProps["keyboardType"]> = {
@@ -93,6 +95,7 @@ const KEYBOARD: Record<Kind, TextInputProps["keyboardType"]> = {
   phone: "phone-pad",
   name: "default",
   text: "default",
+  code: "number-pad",
 };
 
 const CONTENT_TYPE: Record<Kind, TextInputProps["textContentType"]> = {
@@ -102,4 +105,5 @@ const CONTENT_TYPE: Record<Kind, TextInputProps["textContentType"]> = {
   phone: "telephoneNumber",
   name: "name",
   text: "none",
+  code: "oneTimeCode",
 };
