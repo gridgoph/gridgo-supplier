@@ -7,7 +7,7 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { StatusChip } from "@/components/StatusChip";
 import { useThemeColors } from "@/hooks/useTheme";
 import { askConfirm } from "@/store/sheets";
-import { useSession } from "@/store/session";
+import { isMatchable, useSession } from "@/store/session";
 
 /**
  * The shop's own account.
@@ -27,6 +27,7 @@ import { useSession } from "@/store/session";
 export default function AccountScreen() {
   const user = useSession((s) => s.user);
   const logout = useSession((s) => s.logout);
+  const approved = isMatchable(user);
 
   async function signOut() {
     const confirmed = await askConfirm({
@@ -57,11 +58,16 @@ export default function AccountScreen() {
             <Text className="text-caption text-text-muted">{user?.email || "—"}</Text>
           </View>
           <View className="flex-row">
-            <StatusChip tone="success" icon="circle-check" label="Accredited" />
+            {approved ? (
+              <StatusChip tone="success" icon="circle-check" label="Accredited" />
+            ) : (
+              <StatusChip tone="warning" icon="clock" label="With Operations" />
+            )}
           </View>
           <Text className="text-caption text-text-muted">
-            GRIDGO matches work to your shop. Operations can pause that, and this screen says so
-            if they ever do.
+            {approved
+              ? "GRIDGO matches work to your shop. Operations can pause that, and this screen says so if they ever do."
+              : "Operations is reviewing your shop. No job is matched until they approve."}
           </Text>
         </View>
 
@@ -72,26 +78,39 @@ export default function AccountScreen() {
             detail={user?.shop?.label || "Set the pin every delivery fee is measured from"}
             onPress={() => router.push("/shop-location")}
           />
-          <DestinationRow
-            title="Services you offer"
-            detail="The work GRIDGO may send you, and how each one is verified"
-            onPress={() => router.push("/services")}
-          />
-          <DestinationRow
-            title="Capacity & closures"
-            detail="What you can take on each day, and the days you are shut"
-            onPress={() => router.push("/capacity")}
-          />
+          {!approved ? (
+            <DestinationRow
+              title="Accreditation"
+              detail="Papers and the wait — what Operations still needs from you"
+              onPress={() => router.push("/accreditation")}
+            />
+          ) : null}
+          {approved ? (
+            <>
+              <DestinationRow
+                title="Services you offer"
+                detail="The work GRIDGO may send you, and how each one is verified"
+                onPress={() => router.push("/services")}
+              />
+              <DestinationRow
+                title="Capacity & closures"
+                detail="What you can take on each day, and the days you are shut"
+                onPress={() => router.push("/capacity")}
+              />
+            </>
+          ) : null}
         </View>
 
-        <View className="mt-6 gap-2">
-          <Text className="text-overline text-text-muted">MONEY</Text>
-          <DestinationRow
-            title="Earnings"
-            detail="What each job pays you, and what each part is waiting on"
-            onPress={() => router.push("/payout")}
-          />
-        </View>
+        {approved ? (
+          <View className="mt-6 gap-2">
+            <Text className="text-overline text-text-muted">MONEY</Text>
+            <DestinationRow
+              title="Earnings"
+              detail="What each job pays you, and what each part is waiting on"
+              onPress={() => router.push("/payout")}
+            />
+          </View>
+        ) : null}
 
         <View className="mt-6 gap-2">
           <Text className="text-overline text-text-muted">APP</Text>

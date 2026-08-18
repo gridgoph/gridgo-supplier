@@ -126,11 +126,12 @@ export default function RootLayout() {
  * to false (logout, rejected role, 401), those screens are removed from history
  * — not merely covered — so Android back cannot re-enter them.
  *
- * There are three states here, not two. A shop can sign itself up, so it can be
- * signed in and still not be one GRIDGO sends work to; that shop gets the
- * accreditation screen rather than a tab shell whose every tab would be empty
- * for a reason none of them explains. Settings stays reachable from both so a
- * waiting shop is not locked out of its own theme and sign-out.
+ * A shop can sign itself up and be signed in before Operations approves it.
+ * The tab shell still mounts so Home can tell the truth about the wait.
+ * Accreditation is a screen they open from Home or Settings, not a second
+ * app the guard traps them in. Job, payout and catalogue stay matchable —
+ * those routes have nothing a waiting shop can do. Settings stays reachable
+ * from both so a waiting shop is not locked out of its own theme and sign-out.
  */
 function RootStack() {
   const user = useSession((s) => s.user);
@@ -176,11 +177,20 @@ function RootStack() {
       <Stack.Protected guard={signedIn && !matchable}>
         <Stack.Screen
           name="accreditation"
-          options={{ headerShown: false, title: "Accreditation" }}
+          options={{
+            title: "Accreditation",
+            headerBackButtonDisplayMode: "minimal",
+          }}
         />
       </Stack.Protected>
 
       <Stack.Protected guard={signedIn}>
+        {/*
+          The floor mounts for every signed-in shop. A pending account still
+          needs a Home that says Operations is reviewing it — gating tabs on
+          matchable left that shop on a route the navigator had not mounted.
+        */}
+        <Stack.Screen name="(tabs)" options={{ headerShown: false, title: "GRIDGO" }} />
         <Stack.Screen
           name="settings"
           options={{
@@ -212,12 +222,6 @@ function RootStack() {
       </Stack.Protected>
 
       <Stack.Protected guard={matchable}>
-        {/*
-          The tab shell draws its own headers per tab. It still needs a title:
-          a pushed screen's back control falls back to the previous route's
-          name, and "(tabs)" is not something a person should ever hear.
-        */}
-        <Stack.Screen name="(tabs)" options={{ headerShown: false, title: "GRIDGO" }} />
         {/*
           Pushed screens sit above the tab shell and must share the same guard —
           a tabs-only guard would leave job/payout/design-system reachable after

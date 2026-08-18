@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import * as api from "@/lib/api";
 import {
+  isMatchable,
   isSignedIn,
   setClerkSignOutHandler,
   useSession,
@@ -21,6 +22,15 @@ describe("isSignedIn (Stack.Protected guard source)", () => {
     expect(isSignedIn(null)).toBe(false);
     expect(isSignedIn(undefined)).toBe(false);
     expect(isSignedIn(supplierUser)).toBe(true);
+  });
+});
+
+describe("isMatchable", () => {
+  it("is true only after Operations has approved the shop", () => {
+    expect(isMatchable(null)).toBe(false);
+    expect(isMatchable({ ...supplierUser, verificationStatus: "pending" })).toBe(false);
+    expect(isMatchable({ ...supplierUser, verificationStatus: "rejected" })).toBe(false);
+    expect(isMatchable({ ...supplierUser, verificationStatus: "approved" })).toBe(true);
   });
 });
 
@@ -245,10 +255,16 @@ describe("root stack auth guard wiring", () => {
     expect(src).toContain("Stack.Protected");
     expect(src).toContain("isSignedIn");
     // Tabs alone are not enough — detail screens live outside the tab group.
-    expect(src).toMatch(/Stack\.Protected[\s\S]*name="\(tabs\)"/);
+    expect(src).toMatch(/guard=\{signedIn\}[\s\S]*name="\(tabs\)"/);
     expect(src).toMatch(/Stack\.Protected[\s\S]*name="job\/\[id\]"/);
     expect(src).toMatch(/Stack\.Protected[\s\S]*name="payout"/);
     expect(src).toMatch(/Stack\.Protected[\s\S]*name="design-system"/);
+    // Tabs are for every signed-in shop; job money screens stay matchable.
+    const tabsAt = src.indexOf('name="(tabs)"');
+    const matchableAt = src.indexOf("guard={matchable}");
+    expect(tabsAt).toBeGreaterThan(-1);
+    expect(matchableAt).toBeGreaterThan(-1);
+    expect(tabsAt).toBeLessThan(matchableAt);
     // Login is the complementary unauthenticated half of the pair.
     expect(src).toContain("identity.kind === \"signed_out\" || identity.kind === \"unassigned\"");
     expect(src).toMatch(/guard=\{signedOut\}[\s\S]*name="\(auth\)\/login"/);

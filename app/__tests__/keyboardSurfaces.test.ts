@@ -47,7 +47,10 @@ const CONTROLS = "components/controls";
  * use it wrap it in the avoiding view — its own content is a full-height map,
  * so shrinking is the only thing that can move its address field into view.
  */
-const HANDLED_BY_ITS_CALLERS = ["components/ShopLocationPicker.tsx"];
+const HANDLED_BY_ITS_CALLERS = [
+  "components/ShopLocationPicker.tsx",
+  "components/JobTicketCode.tsx",
+];
 
 describe("every field a shop types into sits in a keyboard-aware surface", () => {
   const files = [

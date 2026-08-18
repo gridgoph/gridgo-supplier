@@ -1,4 +1,4 @@
-import { useSignIn } from "@clerk/expo";
+import { useAuth, useSignIn } from "@clerk/expo";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
@@ -6,16 +6,19 @@ import { Text, View } from "react-native";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { FormScrollView } from "@/components/FormScrollView";
 import { GridgoLogo } from "@/components/GridgoLogo";
+import { JobTicketCode } from "@/components/JobTicketCode";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { PasswordField } from "@/components/controls/PasswordField";
 import { TextField } from "@/components/controls/TextField";
-import { clerkErrorMessage } from "@/lib/clerk";
+import { enterAfterClerkSession, hrefAfterClerkAuth } from "@/lib/afterClerkAuth";
+import { clerkErrorMessage, type ClerkGetToken } from "@/lib/clerk";
 
 type Step = "email" | "code" | "password";
 
 export default function RecoverPasswordScreen() {
   const { signIn, fetchStatus } = useSignIn();
+  const { getToken } = useAuth();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -36,12 +39,20 @@ export default function RecoverPasswordScreen() {
   }
 
   async function verifyCode() {
-    if (!code.trim()) return;
+    const typed = code.replace(/\D/g, "");
+    if (typed.length < 6) return;
     await run(async () => {
-      const verified = await signIn.resetPasswordEmailCode.verifyCode({ code: code.trim() });
+      const verified = await signIn.resetPasswordEmailCode.verifyCode({ code: typed });
       if (verified.error) throw verified.error;
       setStep("password");
     }, "That recovery code was not accepted. Check it and try again.");
+  }
+
+  async function resendCode() {
+    await run(async () => {
+      const sent = await signIn.resetPasswordEmailCode.sendCode();
+      if (sent.error) throw sent.error;
+    }, "GRIDGO could not send another code. Try again.");
   }
 
   async function savePassword() {
@@ -55,7 +66,9 @@ export default function RecoverPasswordScreen() {
       if (submitted.error) throw submitted.error;
       const completed = await signIn.finalize();
       if (completed.error) throw completed.error;
-      router.replace("/");
+      const next = await enterAfterClerkSession(getToken as ClerkGetToken);
+      if (next.kind === "blocked") throw new Error(next.message);
+      router.replace(hrefAfterClerkAuth(next));
     }, "GRIDGO could not save that password. Try again.");
   }
 
@@ -75,87 +88,91 @@ export default function RecoverPasswordScreen() {
     <View className="gg-screen">
       <FormScrollView fillHeight contentClassName="gg-page grow justify-center pb-10 pt-6">
         <GridgoLogo size={48} role="supplier" />
-        <View className="mt-8 gap-2">
-          <Text className="text-h1 text-text-primary">Recover Password</Text>
-          <Text className="text-body-lg text-text-secondary">{ledeFor(step, email)}</Text>
-        </View>
-
-        <View className="mt-8 gap-4">
-          {step === "email" ? (
-            <FieldShell label="Email">
-              <TextField
-                value={email}
-                onChange={setEmail}
-                kind="email"
-                placeholder="you@yourshop.ph"
-                accessibilityLabel="Email"
-                returnKeyType="go"
-                onSubmit={() => void sendCode()}
-              />
-            </FieldShell>
-          ) : step === "code" ? (
-            <FieldShell label="Recovery code" hint="Check the inbox for the email above.">
-              <TextField
-                value={code}
-                onChange={setCode}
-                placeholder="Enter the code"
-                accessibilityLabel="Recovery code"
-                returnKeyType="go"
-                onSubmit={() => void verifyCode()}
-              />
-            </FieldShell>
-          ) : (
-            <>
-              <FieldShell label="New password">
-                <PasswordField
-                  value={password}
-                  onChange={setPassword}
-                  kind="new-password"
-                  placeholder="At least 8 characters"
-                  accessibilityLabel="New password"
-                />
-              </FieldShell>
-              <FieldShell label="Confirm password">
-                <PasswordField
-                  value={confirmation}
-                  onChange={setConfirmation}
-                  kind="new-password"
-                  placeholder="Type it again"
-                  accessibilityLabel="Confirm new password"
-                  returnKeyType="go"
-                  onSubmit={() => void savePassword()}
-                />
-              </FieldShell>
-            </>
-          )}
-        </View>
-
-        {problem ? (
-          <View className="mt-4">
-            <ErrorNotice message={problem} />
+        {step === "code" ? (
+          <View className="mt-8">
+            <JobTicketCode
+              email={email.trim()}
+              value={code}
+              onChange={setCode}
+              onVerify={() => void verifyCode()}
+              onResend={() => void resendCode()}
+              verifyLabel="Verify email"
+              busy={busy || fetchStatus === "fetching"}
+              error={problem}
+            />
           </View>
-        ) : null}
+        ) : (
+          <>
+            <View className="mt-8 gap-2">
+              <Text className="text-h1 text-text-primary">Recover Password</Text>
+              <Text className="text-body-lg text-text-secondary">{ledeFor(step)}</Text>
+            </View>
 
-        <View className="mt-6 gap-3">
-          <PrimaryButton
-            label={busy ? "Working…" : buttonFor(step)}
-            disabled={busy || fetchStatus === "fetching"}
-            onPress={() => void (step === "email" ? sendCode() : step === "code" ? verifyCode() : savePassword())}
-          />
-        </View>
+            <View className="mt-8 gap-4">
+              {step === "email" ? (
+                <FieldShell label="Email">
+                  <TextField
+                    value={email}
+                    onChange={setEmail}
+                    kind="email"
+                    placeholder="you@yourshop.ph"
+                    accessibilityLabel="Email"
+                    returnKeyType="go"
+                    onSubmit={() => void sendCode()}
+                  />
+                </FieldShell>
+              ) : (
+                <>
+                  <FieldShell label="New password">
+                    <PasswordField
+                      value={password}
+                      onChange={setPassword}
+                      kind="new-password"
+                      placeholder="At least 8 characters"
+                      accessibilityLabel="New password"
+                    />
+                  </FieldShell>
+                  <FieldShell label="Confirm password">
+                    <PasswordField
+                      value={confirmation}
+                      onChange={setConfirmation}
+                      kind="new-password"
+                      placeholder="Type it again"
+                      accessibilityLabel="Confirm new password"
+                      returnKeyType="go"
+                      onSubmit={() => void savePassword()}
+                    />
+                  </FieldShell>
+                </>
+              )}
+            </View>
+
+            {problem ? (
+              <View className="mt-4">
+                <ErrorNotice message={problem} />
+              </View>
+            ) : null}
+
+            <View className="mt-6 gap-3">
+              <PrimaryButton
+                label={busy ? "Working…" : buttonFor(step)}
+                disabled={busy || fetchStatus === "fetching"}
+                onPress={() => void (step === "email" ? sendCode() : savePassword())}
+              />
+            </View>
+          </>
+        )}
       </FormScrollView>
     </View>
   );
 }
 
-function ledeFor(step: Step, email: string): string {
+function ledeFor(step: Exclude<Step, "code">): string {
   if (step === "email") return "We’ll send a recovery code to your shop email.";
-  if (step === "code") return `Enter the code sent to ${email}.`;
   return "Choose a new password for this supplier account.";
 }
 
-function buttonFor(step: Step): string {
+function buttonFor(step: Exclude<Step, "code">): string {
   if (step === "email") return "Send recovery code";
-  if (step === "code") return "Check code";
   return "Save new password";
 }

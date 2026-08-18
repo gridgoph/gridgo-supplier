@@ -6,10 +6,9 @@ import { Pressable, Text, View } from "react-native";
 
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { JobTicketCode } from "@/components/JobTicketCode";
 import { OnboardingStep } from "@/components/OnboardingStep";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { FieldShell } from "@/components/controls/FieldShell";
-import { TextField } from "@/components/controls/TextField";
 import { PUBLISHED_CATALOG } from "@/data/serviceCatalog";
 import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";
@@ -129,6 +128,7 @@ export default function ReviewStep() {
     const created = await enrollSupplier(request, key);
     if (!created) return false;
     clearDraft();
+    router.replace("/(tabs)/home");
     return true;
   }
 
@@ -170,7 +170,7 @@ export default function ReviewStep() {
   }
 
   async function verifyEmail() {
-    const typed = code.trim();
+    const typed = code.replace(/\D/g, "");
     if (!signUp || typed.length < 6) return;
     clearError();
     setLocalError(null);
@@ -188,15 +188,26 @@ export default function ReviewStep() {
     }
   }
 
+  async function resendCode() {
+    if (!signUp) return;
+    clearError();
+    setLocalError(null);
+    setBusy(true);
+    try {
+      const sent = await signUp.verifications.sendEmailCode();
+      if (sent.error) throw sent.error;
+    } catch (caught) {
+      setLocalError(clerkErrorMessage(caught, "GRIDGO could not send another code. Try again."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <OnboardingStep
       id="review"
-      title={verifying ? "Verify your email" : step.title}
-      lede={
-        verifying
-          ? `Enter the six-digit code sent to ${draft.email.trim()}.`
-          : step.lede
-      }
+      title={verifying ? "Check your email" : step.title}
+      lede={verifying ? "" : step.lede}
       contentClassName="gap-3 pb-4 pt-4"
       overlay={
         <BusyOverlay
@@ -205,36 +216,29 @@ export default function ReviewStep() {
         />
       }
       footer={
-        <>
-          {shownError ? <ErrorNotice message={shownError} /> : null}
-          <PrimaryButton
-            label={
-              sending
-                ? verifying
-                  ? "Checking…"
-                  : "Sending your application…"
-                : verifying
-                  ? "Verify email"
-                  : "Send my application"
-            }
-            disabled={sending || (verifying && code.trim().length < 6)}
-            onPress={() => void (verifying ? verifyEmail() : open())}
-          />
-        </>
+        verifying ? null : (
+          <>
+            {shownError ? <ErrorNotice message={shownError} /> : null}
+            <PrimaryButton
+              label={sending ? "Sending your application…" : "Send my application"}
+              disabled={sending}
+              onPress={() => void open()}
+            />
+          </>
+        )
       }
     >
       {verifying ? (
-        <FieldShell label="Verification code">
-          <TextField
-            value={code}
-            onChange={setCode}
-            kind="code"
-            placeholder="123456"
-            accessibilityLabel="Verification code"
-            returnKeyType="go"
-            onSubmit={() => void verifyEmail()}
-          />
-        </FieldShell>
+        <JobTicketCode
+          title=""
+          email={draft.email.trim()}
+          value={code}
+          onChange={setCode}
+          onVerify={() => void verifyEmail()}
+          onResend={() => void resendCode()}
+          busy={sending}
+          error={shownError}
+        />
       ) : (
         <>
           <ReviewCard
