@@ -1,3 +1,4 @@
+import { useUser } from "@clerk/expo";
 import { useCallback, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
@@ -11,6 +12,7 @@ import { SkeletonBlock } from "@/components/Skeleton";
 import { StatusChip } from "@/components/StatusChip";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import { clerkDisplayName } from "@/lib/clerk";
 import { buildObligations, greeting, homeHeadline, type Obligation } from "@/lib/homeBoard";
 import { buildSchedule } from "@/lib/schedule";
 import { useAlertsStore } from "@/store/alerts";
@@ -31,6 +33,7 @@ import { useThemeColors } from "@/hooks/useTheme";
  */
 export default function HomeScreen() {
   const { user, refresh } = useSession();
+  const { user: clerkUser } = useUser();
   const colors = useThemeColors();
   const syncAlerts = useAlertsStore((s) => s.syncFrom);
   const [jobs, setJobs] = useState<api.Order[]>([]);
@@ -106,7 +109,7 @@ export default function HomeScreen() {
           The lockup lives at the door: sign-in, onboarding, accreditation.
         */}
         <ScreenHeader
-          eyebrow={greeting(user?.name)}
+          eyebrow={greeting(clerkDisplayName(clerkUser) || user?.name)}
           title={user?.supplierName || "Your shop"}
           right={
             firstLoad || waitingOnOps ? null : (

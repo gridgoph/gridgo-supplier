@@ -5,6 +5,10 @@ jest.mock("expo-router", () => ({
   useFocusEffect: () => undefined,
 }));
 
+jest.mock("@clerk/expo", () => ({
+  useUser: () => ({ user: null }),
+}));
+
 jest.mock("react-native-safe-area-context", () => {
   const { View } = require("react-native");
   return {

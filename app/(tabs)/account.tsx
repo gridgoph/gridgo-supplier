@@ -1,3 +1,4 @@
+import { useUser } from "@clerk/expo";
 import { ChevronRight } from "lucide-react-native";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { router, type Href } from "expo-router";
@@ -5,6 +6,7 @@ import { router, type Href } from "expo-router";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { StatusChip } from "@/components/StatusChip";
+import { clerkDisplayName } from "@/lib/clerk";
 import { useThemeColors } from "@/hooks/useTheme";
 import { askConfirm } from "@/store/sheets";
 import { isMatchable, useSession } from "@/store/session";
@@ -27,7 +29,9 @@ import { isMatchable, useSession } from "@/store/session";
 export default function AccountScreen() {
   const user = useSession((s) => s.user);
   const logout = useSession((s) => s.logout);
+  const { user: clerkUser } = useUser();
   const approved = isMatchable(user);
+  const personName = clerkDisplayName(clerkUser) || user?.name || "—";
 
   async function signOut() {
     const confirmed = await askConfirm({
@@ -54,7 +58,7 @@ export default function AccountScreen() {
         <View className="gg-card gap-3">
           <View className="gap-1">
             <Text className="text-h3 text-text-primary">{user?.supplierName || "Your shop"}</Text>
-            <Text className="text-body text-text-secondary">{user?.name || "—"}</Text>
+            <Text className="text-body text-text-secondary">{personName}</Text>
             <Text className="text-caption text-text-muted">{user?.email || "—"}</Text>
           </View>
           <View className="flex-row">

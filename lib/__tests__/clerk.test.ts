@@ -1,6 +1,7 @@
 import {
   appForGridgoRole,
   clerkAccessFor,
+  clerkDisplayName,
   clerkPublishableKey,
   clerkSessionToken,
   CLERK_CACHED_TOKEN_MS,
@@ -103,6 +104,15 @@ describe("splitPersonName", () => {
   it("keeps a single name as the first name", () => {
     expect(splitPersonName("Ben")).toEqual({ firstName: "Ben" });
     expect(splitPersonName("Ben Santos")).toEqual({ firstName: "Ben", lastName: "Santos" });
+  });
+});
+
+describe("clerkDisplayName", () => {
+  it("joins Clerk first and last name, and ignores an empty last name", () => {
+    expect(clerkDisplayName({ firstName: "Quinn", lastName: "Reyes" })).toBe("Quinn Reyes");
+    expect(clerkDisplayName({ firstName: "Quinn", lastName: "" })).toBe("Quinn");
+    expect(clerkDisplayName({ firstName: "Quinn", lastName: null })).toBe("Quinn");
+    expect(clerkDisplayName(null)).toBeUndefined();
   });
 });
 

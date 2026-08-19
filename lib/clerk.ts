@@ -185,6 +185,23 @@ export function splitPersonName(value: string): { firstName: string; lastName?: 
   return parts.length ? { firstName, lastName: parts.join(" ") } : { firstName };
 }
 
+/**
+ * The person currently signed in, from Clerk.
+ *
+ * GRIDGO still stores a copy for Operations and mail. Account and the Home
+ * greeting prefer this live name so a dashboard rename is visible before the
+ * copy lands.
+ */
+export function clerkDisplayName(
+  user: { firstName?: string | null; lastName?: string | null } | null | undefined,
+): string | undefined {
+  const name = [user?.firstName, user?.lastName]
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter(Boolean)
+    .join(" ");
+  return name || undefined;
+}
+
 /** Pick Clerk's person-readable message without exposing codes or payloads. */
 export function clerkErrorMessage(error: unknown, fallback: string): string {
   if (!error || typeof error !== "object") return fallback;
