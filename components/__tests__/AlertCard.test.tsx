@@ -141,4 +141,17 @@ describe("AlertCard", () => {
     expect(track.props.accessibilityLabel).toBe("Job stage 2 of 4, Printing");
     expect(track.props.accessibilityValue).toEqual({ min: 1, max: 4, now: 2 });
   });
+
+  it("prints a broadcast picture when the alert carries one", async () => {
+    await render(
+      <AlertCard
+        alert={alert({ imageUrl: "https://cdn.gridgo.example/update.png" })}
+        unread
+        stageIndex={-1}
+        onMarkRead={jest.fn()}
+        onDelete={jest.fn()}
+      />,
+    );
+    expect(screen.getByTestId("alert-picture")).toBeTruthy();
+  });
 });

@@ -1,3 +1,4 @@
+import { Image } from "expo-image";
 import { Check, Trash2 } from "lucide-react-native";
 import { useRef } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -6,7 +7,7 @@ import ReanimatedSwipeable, {
 } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { AlertStageTrack } from "@/components/AlertStageTrack";
-import type { Notification } from "@/lib/api";
+import { notificationImageUrl, type Notification } from "@/lib/api";
 import { formatNotificationAt } from "@/lib/dates";
 import { useThemeColors } from "@/hooks/useTheme";
 
@@ -58,6 +59,7 @@ export function AlertCard({
 }: Props) {
   const colors = useThemeColors();
   const row = useRef<SwipeableMethods>(null);
+  const picture = notificationImageUrl(alert.imageUrl);
 
   /** Close the revealed panel, then act — never inside the gesture's frame. */
   const runFromRow = (action: () => void) => {
@@ -110,6 +112,14 @@ export function AlertCard({
           </Text>
           <Text className="text-caption text-text-muted">{formatNotificationAt(alert.at)}</Text>
         </View>
+        {picture ? (
+          <Image
+            testID="alert-picture"
+            source={{ uri: picture }}
+            style={{ width: "100%", height: 144, borderRadius: 12 }}
+            contentFit="cover"
+          />
+        ) : null}
 
         {stageIndex >= 0 ? (
           <>

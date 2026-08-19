@@ -194,6 +194,8 @@ export type Notification = {
   orderId?: string;
   title: string;
   body: string;
+  /** Broadcast picture. Public HTTPS link or `/public/announcement-images/<fileId>`. */
+  imageUrl?: string | null;
   read: boolean;
   at: string;
 };
@@ -384,6 +386,14 @@ export function getApiBase(): string {
     hostCandidates: collectExpoHostCandidates(),
     platformOS: Platform.OS,
   });
+}
+
+/** In-app picture URL. Hosted broadcast paths resolve against this app's API. */
+export function notificationImageUrl(imageUrl?: string | null): string | null {
+  const value = typeof imageUrl === "string" ? imageUrl.trim() : "";
+  if (!value) return null;
+  if (value.startsWith("/")) return `${getApiBase().replace(/\/$/, "")}${value}`;
+  return value;
 }
 
 export function setToken(token: string | null): void {

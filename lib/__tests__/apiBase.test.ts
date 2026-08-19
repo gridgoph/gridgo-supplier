@@ -1,4 +1,4 @@
-import { hostnameFromHostUri, resolveApiBase } from "@/lib/api";
+import { hostnameFromHostUri, notificationImageUrl, resolveApiBase } from "@/lib/api";
 
 describe("hostnameFromHostUri", () => {
   it("extracts host from host:port", () => {
@@ -138,5 +138,15 @@ describe("resolveApiBase", () => {
         platformOS: "ios",
       }),
     ).toBe("http://10.20.30.40:8787");
+  });
+});
+
+describe("notificationImageUrl", () => {
+  it("leaves a public picture link alone and ignores blanks", () => {
+    expect(notificationImageUrl("https://cdn.gridgo.example/update.png")).toBe(
+      "https://cdn.gridgo.example/update.png",
+    );
+    expect(notificationImageUrl("  ")).toBeNull();
+    expect(notificationImageUrl(undefined)).toBeNull();
   });
 });
