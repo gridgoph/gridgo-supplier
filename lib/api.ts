@@ -165,7 +165,9 @@ export type StoredFile = {
     | "fulfilment_proof"
     | "delivery_photo"
     | "service_image"
-    | "verification_document";
+    | "verification_document"
+    /** A sample photo on one of the shop's own listings. Provisional. */
+    | "catalog_item_photo";
   originalFilename: string;
   declaredContentType: string;
   detectedContentType: string;
@@ -259,6 +261,12 @@ export type SupplierService = {
   zones: string[];
   equipmentNotes: string;
   imageFileIds?: string[];
+  /**
+   * The artwork files this line accepts by default. A listing inherits these
+   * unless it overrides them. Absent on a GRIDGO that has not shipped the
+   * governed format registry yet.
+   */
+  formatCodes?: string[];
   state: string;
   verifiedAt: string | null;
   suspendedAt: string | null;
@@ -908,4 +916,177 @@ export function formatPhp(minor: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+/* --------------------------------------------------------------------------
+   The shop's own board — listings
+
+   Every route below is settled design (`docs/OPERATIONAL_MODEL_V2_API.md`
+   §4 and §8.2 of the revision-2 contract, plus the additive listing fields)
+   and is being built on GRIDGO in parallel with these screens. Nothing here
+   invents a path.
+
+   Two deliberate shapes:
+
+   - These return the response body as `unknown`. `lib/listings.ts` is the
+     only place that reads a listing's shape, exactly as `lib/taxonomy.ts` is
+     the only place that reads the chart's — so a field the platform renames
+     before it ships costs one normaliser, not fifteen screens.
+   - A deployment without these routes answers 404. `lib/listingsApi.ts`
+     turns that into "GRIDGO has not opened your board yet" rather than a red
+     failure, because a shop cannot fix the platform's release schedule.
+   -------------------------------------------------------------------------- */
+
+/** Every listing this shop owns, draft and on-the-board alike. */
+export async function listCatalogItems(): Promise<unknown> {
+  return request<unknown>("/me/catalog-items");
+}
+
+export async function getCatalogItem(itemId: string): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${itemId}`);
+}
+
+/**
+ * Open a listing. `starterId` clones a GRIDGO starter's steps and add-ons into
+ * the shop's own rows at create time; without one the listing starts blank.
+ */
+export async function createCatalogItem(body: Record<string, unknown>): Promise<unknown> {
+  return request<unknown>("/me/catalog-items", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Partial update. Carries `expectedVersion` so two sessions cannot overwrite. */
+export async function updateCatalogItem(
+  itemId: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${itemId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Archive once ordered, delete while it never was. The server decides which. */
+export async function deleteCatalogItem(itemId: string): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${itemId}`, { method: "DELETE" });
+}
+
+/** Replace the listing's own accepted-format set. An empty set means inherit. */
+export async function putCatalogItemFileFormats(
+  itemId: string,
+  formatCodes: string[],
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${itemId}/file-formats`, {
+    method: "PUT",
+    body: JSON.stringify({ formatCodes }),
+  });
+}
+
+export async function createCatalogOptionGroup(
+  itemId: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${itemId}/option-groups`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateCatalogOptionGroup(
+  itemId: string,
+  groupId: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${itemId}/option-groups/${groupId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteCatalogOptionGroup(
+  itemId: string,
+  groupId: string,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${itemId}/option-groups/${groupId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function createCatalogOption(
+  groupId: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-option-groups/${groupId}/options`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateCatalogOption(
+  groupId: string,
+  optionId: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-option-groups/${groupId}/options/${optionId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteCatalogOption(
+  groupId: string,
+  optionId: string,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-option-groups/${groupId}/options/${optionId}`, {
+    method: "DELETE",
+  });
+}
+
+/**
+ * Set the order of a listing's sample photos.
+ *
+ * The first id is the board thumbnail. This is also how a photo comes off a
+ * listing: the contract has no detach route, an attached file cannot be
+ * deleted while it is referenced, and the sent list is the listing's photos —
+ * so an id left out of it is no longer on the listing. Callers reload the
+ * listing from GRIDGO afterwards rather than trusting that locally.
+ */
+export async function reorderCatalogItemPhotos(
+  itemId: string,
+  fileIds: string[],
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${itemId}/photos/reorder`, {
+    method: "POST",
+    body: JSON.stringify({ fileIds }),
+  });
+}
+
+/** Bind an uploaded photo to one listing. Second half of the upload pair. */
+export async function attachCatalogItemPhoto(
+  fileId: string,
+  catalogItemId: string,
+  sortOrder: number,
+  altText?: string,
+): Promise<unknown> {
+  return request<unknown>(`/files/${fileId}/attach`, {
+    method: "POST",
+    body: JSON.stringify(
+      altText ? { catalogItemId, sortOrder, altText } : { catalogItemId, sortOrder },
+    ),
+  });
+}
+
+/**
+ * GRIDGO's own starters for one kind of work.
+ *
+ * Platform seed data, not records the shop mutates: creating from one copies
+ * its steps and add-ons into the shop's own rows, and the starter is never
+ * referenced again.
+ */
+export async function listListingStarters(subcategoryCode: string): Promise<unknown> {
+  return request<unknown>(
+    `/listing-starters?subcategoryCode=${encodeURIComponent(subcategoryCode)}`,
+  );
 }

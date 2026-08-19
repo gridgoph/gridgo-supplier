@@ -6,14 +6,18 @@ import { router, useFocusEffect } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ObligationRow } from "@/components/ObligationRow";
+import { SamplePhoto } from "@/components/SamplePhoto";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { StatusChip } from "@/components/StatusChip";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { clerkDisplayName } from "@/lib/clerk";
 import { buildObligations, greeting, homeHeadline, type Obligation } from "@/lib/homeBoard";
+import { boardPrompt, type Listing } from "@/lib/listings";
+import { loadBoard } from "@/lib/listingsApi";
 import { buildSchedule } from "@/lib/schedule";
 import { useAlertsStore } from "@/store/alerts";
 import { isMatchable, useSession } from "@/store/session";
@@ -37,14 +41,36 @@ export default function HomeScreen() {
   const colors = useThemeColors();
   const syncAlerts = useAlertsStore((s) => s.syncFrom);
   const [jobs, setJobs] = useState<api.Order[]>([]);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [services, setServices] = useState<api.SupplierService[]>([]);
+  // False while GRIDGO has no board routes: nothing to nag a shop about.
+  const [boardOpen, setBoardOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const waitingOnOps = !isMatchable(user);
 
+  /**
+   * The board rides along with the floor.
+   *
+   * It is a second, quieter question — is there anything for a client to
+   * choose? — and it must never delay or break the first one, so it is loaded
+   * beside the jobs and its failures are simply an absent card rather than an
+   * error on a screen about work.
+   */
+  const loadBoardQuietly = useCallback(async () => {
+    const [board, lines] = await Promise.all([
+      loadBoard(),
+      api.listSupplierServices().catch(() => [] as api.SupplierService[]),
+    ]);
+    setServices(lines);
+    setListings(board.status === "ok" ? board.value : []);
+    setBoardOpen(board.status === "ok");
+  }, []);
+
   const reload = useCallback(async () => {
     if (waitingOnOps) {
-      await refresh();
+      await Promise.all([refresh(), loadBoardQuietly()]);
       return;
     }
     setLoading(true);
@@ -52,6 +78,7 @@ export default function HomeScreen() {
       const [list, notifications] = await Promise.all([
         api.listJobs(),
         api.listNotifications().catch(() => [] as api.Notification[]),
+        loadBoardQuietly(),
       ]);
       setJobs(list);
       syncAlerts(notifications);
@@ -62,7 +89,7 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  }, [refresh, syncAlerts, waitingOnOps]);
+  }, [loadBoardQuietly, refresh, syncAlerts, waitingOnOps]);
 
   useFocusEffect(
     useCallback(() => {
@@ -77,6 +104,8 @@ export default function HomeScreen() {
   const obligations = buildObligations(jobs);
   const [first, ...rest] = obligations;
   const summary = buildSchedule(jobs, "today").summary;
+  const board = boardOpen ? boardPrompt(listings, services, !waitingOnOps) : null;
+  const needsBoardWork = board != null && board.kind !== "ready";
 
   function open(obligation: Obligation) {
     router.push({
@@ -140,6 +169,12 @@ export default function HomeScreen() {
               body="The floor stays empty until they approve."
               actionLabel="Open accreditation"
               onAction={() => router.push("/accreditation")}
+              {...(board
+                ? {
+                    secondaryLabel: "Build your board while you wait",
+                    onSecondary: () => router.push("/shop"),
+                  }
+                : {})}
             />
           </View>
         ) : null}
@@ -231,14 +266,38 @@ export default function HomeScreen() {
               </View>
             ) : (
               <View className="mt-6">
+                {/*
+                  With nothing owed, the sharpest thing on this screen is an
+                  unfinished board — so the yellow goes there and schedule
+                  steps down to a quiet action. One yellow, always on the thing
+                  most worth doing next.
+                */}
                 <EmptyState
                   title="Nothing owed today"
                   body="No job is waiting on a decision, a proof or a handover from you. Check Schedule for what is coming, or Jobs when GRIDGO matches new work."
-                  actionLabel="Open schedule"
-                  onAction={() => router.push("/(tabs)/schedule")}
+                  {...(needsBoardWork
+                    ? {
+                        secondaryLabel: "Open schedule",
+                        onSecondary: () => router.push("/(tabs)/schedule"),
+                      }
+                    : {
+                        actionLabel: "Open schedule",
+                        onAction: () => router.push("/(tabs)/schedule"),
+                      })}
                 />
               </View>
             )}
+
+            {board ? (
+              <View className="mt-8 gap-2">
+                <Text className="text-overline text-text-muted">YOUR BOARD</Text>
+                {board.kind === "ready" ? (
+                  <SampleStrip listings={listings} />
+                ) : (
+                  <BoardCard prompt={board} quiet={Boolean(first)} />
+                )}
+              </View>
+            ) : null}
 
             {error ? (
               <Text className="mt-4 text-caption text-text-muted">
@@ -287,5 +346,75 @@ function NextCard({ obligation, onPress }: { obligation: Obligation; onPress: ()
       </View>
       <PrimaryButton label={obligation.actionLabel} onPress={onPress} />
     </View>
+  );
+}
+
+/**
+ * The board, when it still needs something.
+ *
+ * It takes the screen's yellow only when the floor has no obligation to carry
+ * it — a shop with a proof owed on a delivered job should not be pulled into
+ * writing product copy, and two yellows on one screen means neither of them is
+ * the next thing to do.
+ */
+function BoardCard({
+  prompt,
+  quiet,
+}: {
+  prompt: NonNullable<ReturnType<typeof boardPrompt>>;
+  quiet: boolean;
+}) {
+  return (
+    <View className="gg-card gap-3">
+      <Text className="text-h3 text-text-primary">{prompt.title}</Text>
+      <Text className="text-body text-text-secondary">{prompt.body}</Text>
+      {quiet ? (
+        <SecondaryButton label={prompt.actionLabel} onPress={() => router.push("/shop")} />
+      ) : (
+        <PrimaryButton label={prompt.actionLabel} onPress={() => router.push("/shop")} />
+      )}
+    </View>
+  );
+}
+
+/**
+ * The finished board, at a glance.
+ *
+ * Deliberately not a second ranking: it is the shop's own board order, cropped
+ * to what fits on one row, and its only job is to be a door. A shop that wants
+ * to read its board opens its board.
+ */
+function SampleStrip({ listings }: { listings: Listing[] }) {
+  const colors = useThemeColors();
+
+  return (
+    <Pressable
+      onPress={() => router.push("/shop")}
+      accessibilityRole="button"
+      accessibilityLabel={`Open your board. ${listings.length} listings.`}
+      className="gg-card-flush px-3 py-3"
+      style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+    >
+      <View className="flex-row items-center gap-3">
+        <View className="min-w-0 flex-1 flex-row">
+          {listings.slice(0, 4).map((listing) => (
+            <View key={listing.id} className="w-1/4">
+              <SamplePhoto
+                fileId={listing.photos[0]?.fileId}
+                altText={listing.name}
+                gutter="tight"
+                emptyLabel=""
+              />
+            </View>
+          ))}
+        </View>
+        <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+      </View>
+      <Text className="mt-2 text-caption text-text-muted">
+        {listings.length === 1
+          ? "1 listing on your board"
+          : `${listings.length} listings on your board`}
+      </Text>
+    </Pressable>
   );
 }

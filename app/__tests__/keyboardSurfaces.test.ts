@@ -50,6 +50,19 @@ const CONTROLS = "components/controls";
 const HANDLED_BY_ITS_CALLERS = [
   "components/ShopLocationPicker.tsx",
   "components/JobTicketCode.tsx",
+  "components/SpecGroupEditor.tsx",
+];
+
+/**
+ * Components in the list above are exempt from owning a scroll surface, not
+ * from the rule. Each one names the screens that compose it, and those screens
+ * are checked instead — an exemption nobody checks is a hole.
+ */
+const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
+  // Shop pin from Settings, and the public apply location step.
+  { component: "ShopLocationPicker", users: /<ShopLocationPicker\b/, least: 2 },
+  // Every step and add-on on one listing is edited inside the listing screen.
+  { component: "SpecGroupEditor", users: /<SpecGroupEditor\b/, least: 1 },
 ];
 
 describe("every field a shop types into sits in a keyboard-aware surface", () => {
@@ -78,19 +91,19 @@ describe("every field a shop types into sits in a keyboard-aware surface", () =>
     expect(unhandled).toEqual([]);
   });
 
-  it("keeps the one exception wrapped by every screen that uses it", () => {
-    const users = files.filter((file) =>
-      /<ShopLocationPicker\b/.test(fs.readFileSync(file, "utf8")),
-    );
+  it("keeps every exception wrapped by the screens that use it", () => {
+    for (const check of CALLER_CHECKS) {
+      const users = files.filter((file) => check.users.test(fs.readFileSync(file, "utf8")));
 
-    // Shop pin from Settings, and the public apply location step.
-    expect(users.length).toBeGreaterThanOrEqual(2);
-    for (const file of users) {
-      const source = fs.readFileSync(file, "utf8");
-      expect({ file: relative(file), handled: HANDLES_A_KEYBOARD.test(source) }).toEqual({
-        file: relative(file),
-        handled: true,
-      });
+      expect(users.length).toBeGreaterThanOrEqual(check.least);
+
+      for (const file of users) {
+        const source = fs.readFileSync(file, "utf8");
+        expect({ file: relative(file), handled: HANDLES_A_KEYBOARD.test(source) }).toEqual({
+          file: relative(file),
+          handled: true,
+        });
+      }
     }
   });
 

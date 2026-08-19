@@ -211,6 +211,14 @@ function RootStack() {
           }}
         />
         {/*
+          The board is reachable from both signed-in states for the same reason
+          the pin is, and a stronger one: approval requires a finished listing,
+          so trapping a waiting shop out of the screen where it builds one would
+          hold it behind the thing it is waiting for. The stack draws its own
+          headers.
+        */}
+        <Stack.Screen name="shop" options={{ headerShown: false, title: "Your board" }} />
+        {/*
           Sheets the app asks for and waits on. Both are routes so the platform
           owns the presentation — see `sheetScreenOptions`. They sit with the
           signed-in guard rather than the matchable one because a waiting shop

@@ -77,6 +77,26 @@ export default function AccountScreen() {
 
         <View className="mt-6 gap-2">
           <Text className="text-overline text-text-muted">YOUR SHOP</Text>
+          {/*
+            The board leads because it is the only thing here a client ever
+            sees, and it is first for a waiting shop too: accreditation needs a
+            finished listing, so this is work that shortens the wait rather than
+            work that follows it. What GRIDGO may send you — the accreditation
+            — sits under it, because those are two different questions and a
+            shop that confuses them prices the wrong thing.
+          */}
+          <DestinationRow
+            title="Your board"
+            detail="What clients see: listings, prices, samples"
+            onPress={() => router.push("/shop")}
+          />
+          {approved ? (
+            <DestinationRow
+              title="Services you offer"
+              detail="The work GRIDGO may send you, and how each one is verified"
+              onPress={() => router.push("/services")}
+            />
+          ) : null}
           <DestinationRow
             title="Where you print"
             detail={user?.shop?.label || "Set the pin every delivery fee is measured from"}
@@ -90,18 +110,11 @@ export default function AccountScreen() {
             />
           ) : null}
           {approved ? (
-            <>
-              <DestinationRow
-                title="Services you offer"
-                detail="The work GRIDGO may send you, and how each one is verified"
-                onPress={() => router.push("/services")}
-              />
-              <DestinationRow
-                title="Capacity & closures"
-                detail="What you can take on each day, and the days you are shut"
-                onPress={() => router.push("/capacity")}
-              />
-            </>
+            <DestinationRow
+              title="Capacity & closures"
+              detail="What you can take on each day, and the days you are shut"
+              onPress={() => router.push("/capacity")}
+            />
           ) : null}
         </View>
 
