@@ -92,23 +92,43 @@ export function buildShopMapHtml(model: ShopMapModel): string {
       background: rgba(20,20,20,0.9) !important;
       color: #f0f0f0 !important;
     }
-    .shop-pin { display: flex; flex-direction: column; align-items: center; }
-    .shop-pin-mark {
-      width: 26px; height: 26px; border-radius: 4px;
-      background: #FFDE58; border: 2px solid #1a1a1a;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+    /* Leaflet's default div-icon is a white plate. The shop pin is a teardrop
+       — same head + tip the rider Maps tab draws — so the two apps read as
+       one city. */
+    .leaflet-div-icon { background: transparent; border: none; }
+    .pin {
+      display: flex; flex-direction: column; align-items: center;
+      transform: translateY(-4px);
     }
-    .shop-pin-stem { width: 2px; height: 10px; background: #1a1a1a; }
-    .shop-pin-label {
-      margin-top: 3px; padding: 2px 6px;
-      font: 600 10px/1.3 system-ui, sans-serif;
-      background: rgba(255,255,255,0.94); color: #1a1a1a;
-      border-radius: 4px; white-space: nowrap;
+    .pin-shop .pin-head {
+      width: 30px; height: 30px; border-radius: 999px;
+      background: #FFDE58; color: #1a1a1a;
+      border: 2px solid #1a1a1a;
+      display: flex; align-items: center; justify-content: center;
+      font: 700 12px/1 system-ui, sans-serif;
+      position: relative; z-index: 1;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+    }
+    .pin-shop .pin-tip {
+      width: 12px; height: 12px;
+      background: #FFDE58;
+      border-right: 2px solid #1a1a1a;
+      border-bottom: 2px solid #1a1a1a;
+      transform: translateY(-7px) rotate(45deg);
+    }
+    .pin-shop.is-selected .pin-head {
+      box-shadow: 0 0 0 3px #ffffff, 0 1px 3px rgba(0,0,0,0.35);
+    }
+    .pin-label {
+      margin-top: 2px; padding: 1px 4px;
+      font: 600 9px/1.2 system-ui, sans-serif;
+      background: rgba(255,255,255,0.92); color: #1a1a1a;
+      border-radius: 3px; white-space: nowrap;
       max-width: 160px; overflow: hidden; text-overflow: ellipsis;
     }
-    body.night .shop-pin-label { background: rgba(20,20,20,0.94); color: #f0f0f0; }
+    body.night .pin-label { background: rgba(20,20,20,0.92); color: #f0f0f0; }
     .hint {
-      position: absolute; top: 8px; left: 8px; right: 8px; z-index: 1000;
+      position: absolute; bottom: 28px; left: 8px; right: 8px; z-index: 1000;
       padding: 6px 10px; border-radius: 8px; text-align: center;
       font: 600 12px/1.3 system-ui, sans-serif;
       background: rgba(255,255,255,0.95); color: #1a1a1a;
@@ -138,16 +158,30 @@ export function buildShopMapHtml(model: ShopMapModel): string {
       }
     }
 
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
     function pinIcon(label) {
-      var text = (label || '').replace(/[<>&]/g, ' ');
+      var text = String(label || '').replace(/^\s+/, '');
+      var letter = text ? escapeHtml(text.charAt(0).toUpperCase()) : '';
+      var labelHtml = text
+        ? '<div class="pin-label">' + escapeHtml(text) + '</div>'
+        : '';
       return L.divIcon({
         className: '',
-        html: '<div class="shop-pin"><div class="shop-pin-mark"></div>' +
-          '<div class="shop-pin-stem"></div>' +
-          (text ? '<div class="shop-pin-label">' + text + '</div>' : '') +
-          '</div>',
-        iconSize: [160, 60],
-        iconAnchor: [80, 36]
+        html: '<div class="pin pin-shop is-selected">'
+          + '<div class="pin-head">' + letter + '</div>'
+          + '<div class="pin-tip"></div>'
+          + labelHtml
+          + '</div>',
+        // Wide enough for the caption; the tip still sits on the point.
+        iconSize: [168, 72],
+        iconAnchor: [84, 40]
       });
     }
 

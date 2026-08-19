@@ -43,6 +43,17 @@ describe("the map document", () => {
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(html).toContain("\\u003c");
   });
+
+  it("draws the rider Maps teardrop, not a square plate", () => {
+    const html = buildShopMapHtml(MODEL);
+    expect(html).toContain("pin-shop");
+    expect(html).toContain("pin-head");
+    expect(html).toContain("pin-tip");
+    expect(html).toContain("is-selected");
+    expect(html).not.toContain("shop-pin-mark");
+    expect(html).toContain("charAt(0).toUpperCase()");
+    expect(html).toContain("C.M. Recto St");
+  });
 });
 
 describe("what the document sends back", () => {

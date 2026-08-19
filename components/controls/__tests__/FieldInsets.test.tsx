@@ -106,7 +106,13 @@ describe("field text insets", () => {
       />,
     );
 
-    expectNativeInset("Search for your shop's address");
-    expectNativeInset("Address at this pin");
+    // Icon sits in a 48dp well; anything smaller draws the first letter under it.
+    const search = flattenedInputStyle("Search for your shop's address");
+    expect(search.paddingStart).toBeGreaterThanOrEqual(48);
+    expect(search.paddingLeft).toBeGreaterThanOrEqual(48);
+    expect(search.includeFontPadding).toBe(false);
+    expect(search.textAlignVertical).toBe("center");
+
+    expectNativeInset("Address at this pin", "top");
   });
 });
