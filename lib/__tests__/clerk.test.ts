@@ -2,6 +2,9 @@ import {
   appForGridgoRole,
   clerkAccessFor,
   clerkPublishableKey,
+  clerkSessionToken,
+  CLERK_CACHED_TOKEN_MS,
+  CLERK_TOKEN_ATTEMPT_MS,
   isAlreadySignedInError,
   resolveClerkPublishableKey,
   splitPersonName,
@@ -54,7 +57,45 @@ describe("clerkAccessFor", () => {
 describe("isAlreadySignedInError", () => {
   it("recognises Clerk's leftover-session wording", () => {
     expect(isAlreadySignedInError(new Error("You're already signed in"))).toBe(true);
+    expect(isAlreadySignedInError(new Error("You are currently logged in."))).toBe(true);
+    expect(isAlreadySignedInError({ errors: [{ message: "You're already signed in." }] })).toBe(
+      true,
+    );
     expect(isAlreadySignedInError(new Error("That password is wrong"))).toBe(false);
+  });
+});
+
+describe("clerkSessionToken", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("uses the cached session token a just-signed-in shop already has", async () => {
+    const getToken = jest.fn(async (options?: { skipCache?: boolean }) => {
+      if (options?.skipCache) return "fresh-jwt";
+      return "cached-jwt";
+    });
+    await expect(clerkSessionToken(getToken)).resolves.toBe("cached-jwt");
+    expect(getToken).toHaveBeenCalledTimes(1);
+    expect(getToken).toHaveBeenCalledWith(undefined);
+  });
+
+  it("refreshes only when the cache is empty", async () => {
+    const getToken = jest.fn(async (options?: { skipCache?: boolean }) => {
+      if (options?.skipCache) return "fresh-jwt";
+      return null;
+    });
+    await expect(clerkSessionToken(getToken)).resolves.toBe("fresh-jwt");
+    expect(getToken).toHaveBeenNthCalledWith(1, undefined);
+    expect(getToken).toHaveBeenNthCalledWith(2, { skipCache: true });
+  });
+
+  it("gives up a hung Clerk token instead of waiting forever", async () => {
+    jest.useFakeTimers();
+    const pending = clerkSessionToken(() => new Promise(() => {}));
+    const assertion = expect(pending).resolves.toBeNull();
+    await jest.advanceTimersByTimeAsync(CLERK_CACHED_TOKEN_MS + CLERK_TOKEN_ATTEMPT_MS);
+    await assertion;
   });
 });
 

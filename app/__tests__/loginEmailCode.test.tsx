@@ -21,7 +21,8 @@ jest.mock("expo-router", () => ({
 
 jest.mock("@clerk/expo", () => ({
   useAuth: () => ({ isSignedIn: false, getToken: mockGetToken }),
-  useClerk: () => ({ setActive: jest.fn() }),
+  useClerk: () => ({ setActive: jest.fn(), signOut: jest.fn(async () => undefined) }),
+  useUser: () => ({ user: null }),
   useSignIn: () => ({
     signIn: {
       get status() {

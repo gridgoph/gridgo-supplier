@@ -18,10 +18,17 @@ import { useThemeColors } from "@/hooks/useTheme";
  */
 
 const DOT = 8;
-const ACTIVE = 24;
-/** 8px dot + 18px on every side clears the 44px minimum in both directions. */
-const PAD = 18;
-const TARGET = DOT + PAD * 2;
+const ACTIVE = 20;
+/**
+ * Slot per dot. Wide enough to separate them, narrow enough that three read as
+ * one indicator instead of three specks scattered across a thumb's width.
+ *
+ * A full 44 here spaced 8px dots 44px apart, which is what made them look
+ * strewn about. An unambiguous narrow slot beats an ambiguous wide one.
+ */
+const SLOT = 26;
+/** Full height, so the row still clears 44 in the direction it can. */
+const SLOT_HEIGHT = 44;
 
 type Props = {
   count: number;
@@ -36,8 +43,8 @@ type Props = {
 
 export function PaginationDots({ count, activeIndex, scrollX, width, onPress }: Props) {
   return (
-    // No gap: each dot's own 44px target is the spacing. Adding one on top
-    // would push them a thumb-width apart.
+    // No gap: each dot's slot is the spacing. Adding one on top would push
+    // them apart again.
     <View className="flex-row items-center" accessibilityRole="tablist">
       {Array.from({ length: count }, (_, index) => (
         <Dot
@@ -91,10 +98,15 @@ function Dot({ index, count, selected, scrollX, width, onPress }: DotProps) {
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       accessibilityLabel={`Slide ${index + 1} of ${count}`}
-      // The dot itself is 8px wide, and 8px is not a control. The target is a
-      // fixed 44 square with the dot centred in it, which also stops the row
-      // reflowing as the active dot stretches from 8 to 24.
-      style={{ width: TARGET, height: TARGET, alignItems: "center", justifyContent: "center" }}
+      // The dot itself is 8px wide, and 8px is not a control. The slot is
+      // fixed with the dot centred in it, which also stops the row reflowing
+      // as the active dot stretches.
+      style={{
+        width: SLOT,
+        height: SLOT_HEIGHT,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
     >
       <Animated.View style={[{ height: DOT, borderRadius: DOT / 2 }, style]} />
     </Pressable>

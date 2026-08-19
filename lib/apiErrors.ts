@@ -6,6 +6,10 @@ import * as api from "@/lib/api";
  * screen — this module is the only place that reads them.
  */
 
+/** A Clerk identity that GRIDGO will not project as a shop. */
+export const supplierAccountNotFoundMessage =
+  "No supplier account is connected to this sign-in. Apply as a shop, or ask Operations to check your invitation.";
+
 const MESSAGES: Record<string, string> = {
   transition_not_allowed:
     "This job has already moved on. Pull down to refresh and take the step the job now shows.",
@@ -58,8 +62,7 @@ const MESSAGES: Record<string, string> = {
     "This shop application is already open. Sign in with the same email to continue.",
   clerk_unavailable:
     "GRIDGO could not confirm your sign-in just now. Wait a moment and try again.",
-  supplier_account_not_found:
-    "No supplier account is connected to this sign-in. Apply as a shop, or ask Operations to check your invitation.",
+  supplier_account_not_found: supplierAccountNotFoundMessage,
 
   // Money and evidence.
   invalid_money:
@@ -84,6 +87,13 @@ export function humanizeApiError(error: unknown, fallback: string): string {
       typeof body === "object" && body && "error" in body
         ? String((body as { error: string }).error)
         : "";
+    const fields =
+      typeof body === "object" && body && "fields" in body && body.fields && typeof body.fields === "object"
+        ? Object.keys(body.fields as object)
+        : [];
+    if (code === "invalid_application" && fields.some((field) => field.startsWith("serviceCategories"))) {
+      return "GRIDGO does not recognize one of the print categories you picked. Pull down to refresh and pick again.";
+    }
     const known = MESSAGES[code];
     if (known) return known;
     if (error.status === 401) {

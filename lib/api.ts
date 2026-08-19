@@ -449,6 +449,9 @@ type RequestOptions = RequestInit & {
   ignoreUnauthorized?: boolean;
 };
 
+/** GRIDGO must fail an apply rather than spin until the shop force-closes. */
+export const API_REQUEST_MS = 20_000;
+
 async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   const { ignoreUnauthorized, ...fetchInit } = init;
   const headers: Record<string, string> = {
@@ -456,10 +459,37 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     ...(fetchInit.headers as Record<string, string> | undefined),
   };
   if (fetchInit.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
-  const token = await getAuthToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(`${getApiBase()}${path}`, { ...fetchInit, headers });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_REQUEST_MS);
+  const aborted = new Promise<never>((_, reject) => {
+    const fail = () => {
+      const error = new Error("Aborted");
+      error.name = "AbortError";
+      reject(error);
+    };
+    if (controller.signal.aborted) fail();
+    else controller.signal.addEventListener("abort", fail, { once: true });
+  });
+  let res: Response;
+  try {
+    const token = await Promise.race([getAuthToken(), aborted]);
+    if (token) headers.Authorization = `Bearer ${token}`;
+    res = await fetch(`${getApiBase()}${path}`, {
+      ...fetchInit,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    const timedOut =
+      (error instanceof Error && error.name === "AbortError") ||
+      (typeof error === "object" && error !== null && "name" in error && error.name === "AbortError");
+    if (timedOut) {
+      throw new Error("GRIDGO did not answer in time. Check this phone’s connection, then try again.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
   const text = await res.text();
   let data: unknown = null;
   if (text) {

@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 import { JobTicketCode } from "@/components/JobTicketCode";
 
 describe("JobTicketCode", () => {
-  it("is a docket strip with OS autofill, not a lone verification field", async () => {
+  it("is six boxes over one OS autofill field, not a lone verification field", async () => {
     await render(
       <JobTicketCode
         email="shop@example.com"
@@ -16,10 +16,14 @@ describe("JobTicketCode", () => {
 
     expect(screen.getByText("Check your email")).toBeTruthy();
     expect(screen.getByText("We sent a 6-digit job number to shop@example.com")).toBeTruthy();
-    expect(screen.getByLabelText("6-digit job number")).toBeTruthy();
-    expect(screen.getByLabelText("6-digit job number").props.textContentType).toBe("oneTimeCode");
-    expect(screen.getByLabelText("6-digit job number").props.maxLength).toBe(6);
-    expect(screen.getByLabelText("6-digit job number").props.keyboardType).toBe("number-pad");
+    const field = screen.getByLabelText("6-digit job number");
+    expect(field).toBeTruthy();
+    expect(field.props.textContentType).toBe("oneTimeCode");
+    expect(field.props.autoComplete).toBe("one-time-code");
+    expect(field.props.inputMode).toBe("numeric");
+    expect(field.props.autoFocus).toBe(true);
+    expect(field.props.maxLength).toBe(6);
+    expect(field.props.keyboardType).toBe("number-pad");
     expect(screen.queryByLabelText("Verification code")).toBeNull();
     expect(screen.getByText("Verify email")).toBeTruthy();
     expect(screen.getByText("Send another code")).toBeTruthy();

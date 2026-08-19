@@ -1,4 +1,5 @@
 import {
+  applyRoute,
   firstIncompleteStep,
   hasProblems,
   isSendable,
@@ -88,6 +89,18 @@ describe("what each step still needs", () => {
     expect(firstIncompleteStep(draft({ pin: null }))?.id).toBe("location");
     expect(firstIncompleteStep(draft({ shopName: "", pin: null }))?.id).toBe("shop");
     expect(isSendable(draft({ pin: null }))).toBe(false);
+  });
+
+  it("does not ask for a password when Clerk already has the session", () => {
+    expect(shopStepProblems(draft({ password: "" }), { clerkSession: true }).password).toBeUndefined();
+    expect(firstIncompleteStep(draft({ password: "" }), { clerkSession: true })).toBeNull();
+    expect(isSendable(draft({ password: "" }), { clerkSession: true })).toBe(true);
+    expect(applyRoute(draft({ password: "", pin: null }), { clerkSession: true })).toBe(
+      "/(auth)/signup/location",
+    );
+    expect(applyRoute(draft({ password: "" }), { clerkSession: true })).toBe(
+      "/(auth)/signup/review",
+    );
   });
 
   it("never puts an error message in the platform's own words", () => {

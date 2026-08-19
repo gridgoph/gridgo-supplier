@@ -95,19 +95,68 @@ export function isAlreadySignedInError(error: unknown): boolean {
   );
 }
 
+/** True when Clerk is complaining that there is no session to act on. */
+export function isClerkSignedOutError(error: unknown): boolean {
+  const message = clerkErrorMessage(error, "").toLowerCase();
+  if (!message) return false;
+  return (
+    message.includes("signed out") ||
+    message.includes("logged out") ||
+    message.includes("no active session") ||
+    message.includes("session not found") ||
+    message.includes("unable to authenticate")
+  );
+}
+
 export type ClerkGetToken = (options?: { skipCache?: boolean }) => Promise<string | null | undefined>;
 
 /**
- * Fresh JWT for gridgo-api. Cached leftovers are often expired or empty, and a
- * signed-out Clerk throws rather than returning null — answer null either way.
+ * Cached JWT first — a shop who just signed in already has one, and
+ * skipCache on a phone can take longer than a short deadline, which used
+ * to look like "GRIDGO could not confirm your sign-in".
  */
-export async function clerkSessionToken(getToken: ClerkGetToken): Promise<string | null> {
+export const CLERK_CACHED_TOKEN_MS = 8_000;
+/** Fresh Clerk refresh. Slow wifi must still finish; a hang must not. */
+export const CLERK_TOKEN_ATTEMPT_MS = 12_000;
+
+async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const token = (await getToken({ skipCache: true }))?.trim() ?? "";
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("GRIDGO_DEADLINE")), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function readClerkToken(
+  getToken: ClerkGetToken,
+  skipCache: boolean,
+  ms: number,
+): Promise<string | null> {
+  try {
+    const token =
+      (
+        await withDeadline(
+          Promise.resolve().then(() => getToken(skipCache ? { skipCache: true } : undefined)),
+          ms,
+        )
+      )?.trim() ?? "";
     return token || null;
   } catch {
     return null;
   }
+}
+
+export async function clerkSessionToken(getToken: ClerkGetToken): Promise<string | null> {
+  return (
+    (await readClerkToken(getToken, false, CLERK_CACHED_TOKEN_MS)) ??
+    (await readClerkToken(getToken, true, CLERK_TOKEN_ATTEMPT_MS))
+  );
 }
 
 /**

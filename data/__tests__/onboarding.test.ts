@@ -1,5 +1,4 @@
 import { onboardingSlides } from "@/data/onboarding";
-import { illustrations } from "@/components/illustrations";
 
 describe("supplier onboarding slides", () => {
   it("has three beats with step labels and CTAs", () => {
@@ -10,12 +9,8 @@ describe("supplier onboarding slides", () => {
     expect(onboardingSlides[2].cta).toBe("Get Started");
   });
 
-  it("uses supplier illustration keys that exist in the registry", () => {
-    for (const slide of onboardingSlides) {
-      expect(illustrations[slide.art]).toBeDefined();
-      expect(typeof illustrations[slide.art].aspect).toBe("number");
-      expect(illustrations[slide.art].aspect).toBeGreaterThan(0);
-    }
+  it("uses the captain-picked print-shop pictures", () => {
+    expect(onboardingSlides.map((s) => s.art)).toEqual(["invoices", "checklist", "payment"]);
   });
 
   it("does not carry client-themed art keys", () => {
@@ -23,7 +18,7 @@ describe("supplier onboarding slides", () => {
     expect(arts).not.toContain("scooter");
     expect(arts).not.toContain("proof");
     expect(arts).not.toContain("workstation");
-    expect(arts).toEqual(["storefront", "working", "packages"]);
+    expect(arts).toEqual(["invoices", "checklist", "payment"]);
   });
 
   it("names supplier outcomes, not client request language", () => {

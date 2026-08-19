@@ -2,10 +2,10 @@ import { router, useLocalSearchParams, type Href } from "expo-router";
 import { useState } from "react";
 import {
   Pressable,
-  StyleSheet,
   Text,
   useWindowDimensions,
   View,
+  type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
@@ -17,38 +17,31 @@ import Animated, {
   useSharedValue,
   type SharedValue,
 } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { GridgoLogo } from "@/components/GridgoLogo";
+import { OnboardingMark } from "@/components/OnboardingMark";
 import { PaginationDots } from "@/components/PaginationDots";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import {
-  illustrations,
-  type IllustrationName,
-  type IllustrationPalette,
-} from "@/components/illustrations";
-import { onboardingSlides } from "@/data/onboarding";
-import { useThemeColors } from "@/hooks/useTheme";
+import { Screen } from "@/components/Screen";
+import { onboardingSlides, type OnboardingArt } from "@/data/onboarding";
 import { resolveOnboardingExit } from "@/lib/onboardingExit";
+import { estimatePagerHeight } from "@/lib/onboardingStage";
 
 /**
  * Supplier onboarding.
  *
- * Full-height horizontal pager over a fixed illustration stack. The art sits
- * behind the pager (pointerEvents none) and drifts at 40% of the text speed
- * with a cross-fade between beats — so a swipe lands anywhere in the content
- * area, not only on the short text band.
+ * Three pages: jobs, produce, payout. Each beat is a PNG the captain picked,
+ * loaded through `images.onboarding` — not a scene SVG.
  *
- * Entry points:
- * - First launch / deep link: dismiss to the app launcher.
- * - Settings replay (`?from=settings`): return to Settings explicitly.
+ * Entry points: first-run / public (`/onboarding`) and Settings replay
+ * (`/onboarding?from=settings`). Exit is explicit via `resolveOnboardingExit`
+ * — never dependent on navigation history alone.
  */
 
-const HERO_MAX = 360;
-
 export default function OnboardingScreen() {
-  const colors = useThemeColors();
-  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const { width, height: windowHeight } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
   const params = useLocalSearchParams<{ from?: string | string[] }>();
   const from = Array.isArray(params.from) ? params.from[0] : params.from;
@@ -56,29 +49,17 @@ export default function OnboardingScreen() {
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const scrollX = useSharedValue(0);
   const [index, setIndex] = useState(0);
-  // Horizontal ScrollView children do not stretch by flex — measure the
-  // content region so every page is full height and swipes land on the art.
-  const [pagerHeight, setPagerHeight] = useState(0);
-
-  // `useWindowDimensions` reports 0 on the first web paint, and a negative
-  // width is not a valid SVG dimension. Clamp rather than let it through.
-  const heroWidth = Math.max(0, Math.min(width - 32, HERO_MAX));
+  const [measuredPager, setMeasuredPager] = useState(0);
+  const pagerHeight =
+    measuredPager > 0
+      ? measuredPager
+      : estimatePagerHeight(windowHeight, insets.top, insets.bottom);
   const last = onboardingSlides.length - 1;
-
-  const palette = {
-    ink: colors.accent,
-    shade: colors.textSecondary,
-    mid: colors.textMuted,
-    tint: colors.outline,
-    highlight: colors.surface,
-  };
 
   const onScroll = useAnimatedScrollHandler((event) => {
     scrollX.value = event.contentOffset.x;
   });
 
-  // The CTA label is React state, so it cannot read the shared value. Settle
-  // it once per page rather than on every frame.
   function onMomentumScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
     setIndex(Math.round(event.nativeEvent.contentOffset.x / width));
   }
@@ -89,7 +70,6 @@ export default function OnboardingScreen() {
   }
 
   function dismiss() {
-    // Explicit exits — do not rely on stack history alone.
     const exit = resolveOnboardingExit(from, router.canGoBack());
     if (exit === "settings") {
       router.replace("/settings" as Href);
@@ -102,14 +82,19 @@ export default function OnboardingScreen() {
     router.replace("/");
   }
 
+  function onPagerLayout(event: LayoutChangeEvent) {
+    const next = event.nativeEvent.layout.height;
+    setMeasuredPager((current) => (current === next ? current : next));
+  }
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "bottom"]}>
-      {/* Header sits above the pager so Skip is never swallowed by the scroller. */}
-      <View className="gg-page flex-row items-center justify-between py-3" style={{ zIndex: 2 }}>
+    <Screen edges={["top", "bottom"]}>
+      <View className="gg-page flex-row items-center justify-between py-3">
         <GridgoLogo size={40} role="supplier" />
         <Pressable
           onPress={dismiss}
           accessibilityRole="button"
+          accessibilityLabel="Skip onboarding"
           className="gg-touch items-end justify-center"
           style={({ pressed }) => (pressed ? { opacity: 0.6 } : undefined)}
         >
@@ -117,29 +102,7 @@ export default function OnboardingScreen() {
         </Pressable>
       </View>
 
-      {/*
-        Content: art behind, full-height pager in front. Swipes on the hero,
-        empty space, or the text all page. Footer stays outside so dots and
-        the CTA remain tappable without fighting the scroller.
-      */}
-      <View
-        className="flex-1"
-        onLayout={(event) => setPagerHeight(event.nativeEvent.layout.height)}
-      >
-        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-          {onboardingSlides.map((slide, slideIndex) => (
-            <Hero
-              key={slide.id}
-              index={slideIndex}
-              art={slide.art}
-              scrollX={scrollX}
-              width={width}
-              heroWidth={heroWidth}
-              palette={palette}
-            />
-          ))}
-        </View>
-
+      <View className="flex-1" onLayout={onPagerLayout}>
         <Animated.ScrollView
           ref={scrollRef}
           horizontal
@@ -149,7 +112,6 @@ export default function OnboardingScreen() {
           onMomentumScrollEnd={onMomentumScrollEnd}
           scrollEventThrottle={16}
           style={{ flex: 1 }}
-          // Horizontal only — never introduce a vertical scroll on this screen.
           bounces={false}
         >
           {onboardingSlides.map((slide, slideIndex) => (
@@ -157,6 +119,7 @@ export default function OnboardingScreen() {
               key={slide.id}
               active={slideIndex === index}
               index={slideIndex}
+              art={slide.art}
               step={slide.step}
               title={slide.title}
               body={slide.body}
@@ -168,101 +131,56 @@ export default function OnboardingScreen() {
         </Animated.ScrollView>
       </View>
 
-      <View className="gg-page gap-4 pb-2 pt-5" style={{ zIndex: 2 }}>
-        <PaginationDots
-          count={onboardingSlides.length}
-          activeIndex={index}
-          scrollX={scrollX}
-          width={width}
-          onPress={goTo}
-        />
+      {/*
+        The dots belong to the button, not to the empty space above it.
+        Centred and pulled in tight, they read as one control.
+      */}
+      <View className="gg-page gap-2 pb-2 pt-3">
+        <View className="items-center">
+          <PaginationDots
+            count={onboardingSlides.length}
+            activeIndex={index}
+            scrollX={scrollX}
+            width={width}
+            onPress={goTo}
+          />
+        </View>
         <PrimaryButton
           label={onboardingSlides[index].cta}
           onPress={() => (index === last ? dismiss() : goTo(index + 1))}
         />
       </View>
-    </SafeAreaView>
-  );
-}
-
-type HeroProps = {
-  index: number;
-  art: IllustrationName;
-  scrollX: SharedValue<number>;
-  width: number;
-  heroWidth: number;
-  palette: IllustrationPalette;
-};
-
-/**
- * One piece of art, fading and drifting as its slide comes into view.
- *
- * All three are stacked and absolutely positioned rather than living inside
- * the pager. That is what lets them travel at 40% of the text's speed, and it
- * keeps the swap between beats a cross-fade rather than a hard cut.
- */
-function Hero({ index, art, scrollX, width, heroWidth, palette }: HeroProps) {
-  const reducedMotion = useReducedMotion();
-  const { Component, aspect } = illustrations[art];
-
-  const style = useAnimatedStyle(() => {
-    const page = width > 0 ? scrollX.value / width : 0;
-
-    // Reduced motion means no drift and no cross-fade — the art cuts between
-    // beats, the way the dots and the text pages already do. Zeroing the
-    // translation alone would still leave two pieces dissolving into each
-    // other on every swipe.
-    if (reducedMotion) {
-      return { opacity: Math.round(page) === index ? 1 : 0, transform: [{ translateX: 0 }] };
-    }
-
-    const delta = page - index;
-
-    return {
-      // Fades out over a little less than a full page, so two pieces never
-      // sit on top of each other at half strength.
-      opacity: Math.max(0, 1 - Math.abs(delta) * 1.6),
-      transform: [{ translateX: -delta * width * 0.4 }],
-    };
-  });
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        StyleSheet.absoluteFillObject,
-        // Sit the art in the upper half so it clears the text band below.
-        { alignItems: "center", justifyContent: "center", paddingBottom: 120 },
-        style,
-      ]}
-    >
-      <Component width={heroWidth} height={heroWidth / aspect} palette={palette} />
-    </Animated.View>
+    </Screen>
   );
 }
 
 type SlideProps = {
-  /** The settled page, not the scroll position. Drives accessibility only. */
   active: boolean;
   index: number;
+  art: OnboardingArt;
   step: string;
   title: string;
   body: string;
   scrollX: SharedValue<number>;
   width: number;
-  /** Measured content-region height so the page fills the swipe area. */
   height: number;
 };
 
 /**
- * One text page. Full height so the pager captures gestures over the art as
- * well as the copy. Text anchors to the bottom of the content area.
- *
- * The hairline and the step number are the job-ticket language the
- * design-system route already uses, and the number is what states position
- * when motion is off.
+ * One page: the shop picture, then the ticket number, then the words.
+ * No hairline — the art and the copy already sit as one beat.
  */
-function Slide({ active, index, step, title, body, scrollX, width, height }: SlideProps) {
+function Slide({
+  active,
+  index,
+  art,
+  step,
+  title,
+  body,
+  scrollX,
+  width,
+  height,
+}: SlideProps) {
   const reducedMotion = useReducedMotion();
 
   const style = useAnimatedStyle(() => {
@@ -275,15 +193,17 @@ function Slide({ active, index, step, title, body, scrollX, width, height }: Sli
     <Animated.View
       accessibilityElementsHidden={!active}
       importantForAccessibility={active ? "auto" : "no-hide-descendants"}
-      style={[{ width, height: height > 0 ? height : undefined, justifyContent: "flex-end" }, style]}
+      style={[{ width, height: height > 0 ? height : undefined }, style]}
     >
-      <View className="gg-page gap-2 pb-2">
-        <View className="gg-divider" />
-        <Text className="pt-2 text-overline text-text-muted">{step}</Text>
-        <Text className="text-h1 text-text-primary" accessibilityRole="header">
+      <View className="min-h-0 flex-1">
+        <OnboardingMark name={art} />
+      </View>
+      <View className="gg-page pb-1">
+        <Text className="text-overline text-text-muted">{step}</Text>
+        <Text className="mt-1.5 text-h1 text-text-primary" accessibilityRole="header">
           {title}
         </Text>
-        <Text className="text-body-lg text-text-secondary">{body}</Text>
+        <Text className="mt-2 text-body-lg text-text-secondary">{body}</Text>
       </View>
     </Animated.View>
   );

@@ -84,7 +84,10 @@ export function stepProgressLabel(id: OnboardingStepId): string {
 
 export type StepProblems = Partial<Record<string, string>>;
 
-export function shopStepProblems(draft: SignupDraft): StepProblems {
+/** Apply after a live Clerk session does not choose a password. */
+export type ApplyOptions = { clerkSession?: boolean };
+
+export function shopStepProblems(draft: SignupDraft, options?: ApplyOptions): StepProblems {
   const problems: StepProblems = {};
   if (!draft.shopName.trim()) {
     problems.shopName = "Enter the name clients and riders will see on your jobs.";
@@ -98,7 +101,7 @@ export function shopStepProblems(draft: SignupDraft): StepProblems {
   if (!isPhoneish(draft.phone)) {
     problems.phone = "Enter a mobile number GRIDGO and the rider can reach you on.";
   }
-  if (draft.password.length < MIN_PASSWORD_LENGTH) {
+  if (!options?.clerkSession && draft.password.length < MIN_PASSWORD_LENGTH) {
     problems.password = `Choose a password of at least ${MIN_PASSWORD_LENGTH} characters.`;
   }
   return problems;
@@ -115,10 +118,14 @@ export function servicesStepProblems(draft: SignupDraft): StepProblems {
     : { categoryCodes: "Pick at least one kind of work, starting with what you do best." };
 }
 
-export function stepProblems(id: OnboardingStepId, draft: SignupDraft): StepProblems {
+export function stepProblems(
+  id: OnboardingStepId,
+  draft: SignupDraft,
+  options?: ApplyOptions,
+): StepProblems {
   switch (id) {
     case "shop":
-      return shopStepProblems(draft);
+      return shopStepProblems(draft, options);
     case "location":
       return locationStepProblems(draft);
     case "services":
@@ -133,16 +140,27 @@ export function hasProblems(problems: StepProblems): boolean {
 }
 
 /** The first step still missing something, or null when the draft is complete. */
-export function firstIncompleteStep(draft: SignupDraft): OnboardingStep | null {
+export function firstIncompleteStep(
+  draft: SignupDraft,
+  options?: ApplyOptions,
+): OnboardingStep | null {
   for (const step of ONBOARDING_STEPS) {
-    if (hasProblems(stepProblems(step.id, draft))) return step;
+    if (hasProblems(stepProblems(step.id, draft, options))) return step;
   }
   return null;
 }
 
 /** Whether the draft carries enough for enroll to be worth sending. */
-export function isSendable(draft: SignupDraft): boolean {
-  return firstIncompleteStep(draft) === null && isPlaced(draft.pin);
+export function isSendable(draft: SignupDraft, options?: ApplyOptions): boolean {
+  return firstIncompleteStep(draft, options) === null && isPlaced(draft.pin);
+}
+
+/**
+ * Where Sign in should open apply. A leftover draft skips steps already filled.
+ * A sendable draft goes to review so the shop can send.
+ */
+export function applyRoute(draft: SignupDraft, options?: ApplyOptions): OnboardingStep["route"] {
+  return firstIncompleteStep(draft, options)?.route ?? "/(auth)/signup/review";
 }
 
 /** Deliberately loose: the platform is the authority, this catches typos. */

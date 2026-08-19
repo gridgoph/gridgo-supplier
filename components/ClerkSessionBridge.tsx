@@ -33,9 +33,8 @@ export function ClerkSessionBridge({ children }: Props) {
     const session = useSession.getState();
 
     if (!isLoaded) {
-      if (session.authSource !== "legacy") {
-        session.setClerkIdentity({ kind: "loading" });
-      }
+      // Leave signed_out in place so welcome stays mounted. Flipping this to
+      // loading used to unmount the door and leave the dark canvas empty.
       return () => {
         cancelled = true;
       };

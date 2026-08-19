@@ -81,4 +81,11 @@ describe("Settings screen", () => {
       params: { from: "settings" },
     });
   });
+
+  it("does not show the GRIDGO address", async () => {
+    view = await render(<SettingsScreen />);
+
+    expect(screen.queryByText("CONNECTION")).toBeNull();
+    expect(screen.queryByText("GRIDGO address")).toBeNull();
+  });
 });

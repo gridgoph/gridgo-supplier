@@ -1,5 +1,6 @@
+import { useAuth, useUser } from "@clerk/expo";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { OnboardingStep } from "@/components/OnboardingStep";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -16,14 +17,25 @@ import { useSignupDraft } from "@/store/signupDraft";
  * The identity first, because it is what a shop owner already knows by heart —
  * nothing here needs looking up, so the flow starts moving before it asks for
  * anything that does.
+ *
+ * A live Clerk session has already chosen the email. Password is how a new
+ * identity is created; it is not asked again here.
  */
 export default function ShopIdentityStep() {
   const draft = useSignupDraft((s) => s.draft);
   const patch = useSignupDraft((s) => s.patch);
+  const { isSignedIn } = useAuth();
+  const { user: clerkUser } = useUser();
   const [showProblems, setShowProblems] = useState(false);
 
+  const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress?.trim() ?? "";
+  useEffect(() => {
+    if (!isSignedIn || !clerkEmail || draft.email === clerkEmail) return;
+    patch({ email: clerkEmail });
+  }, [clerkEmail, draft.email, isSignedIn, patch]);
+
   const step = stepAt("shop");
-  const problems = shopStepProblems(draft);
+  const problems = shopStepProblems(draft, { clerkSession: Boolean(isSignedIn) });
   const problem = (field: string) => (showProblems ? (problems[field] ?? null) : null);
 
   function next() {
@@ -38,15 +50,21 @@ export default function ShopIdentityStep() {
     <OnboardingStep
       id="shop"
       title={step.title}
-      lede={step.lede}
+      lede={
+        isSignedIn
+          ? "Finish opening your shop. This sign-in is already live — GRIDGO just needs the shop details."
+          : step.lede
+      }
       contentClassName="gap-6 pb-4 pt-4"
       footer={
         <>
           <PrimaryButton label="Continue" onPress={next} />
-          <SecondaryButton
-            label="I already have an account"
-            onPress={() => router.replace("/(auth)/login")}
-          />
+          {isSignedIn ? null : (
+            <SecondaryButton
+              label="I already have an account"
+              onPress={() => router.replace("/(auth)/login")}
+            />
+          )}
         </>
       }
     >
@@ -81,6 +99,7 @@ export default function ShopIdentityStep() {
           kind="email"
           placeholder="you@yourshop.ph"
           accessibilityLabel="Email"
+          editable={!isSignedIn}
         />
       </FieldShell>
 
@@ -98,21 +117,23 @@ export default function ShopIdentityStep() {
         />
       </FieldShell>
 
-      <FieldShell
-        label="Password"
-        hint="At least 8 characters. This is the only thing GRIDGO does not keep while you finish signing up."
-        error={problem("password")}
-      >
-        <PasswordField
-          value={draft.password}
-          onChange={(password) => patch({ password })}
-          kind="new-password"
-          placeholder="Choose a password"
-          accessibilityLabel="Password"
-          returnKeyType="done"
-          onSubmit={next}
-        />
-      </FieldShell>
+      {isSignedIn ? null : (
+        <FieldShell
+          label="Password"
+          hint="At least 8 characters. This is the only thing GRIDGO does not keep while you finish signing up."
+          error={problem("password")}
+        >
+          <PasswordField
+            value={draft.password}
+            onChange={(password) => patch({ password })}
+            kind="new-password"
+            placeholder="Choose a password"
+            accessibilityLabel="Password"
+            returnKeyType="done"
+            onSubmit={next}
+          />
+        </FieldShell>
+      )}
     </OnboardingStep>
   );
 }

@@ -25,6 +25,7 @@ import { useAlertStream } from "@/hooks/useAlertStream";
 import { useAppFonts } from "@/hooks/useAppFonts";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
+import { authDoorOpen } from "@/lib/launch";
 import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions";
 import { resolveClerkPublishableKey } from "@/lib/clerk";
 import { isMatchable, isSignedIn, useSession } from "@/store/session";
@@ -140,11 +141,9 @@ function RootStack() {
   const signedIn = isSignedIn(user);
   const matchable = signedIn && isMatchable(user);
   const accessBlocked = identity.kind === "mismatch" || identity.kind === "error";
-  // Unassigned Clerk (just created, not yet enrolled) stays on apply so
-  // Send can enroll without bouncing to the closed-shop screen.
-  const signedOut =
-    !signedIn &&
-    (identity.kind === "signed_out" || identity.kind === "unassigned");
+  // Unassigned Clerk stays on apply so Send can enroll. Loading stays on the
+  // door too — dropping it unmounted welcome and left a black canvas.
+  const signedOut = authDoorOpen(identity, user);
 
   // Live alerts for as long as there is a session to receive them.
   useAlertStream(signedIn);

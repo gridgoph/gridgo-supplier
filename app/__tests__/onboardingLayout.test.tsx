@@ -40,6 +40,7 @@ jest.mock("react-native-reanimated", () => {
 jest.mock("react-native-safe-area-context", () => {
   const { View } = require("react-native");
   return {
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
     SafeAreaView: ({ children, ...props }: { children: React.ReactNode }) => (
       <View {...props}>{children}</View>
     ),
@@ -58,17 +59,9 @@ jest.mock("@/hooks/useTheme", () => ({
   }),
 }));
 
-// Illustrations pull heavy SVG — stub the registry for layout tests.
-jest.mock("@/components/illustrations", () => {
+jest.mock("@/components/OnboardingMark", () => {
   const { View } = require("react-native");
-  const Stub = () => <View testID="illustration-stub" />;
-  return {
-    illustrations: {
-      storefront: { Component: Stub, aspect: 1.2 },
-      working: { Component: Stub, aspect: 1.2 },
-      packages: { Component: Stub, aspect: 1.5 },
-    },
-  };
+  return { OnboardingMark: () => <View testID="onboarding-mark" /> };
 });
 
 import OnboardingScreen from "@/app/onboarding";
