@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { Platform, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { spacing } from "@/constants/theme";
+
 type Props = {
   /** What the sheet is asking, as a heading. */
   title: string;
@@ -22,13 +24,21 @@ type Props = {
  *
  * Height is left to the content, so the sheet's own `fitToContents` detent can
  * measure it — nothing here may claim `flex-1`.
+ *
+ * Bottom padding is the system inset plus one page step: the last action is a
+ * real target, not a kiss against the home indicator. Measuring only
+ * `max(inset, 16)` sat Sign out on the gesture zone on a gesture-nav phone.
  */
+export function sheetBottomPadding(insetBottom: number): number {
+  return insetBottom + spacing.xl;
+}
+
 export function SheetSurface({ title, body, children, footer }: Props) {
   const insets = useSafeAreaInsets();
 
   const surface = (
     <View
-      className="rounded-t-card border-t border-outline bg-surface px-4 pb-4"
+      className="rounded-t-card border-t border-outline bg-surface px-4"
       // The only deliberate platform split in this component: iOS draws its
       // grabber inside the sheet's own top edge, so the heading needs a further
       // 8pt to clear it. Android's bottom sheet puts the handle in its own strip
@@ -36,9 +46,10 @@ export function SheetSurface({ title, body, children, footer }: Props) {
       // value on both.
       style={{
         paddingTop: Platform.OS === "ios" ? 24 : 16,
-        paddingBottom: Math.max(insets.bottom, 16),
+        paddingBottom: sheetBottomPadding(insets.bottom),
       }}
       accessibilityViewIsModal
+      testID="sheet-surface"
     >
       <View className="gap-2">
         <Text className="text-h3 text-text-primary" accessibilityRole="header">
@@ -49,7 +60,7 @@ export function SheetSurface({ title, body, children, footer }: Props) {
 
       {children ? <View className="mt-5">{children}</View> : null}
 
-      <View className="mt-6 gap-2">{footer}</View>
+      <View className="mt-6 gap-3">{footer}</View>
     </View>
   );
 
