@@ -51,6 +51,7 @@ const HANDLED_BY_ITS_CALLERS = [
   "components/ShopLocationPicker.tsx",
   "components/JobTicketCode.tsx",
   "components/SpecGroupEditor.tsx",
+  "components/PrepStepEditor.tsx",
 ];
 
 /**
@@ -63,6 +64,9 @@ const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
   { component: "ShopLocationPicker", users: /<ShopLocationPicker\b/, least: 2 },
   // Every step and add-on on one listing is edited inside the listing screen.
   { component: "SpecGroupEditor", users: /<SpecGroupEditor\b/, least: 1 },
+  // Only the add form takes typing; the preview draws the read-only row and is
+  // deliberately not checked, which is why this matches the button, not the row.
+  { component: "AddPrepStepButton", users: /<AddPrepStepButton\b/, least: 1 },
 ];
 
 describe("every field a shop types into sits in a keyboard-aware surface", () => {

@@ -1,0 +1,226 @@
+import {
+  addGroup,
+  addOption,
+  addPrepStep,
+  loadListing,
+  removeListing,
+  reorderPrepSteps,
+} from "@/lib/listingsApi";
+import type { Listing, PrepStep, SpecGroup } from "@/lib/listings";
+
+/**
+ * What this app actually puts on the wire.
+ *
+ * Every bug behind this file was invisible from the screen and obvious from the
+ * request: a listing that would not open, a step that would not save, a second
+ * choice refused for a position nobody chose, and a Remove button that did
+ * nothing. So these assert the request rather than the render — the screens are
+ * covered elsewhere, and none of these would have been caught there.
+ *
+ * `docs/SUPPLIER_CATALOG_API.md` in gridgo-api is the contract being pinned.
+ */
+
+function answered(status: number, body: unknown): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => (body == null ? "" : JSON.stringify(body)),
+  } as Response;
+}
+
+/** The last call's method, parsed body and headers, in one place. */
+function sent(fetch: jest.SpyInstance, index = 0) {
+  const [url, init] = fetch.mock.calls[index] as [string, RequestInit];
+  return {
+    url,
+    method: init.method ?? "GET",
+    headers: (init.headers ?? {}) as Record<string, string>,
+    body: init.body ? (JSON.parse(init.body as string) as Record<string, unknown>) : null,
+  };
+}
+
+const group: SpecGroup = {
+  id: "cog_1",
+  name: "Rush",
+  kind: "addon",
+  required: false,
+  helpText: null,
+  sortOrder: 0,
+  version: 4,
+  options: [
+    {
+      id: "cop_1",
+      label: "Ready in 24 hours",
+      priceModifierMinor: 20000,
+      active: true,
+      sortOrder: 0,
+    },
+  ],
+};
+
+const listing: Listing = {
+  id: "sci_1",
+  serviceLineId: "svc_1",
+  subcategoryCode: "tarpaulins_outdoor_banners",
+  name: "Tarpaulin, 13oz",
+  description: "",
+  basePriceMinor: 45000,
+  pricingUnit: "per_unit",
+  packageQty: null,
+  turnaroundMode: "inherit",
+  turnaroundHours: null,
+  fileFormatMode: "inherit",
+  formatCodes: [],
+  onTheBoard: false,
+  sortOrder: 0,
+  photos: [],
+  groups: [group],
+  version: 7,
+  updatedAt: null,
+};
+
+function step(id: string, sortOrder: number): PrepStep {
+  return { id, title: `Step ${sortOrder}`, body: "", sortOrder };
+}
+
+describe("what the board sends GRIDGO", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  /**
+   * The captain's report: Remove this listing does nothing. GRIDGO answered
+   * `400 expected_version_required` to a body-less DELETE.
+   */
+  it("removes a listing with its version, in the body and the header", async () => {
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(answered(200, { ok: true }));
+
+    const result = await removeListing(listing);
+
+    const call = sent(fetch);
+    expect(call.method).toBe("DELETE");
+    expect(call.url).toContain("/me/catalog-items/sci_1");
+    expect(call.body).toEqual({ expectedVersion: 7 });
+    expect(call.headers["If-Match"]).toBe("7");
+    expect(result).toEqual({ status: "ok", value: "deleted" });
+  });
+
+  /** A listing a client already ordered from comes back, still there. */
+  it("calls a listing GRIDGO kept for a job archived, not deleted", async () => {
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(answered(200, { item: { ...listing, active: false } }));
+
+    expect(await removeListing(listing)).toEqual({ status: "ok", value: "archived" });
+  });
+
+  /** `POST .../option-groups 400 expected_version_required`, from the phone. */
+  it("opens a step with the listing's version and the first choice", async () => {
+    const fetch = jest.spyOn(global, "fetch").mockResolvedValue(answered(201, { group }));
+
+    await addGroup(listing, {
+      name: "Size",
+      kind: "spec",
+      required: true,
+      firstOption: { label: "2 × 3 ft", priceModifierMinor: 0 },
+    });
+
+    const call = sent(fetch);
+    expect(call.method).toBe("POST");
+    expect(call.headers["If-Match"]).toBe("7");
+    expect(call.body).toMatchObject({
+      expectedVersion: 7,
+      name: "Size",
+      kind: "spec",
+      required: true,
+      options: [{ label: "2 × 3 ft", priceModifierMinor: 0, sortOrder: 0 }],
+    });
+  });
+
+  /**
+   * Positions are chosen here, not left to GRIDGO. A choice with no position
+   * is read as position zero — which the group's first choice already holds —
+   * so the second choice a shop ever adds used to come back refused.
+   */
+  it("adds a second choice at a free position, not on top of the first", async () => {
+    const fetch = jest.spyOn(global, "fetch").mockResolvedValue(answered(201, {}));
+
+    await addOption(group, { label: "Ready in 12 hours", priceModifierMinor: 40000 });
+
+    const call = sent(fetch);
+    expect(call.url).toContain("/me/catalog-option-groups/cog_1/options");
+    expect(call.body).toEqual({
+      expectedVersion: 4,
+      label: "Ready in 12 hours",
+      priceModifierMinor: 40000,
+      sortOrder: 1,
+    });
+    // A choice belongs to its group, so it carries the group's version.
+    expect(call.headers["If-Match"]).toBe("4");
+  });
+
+  /** A gap left by a removed step must not be read as the end of the list. */
+  it("adds a step into the gap a removed one left", async () => {
+    const fetch = jest.spyOn(global, "fetch").mockResolvedValue(answered(201, {}));
+
+    await addPrepStep(listing, [step("cps_2", 1), step("cps_3", 2)], {
+      title: "Outline your fonts",
+      body: "",
+    });
+
+    expect(sent(fetch).body).toMatchObject({ sortOrder: 0, expectedVersion: 7 });
+  });
+
+  /** Steps move as a whole set; two swapping would collide one at a time. */
+  it("reorders steps by sending every one of them", async () => {
+    const fetch = jest.spyOn(global, "fetch").mockResolvedValue(answered(200, {}));
+
+    await reorderPrepSteps(listing, [step("cps_2", 1), step("cps_1", 0)]);
+
+    const call = sent(fetch);
+    expect(call.url).toContain("/me/catalog-items/sci_1/prep-steps/reorder");
+    expect(call.body).toEqual({ stepIds: ["cps_2", "cps_1"], expectedVersion: 7 });
+  });
+});
+
+describe("opening one listing", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("reads the listing GRIDGO answered with", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue(
+      answered(200, { item: { id: "sci_1", name: "Tarpaulin, 13oz", version: 7 } }),
+    );
+
+    const result = await loadListing("sci_1");
+
+    expect(result.status).toBe("ok");
+    expect(result.status === "ok" && result.value.name).toBe("Tarpaulin, 13oz");
+  });
+
+  /**
+   * The captain's report: "This listing is not reachable" on a `GET` that
+   * answered 200. A parse miss used to be turned into a synthetic 404 and read
+   * as a platform that had not shipped the board at all.
+   */
+  it("says the app is behind when GRIDGO answers with a shape it cannot read", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue(answered(200, { item: { name: "no id" } }));
+
+    const result = await loadListing("sci_1");
+
+    expect(result.status).toBe("failed");
+    expect(result.status === "failed" && result.message).toContain("Update GRIDGO Supplier");
+  });
+
+  /** Only a route that is genuinely absent means the board is not open. */
+  it("keeps not-open-yet for a route this deployment does not have", async () => {
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(answered(404, { error: "not_found" }));
+
+    expect(await loadListing("sci_1")).toEqual({ status: "not_open_yet" });
+  });
+});

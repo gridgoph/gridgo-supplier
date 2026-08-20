@@ -6,6 +6,12 @@ import { useThemeColors } from "@/hooks/useTheme";
 export type ChipOption = {
   value: string;
   label: string;
+  /**
+   * What the chip is called out loud, when the visible word is a shorthand the
+   * group's heading completes. "Canva" under "Links you accept" is clear on
+   * screen and means nothing read on its own.
+   */
+  accessibilityLabel?: string;
 };
 
 type Props = {
@@ -49,7 +55,7 @@ export function ChipMultiSelect({
             disabled={disabled}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: on, disabled: Boolean(disabled) }}
-            accessibilityLabel={option.label}
+            accessibilityLabel={option.accessibilityLabel ?? option.label}
             className={
               on
                 ? "gg-chip gg-touch border-accent bg-accent px-3"

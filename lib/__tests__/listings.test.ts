@@ -1,4 +1,3 @@
-import type { SupplierService } from "@/lib/api";
 import {
   boardBlockers,
   boardContextFor,
@@ -13,6 +12,7 @@ import {
   readyInLine,
   unitLine,
   type Listing,
+  type ServiceLine,
 } from "@/lib/listings";
 import { buildCatalog } from "@/lib/taxonomy";
 
@@ -135,6 +135,7 @@ describe("what a listing costs", () => {
           required: true,
           helpText: null,
           sortOrder: 0,
+          version: 1,
           options: [
             { id: "o1", label: "3 × 5", priceModifierMinor: 15000, active: true, sortOrder: 0 },
             { id: "o2", label: "2 × 3", priceModifierMinor: 5000, active: true, sortOrder: 1 },
@@ -147,6 +148,7 @@ describe("what a listing costs", () => {
           required: false,
           helpText: null,
           sortOrder: 1,
+          version: 1,
           options: [
             { id: "o3", label: "Every 2ft", priceModifierMinor: 9000, active: true, sortOrder: 0 },
           ],
@@ -173,6 +175,7 @@ describe("what a listing costs", () => {
             required: true,
             helpText: null,
             sortOrder: 0,
+            version: 1,
             options: [
               { id: "o", label: "Greyscale", priceModifierMinor: -9000, active: true, sortOrder: 0 },
             ],
@@ -222,6 +225,7 @@ describe("what stops a listing going on the board", () => {
           required: true,
           helpText: null,
           sortOrder: 0,
+          version: 1,
           options: [],
         },
       ],
@@ -257,7 +261,7 @@ describe("where a listing stands", () => {
 });
 
 describe("what the floor says about the board", () => {
-  const services: SupplierService[] = [];
+  const services: ServiceLine[] = [];
 
   it("invites an empty board to open, in the words of the shop's own wait", () => {
     expect(boardPrompt([], services, true).body).toContain("Clients pick a shop");
@@ -286,34 +290,14 @@ describe("where a shop may file a listing", () => {
     finishes: [],
   });
 
-  const line = (over: Partial<SupplierService>): SupplierService =>
-    ({
-      id: "svc_1",
-      supplierId: "u1",
-      categoryCode: "marketing_collateral",
-      materialCodes: [],
-      finishCodes: [],
-      productFamilyIds: [],
-      sizeMin: null,
-      sizeMax: null,
-      qtyMin: null,
-      qtyMax: null,
-      pricingBasis: "",
-      referenceRateMinor: 0,
-      turnaroundHours: 48,
-      capacityDaily: null,
-      capacityWeekly: null,
-      zones: [],
-      equipmentNotes: "",
-      state: "pending_verification",
-      verifiedAt: null,
-      suspendedAt: null,
-      suspendReason: null,
-      withdrawnAt: null,
-      createdAt: "",
-      updatedAt: "",
-      ...over,
-    }) as SupplierService;
+  const line = (over: Partial<ServiceLine> = {}): ServiceLine => ({
+    id: "svc_1",
+    categoryCode: "marketing_collateral",
+    state: "pending_verification",
+    turnaroundHours: 48,
+    formatCodes: [],
+    ...over,
+  });
 
   it("offers a category still with Operations, because approval needs a listing", () => {
     expect(boardTargets(catalog, [line({})])).toHaveLength(1);

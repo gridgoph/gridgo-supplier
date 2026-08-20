@@ -1,27 +1,39 @@
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import { fileFormatName } from "@/data/fileFormats";
 import {
+  LISTING_CAPS,
+  nextFreeSlot,
   normalizeListing,
   normalizeListings,
+  normalizePrepSteps,
   normalizeStarters,
   type Listing,
   type ListingStarter,
+  type PrepStep,
+  type SpecGroup,
 } from "@/lib/listings";
 
 /**
- * The board, against a GRIDGO that may not have it yet.
+ * The board, against a GRIDGO that may not have every part of it yet.
  *
- * The listing routes are settled design and in flight on the platform. Until
- * they land on a deployment, calling them answers 404 — and a screen that
- * showed a shop a red failure for a route GRIDGO has not opened would be
- * blaming the shop for the platform's schedule. So "not open yet" is a third
- * outcome, exactly as it is for the shop's own pin and papers in
- * `lib/verification.ts`: the screen says plainly what is true, offers to try
- * again, and nothing anywhere pretends a listing was saved.
+ * `docs/SUPPLIER_CATALOG_API.md` in gridgo-api is the contract. Two rules run
+ * through everything here.
  *
- * Nothing here keeps a local catalogue. A board that exists only on one phone
- * is worse than an empty one: a shop would fill it, believe clients could see
- * it, and find out at the first job that nobody could.
+ * **A version goes with every change.** GRIDGO answers
+ * `400 expected_version_required` otherwise, and which record's version depends
+ * on what is moving: the listing's for its own fields, its formats, its photos
+ * and for opening a new step; the *step's* for renaming it, removing it, and
+ * for every option inside it. `lib/api.ts` sends each one as both
+ * `expectedVersion` and `If-Match`.
+ *
+ * **A route that is not there yet is a third outcome, not a failure.** These
+ * routes are the newest thing on GRIDGO and a deployment can be behind the
+ * contract, so a 404 says so plainly and offers to look again — a shop cannot
+ * fix GRIDGO's release schedule, and a red error would tell it to try. Nothing
+ * here keeps a local copy of anything: a board that exists on one phone is
+ * worse than an empty one, because a shop would fill it and find out at the
+ * first job that no client could see it.
  */
 
 export type BoardOutcome<T> =
@@ -32,6 +44,10 @@ export type BoardOutcome<T> =
 /** What a shop is told while GRIDGO has no board routes. Promises nothing. */
 export const BOARD_NOT_OPEN_YET =
   "GRIDGO has not opened your board on this app yet. Nothing you do here is lost — check again shortly, and it will be the first thing this screen shows.";
+
+/** The same fact for the one section the platform is still building. */
+export const PREP_STEPS_NOT_OPEN_YET =
+  "GRIDGO has not opened this section yet. Your listing is unaffected — check again shortly and add what a client should do before they send work.";
 
 /** 404/405 mean the route is not there. Anything else is a real failure. */
 function isRouteAbsent(error: unknown): boolean {
@@ -55,6 +71,17 @@ async function attempt<T>(
   }
 }
 
+/**
+ * A listing GRIDGO answered with but this app could not read.
+ *
+ * Kept apart from every other outcome on purpose. It is not "your board is not
+ * open" — the board is open, GRIDGO returned a listing, and this app is the
+ * part that is behind. Saying so is what stops a shop pulling back and forth on
+ * a screen that will never load.
+ */
+const UNREADABLE_LISTING =
+  "GRIDGO sent this listing in a shape this version of the app cannot read. Update GRIDGO Supplier, or ask Operations to open it on the web.";
+
 /* --------------------------------------------------------------------------
    Listings
    -------------------------------------------------------------------------- */
@@ -67,11 +94,22 @@ export async function loadBoard(): Promise<BoardOutcome<Listing[]>> {
 
 /** One listing, reloaded from GRIDGO. Never trusted from local state. */
 export async function loadListing(itemId: string): Promise<BoardOutcome<Listing>> {
-  return attempt("open this listing", async () => {
-    const listing = normalizeListing(await api.getCatalogItem(itemId));
-    if (!listing) throw new api.ApiError(404, { error: "not_found" });
-    return listing;
-  });
+  let body: unknown;
+  try {
+    body = await api.getCatalogItem(itemId);
+  } catch (error) {
+    if (isRouteAbsent(error)) return { status: "not_open_yet" };
+    return {
+      status: "failed",
+      message: humanizeApiError(error, offlineMessage("open this listing")),
+    };
+  }
+
+  // GRIDGO answered. Whatever happens now, this is not "the board is closed" —
+  // turning a parse miss into a synthetic 404 is how a working listing ends up
+  // reported as a platform that has not shipped.
+  const listing = normalizeListing(body);
+  return listing ? { status: "ok", value: listing } : { status: "failed", message: UNREADABLE_LISTING };
 }
 
 export type NewListingInput = {
@@ -96,7 +134,7 @@ export async function createListing(
     };
     if (input.starterId) body.starterId = input.starterId;
     const listing = normalizeListing(await api.createCatalogItem(body));
-    if (!listing) throw new api.ApiError(502, { error: "not_found" });
+    if (!listing) throw new api.ApiError(502, { error: "unreadable" });
     return listing;
   });
 }
@@ -121,18 +159,36 @@ export async function saveListing(
   patch: ListingPatch,
 ): Promise<BoardOutcome<Listing>> {
   return attempt("save this listing", async () => {
-    const body: Record<string, unknown> = { ...patch };
-    if (listing.version != null) body.expectedVersion = listing.version;
-    const saved = normalizeListing(await api.updateCatalogItem(listing.id, body));
-    if (!saved) throw new api.ApiError(502, { error: "not_found" });
+    const saved = normalizeListing(
+      await api.updateCatalogItem(listing.id, listing.version, patch),
+    );
+    if (!saved) throw new api.ApiError(502, { error: "unreadable" });
     return saved;
   });
 }
 
-export async function removeListing(itemId: string): Promise<BoardOutcome<null>> {
+/**
+ * What happened to a listing the shop asked to remove.
+ *
+ * GRIDGO archives a listing a client has already ordered from, so the job's
+ * history keeps the price and options it was sold at. That is a different fact
+ * from "it is gone", and a shop that is told the wrong one goes looking for a
+ * listing that is no longer on its board.
+ */
+export type RemovalOutcome = "deleted" | "archived";
+
+export const ARCHIVED_SENTENCE =
+  "Kept for a job already ordered — it is off the board and no client can see it.";
+
+export async function removeListing(
+  listing: Listing,
+): Promise<BoardOutcome<RemovalOutcome>> {
   return attempt("remove this listing", async () => {
-    await api.deleteCatalogItem(itemId);
-    return null;
+    const body = await api.deleteCatalogItem(listing.id, listing.version);
+    // An archived listing comes back as the item itself, still there and no
+    // longer active. A deleted one comes back with nothing to return.
+    const kept = normalizeListing(body);
+    return kept ? "archived" : "deleted";
   });
 }
 
@@ -143,90 +199,160 @@ export async function removeListing(itemId: string): Promise<BoardOutcome<null>>
 /**
  * Replace the listing's own accepted-format set.
  *
- * An empty set is how a listing goes back to inheriting its service line's
- * formats — the contract's `inherit` mode holds no item rows.
+ * `inherit` clears the listing's rows and follows its category line; `override`
+ * needs at least one code. A code the platform has not seeded yet comes back as
+ * a refusal naming that code, and it is named on screen too — the link formats
+ * are landing on GRIDGO in parallel with this screen, and "one of your choices
+ * is not accepted" would leave a shop unticking five boxes to find out which.
  */
 export async function setFileFormats(
-  itemId: string,
+  listing: Listing,
+  mode: Listing["fileFormatMode"],
   formatCodes: string[],
-): Promise<BoardOutcome<null>> {
-  return attempt("save the files you accept", async () => {
-    await api.putCatalogItemFileFormats(itemId, formatCodes);
-    return null;
-  });
+): Promise<BoardOutcome<Listing>> {
+  try {
+    const saved = normalizeListing(
+      await api.putCatalogItemFileFormats(
+        listing.id,
+        listing.version,
+        mode,
+        mode === "override" ? formatCodes : [],
+      ),
+    );
+    if (!saved) return { status: "failed", message: UNREADABLE_LISTING };
+    return { status: "ok", value: saved };
+  } catch (error) {
+    if (isRouteAbsent(error)) return { status: "not_open_yet" };
+    const refused = refusedFormatCode(error);
+    if (refused) {
+      return {
+        status: "failed",
+        message: `GRIDGO does not accept ${fileFormatName(refused)} yet. Take it off and save the rest — it will appear here when the platform opens it.`,
+      };
+    }
+    return {
+      status: "failed",
+      message: humanizeApiError(error, offlineMessage("save the files you accept")),
+    };
+  }
+}
+
+/** The one code GRIDGO named when it refused the set, if it named one. */
+function refusedFormatCode(error: unknown): string | null {
+  if (!(error instanceof api.ApiError)) return null;
+  const body = error.body;
+  if (typeof body !== "object" || !body) return null;
+  const record = body as Record<string, unknown>;
+  if (record.error !== "invalid_file_format") return null;
+  return typeof record.formatCode === "string" ? record.formatCode : null;
 }
 
 /* --------------------------------------------------------------------------
    Steps and add-ons
    -------------------------------------------------------------------------- */
 
+/**
+ * Open a step or an add-on, with the first thing a client can pick.
+ *
+ * GRIDGO will not create an empty group, and it is right not to: a step with
+ * nothing under it is a question a client cannot answer. So the screen asks for
+ * the name and the first choice together, and both go in one call.
+ */
 export async function addGroup(
-  itemId: string,
-  input: { name: string; kind: "spec" | "addon"; required: boolean; helpText?: string | null },
+  listing: Listing,
+  input: {
+    name: string;
+    kind: "spec" | "addon";
+    required: boolean;
+    helpText?: string | null;
+    firstOption: { label: string; priceModifierMinor: number };
+  },
 ): Promise<BoardOutcome<null>> {
-  return attempt("add this step", async () => {
-    await api.createCatalogOptionGroup(itemId, {
+  return attempt(input.kind === "addon" ? "add this add-on" : "add this step", async () => {
+    await api.createCatalogOptionGroup(listing.id, listing.version, {
       name: input.name,
       kind: input.kind,
-      // Only a step can be required; an extra the customer may skip cannot be.
+      // Only a step can be required; an extra a client may skip cannot be.
       required: input.kind === "addon" ? false : input.required,
       helpText: input.helpText ?? null,
+      sortOrder: nextFreeSlot(
+        listing.groups.map((group) => group.sortOrder),
+        LISTING_CAPS.specGroups,
+      ),
+      options: [
+        {
+          label: input.firstOption.label,
+          priceModifierMinor: input.firstOption.priceModifierMinor,
+          sortOrder: 0,
+        },
+      ],
     });
     return null;
   });
 }
 
-export async function renameGroup(
-  itemId: string,
-  groupId: string,
+export async function saveGroup(
+  listing: Listing,
+  group: SpecGroup,
   patch: { name?: string; required?: boolean; helpText?: string | null; sortOrder?: number },
 ): Promise<BoardOutcome<null>> {
   return attempt("save this step", async () => {
-    await api.updateCatalogOptionGroup(itemId, groupId, patch);
+    await api.updateCatalogOptionGroup(listing.id, group.id, group.version, patch);
     return null;
   });
 }
 
 export async function removeGroup(
-  itemId: string,
-  groupId: string,
+  listing: Listing,
+  group: SpecGroup,
 ): Promise<BoardOutcome<null>> {
   return attempt("remove this step", async () => {
-    await api.deleteCatalogOptionGroup(itemId, groupId);
+    await api.deleteCatalogOptionGroup(listing.id, group.id, group.version);
     return null;
   });
 }
 
+/**
+ * Add one thing a client can pick.
+ *
+ * The position is sent rather than left to GRIDGO. Left out, the contract reads
+ * it as zero — which the group's first choice already holds — so the second
+ * choice a shop ever adds comes back refused for a position it never chose.
+ */
 export async function addOption(
-  groupId: string,
+  group: SpecGroup,
   input: { label: string; priceModifierMinor: number },
 ): Promise<BoardOutcome<null>> {
-  return attempt("add this option", async () => {
-    await api.createCatalogOption(groupId, {
+  return attempt("add this choice", async () => {
+    await api.createCatalogOption(group.id, group.version, {
       label: input.label,
       priceModifierMinor: input.priceModifierMinor,
+      sortOrder: nextFreeSlot(
+        group.options.map((option) => option.sortOrder),
+        LISTING_CAPS.optionsPerGroup,
+      ),
     });
     return null;
   });
 }
 
 export async function saveOption(
-  groupId: string,
+  group: SpecGroup,
   optionId: string,
   patch: { label?: string; priceModifierMinor?: number; active?: boolean; sortOrder?: number },
 ): Promise<BoardOutcome<null>> {
-  return attempt("save this option", async () => {
-    await api.updateCatalogOption(groupId, optionId, patch);
+  return attempt("save this choice", async () => {
+    await api.updateCatalogOption(group.id, optionId, group.version, patch);
     return null;
   });
 }
 
 export async function removeOption(
-  groupId: string,
+  group: SpecGroup,
   optionId: string,
 ): Promise<BoardOutcome<null>> {
-  return attempt("remove this option", async () => {
-    await api.deleteCatalogOption(groupId, optionId);
+  return attempt("remove this choice", async () => {
+    await api.deleteCatalogOption(group.id, optionId, group.version);
     return null;
   });
 }
@@ -238,21 +364,27 @@ export async function removeOption(
 /**
  * Set the order of a listing's samples. The first one is the board thumbnail.
  *
- * This is also how a sample comes off a listing — see the note on
- * `api.reorderCatalogItemPhotos`. Callers reload the listing afterwards, so
- * what the screen shows is what GRIDGO kept, not what this phone hoped.
+ * GRIDGO takes the whole current set and rejects anything else as stale, so
+ * this only ever reorders. Removing a sample is not a thing the contract has:
+ * an attached file cannot be deleted while it is referenced, and the way a
+ * sample is taken down is to put another in its place — see {@link replacePhoto}.
  */
 export async function setPhotoOrder(
-  itemId: string,
+  listing: Listing,
   fileIds: string[],
 ): Promise<BoardOutcome<null>> {
-  return attempt("save your sample photos", async () => {
-    await api.reorderCatalogItemPhotos(itemId, fileIds);
+  return attempt("reorder your sample photos", async () => {
+    await api.reorderCatalogItemPhotos(listing.id, listing.version, fileIds);
     return null;
   });
 }
 
-/** Bind one stored upload to this listing. Only a stored file id may be sent. */
+/**
+ * Put one stored upload on the listing.
+ *
+ * Attaching at a position a sample already holds replaces it. Only a file id
+ * GRIDGO has confirmed it stored may be sent.
+ */
 export async function attachPhoto(
   fileId: string,
   itemId: string,
@@ -260,6 +392,71 @@ export async function attachPhoto(
 ): Promise<BoardOutcome<null>> {
   return attempt("file this photo with GRIDGO", async () => {
     await api.attachCatalogItemPhoto(fileId, itemId, sortOrder);
+    return null;
+  });
+}
+
+/* --------------------------------------------------------------------------
+   Before they order
+   -------------------------------------------------------------------------- */
+
+export async function loadPrepSteps(itemId: string): Promise<BoardOutcome<PrepStep[]>> {
+  return attempt("load what a client should do first", async () =>
+    normalizePrepSteps(await api.listPrepSteps(itemId)),
+  );
+}
+
+/**
+ * Add one instruction, at the end of what is already there.
+ *
+ * The position is worked out from the steps on screen rather than left to
+ * GRIDGO, for the same reason a choice's is: after a shop removes the first of
+ * three, the count is a position something already holds.
+ */
+export async function addPrepStep(
+  listing: Listing,
+  steps: readonly PrepStep[],
+  input: { title: string; body: string },
+): Promise<BoardOutcome<null>> {
+  return attempt("add this step", async () => {
+    await api.createPrepStep(listing.id, listing.version, {
+      ...input,
+      sortOrder: nextFreeSlot(
+        steps.map((step) => step.sortOrder),
+        LISTING_CAPS.prepSteps,
+      ),
+    });
+    return null;
+  });
+}
+
+/**
+ * Move one step up or down the list.
+ *
+ * The whole set goes to GRIDGO in the order a client should read it. Nothing
+ * moves by rewriting one position: two steps swapping would both want the
+ * position they are passing through, and GRIDGO would refuse the second.
+ */
+export async function reorderPrepSteps(
+  listing: Listing,
+  steps: readonly PrepStep[],
+): Promise<BoardOutcome<null>> {
+  return attempt("reorder these steps", async () => {
+    await api.reorderPrepSteps(
+      listing.id,
+      listing.version,
+      steps.map((step) => step.id),
+    );
+    return null;
+  });
+}
+
+export async function removePrepStep(
+  listing: Listing,
+  stepId: string,
+): Promise<BoardOutcome<null>> {
+  return attempt("remove this step", async () => {
+    await api.deletePrepStep(listing.id, stepId, listing.version);
     return null;
   });
 }

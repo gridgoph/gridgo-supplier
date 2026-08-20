@@ -1,6 +1,8 @@
+import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 
+import { BusyOverlay } from "@/components/BusyOverlay";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { ListingCard } from "@/components/ListingCard";
@@ -14,10 +16,11 @@ import {
   EMPTY_BOARD_TITLE,
   type Listing,
 } from "@/lib/listings";
-import { BOARD_NOT_OPEN_YET } from "@/lib/listingsApi";
+import { ARCHIVED_SENTENCE, BOARD_NOT_OPEN_YET, removeListing } from "@/lib/listingsApi";
 import { useBoard } from "@/hooks/useBoard";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
+import { askConfirm } from "@/store/sheets";
 import { isMatchable, useSession } from "@/store/session";
 
 /**
@@ -39,6 +42,46 @@ export default function BoardScreen() {
   const approved = isMatchable(user);
   const { listings, catalog, services, loading, loaded, notOpenYet, error, reload } = useBoard();
   const { refreshing, onRefresh } = usePullToRefresh(reload);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  /**
+   * Take one listing off the shop, from the wall.
+   *
+   * The editor has the same action at the foot of a long form, which on a phone
+   * is under whatever the platform is drawing over the bottom of the screen. A
+   * shop that wants a listing gone should be able to do it from the thing it is
+   * looking at.
+   */
+  const remove = useCallback(
+    async (listing: Listing) => {
+      const confirmed = await askConfirm({
+        question: `Remove “${listing.name || "this listing"}” from your shop?`,
+        consequence:
+          "It comes off your board and its samples, steps and prices go with it. A listing a client has already ordered from is kept for that job's history instead.",
+        confirmLabel: "Remove it",
+        cancelLabel: "Keep it",
+        destructive: true,
+      });
+      if (!confirmed) return;
+
+      setRemoving(true);
+      setRemoveError(null);
+      setNotice(null);
+      const result = await removeListing(listing);
+      if (result.status === "ok") {
+        setNotice(result.value === "archived" ? ARCHIVED_SENTENCE : null);
+        await reload();
+      } else {
+        setRemoveError(
+          result.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : result.message,
+        );
+      }
+      setRemoving(false);
+    },
+    [reload],
+  );
 
   const firstLoad = loading && !loaded;
   const unfinished = listings.filter(
@@ -141,16 +184,23 @@ export default function BoardScreen() {
                 hint={
                   unfinished
                     ? unfinished === 1
-                      ? "One listing still needs something before it can go up."
-                      : `${unfinished} listings still need something before they can go up.`
-                    : "Tap one to change its price, samples or steps."
+                      ? "One listing still needs something before it can go up. Press and hold one to remove it."
+                      : `${unfinished} listings still need something before they can go up. Press and hold one to remove it.`
+                    : "Tap one to change its price, samples or steps. Press and hold to remove one."
                 }
               />
+              {notice ? (
+                <View className="gg-panel">
+                  <Text className="text-body text-text-secondary">{notice}</Text>
+                </View>
+              ) : null}
+              {removeError ? <ErrorNotice message={removeError} /> : null}
               <Wall
                 listings={listings}
                 catalog={catalog}
                 services={services}
                 shopApproved={approved}
+                onRemove={removing ? undefined : remove}
               />
             </View>
 
@@ -163,6 +213,8 @@ export default function BoardScreen() {
           </>
         ) : null}
       </ScrollView>
+
+      <BusyOverlay visible={removing} label="Removing this listing…" />
     </View>
   );
 }
@@ -173,11 +225,13 @@ function Wall({
   catalog,
   services,
   shopApproved,
+  onRemove,
 }: {
   listings: Listing[];
   catalog: ReturnType<typeof useBoard>["catalog"];
   services: ReturnType<typeof useBoard>["services"];
   shopApproved: boolean;
+  onRemove?: (listing: Listing) => void;
 }) {
   return (
     <View className="-mx-1.5 flex-row flex-wrap">
@@ -191,6 +245,7 @@ function Wall({
             onPress={() =>
               router.push({ pathname: "/shop/[id]", params: { id: listing.id } })
             }
+            onRemove={onRemove ? () => onRemove(listing) : undefined}
           />
         </View>
       ))}

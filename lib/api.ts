@@ -261,12 +261,6 @@ export type SupplierService = {
   zones: string[];
   equipmentNotes: string;
   imageFileIds?: string[];
-  /**
-   * The artwork files this line accepts by default. A listing inherits these
-   * unless it overrides them. Absent on a GRIDGO that has not shipped the
-   * governed format registry yet.
-   */
-  formatCodes?: string[];
   state: string;
   verifiedAt: string | null;
   suspendedAt: string | null;
@@ -910,32 +904,36 @@ export async function getDownloadUrl(fileId: string): Promise<DownloadUrl> {
   return request(`/files/${fileId}/download-url`);
 }
 
-/** Format PHP minor units (centavos) for display. */
-export function formatPhp(minor: number): string {
-  return `₱${(minor / 100).toLocaleString("en-PH", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 /* --------------------------------------------------------------------------
    The shop's own board — listings
 
-   Every route below is settled design (`docs/OPERATIONAL_MODEL_V2_API.md`
-   §4 and §8.2 of the revision-2 contract, plus the additive listing fields)
-   and is being built on GRIDGO in parallel with these screens. Nothing here
-   invents a path.
+   The contract is `docs/SUPPLIER_CATALOG_API.md` in gridgo-api. Read it before
+   touching anything here; nothing below invents a path.
 
-   Two deliberate shapes:
+   Two shapes run through every call:
 
-   - These return the response body as `unknown`. `lib/listings.ts` is the
-     only place that reads a listing's shape, exactly as `lib/taxonomy.ts` is
-     the only place that reads the chart's — so a field the platform renames
-     before it ships costs one normaliser, not fifteen screens.
-   - A deployment without these routes answers 404. `lib/listingsApi.ts`
-     turns that into "GRIDGO has not opened your board yet" rather than a red
-     failure, because a shop cannot fix the platform's release schedule.
+   - These return the response body as `unknown`. `lib/listings.ts` is the only
+     place that reads a listing's shape, exactly as `lib/taxonomy.ts` is the
+     only place that reads the chart's — so a field the platform renames costs
+     one normaliser, not fifteen screens.
+   - **Every mutation of an existing record carries its version**, as both
+     `expectedVersion` in the body and `If-Match` in the header, or GRIDGO
+     answers `400 expected_version_required`. Which record's version depends on
+     what is being changed: the *item* for the listing, its formats, its photos
+     and for creating a group; the *group* for renaming it, deleting it, and for
+     every option inside it. Getting that wrong is a `409`, not a silent write.
    -------------------------------------------------------------------------- */
+
+/** Body plus `If-Match`. GRIDGO accepts either; sending both is unambiguous. */
+function versioned(
+  version: number | null | undefined,
+  body: Record<string, unknown> = {},
+): RequestOptions {
+  const init: RequestOptions = { body: JSON.stringify({ ...body, expectedVersion: version }) };
+  if (version != null) init.headers = { "If-Match": String(version) };
+  return init;
+}
 
 /** Every listing this shop owns, draft and on-the-board alike. */
 export async function listCatalogItems(): Promise<unknown> {
@@ -943,7 +941,19 @@ export async function listCatalogItems(): Promise<unknown> {
 }
 
 export async function getCatalogItem(itemId: string): Promise<unknown> {
-  return request<unknown>(`/me/catalog-items/${itemId}`);
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}`);
+}
+
+/**
+ * The shop's own accreditation lines, as the catalog contract projects them.
+ *
+ * `/supplier-services` is the older route the accreditation screens use and it
+ * carries no `acceptedFormats`, which is exactly what a listing inherits — so
+ * the board reads the `/me` projection instead of guessing that a line accepts
+ * nothing.
+ */
+export async function listMyCatalogServices(): Promise<unknown> {
+  return request<unknown>("/me/supplier-services");
 }
 
 /**
@@ -957,124 +967,162 @@ export async function createCatalogItem(body: Record<string, unknown>): Promise<
   });
 }
 
-/** Partial update. Carries `expectedVersion` so two sessions cannot overwrite. */
 export async function updateCatalogItem(
   itemId: string,
+  version: number | null,
   body: Record<string, unknown>,
 ): Promise<unknown> {
-  return request<unknown>(`/me/catalog-items/${itemId}`, {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}`, {
     method: "PATCH",
-    body: JSON.stringify(body),
+    ...versioned(version, body),
   });
 }
 
-/** Archive once ordered, delete while it never was. The server decides which. */
-export async function deleteCatalogItem(itemId: string): Promise<unknown> {
-  return request<unknown>(`/me/catalog-items/${itemId}`, { method: "DELETE" });
+/**
+ * Take a listing off the shop.
+ *
+ * A listing a client has already ordered from is archived rather than deleted,
+ * and GRIDGO says which by what it returns: the archived item, or `{ ok: true }`.
+ * The caller has to tell the shop which happened — "gone" and "kept for a job
+ * you already have" are different facts.
+ */
+export async function deleteCatalogItem(
+  itemId: string,
+  version: number | null,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}`, {
+    method: "DELETE",
+    ...versioned(version),
+  });
 }
 
-/** Replace the listing's own accepted-format set. An empty set means inherit. */
+/**
+ * Replace the listing's accepted-format set.
+ *
+ * `mode` is the field GRIDGO reads: `inherit` keeps no item rows and follows
+ * the service line, `override` requires at least one active governed code.
+ */
 export async function putCatalogItemFileFormats(
   itemId: string,
+  version: number | null,
+  mode: "inherit" | "override",
   formatCodes: string[],
 ): Promise<unknown> {
-  return request<unknown>(`/me/catalog-items/${itemId}/file-formats`, {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}/file-formats`, {
     method: "PUT",
-    body: JSON.stringify({ formatCodes }),
+    ...versioned(version, { mode, formatCodes }),
   });
 }
 
+/**
+ * Open a step or an add-on.
+ *
+ * GRIDGO will not create an empty group — a step with nothing to choose is a
+ * dead end on a client's screen — so the first option goes in the same call.
+ */
 export async function createCatalogOptionGroup(
   itemId: string,
+  itemVersion: number | null,
   body: Record<string, unknown>,
 ): Promise<unknown> {
-  return request<unknown>(`/me/catalog-items/${itemId}/option-groups`, {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}/option-groups`, {
     method: "POST",
-    body: JSON.stringify(body),
+    ...versioned(itemVersion, body),
   });
 }
 
 export async function updateCatalogOptionGroup(
   itemId: string,
   groupId: string,
+  groupVersion: number | null,
   body: Record<string, unknown>,
 ): Promise<unknown> {
-  return request<unknown>(`/me/catalog-items/${itemId}/option-groups/${groupId}`, {
-    method: "PATCH",
-    body: JSON.stringify(body),
-  });
+  return request<unknown>(
+    `/me/catalog-items/${encodeURIComponent(itemId)}/option-groups/${encodeURIComponent(groupId)}`,
+    { method: "PATCH", ...versioned(groupVersion, body) },
+  );
 }
 
 export async function deleteCatalogOptionGroup(
   itemId: string,
   groupId: string,
+  groupVersion: number | null,
 ): Promise<unknown> {
-  return request<unknown>(`/me/catalog-items/${itemId}/option-groups/${groupId}`, {
-    method: "DELETE",
-  });
+  return request<unknown>(
+    `/me/catalog-items/${encodeURIComponent(itemId)}/option-groups/${encodeURIComponent(groupId)}`,
+    { method: "DELETE", ...versioned(groupVersion) },
+  );
 }
 
 export async function createCatalogOption(
   groupId: string,
+  groupVersion: number | null,
   body: Record<string, unknown>,
 ): Promise<unknown> {
-  return request<unknown>(`/me/catalog-option-groups/${groupId}/options`, {
+  return request<unknown>(`/me/catalog-option-groups/${encodeURIComponent(groupId)}/options`, {
     method: "POST",
-    body: JSON.stringify(body),
+    ...versioned(groupVersion, body),
   });
 }
 
 export async function updateCatalogOption(
   groupId: string,
   optionId: string,
+  groupVersion: number | null,
   body: Record<string, unknown>,
 ): Promise<unknown> {
-  return request<unknown>(`/me/catalog-option-groups/${groupId}/options/${optionId}`, {
-    method: "PATCH",
-    body: JSON.stringify(body),
-  });
+  return request<unknown>(
+    `/me/catalog-option-groups/${encodeURIComponent(groupId)}/options/${encodeURIComponent(optionId)}`,
+    { method: "PATCH", ...versioned(groupVersion, body) },
+  );
 }
 
 export async function deleteCatalogOption(
   groupId: string,
   optionId: string,
+  groupVersion: number | null,
 ): Promise<unknown> {
-  return request<unknown>(`/me/catalog-option-groups/${groupId}/options/${optionId}`, {
-    method: "DELETE",
+  return request<unknown>(
+    `/me/catalog-option-groups/${encodeURIComponent(groupId)}/options/${encodeURIComponent(optionId)}`,
+    { method: "DELETE", ...versioned(groupVersion) },
+  );
+}
+
+/**
+ * Set the order of a listing's sample photos. The first id is the board thumb.
+ *
+ * GRIDGO requires the **whole current set**, so this reorders and nothing else
+ * — a shorter list is rejected as stale rather than quietly dropping a sample.
+ */
+export async function reorderCatalogItemPhotos(
+  itemId: string,
+  version: number | null,
+  fileIds: string[],
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}/photos/reorder`, {
+    method: "POST",
+    ...versioned(version, { fileIds }),
   });
 }
 
 /**
- * Set the order of a listing's sample photos.
+ * Bind an uploaded photo to one listing.
  *
- * The first id is the board thumbnail. This is also how a photo comes off a
- * listing: the contract has no detach route, an attached file cannot be
- * deleted while it is referenced, and the sent list is the listing's photos —
- * so an id left out of it is no longer on the listing. Callers reload the
- * listing from GRIDGO afterwards rather than trusting that locally.
+ * Attaching at a `sortOrder` a photo already holds **replaces** that photo,
+ * which is the only way a sample comes off a listing: the contract has no
+ * detach, and an attached file cannot be deleted while it is referenced.
  */
-export async function reorderCatalogItemPhotos(
-  itemId: string,
-  fileIds: string[],
-): Promise<unknown> {
-  return request<unknown>(`/me/catalog-items/${itemId}/photos/reorder`, {
-    method: "POST",
-    body: JSON.stringify({ fileIds }),
-  });
-}
-
-/** Bind an uploaded photo to one listing. Second half of the upload pair. */
 export async function attachCatalogItemPhoto(
   fileId: string,
   catalogItemId: string,
   sortOrder: number,
   altText?: string,
 ): Promise<unknown> {
-  return request<unknown>(`/files/${fileId}/attach`, {
+  const body: Record<string, unknown> = { catalogItemId, sortOrder };
+  if (altText) body.altText = altText;
+  return request<unknown>(`/files/${encodeURIComponent(fileId)}/attach`, {
     method: "POST",
-    body: JSON.stringify(
-      altText ? { catalogItemId, sortOrder, altText } : { catalogItemId, sortOrder },
-    ),
+    body: JSON.stringify(body),
   });
 }
 
@@ -1090,3 +1138,82 @@ export async function listListingStarters(subcategoryCode: string): Promise<unkn
     `/listing-starters?subcategoryCode=${encodeURIComponent(subcategoryCode)}`,
   );
 }
+
+/* --------------------------------------------------------------------------
+   What a client does before it sends work
+
+   `docs/SUPPLIER_CATALOG_API.md` carries these now: a collection under the
+   item, its member route, a reorder route, and the **item's** version on every
+   write. A listing holds at most eight.
+
+   They are still the newest thing on GRIDGO, so `lib/listingsApi.ts` — the only
+   caller — keeps treating a missing route as a fact to state rather than an
+   error to swallow. A deployment that has not caught up says so; it does not
+   turn red.
+   -------------------------------------------------------------------------- */
+
+export async function listPrepSteps(itemId: string): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps`);
+}
+
+export async function createPrepStep(
+  itemId: string,
+  version: number | null,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps`, {
+    method: "POST",
+    ...versioned(version, body),
+  });
+}
+
+export async function updatePrepStep(
+  itemId: string,
+  stepId: string,
+  version: number | null,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(
+    `/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps/${encodeURIComponent(stepId)}`,
+    { method: "PATCH", ...versioned(version, body) },
+  );
+}
+
+export async function deletePrepStep(
+  itemId: string,
+  stepId: string,
+  version: number | null,
+): Promise<unknown> {
+  return request<unknown>(
+    `/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps/${encodeURIComponent(stepId)}`,
+    { method: "DELETE", ...versioned(version) },
+  );
+}
+
+/**
+ * Put the prep steps in the order a client should read them.
+ *
+ * The whole current set goes with it, exactly as the photo reorder does, and a
+ * set that no longer matches is refused as stale rather than half-applied. This
+ * is also why a step never moves by patching one position: two steps swapping
+ * would collide on the position they are passing through.
+ */
+export async function reorderPrepSteps(
+  itemId: string,
+  version: number | null,
+  stepIds: string[],
+): Promise<unknown> {
+  return request<unknown>(
+    `/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps/reorder`,
+    { method: "POST", ...versioned(version, { stepIds }) },
+  );
+}
+
+/** Format PHP minor units (centavos) for display. */
+export function formatPhp(minor: number): string {
+  return `₱${(minor / 100).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+

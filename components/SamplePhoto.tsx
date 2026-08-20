@@ -43,15 +43,29 @@ export function SamplePhoto({
   emptyLabel,
 }: Props) {
   const colors = useThemeColors();
-  const [uri, setUri] = useState<string | null>(localUri ?? null);
+  const [uri, setUri] = useState<string | null>(localUri ?? heldLink(fileId));
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (localUri) {
       setUri(localUri);
+      setFailed(false);
       return;
     }
-    if (!fileId) return;
+    if (!fileId) {
+      setUri(null);
+      setFailed(false);
+      return;
+    }
+
+    // A different sample in the same frame — replacing one, or reordering the
+    // strip. Last sample's link and last sample's failure both go with it, or
+    // the frame keeps showing the photo that has just been taken down, and one
+    // refusal sticks to every photo that lands in that position afterwards.
+    const held = heldLink(fileId);
+    setUri(held);
+    setFailed(false);
+    if (held) return;
 
     let cancelled = false;
     void (async () => {
@@ -108,9 +122,16 @@ export function SamplePhoto({
  */
 const links = new Map<string, { url: string; goodUntil: number }>();
 
-async function signedLink(fileId: string): Promise<string | null> {
+/** A link already in hand, without a round trip. Null means one is needed. */
+function heldLink(fileId?: string | null): string | null {
+  if (!fileId) return null;
   const held = links.get(fileId);
-  if (held && held.goodUntil > Date.now()) return held.url;
+  return held && held.goodUntil > Date.now() ? held.url : null;
+}
+
+async function signedLink(fileId: string): Promise<string | null> {
+  const held = heldLink(fileId);
+  if (held) return held;
 
   try {
     const link = await api.getDownloadUrl(fileId);

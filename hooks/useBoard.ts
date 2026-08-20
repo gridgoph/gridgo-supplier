@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
 import * as api from "@/lib/api";
-import { loadBoard, loadListing } from "@/lib/listingsApi";
-import type { Listing } from "@/lib/listings";
+import { loadBoard, loadListing, loadPrepSteps } from "@/lib/listingsApi";
+import {
+  normalizeServiceLines,
+  type Listing,
+  type PrepStep,
+  type ServiceLine,
+} from "@/lib/listings";
 import { buildCatalog, type ServiceCatalog } from "@/lib/taxonomy";
 
 /**
@@ -19,10 +24,33 @@ import { buildCatalog, type ServiceCatalog } from "@/lib/taxonomy";
  * `notOpenYet` is a first-class outcome, not an error — see `lib/listingsApi`.
  */
 
+/** The shop's own lines, from the projection that carries accepted formats. */
+export async function loadServiceLines(): Promise<ServiceLine[]> {
+  try {
+    return normalizeServiceLines(await api.listMyCatalogServices());
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * A route parameter that is worth spending a request on.
+ *
+ * `useLocalSearchParams` hands back `string | string[] | undefined`, and it is
+ * briefly undefined on the first render of a pushed screen. Fetching anyway
+ * asks GRIDGO for `/me/catalog-items/undefined`, gets a 404, and reports the
+ * board as closed — a platform failure invented by a render order.
+ */
+export function routeId(value: string | string[] | undefined): string | null {
+  const first = Array.isArray(value) ? value[0] : value;
+  const trimmed = typeof first === "string" ? first.trim() : "";
+  return trimmed && trimmed !== "undefined" && trimmed !== "null" ? trimmed : null;
+}
+
 export type BoardData = {
   listings: Listing[];
   catalog: ServiceCatalog | null;
-  services: api.SupplierService[];
+  services: ServiceLine[];
   loading: boolean;
   /** True while GRIDGO has no board routes on this deployment. */
   notOpenYet: boolean;
@@ -36,7 +64,7 @@ export type BoardData = {
 export function useBoard(): BoardData {
   const [listings, setListings] = useState<Listing[]>([]);
   const [catalog, setCatalog] = useState<ServiceCatalog | null>(null);
-  const [services, setServices] = useState<api.SupplierService[]>([]);
+  const [services, setServices] = useState<ServiceLine[]>([]);
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [notOpenYet, setNotOpenYet] = useState(false);
@@ -48,7 +76,7 @@ export function useBoard(): BoardData {
       const [board, taxonomy, lines] = await Promise.all([
         loadBoard(),
         api.getTaxonomy().catch(() => null),
-        api.listSupplierServices().catch(() => [] as api.SupplierService[]),
+        loadServiceLines(),
       ]);
 
       if (taxonomy) setCatalog(buildCatalog(taxonomy));
@@ -84,7 +112,10 @@ export function useBoard(): BoardData {
 export type ListingData = {
   listing: Listing | null;
   catalog: ServiceCatalog | null;
-  services: api.SupplierService[];
+  services: ServiceLine[];
+  prepSteps: PrepStep[];
+  /** False while GRIDGO has no prep-step routes on this deployment. */
+  prepStepsOpen: boolean;
   loading: boolean;
   notOpenYet: boolean;
   error: string | null;
@@ -94,30 +125,45 @@ export type ListingData = {
 /**
  * One listing, for the editor.
  *
- * Deliberately loaded on mount rather than on every focus: this screen holds
- * edits a shop has typed and not yet saved, and refetching under them on the
- * way back from the photo screen would throw the words away. Every write
- * reloads explicitly, so what is on screen is still what GRIDGO kept.
+ * Reloading is deliberately conditional. The editor holds words and a price a
+ * shop has typed and not yet saved, so refetching under them on the way back
+ * from a sheet would throw them away — but coming back from the photo screen
+ * with a stale zero-photo listing is exactly the bug that made a shop think its
+ * samples had not saved. So `holdRefresh` is the screen's own answer to "am I
+ * holding unsaved words?", checked on every focus, and every write calls
+ * `reload` outright.
  */
-export function useListing(itemId: string): ListingData {
+export function useListing(
+  itemId: string | null,
+  holdRefresh?: () => boolean,
+): ListingData {
   const [listing, setListing] = useState<Listing | null>(null);
   const [catalog, setCatalog] = useState<ServiceCatalog | null>(null);
-  const [services, setServices] = useState<api.SupplierService[]>([]);
+  const [services, setServices] = useState<ServiceLine[]>([]);
+  const [prepSteps, setPrepSteps] = useState<PrepStep[]>([]);
+  const [prepStepsOpen, setPrepStepsOpen] = useState(true);
   const [loading, setLoading] = useState(true);
   const [notOpenYet, setNotOpenYet] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const hold = useRef(holdRefresh);
+  hold.current = holdRefresh;
+
   const reload = useCallback(async () => {
+    if (!itemId) return;
     setLoading(true);
     try {
-      const [result, taxonomy, lines] = await Promise.all([
+      const [result, taxonomy, lines, steps] = await Promise.all([
         loadListing(itemId),
         api.getTaxonomy().catch(() => null),
-        api.listSupplierServices().catch(() => [] as api.SupplierService[]),
+        loadServiceLines(),
+        loadPrepSteps(itemId),
       ]);
 
       if (taxonomy) setCatalog(buildCatalog(taxonomy));
       setServices(lines);
+      setPrepSteps(steps.status === "ok" ? steps.value : []);
+      setPrepStepsOpen(steps.status !== "not_open_yet");
 
       if (result.status === "ok") {
         setListing(result.value);
@@ -135,9 +181,28 @@ export function useListing(itemId: string): ListingData {
     }
   }, [itemId]);
 
-  useEffect(() => {
-    void reload();
-  }, [reload]);
+  useFocusEffect(
+    useCallback(() => {
+      if (hold.current?.()) return;
+      void reload();
+    }, [reload]),
+  );
 
-  return { listing, catalog, services, loading, notOpenYet, error, reload };
+  // A screen opened with no usable id has nothing to wait for, and saying so is
+  // better than a skeleton that never resolves.
+  useEffect(() => {
+    if (!itemId) setLoading(false);
+  }, [itemId]);
+
+  return {
+    listing,
+    catalog,
+    services,
+    prepSteps,
+    prepStepsOpen,
+    loading,
+    notOpenYet,
+    error,
+    reload,
+  };
 }

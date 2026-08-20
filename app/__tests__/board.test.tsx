@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn() },
@@ -21,6 +21,9 @@ jest.mock("@/lib/api", () => ({
   ...jest.requireActual("@/lib/api"),
   getTaxonomy: jest.fn(async () => ({ categories: [], materials: [], finishes: [] })),
   listSupplierServices: jest.fn(async () => []),
+  // The board reads the catalog projection, which is the one that carries the
+  // formats and turnaround a listing inherits.
+  listMyCatalogServices: jest.fn(async () => []),
   getDownloadUrl: jest.fn(async () => {
     throw new Error("no storage on the bench");
   }),
@@ -29,11 +32,15 @@ jest.mock("@/lib/api", () => ({
 jest.mock("@/lib/listingsApi", () => ({
   ...jest.requireActual("@/lib/listingsApi"),
   loadBoard: jest.fn(),
+  removeListing: jest.fn(),
 }));
+
+jest.mock("@/store/sheets", () => ({ askConfirm: jest.fn(async () => true) }));
 
 import BoardScreen from "@/app/shop/index";
 import type { Listing } from "@/lib/listings";
-import { loadBoard } from "@/lib/listingsApi";
+import { loadBoard, removeListing } from "@/lib/listingsApi";
+import { askConfirm } from "@/store/sheets";
 import { useSession } from "@/store/session";
 
 const approvedShop = {
@@ -68,6 +75,8 @@ const listing: Listing = {
 
 describe("the shop's board", () => {
   beforeEach(() => {
+    jest.clearAllMocks();
+    (askConfirm as jest.Mock).mockResolvedValue(true);
     useSession.setState({
       user: approvedShop,
       loading: false,
@@ -125,6 +134,64 @@ describe("the shop's board", () => {
     await view.unmount();
   });
 
+  /**
+   * The captain's report: Remove this listing did nothing useful. It also sat
+   * at the foot of a long form, under whatever the platform draws over the
+   * bottom of the screen — so the wall offers it too, on the tile itself.
+   */
+  it("removes a listing from the wall, after asking", async () => {
+    (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: [listing] });
+    (removeListing as jest.Mock).mockResolvedValue({ status: "ok", value: "deleted" });
+
+    const view = await render(<BoardScreen />);
+
+    await screen.findByText("Tarpaulin, 13oz");
+    await fireEvent(
+      screen.getByLabelText("Tarpaulin, 13oz. On the board."),
+      "longPress",
+    );
+
+    await waitFor(() => expect(removeListing).toHaveBeenCalledWith(listing));
+    expect(askConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({ destructive: true, confirmLabel: "Remove it" }),
+    );
+    await view.unmount();
+  });
+
+  it("keeps a listing GRIDGO held for a job, and says why", async () => {
+    (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: [listing] });
+    (removeListing as jest.Mock).mockResolvedValue({ status: "ok", value: "archived" });
+
+    const view = await render(<BoardScreen />);
+
+    await screen.findByText("Tarpaulin, 13oz");
+    await fireEvent(
+      screen.getByLabelText("Tarpaulin, 13oz. On the board."),
+      "longPress",
+    );
+
+    expect(
+      await screen.findByText(/Kept for a job already ordered/),
+    ).toBeTruthy();
+    await view.unmount();
+  });
+
+  it("leaves the listing alone when the shop says keep it", async () => {
+    (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: [listing] });
+    (askConfirm as jest.Mock).mockResolvedValue(false);
+
+    const view = await render(<BoardScreen />);
+
+    await screen.findByText("Tarpaulin, 13oz");
+    await fireEvent(
+      screen.getByLabelText("Tarpaulin, 13oz. On the board."),
+      "longPress",
+    );
+
+    expect(removeListing).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+
   it("keeps a shop still with Operations working rather than shut out", async () => {
     useSession.setState({
       user: { ...approvedShop, verificationStatus: "pending" as const },
@@ -138,7 +205,7 @@ describe("the shop's board", () => {
     const view = await render(<BoardScreen />);
 
     expect(await screen.findByText("Operations is still reviewing your shop")).toBeTruthy();
-    expect(screen.getByText("Put something on the board")).toBeTruthy();
+    expect(await screen.findByText("Put something on the board")).toBeTruthy();
     await view.unmount();
   });
 });

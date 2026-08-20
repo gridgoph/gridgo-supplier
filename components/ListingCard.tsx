@@ -2,7 +2,6 @@ import { Pressable, Text, View } from "react-native";
 
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { StatusChip } from "@/components/StatusChip";
-import type { SupplierService } from "@/lib/api";
 import {
   boardContextFor,
   boardStanding,
@@ -11,15 +10,18 @@ import {
   readyInLine,
   subcategoryName,
   type Listing,
+  type ServiceLine,
 } from "@/lib/listings";
 import type { ServiceCatalog } from "@/lib/taxonomy";
 
 type Props = {
   listing: Listing;
   catalog: ServiceCatalog | null;
-  services: SupplierService[];
+  services: ServiceLine[];
   shopApproved: boolean;
   onPress: () => void;
+  /** Press and hold. Absent while another tile is being removed. */
+  onRemove?: () => void;
 };
 
 /**
@@ -33,8 +35,21 @@ type Props = {
  * The chip is only drawn when something is wrong or hidden. A tile that is up
  * and finished says so by being plain — a wall of green ticks is a wall nobody
  * reads.
+ *
+ * Removing one is a press and hold rather than a control on every tile. A wall
+ * of samples with a bin drawn on each of them stops reading as a wall, and the
+ * hold is the gesture a phone already uses for "do something to this one" — so
+ * the wall says so in words above it, and a screen reader is offered the same
+ * thing as a named action rather than a gesture it cannot make.
  */
-export function ListingCard({ listing, catalog, services, shopApproved, onPress }: Props) {
+export function ListingCard({
+  listing,
+  catalog,
+  services,
+  shopApproved,
+  onPress,
+  onRemove,
+}: Props) {
   const context = boardContextFor(listing, services);
   const standing = boardStanding(listing, context, shopApproved);
   const hours = effectiveTurnaroundHours(listing, context.inheritedTurnaroundHours);
@@ -43,8 +58,14 @@ export function ListingCard({ listing, catalog, services, shopApproved, onPress 
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onRemove}
       accessibilityRole="button"
       accessibilityLabel={`${listing.name || "Untitled listing"}. ${standing.label}.`}
+      accessibilityHint={onRemove ? "Press and hold to remove this listing." : undefined}
+      accessibilityActions={onRemove ? [{ name: "remove", label: "Remove this listing" }] : undefined}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === "remove") onRemove?.();
+      }}
       className="gg-card-flush"
       style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
     >

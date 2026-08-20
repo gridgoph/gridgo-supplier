@@ -1,4 +1,3 @@
-import type { SupplierService } from "@/lib/api";
 import { formatPhp } from "@/lib/api";
 import { isActiveLine } from "@/lib/supplierServices";
 import {
@@ -45,6 +44,7 @@ export const LISTING_CAPS = {
   photos: 8,
   specGroups: 6,
   optionsPerGroup: 20,
+  prepSteps: 8,
   nameChars: 80,
   descriptionChars: 4000,
   optionLabelChars: 100,
@@ -74,6 +74,12 @@ export type SpecGroup = {
   helpText: string | null;
   sortOrder: number;
   options: SpecOption[];
+  /**
+   * The group's own version, not the listing's. Renaming a group, deleting it
+   * and every option inside it are all checked against this one — sending the
+   * item's version instead is a `409`, not a silent write.
+   */
+  version: number | null;
 };
 
 export type Listing = {
@@ -100,6 +106,39 @@ export type Listing = {
   version: number | null;
   updatedAt: string | null;
 };
+
+/**
+ * One thing a client does before it sends work.
+ *
+ * Not a size or a material — those are choices. This is the sequence a shop
+ * wants walked before artwork arrives: flatten the layers, outline the fonts,
+ * export the 3MF at the right scale. Numbered because the order is the point,
+ * which is also why nothing here sorts by name.
+ */
+export type PrepStep = {
+  id: string;
+  title: string;
+  /** What to actually do, in the shop's own words. */
+  body: string;
+  sortOrder: number;
+};
+
+export function normalizePrepSteps(body: unknown): PrepStep[] {
+  return collection(body, "prepSteps", "steps", "items")
+    .map((raw, index): PrepStep | null => {
+      const id = str(pick(raw, "id", "stepId", "prepStepId"));
+      const title = str(pick(raw, "title", "name"));
+      if (!id || !title) return null;
+      return {
+        id,
+        title,
+        body: typeof raw.body === "string" ? raw.body : (str(pick(raw, "detail", "text")) ?? ""),
+        sortOrder: num(pick(raw, "sortOrder", "sort_order")) ?? index,
+      };
+    })
+    .filter((step): step is PrepStep => step != null)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
 
 /** One of GRIDGO's own starting points for a kind of work. */
 export type ListingStarter = {
@@ -195,6 +234,7 @@ function readGroup(raw: Raw, index: number): SpecGroup | null {
     required: kind === "addon" ? false : pick(raw, "required") !== false,
     helpText: str(pick(raw, "helpText", "help_text")),
     sortOrder: num(pick(raw, "sortOrder", "sort_order")) ?? index,
+    version: num(pick(raw, "version")),
     options: asArray(pick(raw, "options"))
       .map(readOption)
       .filter((option): option is SpecOption => option != null)
@@ -315,6 +355,23 @@ export function normalizeStarters(body: unknown): ListingStarter[] {
     .filter((starter): starter is ListingStarter => starter != null);
 }
 
+/**
+ * The first position on a listing that nothing already holds.
+ *
+ * GRIDGO numbers a listing's steps, its choices and its prep steps by position
+ * and refuses one that is already taken, so "put it at the end" cannot be the
+ * count. Remove the first of three steps and the two that are left sit at 1 and
+ * 2: the count is 2, which is taken, and a shop that never chose a position at
+ * all is told its position is already used. The first free slot is the only
+ * answer that survives a gap, and there is always one below the cap while the
+ * cap has not been reached.
+ */
+export function nextFreeSlot(taken: readonly number[], cap: number): number {
+  const used = new Set(taken);
+  for (let slot = 0; slot < cap; slot += 1) if (!used.has(slot)) return slot;
+  return cap - 1;
+}
+
 /* --------------------------------------------------------------------------
    What a listing says on screen
    -------------------------------------------------------------------------- */
@@ -325,6 +382,18 @@ export function specs(listing: Listing): SpecGroup[] {
 
 export function addOns(listing: Listing): SpecGroup[] {
   return listing.groups.filter((group) => group.kind === "addon");
+}
+
+/**
+ * How a client will be asked, said in three words.
+ *
+ * The captain's reference is a food-order sheet, and that is the right one: a
+ * required single-select group is "Pick 1" and an optional one is something you
+ * may add. Saying it the same way on the shop's editor and on the client's
+ * order is what stops a shop being surprised by its own listing.
+ */
+export function pickLine(group: SpecGroup): string {
+  return group.required ? "Pick 1" : "Optional";
 }
 
 /** "per piece" / "per pack of 100" — the unit, in the words a shop uses. */
@@ -516,11 +585,47 @@ export const EMPTY_BOARD_BODY =
    Where a listing sits in the shop's accreditation
    -------------------------------------------------------------------------- */
 
+/**
+ * One accredited category line, as the board needs it.
+ *
+ * Read from `/me/supplier-services` rather than the older `/supplier-services`
+ * the accreditation screens use, because only that projection carries
+ * `acceptedFormats` — which is exactly what a listing inherits. A line whose
+ * formats this app could not see would push every listing into overriding them.
+ */
+export type ServiceLine = {
+  id: string;
+  categoryCode: string;
+  state: string;
+  turnaroundHours: number | null;
+  formatCodes: string[];
+};
+
+export function normalizeServiceLines(body: unknown): ServiceLine[] {
+  return collection(body, "services", "supplierServices")
+    .map((raw): ServiceLine | null => {
+      const id = str(pick(raw, "id", "serviceId"));
+      const categoryCode = str(pick(raw, "categoryCode", "category_code"));
+      if (!id || !categoryCode) return null;
+      return {
+        id,
+        categoryCode,
+        state: str(pick(raw, "state")) ?? "draft",
+        turnaroundHours:
+          num(pick(raw, "turnaroundHours", "standardTurnaroundHours", "turnaround_hours")),
+        formatCodes: readFormatCodes(
+          pick(raw, "acceptedFormats", "formatCodes", "accepted_formats", "fileFormats"),
+        ),
+      };
+    })
+    .filter((line): line is ServiceLine => line != null);
+}
+
 /** The accredited category line a listing hangs off, if the shop still has it. */
 export function serviceLineFor(
   listing: Pick<Listing, "serviceLineId">,
-  services: SupplierService[],
-): SupplierService | null {
+  services: ServiceLine[],
+): ServiceLine | null {
   return services.find((service) => service.id === listing.serviceLineId) ?? null;
 }
 
@@ -533,7 +638,7 @@ export function serviceLineFor(
  */
 export function boardContextFor(
   listing: Pick<Listing, "serviceLineId">,
-  services: SupplierService[],
+  services: ServiceLine[],
 ): BoardContext {
   const line = serviceLineFor(listing, services);
   return {
@@ -564,7 +669,7 @@ export function subcategoryName(
 
 /** One category a shop may file a listing under, and the work inside it. */
 export type BoardTarget = {
-  service: SupplierService;
+  service: ServiceLine;
   category: CatalogCategory;
   covers: CatalogCoverage[];
 };
@@ -581,7 +686,7 @@ export type BoardTarget = {
  */
 export function boardTargets(
   catalog: ServiceCatalog | null,
-  services: SupplierService[],
+  services: ServiceLine[],
 ): BoardTarget[] {
   if (!catalog) return [];
   const out: BoardTarget[] = [];
@@ -620,7 +725,7 @@ export type BoardPrompt = {
  */
 export function boardPrompt(
   listings: Listing[],
-  services: SupplierService[],
+  services: ServiceLine[],
   shopApproved: boolean,
 ): BoardPrompt {
   if (!listings.length) {

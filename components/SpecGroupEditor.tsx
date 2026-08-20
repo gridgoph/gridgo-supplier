@@ -7,7 +7,7 @@ import { MoneyField } from "@/components/controls/MoneyField";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import { TextField } from "@/components/controls/TextField";
 import { formatPhp } from "@/lib/api";
-import { LISTING_CAPS, type SpecGroup } from "@/lib/listings";
+import { LISTING_CAPS, pickLine, type SpecGroup } from "@/lib/listings";
 import { parseMoney } from "@/lib/money";
 import { useThemeColors } from "@/hooks/useTheme";
 
@@ -23,17 +23,20 @@ type Props = {
 };
 
 /**
- * One step a customer walks, or one extra they can add.
+ * One thing a client picks, shown to the shop the way the client will see it.
  *
- * Steps are numbered because they genuinely are a sequence — size, then media,
- * then sides is the order the client fills the form in, and the order here is
- * that order. Add-ons are not numbered: they are a set of extras, and numbering
- * them would imply an order that does not exist.
+ * The captain's reference is a food-order sheet, and the fix for an editor that
+ * reads like a content management system is not softer labels — it is to put
+ * the client's own view inside the card. So the card is in two halves: above
+ * the rule is exactly what a client gets (the name, a Pick 1 or Optional chip,
+ * and the choices with their money right-aligned in one column); below it are
+ * the shop's controls. A shop reads the top half and knows what it has built.
  *
- * A price is written the way a shop says it out loud: the option, then what it
- * adds or takes off. Negative modifiers are real — a shop that charges less for
- * greyscale is not doing anything unusual — so the sign is a control rather
- * than a minus sign typed into a money field.
+ * The money column is the tell. Right-aligned and in one line of sight, `+₱200`
+ * under `+₱400` is a price list; scattered inline it is a form. Steps are
+ * numbered and add-ons are not: a step is a sequence a client walks, an add-on
+ * is a set they may tick, and numbering the second would claim an order that
+ * does not exist.
  */
 export function SpecGroupEditor({
   group,
@@ -54,7 +57,7 @@ export function SpecGroupEditor({
   async function add() {
     const trimmed = label.trim();
     if (!trimmed) {
-      setError("Name this option first — a client picks it by its name.");
+      setError("Name this choice first — a client picks it by its name.");
       return;
     }
     const money = parseMoney(amount);
@@ -73,128 +76,151 @@ export function SpecGroupEditor({
 
   return (
     <View className="gg-card gap-4">
-      <View className="flex-row items-start justify-between gap-3">
-        <View className="min-w-0 flex-1 gap-1">
-          <Text className="text-body font-medium text-text-primary">
-            {step != null ? `${step}. ${group.name}` : group.name}
-          </Text>
-          {group.helpText ? (
-            <Text className="text-caption text-text-muted">{group.helpText}</Text>
-          ) : null}
+      {/* What a client sees. */}
+      <View className="gap-3">
+        <View className="flex-row items-start justify-between gap-3">
+          <View className="min-w-0 flex-1 gap-1">
+            <Text className="text-body font-medium text-text-primary">
+              {step != null ? `${step}. ${group.name}` : group.name}
+            </Text>
+            {group.helpText ? (
+              <Text className="text-caption text-text-muted">{group.helpText}</Text>
+            ) : null}
+          </View>
+          <View className="rounded-pill border border-outline px-2 py-0.5">
+            <Text className="text-caption text-text-secondary">{pickLine(group)}</Text>
+          </View>
         </View>
+
+        {group.options.length ? (
+          <View className="gap-2">
+            {group.options.map((option) => (
+              <View key={option.id} className="flex-row items-center gap-3">
+                <Text
+                  className="min-w-0 flex-1 text-body text-text-secondary"
+                  numberOfLines={2}
+                >
+                  {option.label}
+                </Text>
+                <Text className="text-body text-text-primary">
+                  {modifierLine(option.priceModifierMinor)}
+                </Text>
+                <Pressable
+                  onPress={() => onRemoveOption(option.id)}
+                  disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${option.label}`}
+                  className="gg-touch items-center justify-center"
+                  style={({ pressed }) => (pressed ? { opacity: 0.6 } : undefined)}
+                >
+                  <Trash2 size={16} color={colors.textMuted} strokeWidth={2} />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text className="text-body text-text-secondary">
+            {group.kind === "addon"
+              ? "No extras under this yet. A client sees nothing until you add one."
+              : "No choices yet. A step with nothing to pick stops this listing going on the board."}
+          </Text>
+        )}
+      </View>
+
+      <View className="gg-divider" />
+
+      {/* What the shop sets. */}
+      <View className="gap-3">
+        {group.kind === "spec" ? (
+          <SegmentedControl
+            options={[
+              { value: "required", label: "Pick 1" },
+              { value: "optional", label: "Can skip" },
+            ]}
+            value={group.required ? "required" : "optional"}
+            onChange={(value) => onSetRequired(value === "required")}
+            accessibilityLabel={`Whether a client must choose ${group.name}`}
+            disabled={busy}
+          />
+        ) : null}
+
+        {full ? (
+          <Text className="text-caption text-text-muted">
+            That is all twenty choices. Remove one before adding another.
+          </Text>
+        ) : (
+          <>
+            <TextField
+              value={label}
+              onChange={(value) => setLabel(value.slice(0, LISTING_CAPS.optionLabelChars))}
+              placeholder={group.kind === "addon" ? "Every 2 feet" : "4 × 8 ft"}
+              accessibilityLabel={`New choice under ${group.name}`}
+              kind="text"
+            />
+            <View className="flex-row gap-3">
+              <View className="flex-1">
+                <SegmentedControl
+                  options={[
+                    { value: "adds", label: "Adds" },
+                    { value: "takes", label: "Takes off" },
+                  ]}
+                  value={direction}
+                  onChange={setDirection}
+                  accessibilityLabel="Whether this choice adds to or takes off the price"
+                  disabled={busy}
+                />
+              </View>
+              <View className="flex-1">
+                <MoneyField
+                  value={amount}
+                  onChange={setAmount}
+                  accessibilityLabel="What this choice changes the price by"
+                  editable={!busy}
+                />
+              </View>
+            </View>
+            {error ? <Text className="text-caption text-error">{error}</Text> : null}
+            <SecondaryButton
+              label={busy ? "Saving…" : "Add choice"}
+              disabled={busy}
+              onPress={() => void add()}
+            />
+          </>
+        )}
+
         <Pressable
           onPress={onRemoveGroup}
           disabled={busy}
           accessibilityRole="button"
           accessibilityLabel={`Remove ${group.name}`}
-          className="gg-touch items-center justify-center"
+          className="gg-touch flex-row items-center gap-2 self-start"
           style={({ pressed }) => (pressed ? { opacity: 0.6 } : undefined)}
         >
-          <Trash2 size={18} color={colors.textMuted} strokeWidth={2} />
+          <Trash2 size={14} color={colors.textMuted} strokeWidth={2} />
+          <Text className="text-caption text-text-muted">
+            Remove {group.kind === "addon" ? "this add-on" : "this step"}
+          </Text>
         </Pressable>
       </View>
-
-      {group.kind === "spec" ? (
-        <SegmentedControl
-          options={[
-            { value: "required", label: "Must choose" },
-            { value: "optional", label: "Can skip" },
-          ]}
-          value={group.required ? "required" : "optional"}
-          onChange={(value) => onSetRequired(value === "required")}
-          accessibilityLabel={`Whether a client must choose ${group.name}`}
-          disabled={busy}
-        />
-      ) : null}
-
-      {group.options.length ? (
-        <View className="gap-2">
-          {group.options.map((option) => (
-            <View
-              key={option.id}
-              className="flex-row items-center gap-3 rounded-field border border-outline bg-surface px-3 py-2"
-            >
-              <Text className="min-w-0 flex-1 text-body text-text-primary" numberOfLines={2}>
-                {option.label}
-              </Text>
-              <Text className="text-caption text-text-secondary">
-                {modifierLine(option.priceModifierMinor)}
-              </Text>
-              <Pressable
-                onPress={() => onRemoveOption(option.id)}
-                disabled={busy}
-                accessibilityRole="button"
-                accessibilityLabel={`Remove ${option.label}`}
-                className="gg-touch items-center justify-center"
-                style={({ pressed }) => (pressed ? { opacity: 0.6 } : undefined)}
-              >
-                <Trash2 size={16} color={colors.textMuted} strokeWidth={2} />
-              </Pressable>
-            </View>
-          ))}
-        </View>
-      ) : (
-        <Text className="text-body text-text-secondary">
-          {group.kind === "addon"
-            ? "No extras under this yet. A client sees nothing until you add one."
-            : "No options yet. A step with nothing to choose stops this listing going on the board."}
-        </Text>
-      )}
-
-      {full ? (
-        <Text className="text-caption text-text-muted">
-          That is all twenty options. Remove one before adding another.
-        </Text>
-      ) : (
-        <View className="gap-3">
-          <TextField
-            value={label}
-            onChange={(value) => setLabel(value.slice(0, LISTING_CAPS.optionLabelChars))}
-            placeholder={group.kind === "addon" ? "Lamination" : "4 × 8 ft"}
-            accessibilityLabel={`New option under ${group.name}`}
-            kind="text"
-          />
-          <View className="flex-row gap-3">
-            <View className="flex-1">
-              <SegmentedControl
-                options={[
-                  { value: "adds", label: "Adds" },
-                  { value: "takes", label: "Takes off" },
-                ]}
-                value={direction}
-                onChange={setDirection}
-                accessibilityLabel={`Whether this option adds to or takes off the price`}
-                disabled={busy}
-              />
-            </View>
-            <View className="flex-1">
-              <MoneyField
-                value={amount}
-                onChange={setAmount}
-                accessibilityLabel={`What this option changes the price by`}
-                editable={!busy}
-              />
-            </View>
-          </View>
-          {error ? <Text className="text-caption text-error">{error}</Text> : null}
-          <SecondaryButton
-            label={busy ? "Saving…" : "Add option"}
-            disabled={busy}
-            onPress={() => void add()}
-          />
-        </View>
-      )}
     </View>
   );
 }
 
-/** "+₱150.00", "−₱50.00", or "No change" — never a bare signed number. */
+/** "+₱150.00", "−₱50.00", or "Included" — never a bare signed number. */
 export function modifierLine(minor: number): string {
-  if (minor === 0) return "No change";
+  if (minor === 0) return "Included";
   return minor > 0 ? `+${formatPhp(minor)}` : `−${formatPhp(Math.abs(minor))}`;
 }
 
-/** The button that opens a new step or extra. Kept beside the editor it feeds. */
+/**
+ * Opening a step or an add-on.
+ *
+ * The name and the first choice are asked for together because GRIDGO will not
+ * hold an empty group, and it is right not to: a step with nothing under it is
+ * a question a client cannot answer. Asking for both at once is also what the
+ * shop was going to type anyway — "Rush" is not a thing you add without knowing
+ * it costs ₱200.
+ */
 export function AddGroupButton({
   kind,
   busy,
@@ -202,11 +228,46 @@ export function AddGroupButton({
 }: {
   kind: "spec" | "addon";
   busy: boolean;
-  onAdd: (name: string) => Promise<boolean>;
+  onAdd: (input: {
+    name: string;
+    firstOption: { label: string; priceModifierMinor: number };
+  }) => Promise<boolean>;
 }) {
   const colors = useThemeColors();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [label, setLabel] = useState("");
+  const [amount, setAmount] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function close() {
+    setOpen(false);
+    setName("");
+    setLabel("");
+    setAmount("");
+    setError(null);
+  }
+
+  async function submit() {
+    if (!name.trim() || !label.trim()) {
+      setError("GRIDGO needs the name and one choice a client can pick.");
+      return;
+    }
+    const money = parseMoney(amount);
+    if (!money.ok) {
+      setError(money.error);
+      return;
+    }
+    setError(null);
+    if (
+      await onAdd({
+        name: name.trim(),
+        firstOption: { label: label.trim(), priceModifierMinor: money.minor ?? 0 },
+      })
+    ) {
+      close();
+    }
+  }
 
   if (!open) {
     return (
@@ -233,34 +294,45 @@ export function AddGroupButton({
       </Text>
       <TextField
         value={name}
-        onChange={setName}
-        placeholder={kind === "addon" ? "Grommets" : "Size"}
+        onChange={(value) => setName(value.slice(0, LISTING_CAPS.nameChars))}
+        placeholder={kind === "addon" ? "Rush" : "Size"}
         accessibilityLabel={kind === "addon" ? "Add-on name" : "Step name"}
         kind="text"
       />
+
+      <Text className="text-caption text-text-muted">
+        {kind === "addon"
+          ? "And the first thing a client can add, with what it costs."
+          : "And the first thing a client can pick, with what it changes."}
+      </Text>
+      <TextField
+        value={label}
+        onChange={(value) => setLabel(value.slice(0, LISTING_CAPS.optionLabelChars))}
+        placeholder={kind === "addon" ? "Ready in 24 hours" : "2 × 3 ft"}
+        accessibilityLabel="First choice"
+        kind="text"
+      />
+      <MoneyField
+        value={amount}
+        onChange={setAmount}
+        accessibilityLabel="What this choice adds to the price"
+        editable={!busy}
+      />
+      <Text className="text-caption text-text-muted">
+        Leave the amount empty if it is included in your price.
+      </Text>
+
+      {error ? <Text className="text-caption text-error">{error}</Text> : null}
+
       <View className="flex-row gap-3">
         <View className="flex-1">
-          <SecondaryButton
-            label="Cancel"
-            disabled={busy}
-            onPress={() => {
-              setOpen(false);
-              setName("");
-            }}
-          />
+          <SecondaryButton label="Cancel" disabled={busy} onPress={close} />
         </View>
         <View className="flex-1">
           <SecondaryButton
             label={busy ? "Saving…" : "Add"}
-            disabled={busy || !name.trim()}
-            onPress={() => {
-              void (async () => {
-                if (await onAdd(name.trim())) {
-                  setName("");
-                  setOpen(false);
-                }
-              })();
-            }}
+            disabled={busy}
+            onPress={() => void submit()}
           />
         </View>
       </View>

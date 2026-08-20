@@ -16,11 +16,12 @@ import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { clerkDisplayName } from "@/lib/clerk";
 import { buildObligations, greeting, homeHeadline, type Obligation } from "@/lib/homeBoard";
-import { boardPrompt, type Listing } from "@/lib/listings";
+import { boardPrompt, type Listing, type ServiceLine } from "@/lib/listings";
 import { loadBoard } from "@/lib/listingsApi";
 import { buildSchedule } from "@/lib/schedule";
 import { useAlertsStore } from "@/store/alerts";
 import { isMatchable, useSession } from "@/store/session";
+import { loadServiceLines } from "@/hooks/useBoard";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 
@@ -42,7 +43,7 @@ export default function HomeScreen() {
   const syncAlerts = useAlertsStore((s) => s.syncFrom);
   const [jobs, setJobs] = useState<api.Order[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
-  const [services, setServices] = useState<api.SupplierService[]>([]);
+  const [services, setServices] = useState<ServiceLine[]>([]);
   // False while GRIDGO has no board routes: nothing to nag a shop about.
   const [boardOpen, setBoardOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -59,10 +60,7 @@ export default function HomeScreen() {
    * error on a screen about work.
    */
   const loadBoardQuietly = useCallback(async () => {
-    const [board, lines] = await Promise.all([
-      loadBoard(),
-      api.listSupplierServices().catch(() => [] as api.SupplierService[]),
-    ]);
+    const [board, lines] = await Promise.all([loadBoard(), loadServiceLines()]);
     setServices(lines);
     setListings(board.status === "ok" ? board.value : []);
     setBoardOpen(board.status === "ok");

@@ -1,7 +1,7 @@
-import { ChevronRight } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { ChevronRight, Link2 } from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BusyOverlay } from "@/components/BusyOverlay";
@@ -14,6 +14,7 @@ import { SamplePhoto } from "@/components/SamplePhoto";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { AddGroupButton, SpecGroupEditor } from "@/components/SpecGroupEditor";
+import { AddPrepStepButton, PrepStepRow } from "@/components/PrepStepEditor";
 import { StatusChip } from "@/components/StatusChip";
 import { ChipMultiSelect } from "@/components/ChipMultiSelect";
 import { MoneyField } from "@/components/controls/MoneyField";
@@ -22,7 +23,12 @@ import { OptionList } from "@/components/controls/OptionList";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import { Stepper } from "@/components/controls/Stepper";
 import { TextField } from "@/components/controls/TextField";
-import { fileFormatName, PUBLISHED_FILE_FORMATS } from "@/data/fileFormats";
+import {
+  fileFormatName,
+  LINK_FILE_FORMATS,
+  linkFormatInvitation,
+  UPLOADED_FILE_FORMATS,
+} from "@/data/fileFormats";
 import { spacing } from "@/constants/theme";
 import {
   addOns,
@@ -39,17 +45,23 @@ import {
 import {
   addGroup,
   addOption,
+  addPrepStep,
+  ARCHIVED_SENTENCE,
   BOARD_NOT_OPEN_YET,
+  PREP_STEPS_NOT_OPEN_YET,
   removeGroup,
   removeListing,
   removeOption,
-  renameGroup,
+  removePrepStep,
+  reorderPrepSteps,
+  saveGroup,
   saveListing,
   setFileFormats,
+  type BoardOutcome,
 } from "@/lib/listingsApi";
 import { parseMoney } from "@/lib/money";
 import { resolveCategoryCode } from "@/lib/taxonomy";
-import { useListing } from "@/hooks/useBoard";
+import { routeId, useListing } from "@/hooks/useBoard";
 import { useThemeColors } from "@/hooks/useTheme";
 import { askConfirm } from "@/store/sheets";
 import { isMatchable, useSession } from "@/store/session";
@@ -57,34 +69,62 @@ import { isMatchable, useSession } from "@/store/session";
 /**
  * One listing, in sections.
  *
- * Everything a shop changes about a listing is on this screen rather than
- * behind a twelve-step wizard: a price change is one tap in, not a flow. Only
- * the samples and the client's-eye view get their own screens, because one is a
+ * Everything a shop changes about a listing is here rather than behind a
+ * twelve-step wizard: a price change is one tap in, not a flow. Only the
+ * samples and the client's-eye view get their own screens, because one is a
  * camera roll and the other is a different point of view.
  *
  * Two kinds of change live here and the copy says which is which. The words,
- * the price and the times are held until the foot is pressed, so a half-typed
- * name is never saved. Steps, add-ons and their options are their own records
- * on GRIDGO and save as they are added — pretending otherwise would mean
- * holding a pile of unsent rows and losing them to a back gesture.
+ * the price and the times are held until the foot is pressed — a half-typed
+ * name must never be saved — and they are also saved on the way out, because
+ * opening the preview to check a price that had never left the phone is exactly
+ * how a shop concludes GRIDGO lost it. Steps, add-ons and their choices are
+ * their own records on GRIDGO and save as they are added.
  */
 export default function ListingScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id?: string | string[] }>();
+  const id = routeId(params.id);
   const insets = useSafeAreaInsets();
   const approved = isMatchable(useSession((s) => s.user));
-  const { listing, catalog, services, loading, notOpenYet, error, reload } = useListing(id);
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // The reload guard and the leaving-the-screen save both need to know whether
+  // there are unsaved words, from callbacks that must not re-subscribe on every
+  // keystroke — hence a ref beside the state rather than a second source.
+  const dirtyRef = useRef(false);
+  const savingRef = useRef(false);
+
+  const {
+    listing,
+    catalog,
+    services,
+    prepSteps,
+    prepStepsOpen,
+    loading,
+    notOpenYet,
+    error,
+    reload,
+  } = useListing(id, useCallback(() => dirtyRef.current, []));
+
+  // Never null while a listing is loaded. Deriving it here rather than waiting
+  // for an effect is what stops the screen rendering its "not reachable" state
+  // for the frame between the listing arriving and the draft being seeded.
+  const working = draft ?? (listing ? draftFrom(listing) : null);
 
   useEffect(() => {
-    if (listing) setDraft(draftFrom(listing));
+    if (listing && !dirtyRef.current) setDraft(draftFrom(listing));
   }, [listing]);
 
+  const dirty = Boolean(listing && working && !sameDraft(working, draftFrom(listing)));
+  dirtyRef.current = dirty;
+
   const merged = useMemo(
-    () => (listing && draft ? applyDraft(listing, draft) : listing),
-    [listing, draft],
+    () => (listing && working ? applyDraft(listing, working) : listing),
+    [listing, working],
   );
   const context = useMemo(
     () => (merged ? boardContextFor(merged, services) : null),
@@ -95,7 +135,7 @@ export default function ListingScreen() {
 
   /** Every write goes through here, so one failure sentence has one home. */
   const run = useCallback(
-    async (work: () => Promise<{ status: string; message?: string }>) => {
+    async <T,>(work: () => Promise<BoardOutcome<T>>, absent = BOARD_NOT_OPEN_YET) => {
       setBusy(true);
       setActionError(null);
       const result = await work();
@@ -104,52 +144,78 @@ export default function ListingScreen() {
         setBusy(false);
         return true;
       }
-      setActionError(
-        result.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : (result.message ?? ""),
-      );
+      setActionError(result.status === "not_open_yet" ? absent : result.message);
       setBusy(false);
       return false;
     },
     [reload],
   );
 
-  async function persist(onTheBoard?: boolean): Promise<boolean> {
-    if (!listing || !draft) return false;
-    const money = parseMoney(draft.price);
-    if (!money.ok) {
-      setActionError(money.error);
-      return false;
-    }
+  /**
+   * Send the words, the price and the times.
+   *
+   * `onTheBoard` is passed only when the shop asked to change it; the formats
+   * are their own route and only move when they moved.
+   */
+  const persist = useCallback(
+    async (onTheBoard?: boolean): Promise<boolean> => {
+      if (!listing || !working) return false;
+      const money = parseMoney(working.price);
+      if (!money.ok) {
+        setActionError(money.error);
+        return false;
+      }
 
-    const saved = await run(async () =>
-      saveListing(listing, {
-        name: draft.name.trim(),
-        description: draft.description.trim(),
-        basePriceMinor: money.minor ?? 0,
-        pricingUnit: draft.pricingUnit,
-        packageQty: draft.pricingUnit === "per_package" ? draft.packageQty : null,
-        turnaroundMode: draft.turnaroundMode,
-        turnaroundHours: draft.turnaroundMode === "override" ? draft.turnaroundHours : null,
-        subcategoryCode: draft.subcategoryCode,
-        ...(onTheBoard == null ? {} : { active: onTheBoard }),
-      }),
-    );
-    if (!saved) return false;
+      savingRef.current = true;
+      try {
+        const saved = await run(async () =>
+          saveListing(listing, {
+            name: working.name.trim(),
+            description: working.description.trim(),
+            basePriceMinor: money.minor ?? 0,
+            pricingUnit: working.pricingUnit,
+            packageQty: working.pricingUnit === "per_package" ? working.packageQty : null,
+            turnaroundMode: working.turnaroundMode,
+            turnaroundHours:
+              working.turnaroundMode === "override" ? working.turnaroundHours : null,
+            subcategoryCode: working.subcategoryCode,
+            ...(onTheBoard == null ? {} : { active: onTheBoard }),
+          }),
+        );
+        if (!saved) return false;
+        dirtyRef.current = false;
+        setDraft(null);
 
-    // The formats are their own route, so they are only sent when they moved.
-    const formatsMoved =
-      draft.fileFormatMode !== listing.fileFormatMode ||
-      draft.formatCodes.join(",") !== listing.formatCodes.join(",");
-    if (formatsMoved) {
-      return run(async () =>
-        setFileFormats(
-          listing.id,
-          draft.fileFormatMode === "override" ? draft.formatCodes : [],
-        ),
-      );
-    }
-    return true;
-  }
+        const formatsMoved =
+          working.fileFormatMode !== listing.fileFormatMode ||
+          working.formatCodes.join(",") !== listing.formatCodes.join(",");
+        if (!formatsMoved) return true;
+        return run(async () =>
+          setFileFormats(listing, working.fileFormatMode, working.formatCodes),
+        );
+      } finally {
+        savingRef.current = false;
+      }
+    },
+    [listing, run, working],
+  );
+
+  /**
+   * Leaving with unsaved words saves them.
+   *
+   * A shop that types a price and taps through to the preview is not asking to
+   * throw the price away, and finding ₱0.00 on the other side reads as GRIDGO
+   * losing it. Every route out of this screen goes through here first.
+   */
+  const persistThen = useCallback(
+    async (go: () => void) => {
+      if (dirtyRef.current && !savingRef.current) {
+        if (!(await persist())) return;
+      }
+      go();
+    },
+    [persist],
+  );
 
   async function takeOff() {
     if (!listing) return;
@@ -175,7 +241,45 @@ export default function ListingScreen() {
       destructive: true,
     });
     if (!confirmed) return;
-    if (await run(async () => removeListing(listing.id))) router.back();
+
+    setBusy(true);
+    setActionError(null);
+    setNotice(null);
+    const result = await removeListing(listing);
+
+    if (result.status === "ok") {
+      dirtyRef.current = false;
+      if (result.value === "deleted") {
+        setBusy(false);
+        // The board reloads when it regains focus, so it never shows a listing
+        // GRIDGO no longer has.
+        router.back();
+        return;
+      }
+      // GRIDGO kept it because a job already used it. Saying "removed" and
+      // sending the shop back to a board it is still on would be the lie.
+      setNotice(ARCHIVED_SENTENCE);
+      await reload();
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
+    setActionError(
+      result.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : result.message,
+    );
+  }
+
+  if (!id) {
+    return (
+      <View className="gg-screen gg-page justify-center">
+        <EmptyState
+          title="This listing could not be opened"
+          body="GRIDGO was not told which listing to open. Go back to your board and tap it again."
+          actionLabel="Back to your board"
+          onAction={() => router.back()}
+        />
+      </View>
+    );
   }
 
   if (loading && !listing) {
@@ -208,12 +312,15 @@ export default function ListingScreen() {
     );
   }
 
-  if (!listing || !draft || !merged || !context || !standing) {
+  if (!listing || !working || !merged || !context || !standing) {
     return (
       <View className="gg-screen gg-page justify-center">
         <EmptyState
-          title="This listing is not reachable"
-          body={error ?? "GRIDGO did not return this listing. Pull back and open it again."}
+          title="This listing did not load"
+          body={
+            error ??
+            "GRIDGO did not answer for this listing. Check this phone's connection and try again."
+          }
           actionLabel="Try again"
           onAction={() => void reload()}
         />
@@ -222,22 +329,32 @@ export default function ListingScreen() {
   }
 
   const category = catalog
-    ? catalog.categories.find((entry) =>
+    ? (catalog.categories.find((entry) =>
         entry.covers.some((cover) => cover.code === listing.subcategoryCode),
       ) ??
       catalog.categories.find(
         (entry) =>
           entry.code ===
-          resolveCategoryCode(catalog, services.find((s) => s.id === listing.serviceLineId)?.categoryCode ?? ""),
+          resolveCategoryCode(
+            catalog,
+            services.find((line) => line.id === listing.serviceLineId)?.categoryCode ?? "",
+          ),
       ) ??
-      null
+      null)
     : null;
 
   return (
     <View className="gg-screen">
+      {/*
+        The listing's own name in the header. "Listing" told a shop with eleven
+        of them nothing at all, and the name is already the first thing it
+        looked for. Nothing else is drawn up there — the platform's own controls
+        share that bar.
+      */}
+      <Stack.Screen options={{ title: merged.name || "Untitled listing" }} />
+
       <FormScrollView contentClassName="gg-page pb-10 pt-4" bottomOffset={spacing.xxl}>
         <View className="gap-2">
-          <Text className="text-h2 text-text-primary">{merged.name || "Untitled listing"}</Text>
           <Text className="text-body-lg font-medium text-text-primary">{priceLine(merged)}</Text>
           <View className="flex-row">
             <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
@@ -248,48 +365,40 @@ export default function ListingScreen() {
         </View>
 
         {/* 1. Samples */}
-        <Section title="SAMPLE PHOTOS" hint="The first one is what clients see on your board.">
-          <View className="flex-row flex-wrap">
-            {listing.photos.slice(0, 4).map((photo) => (
-              <View key={photo.fileId} className="w-1/4">
-                <SamplePhoto
-                  fileId={photo.fileId}
-                  altText={photo.altText ?? merged.name}
-                  gutter="tight"
-                />
-              </View>
-            ))}
-            {listing.photos.length === 0 ? (
-              <View className="w-1/2">
-                <SamplePhoto gutter="tight" emptyLabel="No samples yet" />
-              </View>
-            ) : null}
-          </View>
+        <Section
+          title="SAMPLE PHOTOS"
+          hint={
+            listing.photos.length
+              ? "The first one is what clients see on your board."
+              : "A listing cannot go on the board without one."
+          }
+        >
+          <SampleStrip listing={listing} />
           <DestinationRow
             title={listing.photos.length ? "Change your samples" : "Add a sample photo"}
-            detail={
-              listing.photos.length
-                ? `${listing.photos.length} of ${LISTING_CAPS.photos} used. Reorder or remove them.`
-                : "A listing cannot go on the board without one."
+            detail={`${listing.photos.length} of ${LISTING_CAPS.photos} used.`}
+            onPress={() =>
+              void persistThen(() =>
+                router.push({ pathname: "/shop/[id]/photos", params: { id } }),
+              )
             }
-            onPress={() => router.push({ pathname: "/shop/[id]/photos", params: { id } })}
           />
         </Section>
 
         {/* 2. What it is */}
         <Section title="WHAT IT IS">
           <TextField
-            value={draft.name}
+            value={working.name}
             onChange={(value) =>
-              setDraft({ ...draft, name: value.slice(0, LISTING_CAPS.nameChars) })
+              setDraft({ ...working, name: value.slice(0, LISTING_CAPS.nameChars) })
             }
             placeholder="Tarpaulin, 13oz"
             accessibilityLabel="Listing name"
             kind="text"
           />
           <NoteField
-            value={draft.description}
-            onChange={(value) => setDraft({ ...draft, description: value })}
+            value={working.description}
+            onChange={(value) => setDraft({ ...working, description: value })}
             placeholder="What a client gets, in your own words."
             accessibilityLabel="What this listing is"
             maxLength={LISTING_CAPS.descriptionChars}
@@ -305,8 +414,8 @@ export default function ListingScreen() {
                   label: cover.name,
                   detail: cover.examples,
                 }))}
-                value={draft.subcategoryCode}
-                onChange={(value) => setDraft({ ...draft, subcategoryCode: value })}
+                value={working.subcategoryCode}
+                onChange={(value) => setDraft({ ...working, subcategoryCode: value })}
                 accessibilityLabel="What kind of work this listing is"
               />
             </View>
@@ -327,21 +436,21 @@ export default function ListingScreen() {
               { value: "per_unit", label: "Per piece" },
               { value: "per_package", label: "Per pack" },
             ]}
-            value={draft.pricingUnit}
-            onChange={(value) => setDraft({ ...draft, pricingUnit: value })}
+            value={working.pricingUnit}
+            onChange={(value) => setDraft({ ...working, pricingUnit: value })}
             accessibilityLabel="How this listing is priced"
           />
           <MoneyField
-            value={draft.price}
-            onChange={(value) => setDraft({ ...draft, price: value })}
+            value={working.price}
+            onChange={(value) => setDraft({ ...working, price: value })}
             accessibilityLabel="Your price"
           />
-          {draft.pricingUnit === "per_package" ? (
+          {working.pricingUnit === "per_package" ? (
             <View className="gap-2">
               <Text className="text-caption text-text-muted">How many pieces in a pack</Text>
               <Stepper
-                value={draft.packageQty ?? 100}
-                onChange={(value) => setDraft({ ...draft, packageQty: value })}
+                value={working.packageQty ?? 100}
+                onChange={(value) => setDraft({ ...working, packageQty: value })}
                 min={2}
                 max={5000}
                 step={PACK_STEP}
@@ -359,14 +468,14 @@ export default function ListingScreen() {
               { value: "inherit", label: "Your usual time" },
               { value: "override", label: "Just this listing" },
             ]}
-            value={draft.turnaroundMode}
-            onChange={(value) => setDraft({ ...draft, turnaroundMode: value })}
+            value={working.turnaroundMode}
+            onChange={(value) => setDraft({ ...working, turnaroundMode: value })}
             accessibilityLabel="How long this listing takes"
           />
-          {draft.turnaroundMode === "override" ? (
+          {working.turnaroundMode === "override" ? (
             <Stepper
-              value={draft.turnaroundHours ?? 24}
-              onChange={(value) => setDraft({ ...draft, turnaroundHours: value })}
+              value={working.turnaroundHours ?? 24}
+              onChange={(value) => setDraft({ ...working, turnaroundHours: value })}
               min={1}
               max={336}
               step={1}
@@ -382,10 +491,10 @@ export default function ListingScreen() {
           )}
         </Section>
 
-        {/* 5. Specs */}
+        {/* 5. Steps */}
         <Section
-          title="STEPS A CLIENT WALKS"
-          hint="In this order. Each one saves as you add it."
+          title="WHAT A CLIENT PICKS"
+          hint="In this order, the way they will see it. Each one saves as you add it."
         >
           {specs(merged).map((group, index) => (
             <SpecGroupEditor
@@ -394,36 +503,46 @@ export default function ListingScreen() {
               step={index + 1}
               busy={busy}
               onSetRequired={(required) => {
-                void run(async () => renameGroup(listing.id, group.id, { required }));
+                void run(async () => saveGroup(listing, group, { required }));
               }}
               onAddOption={(label, minor) =>
-                run(async () => addOption(group.id, { label, priceModifierMinor: minor }))
+                run(async () => addOption(group, { label, priceModifierMinor: minor }))
               }
               onRemoveOption={(optionId) => {
-                void run(async () => removeOption(group.id, optionId));
+                void run(async () => removeOption(group, optionId));
               }}
               onRemoveGroup={() => {
-                void run(async () => removeGroup(listing.id, group.id));
+                void run(async () => removeGroup(listing, group));
               }}
             />
           ))}
-          {specs(merged).length < LISTING_CAPS.specGroups ? (
+          {merged.groups.length < LISTING_CAPS.specGroups ? (
             <AddGroupButton
               kind="spec"
               busy={busy}
-              onAdd={(name) =>
-                run(async () => addGroup(listing.id, { name, kind: "spec", required: true }))
+              onAdd={(input) =>
+                run(async () =>
+                  addGroup(listing, {
+                    name: input.name,
+                    kind: "spec",
+                    required: true,
+                    firstOption: input.firstOption,
+                  }),
+                )
               }
             />
           ) : (
             <Text className="text-caption text-text-muted">
-              That is all six steps. Remove one before adding another.
+              That is all six steps and add-ons. Remove one before adding another.
             </Text>
           )}
         </Section>
 
         {/* 6. Add-ons */}
-        <Section title="ADD-ONS" hint="Extras a client can tick. Never required.">
+        <Section
+          title="ADD-ONS"
+          hint="Priced extras a client can add. Rush, grommets, lamination."
+        >
           {addOns(merged).map((group) => (
             <SpecGroupEditor
               key={group.id}
@@ -432,13 +551,13 @@ export default function ListingScreen() {
               busy={busy}
               onSetRequired={() => undefined}
               onAddOption={(label, minor) =>
-                run(async () => addOption(group.id, { label, priceModifierMinor: minor }))
+                run(async () => addOption(group, { label, priceModifierMinor: minor }))
               }
               onRemoveOption={(optionId) => {
-                void run(async () => removeOption(group.id, optionId));
+                void run(async () => removeOption(group, optionId));
               }}
               onRemoveGroup={() => {
-                void run(async () => removeGroup(listing.id, group.id));
+                void run(async () => removeGroup(listing, group));
               }}
             />
           ))}
@@ -446,54 +565,147 @@ export default function ListingScreen() {
             <AddGroupButton
               kind="addon"
               busy={busy}
-              onAdd={(name) =>
-                run(async () => addGroup(listing.id, { name, kind: "addon", required: false }))
+              onAdd={(input) =>
+                run(async () =>
+                  addGroup(listing, {
+                    name: input.name,
+                    kind: "addon",
+                    required: false,
+                    firstOption: input.firstOption,
+                  }),
+                )
               }
             />
           ) : null}
         </Section>
 
-        {/* 7. Files you accept */}
+        {/* 7. Before they order */}
         <Section
-          title="FILES YOU ACCEPT"
-          hint="What a client may send as artwork for this listing."
+          title="BEFORE THEY ORDER"
+          hint="What a client should do before sending work. Numbered — they read it in order."
+        >
+          {!prepStepsOpen ? (
+            <View className="gg-panel gap-2">
+              <Text className="text-body text-text-secondary">{PREP_STEPS_NOT_OPEN_YET}</Text>
+              <SecondaryButton label="Check again" onPress={() => void reload()} />
+            </View>
+          ) : (
+            <>
+              {prepSteps.map((step, index) => (
+                <PrepStepRow
+                  key={step.id}
+                  step={step}
+                  position={index + 1}
+                  busy={busy}
+                  onRemove={() => {
+                    void run(async () => removePrepStep(listing, step.id));
+                  }}
+                  onMoveUp={
+                    index === 0
+                      ? undefined
+                      : () => {
+                          void run(
+                            async () => reorderPrepSteps(listing, swap(prepSteps, index, index - 1)),
+                            PREP_STEPS_NOT_OPEN_YET,
+                          );
+                        }
+                  }
+                  onMoveDown={
+                    index === prepSteps.length - 1
+                      ? undefined
+                      : () => {
+                          void run(
+                            async () => reorderPrepSteps(listing, swap(prepSteps, index, index + 1)),
+                            PREP_STEPS_NOT_OPEN_YET,
+                          );
+                        }
+                  }
+                />
+              ))}
+              {prepSteps.length === 0 ? (
+                <Text className="text-body text-text-secondary">
+                  Nothing yet. On specialised work this is where a job is won or lost — flatten
+                  the art, outline the fonts, export the 3MF at the right scale.
+                </Text>
+              ) : null}
+              {prepSteps.length < LISTING_CAPS.prepSteps ? (
+                <AddPrepStepButton
+                  busy={busy}
+                  onAdd={(input) =>
+                    run(
+                      async () => addPrepStep(listing, prepSteps, input),
+                      PREP_STEPS_NOT_OPEN_YET,
+                    )
+                  }
+                />
+              ) : (
+                <Text className="text-caption text-text-muted">
+                  That is all eight steps. Remove one before adding another.
+                </Text>
+              )}
+            </>
+          )}
+        </Section>
+
+        {/* 8. Artwork */}
+        <Section
+          title="ARTWORK YOU ACCEPT"
+          hint="What a client may send you for this listing."
         >
           <SegmentedControl
             options={[
               { value: "inherit", label: "Same as your category" },
               { value: "override", label: "Just this listing" },
             ]}
-            value={draft.fileFormatMode}
-            onChange={(value) => setDraft({ ...draft, fileFormatMode: value })}
-            accessibilityLabel="Which files this listing accepts"
+            value={working.fileFormatMode}
+            onChange={(value) => setDraft({ ...working, fileFormatMode: value })}
+            accessibilityLabel="Which artwork this listing accepts"
           />
-          {draft.fileFormatMode === "override" ? (
-            <ChipMultiSelect
-              options={PUBLISHED_FILE_FORMATS.map((format) => ({
-                value: format.code,
-                label: format.name,
-              }))}
-              selected={draft.formatCodes}
-              onToggle={(code) =>
-                setDraft({
-                  ...draft,
-                  formatCodes: draft.formatCodes.includes(code)
-                    ? draft.formatCodes.filter((entry) => entry !== code)
-                    : [...draft.formatCodes, code],
-                })
-              }
-              accessibilityLabel="Files this listing accepts"
-            />
+          {working.fileFormatMode === "override" ? (
+            <View className="gap-5">
+              <View className="gap-2">
+                <Text className="text-caption text-text-muted">Files they upload</Text>
+                <ChipMultiSelect
+                  options={UPLOADED_FILE_FORMATS.map((format) => ({
+                    value: format.code,
+                    label: format.name,
+                  }))}
+                  selected={working.formatCodes}
+                  onToggle={(code) => setDraft({ ...working, formatCodes: toggle(working.formatCodes, code) })}
+                  accessibilityLabel="Files this listing accepts"
+                />
+              </View>
+              <View className="gap-2">
+                <View className="flex-row items-center gap-2">
+                  <LinkGlyph />
+                  <Text className="text-caption text-text-muted">Links you accept</Text>
+                </View>
+                <ChipMultiSelect
+                  options={LINK_FILE_FORMATS.map((format) => ({
+                    value: format.code,
+                    label: format.name,
+                    accessibilityLabel: linkFormatInvitation(format.code),
+                  }))}
+                  selected={working.formatCodes}
+                  onToggle={(code) => setDraft({ ...working, formatCodes: toggle(working.formatCodes, code) })}
+                  accessibilityLabel="Links this listing accepts"
+                />
+                <Text className="text-caption text-text-muted">
+                  Tick Canva and a client can paste a Canva link on this listing instead of
+                  exporting a file.
+                </Text>
+              </View>
+            </View>
           ) : (
             <Text className="text-caption text-text-muted">
               {context.inheritedFormatCodes.length
                 ? context.inheritedFormatCodes.map(fileFormatName).join(", ")
-                : "Your category has no file types set yet. Choose them here, or set them once in Services you offer."}
+                : "Your category has no artwork set yet. Choose it here, or set it once in Services you offer."}
             </Text>
           )}
         </Section>
 
-        {/* 8. On the board */}
+        {/* 9. On the board */}
         <Section title="ON THE BOARD">
           <Text className="text-body text-text-secondary">
             {merged.onTheBoard
@@ -519,9 +731,19 @@ export default function ListingScreen() {
           <DestinationRow
             title="See what clients see"
             detail="Your listing the way it reads on a client's phone"
-            onPress={() => router.push({ pathname: "/shop/[id]/preview", params: { id } })}
+            onPress={() =>
+              void persistThen(() =>
+                router.push({ pathname: "/shop/[id]/preview", params: { id } }),
+              )
+            }
           />
         </Section>
+
+        {notice ? (
+          <View className="gg-panel mt-6">
+            <Text className="text-body text-text-secondary">{notice}</Text>
+          </View>
+        ) : null}
 
         {actionError ? (
           <View className="mt-6">
@@ -547,8 +769,8 @@ export default function ListingScreen() {
         {merged.onTheBoard ? (
           <View className="gap-3">
             <PrimaryButton
-              label={busy ? "Saving…" : "Save changes"}
-              disabled={busy}
+              label={busy ? "Saving…" : dirty ? "Save changes" : "Saved"}
+              disabled={busy || !dirty}
               onPress={() => void persist()}
             />
             <SecondaryButton
@@ -568,8 +790,8 @@ export default function ListingScreen() {
               <Text className="text-caption text-text-muted">{blockers[0]}</Text>
             ) : null}
             <SecondaryButton
-              label={busy ? "Saving…" : "Save draft"}
-              disabled={busy}
+              label={busy ? "Saving…" : dirty ? "Save draft" : "Draft saved"}
+              disabled={busy || !dirty}
               onPress={() => void persist()}
             />
           </View>
@@ -579,6 +801,63 @@ export default function ListingScreen() {
       <BusyOverlay visible={busy} label="Saving your listing…" />
     </View>
   );
+}
+
+/**
+ * Every sample, in a row.
+ *
+ * A wall of samples is a row, not a grid: horizontal keeps the price section
+ * above the fold on a small phone, and it makes "the first one is your board
+ * photo" mean the leftmost one, which is how a strip is read. All of them are
+ * drawn — a shop that added six and saw four believed two had not saved.
+ */
+function SampleStrip({ listing }: { listing: Listing }) {
+  if (!listing.photos.length) {
+    return (
+      <View className="w-1/2">
+        <SamplePhoto gutter="tight" emptyLabel="No samples yet" />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      accessibilityLabel={`${listing.photos.length} sample photos`}
+    >
+      <View className="flex-row">
+        {listing.photos.map((photo, index) => (
+          <View key={photo.fileId} className="w-28">
+            <SamplePhoto
+              fileId={photo.fileId}
+              altText={photo.altText ?? listing.name}
+              gutter="tight"
+            />
+            <Text className="px-1.5 text-caption text-text-muted" numberOfLines={1}>
+              {index === 0 ? "Board photo" : `Sample ${index + 1}`}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
+function LinkGlyph() {
+  const colors = useThemeColors();
+  return <Link2 size={13} color={colors.textMuted} strokeWidth={2} />;
+}
+
+function toggle(codes: string[], code: string): string[] {
+  return codes.includes(code) ? codes.filter((entry) => entry !== code) : [...codes, code];
+}
+
+/** Two entries traded, leaving the array they came from alone. */
+function swap<T>(items: readonly T[], from: number, to: number): T[] {
+  const next = [...items];
+  [next[from], next[to]] = [next[to], next[from]];
+  return next;
 }
 
 /** A pack is usually round: 100, 500, 1000. Stepping by one would be cruel. */
@@ -613,12 +892,28 @@ function draftFrom(listing: Listing): Draft {
   };
 }
 
+/** Whether anything a shop typed differs from what GRIDGO holds. */
+export function sameDraft(left: Draft, right: Draft): boolean {
+  return (
+    left.name === right.name &&
+    left.description === right.description &&
+    left.price === right.price &&
+    left.pricingUnit === right.pricingUnit &&
+    left.packageQty === right.packageQty &&
+    left.turnaroundMode === right.turnaroundMode &&
+    left.turnaroundHours === right.turnaroundHours &&
+    left.subcategoryCode === right.subcategoryCode &&
+    left.fileFormatMode === right.fileFormatMode &&
+    left.formatCodes.join(",") === right.formatCodes.join(",")
+  );
+}
+
 /**
  * The listing as it would be if the shop pressed save now.
  *
- * Completeness is read off this rather than off what GRIDGO holds, so the
- * reason under a disabled action matches what is on screen — a shop that has
- * just typed a name should not be told it needs one.
+ * Completeness and the price line are read off this rather than off what GRIDGO
+ * holds, so what a shop sees matches what it typed — a shop that has just
+ * entered a price should not be told the listing has none.
  */
 function applyDraft(listing: Listing, draft: Draft): Listing {
   const money = parseMoney(draft.price);
