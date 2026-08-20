@@ -211,6 +211,32 @@ function RootStack() {
           }}
         />
         {/*
+          The shop's own name and number sit behind the same guard, and for a
+          sharper version of the same reason: Operations rings that number to
+          progress the application, so a waiting shop is the one that most needs
+          to fix a typo in it.
+        */}
+        <Stack.Screen
+          name="shop-details"
+          options={{
+            title: "Your shop details",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
+          The sign-in address, behind the same guard as the details it is
+          reached from. A shop that mistyped its email while applying cannot
+          sign in anywhere else to fix it, so the screen has to be open to a
+          shop Operations has not approved yet.
+        */}
+        <Stack.Screen
+          name="change-email"
+          options={{
+            title: "Change email",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
           The board is reachable from both signed-in states for the same reason
           the pin is, and a stronger one: approval requires a finished listing,
           so trapping a waiting shop out of the screen where it builds one would

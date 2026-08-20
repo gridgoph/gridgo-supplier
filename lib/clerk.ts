@@ -84,6 +84,20 @@ export function resolveClerkPublishableKey(
   );
 }
 
+/**
+ * The machine code Clerk put on its first refusal, if it put one there.
+ *
+ * Read only to tell one refusal apart from another — `form_identifier_exists`
+ * needs a different sentence and a different next step from every other reason
+ * an address can be rejected. The code itself never reaches a screen.
+ */
+export function clerkErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object") return null;
+  const candidate = error as { errors?: { code?: unknown }[] };
+  const code = candidate.errors?.[0]?.code;
+  return typeof code === "string" && code ? code : null;
+}
+
 /** True when Clerk refused a second session because one is already live. */
 export function isAlreadySignedInError(error: unknown): boolean {
   const message = clerkErrorMessage(error, "").toLowerCase();

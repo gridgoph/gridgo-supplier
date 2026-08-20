@@ -102,6 +102,16 @@ const MESSAGES: Record<string, string> = {
     "A step holds twenty options. Remove one before adding another.",
   catalog_item_in_use:
     "A client has already ordered from this listing, so it is kept for that job's history. Hide it instead of removing it.",
+
+  // The shop's own details.
+  invalid_supplier_profile:
+    "Some of your shop details are missing or not valid. Check the shop name, contact person and mobile number, then try again.",
+  supplier_profile_stale:
+    "Your shop details changed somewhere else while this screen was open. Load the latest, then make your change again.",
+  expected_version_required:
+    "GRIDGO could not tell which version of your details this change was made against. Load the latest and make the change again.",
+  email_not_editable:
+    "Your email belongs to your GRIDGO sign-in, so it cannot be changed here. Change it where you sign in and it changes here too.",
 };
 
 export function humanizeApiError(error: unknown, fallback: string): string {

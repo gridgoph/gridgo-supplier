@@ -164,10 +164,10 @@ export function applyRoute(draft: SignupDraft, options?: ApplyOptions): Onboardi
 }
 
 /** Deliberately loose: the platform is the authority, this catches typos. */
-function isEmailish(value: string): boolean {
+export function isEmailish(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-function isPhoneish(value: string): boolean {
+export function isPhoneish(value: string): boolean {
   return value.replace(/[^0-9]/g, "").length >= 10;
 }

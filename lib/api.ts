@@ -1209,6 +1209,80 @@ export async function reorderPrepSteps(
   );
 }
 
+/* --------------------------------------------------------------------------
+   Provisional — the shop's own details
+
+   The record behind the identity card on Account: the name clients and riders
+   see, the person GRIDGO talks to, and the number the rider calls. GRIDGO is
+   adding `/me/supplier-profile` in parallel with this app, so a 404 is a fact
+   to state rather than an error to swallow — `lib/shopProfile.ts` is the only
+   caller and owns that decision.
+
+   The write carries the version it was read at, as both `expectedVersion` in
+   the body and `If-Match` in the header, or GRIDGO answers
+   `400 expected_version_required`. It is sent inline here rather than through
+   the board's own helper so this pair stays readable on its own.
+
+   Email is deliberately absent from the patch type. It belongs to the GRIDGO
+   sign-in, and the platform refuses it — so this app never offers it.
+   -------------------------------------------------------------------------- */
+
+export type SupplierProfile = {
+  userId: string;
+  shopName: string;
+  contactName: string;
+  /** Canonical `+639XXXXXXXXX`, or null when the shop has never given one. */
+  phone: string | null;
+  /** Owned by the GRIDGO sign-in. Read-only everywhere in this app. */
+  email: string;
+  shop: ShopLocation | null;
+  pickupAvailable: boolean;
+  /** Round-tripped on every write. A stale one is a 409, not a silent write. */
+  version: number;
+  updatedAt: string;
+  /**
+   * The shop's own pictures, as the platform projects them. Nothing in this
+   * app reads them yet, so the shape stays unread rather than guessed.
+   */
+  media: unknown;
+};
+
+/**
+ * What this app may change on the shop's own record.
+ *
+ * `email` is not here on purpose — see the note above.
+ */
+export type SupplierProfilePatch = {
+  shopName?: string;
+  contactName?: string;
+  phone?: string;
+};
+
+/** Provisional. The signed-in shop's own details (the API scopes this by bearer). */
+export async function getSupplierProfile(): Promise<SupplierProfile> {
+  const result = await request<{ profile: SupplierProfile }>("/me/supplier-profile");
+  return result.profile;
+}
+
+/**
+ * Provisional. Change the shop's own details.
+ *
+ * `version` is the one the profile was read at. GRIDGO compares it and refuses
+ * a write built on details that have since moved, so the caller has to offer
+ * the latest rather than overwrite what it cannot see.
+ */
+export async function updateSupplierProfile(
+  version: number,
+  patch: SupplierProfilePatch,
+): Promise<SupplierProfile> {
+  const result = await request<{ profile: SupplierProfile }>("/me/supplier-profile", {
+    method: "PATCH",
+    headers: { "If-Match": String(version) },
+    body: JSON.stringify({ ...patch, expectedVersion: version }),
+  });
+  return result.profile;
+}
+
 /** Format PHP minor units (centavos) for display. */
 export function formatPhp(minor: number): string {
   return `₱${(minor / 100).toLocaleString("en-PH", {
