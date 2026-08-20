@@ -1,27 +1,28 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { TABS } from "@/constants/tabs";
+
 const ROOT = path.resolve(__dirname, "../..");
 
 function source(file: string): string {
   return fs.readFileSync(path.join(ROOT, file), "utf8");
 }
 
-const TABS = [
+const TAB_SCREENS = [
   "app/(tabs)/home.tsx",
   "app/(tabs)/jobs.tsx",
   "app/(tabs)/schedule.tsx",
-  "app/(tabs)/notifications.tsx",
+  "app/(tabs)/catalogues.tsx",
   "app/(tabs)/account.tsx",
 ];
 
 /**
  * The masthead element itself, from its opening tag to the line that closes it.
  *
- * Scoped deliberately: `SectionHeader` on the Alerts screen has a `right` slot
+ * Scoped deliberately: `SectionHeader` on the alerts screen has a `right` slot
  * of its own for "Mark all read", and that is an in-page control rather than
- * anything in the corner of a header. A looser search would have called it a
- * masthead badge and failed for the wrong reason.
+ * anything in the corner of a header.
  */
 function masthead(file: string): string {
   const lines = source(file).split("\n");
@@ -33,66 +34,105 @@ function masthead(file: string): string {
   return lines.slice(opens, closes + 1).join("\n");
 }
 
-/** The masthead's `right` slot, and whatever is put in it. */
-const RIGHT_SLOT = /\bright=\{/;
-
 /**
- * The captain's screenshot: a chip in the top right of Home counting today's
- * jobs, with an arrow drawn from it down to the Alerts tab. A small pill in
- * that corner is a notification bell everywhere else on a phone, and this app
- * already has one place where alerts are announced — the Alerts tab, and the
- * badge on it.
+ * Where alerts live, and where the shop's catalogue lives.
  *
- * So the rule is enumerated rather than remembered, because "put the count back
- * in the header, it is only one tab" is exactly the change that would undo it:
- * one masthead in this app has a right-hand control, it is Home's, and it is a
- * door to the board rather than a count of anything.
+ * Two corrections are pinned here, because both were got wrong on the way to
+ * this layout. A pill counting today's jobs sat in Home's corner and read as an
+ * inbox; replacing it with a picture of the board fixed the wrong half, moving
+ * the shortcut into the corner and leaving the inbox in the bar. The captain
+ * wants the opposite, and it is the ordinary shape: an inbox is a bell you
+ * glance at while you work, and the bar is for places you stand.
  */
-describe("what sits in the corner of a tab's masthead", () => {
-  it("gives the slot to Home alone", () => {
-    const users = TABS.filter((file) => RIGHT_SLOT.test(masthead(file)));
-
-    expect(users).toEqual(["app/(tabs)/home.tsx"]);
+describe("the five places and the one inbox", () => {
+  it("gives the bar to five places, and Catalogues is one of them", () => {
+    expect(TABS.map((tab) => tab.name)).toEqual([
+      "home",
+      "jobs",
+      "schedule",
+      "catalogues",
+      "account",
+    ]);
+    expect(TABS.find((tab) => tab.name === "catalogues")?.label).toBe("Catalogues");
   });
 
-  it("puts the shop's board there, not a status chip", () => {
-    const home = masthead("app/(tabs)/home.tsx");
+  /** The tab is the board. Nothing else in the app is called Catalogues. */
+  it("mounts the shop's own board on the Catalogues tab", () => {
+    const board = source("app/(tabs)/catalogues.tsx");
 
-    expect(home).toContain("<BoardShortcut");
-    expect(home).not.toContain("StatusChip");
+    expect(board).toContain("useBoard");
+    expect(board).toContain("<ListingCard");
+    expect(fs.existsSync(path.join(ROOT, "app/shop/index.tsx"))).toBe(false);
+  });
+
+  it("keeps alerts off the bar and on the root stack", () => {
+    expect(fs.existsSync(path.join(ROOT, "app/(tabs)/notifications.tsx"))).toBe(false);
+    expect(fs.existsSync(path.join(ROOT, "app/alerts.tsx"))).toBe(true);
+    expect(source("app/_layout.tsx")).toContain('name="alerts"');
   });
 
   /**
-   * Not a bell, not a badge, not a count. Home used to build its chip from
-   * today's schedule summary; nothing on this screen reads that any more, and
-   * what is due or late is said on the obligations below it and on Schedule.
+   * Alerts are one tap from wherever the shop is standing, which is the whole
+   * argument for taking them out of the bar.
    */
-  it("leaves counting to the screens built for it", () => {
+  it("puts the bell in every tab's masthead", () => {
+    for (const file of TAB_SCREENS) {
+      expect({ file, bell: masthead(file).includes("<AlertsBell") }).toEqual({
+        file,
+        bell: true,
+      });
+    }
+  });
+
+  /** Not on the screen it opens — the shop is already standing in it. */
+  it("draws no bell on the alerts screen itself", () => {
+    expect(source("app/alerts.tsx")).not.toContain("AlertsBell");
+  });
+
+  /** The unread mark belongs to the bell now, and to nothing else. */
+  it("counts unread on the bell alone", () => {
+    expect(source("components/AlertsBell.tsx")).toContain("unreadCount");
+    expect(source("components/GridgoTabBar.tsx")).not.toContain("unreadCount");
+    for (const file of TAB_SCREENS) {
+      expect({ file, counts: source(file).includes("unreadCount") }).toEqual({
+        file,
+        counts: false,
+      });
+    }
+  });
+
+  /**
+   * The tab bar's fourth glyph is a crop mark — the register mark a printer
+   * trims to, and the frame every listing photo in this app already wears. Not
+   * a bell, and not the grid of rounded squares every other product uses.
+   */
+  it("gives Catalogues a print mark rather than a bell", () => {
+    const bar = source("components/GridgoTabBar.tsx");
+
+    expect(bar).toContain("catalogues: Frame");
+    expect(bar).not.toContain("Bell");
+    expect(bar).not.toContain("LayoutGrid");
+  });
+
+  /**
+   * A pill counting today's jobs is what started all of this. Due and late are
+   * said on Home's own obligations and again on Schedule.
+   */
+  it("leaves counting jobs to the screens built for it", () => {
     const home = source("app/(tabs)/home.tsx");
 
     expect(home).not.toContain("buildSchedule");
     expect(home).not.toContain("Nothing due today");
   });
 
-  /**
-   * Unread is the tab bar's, and only the tab bar's. A second announcement in a
-   * masthead is how a shop learns that neither of them means anything.
-   */
-  it("announces unread nowhere but the tab bar", () => {
-    for (const file of TABS) {
-      expect({ file, reads: source(file).includes("unreadCount") }).toEqual({
+  /** Anything that used to open the Alerts tab has to open the screen. */
+  it("sends every route that opened the Alerts tab to the alerts screen", () => {
+    for (const file of ["lib/push.ts", "components/ToastHost.tsx"]) {
+      expect({ file, stale: source(file).includes("(tabs)/notifications") }).toEqual({
         file,
-        reads: false,
+        stale: false,
       });
+      expect({ file, opens: source(file).includes('"/alerts"') }).toEqual({ file, opens: true });
     }
-    expect(source("components/GridgoTabBar.tsx")).toContain("unreadCount");
-  });
-
-  /** Five tabs. A sixth for the board would be a room, not a shortcut. */
-  it("keeps the board a shortcut rather than a sixth tab", () => {
-    const tabs = source("constants/tabs.ts");
-    expect(tabs).not.toContain("shop");
-    // The entries themselves, not the `name:` on the type above them.
-    expect(tabs.match(/\{ name: "/g)).toHaveLength(5);
   });
 });

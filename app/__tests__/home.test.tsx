@@ -120,27 +120,25 @@ describe("Home for a shop waiting on Operations", () => {
     await view.unmount();
   });
 
-  /**
-   * Operations wants a finished listing before they accredit, so the shop that
-   * is waiting is the one with the most reason to open its board.
-   */
-  it("still hands a waiting shop the way into its board", async () => {
-    (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: [listing("a", ["f1"])] });
+  /** The inbox is where the approval arrives, so it is reachable while waiting. */
+  it("still hands a waiting shop its alerts", async () => {
     signIn(pendingShop);
 
     const view = await render(<HomeScreen />);
 
-    expect(await screen.findByLabelText("Open your board. 1 listing.")).toBeTruthy();
+    expect(screen.getByLabelText("Alerts")).toBeTruthy();
     await view.unmount();
   });
 });
 
 /**
- * The captain's screenshot: a "Nothing due today" chip in the top right, with
- * an arrow drawn from it down to the Alerts tab. That corner reads as a bell
- * wherever it appears, and alerts already have a tab with a badge on it — so
- * the corner is given to the board instead, and nothing in this masthead
- * counts, warns or announces anything.
+ * Two corrections meet in this corner.
+ *
+ * A pill counting today's jobs sat here and read as an inbox. Replacing it with
+ * a picture of the shop's board fixed the wrong half — it moved the shortcut
+ * into the corner and left the inbox in the tab bar. The captain wants the
+ * ordinary shape: a bell you glance at while you work, and a bar spent on the
+ * five places a shop stands.
  */
 describe("the corner of Home's masthead", () => {
   beforeEach(() => {
@@ -162,52 +160,35 @@ describe("the corner of Home's masthead", () => {
     });
   });
 
-  it("carries the shop's board, counted for anyone who cannot see it", async () => {
+  it("carries the alerts inbox", async () => {
     const view = await render(<HomeScreen />);
 
-    expect(await screen.findByLabelText("Open your board. 3 listings.")).toBeTruthy();
-    await view.unmount();
-  });
+    await fireEvent.press(screen.getByLabelText("Alerts"));
 
-  it("opens the board", async () => {
-    const view = await render(<HomeScreen />);
-
-    await fireEvent.press(await screen.findByLabelText("Open your board. 3 listings."));
-
-    expect(router.push).toHaveBeenCalledWith("/shop");
+    expect(router.push).toHaveBeenCalledWith("/alerts");
     await view.unmount();
   });
 
   /** Due and late are said on the obligations below, and again on Schedule. */
-  it("counts nothing due, late or unread up here", async () => {
+  it("counts no jobs up here", async () => {
     const view = await render(<HomeScreen />);
 
-    await screen.findByLabelText("Open your board. 3 listings.");
+    await screen.findByLabelText("Alerts");
     expect(screen.queryByText("Nothing due today")).toBeNull();
     expect(screen.queryByText(/due today$/)).toBeNull();
     expect(screen.queryByText(/\d+ late/)).toBeNull();
-    expect(screen.queryByText(/unread/i)).toBeNull();
     await view.unmount();
   });
 
-  /** A board with nothing on it is still a door, and still says how many. */
-  it("keeps the door open on a board with no samples yet", async () => {
+  /** The board is a tab now; the card at the foot opens it, not a corner. */
+  it("sends the board card to the Catalogues tab", async () => {
     (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: [] });
 
     const view = await render(<HomeScreen />);
 
-    expect(await screen.findByLabelText("Open your board. No listings yet.")).toBeTruthy();
-    await view.unmount();
-  });
+    await fireEvent.press(await screen.findByText("Put something on the board"));
 
-  /** A door to a room this deployment does not have is worse than no door. */
-  it("draws nothing while GRIDGO has not opened the board", async () => {
-    (loadBoard as jest.Mock).mockResolvedValue({ status: "not_open_yet" });
-
-    const view = await render(<HomeScreen />);
-
-    await screen.findByText("PrintRight");
-    expect(screen.queryByLabelText(/Open your board/)).toBeNull();
+    expect(router.push).toHaveBeenCalledWith("/(tabs)/catalogues");
     await view.unmount();
   });
 });

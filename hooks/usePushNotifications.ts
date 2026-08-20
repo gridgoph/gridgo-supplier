@@ -95,12 +95,20 @@ export function usePushNotifications(): void {
   /**
    * A tap can only be spent on a shop GRIDGO actually sends work to.
    *
-   * Both routes a push targets — the job workspace and the Alerts tab — sit
-   * behind the `matchable` guard in `app/_layout.tsx`, because a shop waiting
-   * on accreditation has neither. Pushing into them then would bounce off the
-   * guard and leave the shop somewhere it did not ask to be; the accreditation
-   * screen it is already on is the honest answer, and it is the screen that
-   * explains why nothing else is there.
+   * The job workspace sits behind the `matchable` guard in `app/_layout.tsx`,
+   * so pushing into it before Operations approves would bounce off the guard
+   * and leave the shop somewhere it did not ask to be; the accreditation screen
+   * it is already on is the honest answer, and it is the screen that explains
+   * why nothing else is there.
+   *
+   * **Known and deliberate gap.** The alerts screen is only behind `signedIn`,
+   * so a waiting shop could open it — and the message it is waiting for arrives
+   * in it. This gate is tighter than that target needs, which means a pending
+   * shop tapping an alert with no job behind it waits here until it is approved
+   * rather than landing on the list. That was true while alerts were a tab as
+   * well, so nothing regressed when the route moved; loosening it is its own
+   * change, and it wants a device run because the deferred-push path below has
+   * an open cold-start question of its own.
    */
   const routable = signedIn && isMatchable(user);
 

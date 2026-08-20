@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect, type Href } from "expo-router";
 
+import { AlertsBell } from "@/components/AlertsBell";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { ShopPortrait } from "@/components/ShopPortrait";
@@ -71,7 +72,7 @@ export default function AccountScreen() {
         contentContainerClassName="gg-page pb-10"
         showsVerticalScrollIndicator={false}
       >
-        <ScreenHeader title="Account" />
+        <ScreenHeader title="Account" right={<AlertsBell />} />
 
         {/*
           Identity first, and the one status that governs everything else.
@@ -145,7 +146,7 @@ export default function AccountScreen() {
           <DestinationRow
             title="Your board"
             detail="What clients see: listings, prices, samples"
-            onPress={() => router.push("/shop")}
+            onPress={() => router.push("/(tabs)/catalogues")}
           />
           {approved ? (
             <DestinationRow

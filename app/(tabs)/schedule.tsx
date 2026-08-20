@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { JobRow } from "@/components/JobRow";
 import { ScheduleDayCard } from "@/components/ScheduleDayCard";
+import { AlertsBell } from "@/components/AlertsBell";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -95,7 +96,11 @@ export default function ScheduleScreen() {
           />
         }
       >
-        <ScreenHeader title="Schedule" subtitle="What is due, what is late, what is next" />
+        <ScreenHeader
+          title="Schedule"
+          subtitle="What is due, what is late, what is next"
+          right={<AlertsBell />}
+        />
 
         <SegmentedControl
           options={SCHEDULE_RANGES}

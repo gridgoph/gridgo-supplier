@@ -37,7 +37,7 @@ jest.mock("@/lib/listingsApi", () => ({
 
 jest.mock("@/store/sheets", () => ({ askConfirm: jest.fn(async () => true) }));
 
-import BoardScreen from "@/app/shop/index";
+import BoardScreen from "@/app/(tabs)/catalogues";
 import type { Listing } from "@/lib/listings";
 import { loadBoard, removeListing } from "@/lib/listingsApi";
 import { askConfirm } from "@/store/sheets";

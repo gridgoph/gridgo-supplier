@@ -2,11 +2,13 @@ import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 
+import { AlertsBell } from "@/components/AlertsBell";
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { ListingCard } from "@/components/ListingCard";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { ScreenHeader } from "@/components/ScreenHeader";
 import { SectionHeader } from "@/components/SectionHeader";
 import { SkeletonBlock } from "@/components/Skeleton";
 import {
@@ -24,13 +26,19 @@ import { askConfirm } from "@/store/sheets";
 import { isMatchable, useSession } from "@/store/session";
 
 /**
- * The shop's board — a two-column wall of its own samples.
+ * Catalogues — a two-column wall of the shop's own samples.
  *
  * A print shop's board is a wall, not a spreadsheet: a client picks by looking
  * at what came off this shop's machine. So the photo is the tile and everything
  * else is a caption, and the wall keeps the shop's own order rather than
  * reordering itself by anything clever. There is exactly one ranking in this
  * app and it belongs to the job floor.
+ *
+ * It is one of the five tabs now, where the alerts inbox used to be. A shop
+ * changes a price or adds a sample between jobs, all day, and reaching that
+ * through Account was three taps from anywhere. The masthead says "Catalogues"
+ * because the tab does; the body keeps saying "your board", which is what a
+ * shop calls it out loud.
  *
  * A shop still with Operations gets the whole screen. Approval requires a
  * finished listing, so making a waiting shop wait for the thing it is waiting
@@ -92,7 +100,7 @@ export default function BoardScreen() {
     <View className="gg-screen">
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gg-page pb-16 pt-4"
+        contentContainerClassName="gg-page pb-16"
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -102,13 +110,23 @@ export default function BoardScreen() {
           />
         }
       >
-        <View className="gap-2">
-          <Text className="text-h2 text-text-primary">Your board</Text>
-          <Text className="text-body text-text-secondary">
-            What clients see: your listings, your prices, your samples. GRIDGO still decides
-            which shop a job goes to — this is what a client is choosing when it comes to you.
-          </Text>
-        </View>
+        <ScreenHeader
+          title="Catalogues"
+          subtitle="What clients see: your listings, your prices, your samples"
+          right={<AlertsBell />}
+        />
+
+        {/*
+          Demoted to a footnote on purpose. It is a real thing to know once —
+          a better board does not bring more work, it decides what a client
+          picks when GRIDGO has already sent them here — and a shop that reads
+          it as a promise spends the afternoon on product copy instead of the
+          proof photo holding up its money.
+        */}
+        <Text className="text-caption text-text-muted">
+          GRIDGO still decides which shop a job goes to. This is what a client is choosing when
+          it comes to you.
+        </Text>
 
         {!approved ? (
           <View className="gg-panel mt-6 gap-1">

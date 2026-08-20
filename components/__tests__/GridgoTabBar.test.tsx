@@ -96,9 +96,9 @@ describe("GridgoTabBar", () => {
   it("navigates to a tab that is not open", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    fireEvent.press(screen.getByRole("tab", { name: "Alerts" }));
+    fireEvent.press(screen.getByRole("tab", { name: "Catalogues" }));
 
-    expect(navigate).toHaveBeenCalledWith("notifications");
+    expect(navigate).toHaveBeenCalledWith("catalogues");
   });
 
   it("stays put when the open tab is pressed again", async () => {
@@ -119,32 +119,31 @@ describe("GridgoTabBar", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it("announces unread alerts on the Alerts tab", async () => {
-    useAlertsStore.setState({ unreadCount: 3 });
-
-    await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
-
-    expect(screen.getByRole("tab", { name: "Alerts, 3 unread" })).toBeTruthy();
-    expect(screen.getByText("3")).toBeTruthy();
-  });
-
-  it("caps the unread badge at 9+ without a fixed column height that clips it", async () => {
+  /**
+   * Alerts left the bar for a bell in every masthead, and the unread badge went
+   * with them. A bar that carries a number on one column is a bar a shop reads
+   * for numbers; these five are places.
+   */
+  it("counts nothing, whatever is unread", async () => {
     useAlertsStore.setState({ unreadCount: 12 });
 
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    expect(screen.getByRole("tab", { name: "Alerts, 12 unread" })).toBeTruthy();
-    expect(screen.getByText("9+")).toBeTruthy();
+    expect(screen.queryByText("12")).toBeNull();
+    expect(screen.queryByText("9+")).toBeNull();
+    for (const tab of TABS) {
+      expect(screen.getByRole("tab", { name: tab.label })).toBeTruthy();
+    }
+  });
 
-    // The column grows with its content: a fixed height clips the badge's
-    // overhang and a label that has grown under dynamic type.
-    const alertsTab = screen.getByRole("tab", { name: "Alerts, 12 unread" });
-    const className = String(alertsTab.props.className ?? "");
+  it("lets a column grow rather than clipping a label under dynamic type", async () => {
+    await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
+
+    const tab = screen.getByRole("tab", { name: "Catalogues" });
+    const className = String(tab.props.className ?? "");
     expect(className).toContain("justify-end");
     expect(className).not.toContain("h-13");
-    expect(flattenStyle(alertsTab.props.style).minHeight).toBe(
-      TAB_BAR_METRICS.columnHeight,
-    );
+    expect(flattenStyle(tab.props.style).minHeight).toBe(TAB_BAR_METRICS.columnHeight);
   });
 
   /**
@@ -166,8 +165,7 @@ describe("GridgoTabBar", () => {
     it("is Material 3's 80dp container on Android, built from its own parts", () => {
       const m = tabBarMetrics("android");
       expect(m.columnHeight).toBe(80);
-      // 12 above the item and 16 below it, around a 24 icon and a 16 label,
-      // leaves the slack that carries the badge's overhang.
+      // 12 above the item and 16 below it, around a 24 icon and a 16 label.
       expect(m.itemPaddingTop).toBe(12);
       expect(m.itemPaddingBottom).toBe(16);
       expect(m.itemPaddingTop + 24 + m.itemGap + 16 + m.itemPaddingBottom).toBeLessThanOrEqual(80);

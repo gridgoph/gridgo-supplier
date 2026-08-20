@@ -30,7 +30,7 @@ const DWELL_MS = 6000;
  * label — and it still reads in greyscale.
  *
  * Nothing here is the only copy of anything: every toast corresponds to a
- * notification sitting in the Alerts tab, which is why it can auto-dismiss
+ * notification sitting in the alerts list, which is why it can auto-dismiss
  * without losing information.
  */
 export function ToastHost() {
@@ -69,7 +69,7 @@ function ToastCard({ toast }: { toast: Toast }) {
     if (toast.orderId) {
       router.push({ pathname: "/job/[id]", params: { id: toast.orderId } });
     } else {
-      router.push("/(tabs)/notifications");
+      router.push("/alerts");
     }
   };
 

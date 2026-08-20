@@ -4,7 +4,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { ChevronRight } from "lucide-react-native";
 import { router, useFocusEffect } from "expo-router";
 
-import { BoardShortcut } from "@/components/BoardShortcut";
+import { AlertsBell } from "@/components/AlertsBell";
 import { EmptyState } from "@/components/EmptyState";
 import { ObligationRow } from "@/components/ObligationRow";
 import { SamplePhoto } from "@/components/SamplePhoto";
@@ -130,26 +130,19 @@ export default function HomeScreen() {
         {/*
           The mark is not here on purpose. A shop on its own floor knows whose
           app this is; what it does not know is what today looks like. So the
-          header carries the shop's own name, and the corner carries the one
-          room a shop otherwise has to go looking for. The lockup lives at the
-          door: sign-in, onboarding, accreditation.
+          header carries the shop's own name, and the corner carries the inbox.
+          The lockup lives at the door: sign-in, onboarding, accreditation.
 
-          What used to sit in that corner was a chip counting today's jobs, and
-          it read as an alerts bell — the captain drew an arrow from it straight
-          down to the Alerts tab. Alerts have a tab and a badge on it, and that
-          is the only place in this app they are announced. What is due and what
-          is late is said properly below, on the obligations this screen is
-          built around, and again on Schedule. Neither of those needs a pill up
-          here restating it in two words.
-
-          A pending shop gets the shortcut too. Operations wants a finished
-          listing before they accredit, so the shop that is waiting is the one
-          with the most reason to open its board.
+          What used to sit in that corner was a chip counting today's jobs. It
+          was not alerts and it read as alerts, which is the worst of both — so
+          the corner is now a real bell, on this masthead and every other one in
+          the bar. What is due and what is late is said properly below, on the
+          obligations this screen is built around, and again on Schedule.
         */}
         <ScreenHeader
           eyebrow={greeting(clerkDisplayName(clerkUser) || user?.name)}
           title={user?.supplierName || "Your shop"}
-          right={boardOpen ? <BoardShortcut listings={listings} /> : null}
+          right={<AlertsBell />}
         />
 
         {/*
@@ -167,7 +160,7 @@ export default function HomeScreen() {
               {...(board
                 ? {
                     secondaryLabel: "Build your board while you wait",
-                    onSecondary: () => router.push("/shop"),
+                    onSecondary: () => router.push("/(tabs)/catalogues"),
                   }
                 : {})}
             />
@@ -364,9 +357,9 @@ function BoardCard({
       <Text className="text-h3 text-text-primary">{prompt.title}</Text>
       <Text className="text-body text-text-secondary">{prompt.body}</Text>
       {quiet ? (
-        <SecondaryButton label={prompt.actionLabel} onPress={() => router.push("/shop")} />
+        <SecondaryButton label={prompt.actionLabel} onPress={() => router.push("/(tabs)/catalogues")} />
       ) : (
-        <PrimaryButton label={prompt.actionLabel} onPress={() => router.push("/shop")} />
+        <PrimaryButton label={prompt.actionLabel} onPress={() => router.push("/(tabs)/catalogues")} />
       )}
     </View>
   );
@@ -384,7 +377,7 @@ function SampleStrip({ listings }: { listings: Listing[] }) {
 
   return (
     <Pressable
-      onPress={() => router.push("/shop")}
+      onPress={() => router.push("/(tabs)/catalogues")}
       accessibilityRole="button"
       accessibilityLabel={`Open your board. ${boardCountLine(listings.length)}.`}
       className="gg-card-flush px-3 py-3"

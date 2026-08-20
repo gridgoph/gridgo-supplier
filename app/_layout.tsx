@@ -198,6 +198,19 @@ function RootStack() {
           }}
         />
         {/*
+          Alerts open from the bell in every masthead rather than from a tab.
+          Signed-in rather than matchable on purpose: the shop waiting on
+          accreditation is the one with the most reason to read its inbox,
+          because the message it is waiting for arrives in it.
+        */}
+        <Stack.Screen
+          name="alerts"
+          options={{
+            title: "Alerts",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
           The shop's pin is reachable from both signed-in states on purpose: a
           shop waiting on accreditation is exactly the shop most likely to have
           put its pin on the wrong corner, and making it wait for approval to
@@ -237,13 +250,14 @@ function RootStack() {
           }}
         />
         {/*
-          The board is reachable from both signed-in states for the same reason
-          the pin is, and a stronger one: approval requires a finished listing,
-          so trapping a waiting shop out of the screen where it builds one would
-          hold it behind the thing it is waiting for. The stack draws its own
-          headers.
+          The board itself is a tab now; this group is what opens on top of it —
+          adding a listing, and the editor with its samples and preview. It sits
+          under the signed-in guard rather than the matchable one because
+          approval requires a finished listing, so trapping a waiting shop out
+          of the screens where it builds one would hold it behind the thing it
+          is waiting for. The stack draws its own headers.
         */}
-        <Stack.Screen name="shop" options={{ headerShown: false, title: "Your board" }} />
+        <Stack.Screen name="shop" options={{ headerShown: false, title: "Listings" }} />
         {/*
           Sheets the app asks for and waits on. Both are routes so the platform
           owns the presentation — see `sheetScreenOptions`. They sit with the

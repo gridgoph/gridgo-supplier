@@ -6,7 +6,6 @@ import { AlertCard } from "@/components/AlertCard";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { PushEnableCard } from "@/components/PushEnableCard";
-import { ScreenHeader } from "@/components/ScreenHeader";
 import { SectionHeader } from "@/components/SectionHeader";
 import { SkeletonList } from "@/components/Skeleton";
 import * as api from "@/lib/api";
@@ -21,6 +20,13 @@ import { useThemeColors } from "@/hooks/useTheme";
 
 /**
  * Assignment offers, production notices and payout news.
+ *
+ * Pushed from the bell in every masthead rather than standing in the tab bar.
+ * An inbox is something a shop glances at while it works — it is not one of the
+ * five places it lives — so it opens over whatever the shop was doing and the
+ * back chevron puts it straight back there. The platform's header owns the
+ * title; nothing here draws a second one, and there is no bell on this screen
+ * because the shop is already standing in it.
  *
  * Each alert carries the stage of the job it is about, read off the live job
  * rather than the alert — an alert is a snapshot and the work has usually moved
@@ -186,7 +192,7 @@ export default function NotificationsScreen() {
     <View className="gg-screen">
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gg-page pb-10"
+        contentContainerClassName="gg-page pb-10 pt-4"
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -196,10 +202,9 @@ export default function NotificationsScreen() {
           />
         }
       >
-        <ScreenHeader
-          title="Alerts"
-          subtitle="New work, production news, and what your jobs have paid"
-        />
+        <Text className="text-body text-text-secondary">
+          New work, production news, and what your jobs have paid.
+        </Text>
 
         {/*
           The one place in this app that may raise the permission dialog, and

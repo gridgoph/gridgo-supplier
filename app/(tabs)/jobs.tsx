@@ -5,6 +5,7 @@ import { router, useFocusEffect } from "expo-router";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { JobCard } from "@/components/JobCard";
+import { AlertsBell } from "@/components/AlertsBell";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SectionHeader } from "@/components/SectionHeader";
 import { SkeletonList } from "@/components/Skeleton";
@@ -77,6 +78,7 @@ export default function JobsScreen() {
         <ScreenHeader
           title="Jobs"
           subtitle="Accept, produce, self-QC, hand off to the rider"
+          right={<AlertsBell />}
         />
 
         {firstLoad ? (

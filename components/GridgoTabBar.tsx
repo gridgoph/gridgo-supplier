@@ -1,11 +1,10 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { Bell, Briefcase, Calendar, House, User, type LucideIcon } from "lucide-react-native";
+import { Briefcase, Calendar, Frame, House, User, type LucideIcon } from "lucide-react-native";
 import { Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TABS, type TabName } from "@/constants/tabs";
 import { useThemeColors } from "@/hooks/useTheme";
-import { useAlertsStore } from "@/store/alerts";
 
 /* ---------------------------------------------------------------------------
    Bar geometry
@@ -69,8 +68,7 @@ export type TabBarMetrics = {
  */
 export function tabBarMetrics(platformOS: string): TabBarMetrics {
   if (platformOS === "ios") {
-    // 4 + 24 icon + 2 + 16 label + 3 = 49, the HIG row exactly. The 4pt above
-    // the icon is also precisely the badge's -top-1 overhang.
+    // 4 + 24 icon + 2 + 16 label + 3 = 49, the HIG row exactly.
     return { columnHeight: 49, itemPaddingTop: 4, itemGap: 2, itemPaddingBottom: 3 };
   }
   // Material 3: 80dp container, 12dp above the item, 16dp below it, 24dp icon.
@@ -98,11 +96,25 @@ export function tabBarPaddingBottom(insetBottom: number): number {
  * One Lucide glyph per tab, all outline, all the same optical weight, so the
  * row reads as one set.
  */
+/**
+ * One glyph each, and the fourth is the only one worth arguing about.
+ *
+ * Catalogues is a wall of print samples, and Lucide's `Frame` is four rules
+ * crossing and running past the corners — which is exactly a crop mark, the
+ * thing a printer trims to and the mark every listing photo in this app already
+ * wears (`components/CropMarkFrame`). So the tab that opens the wall carries
+ * the same mark the wall is built from, rather than the grid of rounded squares
+ * every other product reaches for.
+ *
+ * It is also the only open glyph in the row. House, Briefcase, Calendar and
+ * User are all closed outlines, so a shop finds this one by silhouette before
+ * it reads the label.
+ */
 const ICONS: Record<TabName, LucideIcon> = {
   home: House,
   jobs: Briefcase,
   schedule: Calendar,
-  notifications: Bell,
+  catalogues: Frame,
   account: User,
 };
 
@@ -121,10 +133,8 @@ const ICONS: Record<TabName, LucideIcon> = {
  * The heights themselves are in the geometry note above this file's metrics.
  *
  * Column content is icon (24) + `itemGap` + label (16) inside the platform's
- * own item padding, bottom-aligned. On Android the residual slack inside the
- * 80dp container sits above the icon and covers the unread badge's overhang; on
- * iOS the 4pt top pad is exactly that overhang. The 44dp touch floor is
- * exceeded on both.
+ * own item padding, bottom-aligned; on Android the residual slack inside the
+ * 80dp container sits above the icon. The 44dp touch floor is exceeded on both.
  *
  * The open tab is said twice over: its glyph goes to action-yellow and its
  * label to medium yellow. The row still reads in grayscale via weight. Yellow
@@ -132,7 +142,6 @@ const ICONS: Record<TabName, LucideIcon> = {
  */
 export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const unreadCount = useAlertsStore((s) => s.unreadCount);
 
   return (
     <View
@@ -171,7 +180,6 @@ export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
               label={tab.label}
               focused={focused}
               onPress={onPress}
-              badge={tab.name === "notifications" ? unreadCount : 0}
             />
           );
         })}
@@ -185,23 +193,28 @@ type TabItemProps = {
   label: string;
   focused: boolean;
   onPress: () => void;
-  badge?: number;
 };
 
-function TabItem({ name, label, focused, onPress, badge = 0 }: TabItemProps) {
+/**
+ * One destination. Nothing in this bar counts anything.
+ *
+ * The unread badge used to hang off the Alerts tab; alerts are now a bell in
+ * every masthead and the badge went with them. A bar that carries a number on
+ * one column is a bar a shop reads for numbers, and these five are places.
+ */
+function TabItem({ name, label, focused, onPress }: TabItemProps) {
   const colors = useThemeColors();
   const Icon = ICONS[name];
-  const showBadge = badge > 0;
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="tab"
-      accessibilityLabel={showBadge ? `${label}, ${badge} unread` : label}
+      accessibilityLabel={label}
       accessibilityState={{ selected: focused }}
       // Height and padding are the platform's, from `tabBarMetrics`. A minimum
-      // rather than a fixed height, so the column still grows if the label
-      // scales; never a rigid h-13, which left no slack for the badge.
+      // rather than a fixed height, so the column still grows when the label
+      // scales under dynamic type; never a rigid h-13, which clipped it.
       className="flex-1 items-center justify-end"
       style={{
         minHeight: TAB_BAR_METRICS.columnHeight,
@@ -213,23 +226,11 @@ function TabItem({ name, label, focused, onPress, badge = 0 }: TabItemProps) {
       {({ pressed }) => (
         <>
           <View className={pressed ? "opacity-60" : undefined}>
-            <View className="relative">
-              <Icon
-                size={24}
-                strokeWidth={2}
-                color={focused ? colors.actionYellow : colors.textMuted}
-              />
-              {showBadge ? (
-                <View className="absolute -right-2.5 -top-1 min-h-4 min-w-4 items-center justify-center rounded-pill bg-accent px-1">
-                  <Text
-                    maxFontSizeMultiplier={1}
-                    className="text-nav font-medium text-accent-on"
-                  >
-                    {badge > 9 ? "9+" : String(badge)}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+            <Icon
+              size={24}
+              strokeWidth={2}
+              color={focused ? colors.actionYellow : colors.textMuted}
+            />
           </View>
           <Text
             numberOfLines={1}

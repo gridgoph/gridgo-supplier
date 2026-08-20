@@ -136,11 +136,12 @@ export function parsePushData(raw: unknown): PushData {
  *
  * An alert with no job behind it — or one whose type this build has never heard
  * of — opens the alerts list, which is the contract's own instruction for an
- * unknown `type` and is always a screen that can explain itself. The push
+ * unknown `type` and is always a screen that can explain itself. That list is a
+ * pushed screen rather than a tab now; the route moved with it. The push
  * carries no order state, so the job screen fetches the job as it always does.
  */
 export function pushTargetRoute(data: PushData): string {
-  return data.orderId ? `/job/${data.orderId}` : "/(tabs)/notifications";
+  return data.orderId ? `/job/${data.orderId}` : "/alerts";
 }
 
 /**
@@ -262,10 +263,10 @@ export function pushOfferCopy(
  * What a push should do when it lands while the app is open and in front of
  * the person.
  *
- * Nothing visible. The Alerts tab and its unread badge already carry every
- * notification, and `hooks/useAlertStream.ts` already toasts a live arrival on
- * whatever screen the shop is on — a push is the *same record*, so a banner
- * over it is the same news a third time. The foreground handler therefore
+ * Nothing visible. The alerts list and the bell's unread mark already carry
+ * every notification, and `hooks/useAlertStream.ts` already toasts a live
+ * arrival on whatever screen the shop is on — a push is the *same record*, so
+ * a banner over it is the same news a third time. The foreground handler therefore
  * suppresses the banner, the tray entry, the sound and the badge, and the
  * arrival is spent making the unread count agree with the platform instead.
  * Backgrounded or closed, this handler never runs and Android draws the

@@ -715,19 +715,6 @@ export type BoardPrompt = {
 };
 
 /**
- * The one sample that stands for the whole board.
- *
- * The board's own order decides it, not recency and not anything cleverer —
- * there is one ranking in this app and it belongs to the job floor. A listing
- * with no photo yet is skipped rather than shown as a blank, so a shop whose
- * newest draft has no picture still sees the work it does have. Null means the
- * board genuinely has nothing to show.
- */
-export function boardFace(listings: Listing[]): string | null {
-  return listings.find((listing) => listing.photos.length)?.photos[0]?.fileId ?? null;
-}
-
-/**
  * The board, counted aloud: "3 listings", "1 listing", "No listings yet".
  *
  * Written as its own sentence rather than a fragment, because both places that
