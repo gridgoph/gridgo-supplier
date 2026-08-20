@@ -46,14 +46,31 @@ type Pending<TRequest, TResult> = {
   settled: boolean;
 } | null;
 
+export type PickOption = {
+  value: string;
+  label: string;
+  detail?: string;
+};
+
+export type PickRequest = {
+  /** What is being chosen: "Kind of work". */
+  title: string;
+  body?: string;
+  options: PickOption[];
+  selected: string | null;
+  cancelLabel?: string;
+};
+
 type SheetState = {
   confirm: Pending<ConfirmRequest, boolean>;
   date: Pending<DateRequest, string | null>;
+  pick: Pending<PickRequest, string | null>;
 };
 
 export const useSheets = create<SheetState>(() => ({
   confirm: null,
   date: null,
+  pick: null,
 }));
 
 /**
@@ -119,4 +136,22 @@ export function settleDate(iso: string | null): void {
   if (!pending || pending.settled) return;
   useSheets.setState({ date: { ...pending, settled: true } });
   pending.resolve(iso);
+}
+
+/** Ask the shop to pick one of a short list. Resolves null when dismissed. */
+export function askPick(request: PickRequest): Promise<string | null> {
+  return new Promise<string | null>((resolve) => {
+    useSheets.setState({ pick: { request, resolve, settled: false } });
+    router.push("/pick");
+  }).then(async (value) => {
+    await afterNativePresentation();
+    return value;
+  });
+}
+
+export function settlePick(value: string | null): void {
+  const pending = useSheets.getState().pick;
+  if (!pending || pending.settled) return;
+  useSheets.setState({ pick: { ...pending, settled: true } });
+  pending.resolve(value);
 }

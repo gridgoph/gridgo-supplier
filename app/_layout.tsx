@@ -266,6 +266,7 @@ function RootStack() {
         */}
         <Stack.Screen name="confirm" options={sheetScreenOptions(scheme)} />
         <Stack.Screen name="pick-date" options={sheetScreenOptions(scheme)} />
+        <Stack.Screen name="pick" options={sheetScreenOptions(scheme)} />
       </Stack.Protected>
 
       <Stack.Protected guard={matchable}>

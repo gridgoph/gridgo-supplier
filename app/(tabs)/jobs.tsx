@@ -75,11 +75,7 @@ export default function JobsScreen() {
           />
         }
       >
-        <ScreenHeader
-          title="Jobs"
-          subtitle="Accept, produce, self-QC, hand off to the rider"
-          right={<AlertsBell />}
-        />
+        <ScreenHeader title="Jobs" right={<AlertsBell />} />
 
         {firstLoad ? (
           <SkeletonList label="Loading your assignments" count={3} sectioned />

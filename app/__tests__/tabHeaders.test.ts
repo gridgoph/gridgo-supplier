@@ -75,6 +75,23 @@ describe("the five places and the one inbox", () => {
    * Alerts are one tap from wherever the shop is standing, which is the whole
    * argument for taking them out of the bar.
    */
+  /**
+   * The title already names the place. A second line under Jobs, Schedule or
+   * Catalogues was a restatement the captain asked off the masthead.
+   */
+  it("does not restate Jobs, Schedule or Catalogues under the title", () => {
+    for (const file of [
+      "app/(tabs)/jobs.tsx",
+      "app/(tabs)/schedule.tsx",
+      "app/(tabs)/catalogues.tsx",
+    ]) {
+      expect({ file, subtitle: masthead(file).includes("subtitle=") }).toEqual({
+        file,
+        subtitle: false,
+      });
+    }
+  });
+
   it("puts the bell in every tab's masthead", () => {
     for (const file of TAB_SCREENS) {
       expect({ file, bell: masthead(file).includes("<AlertsBell") }).toEqual({

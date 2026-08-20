@@ -2,11 +2,17 @@ import { Pressable, Text, View } from "react-native";
 
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { StatusChip } from "@/components/StatusChip";
+import { formatPhp } from "@/lib/api";
 import {
   boardContextFor,
   boardStanding,
+  effectiveTurnaroundHours,
+  fromPriceMinor,
+  hasPriceRange,
   priceLine,
+  readyInLine,
   subcategoryName,
+  unitLine,
   type Listing,
   type ServiceLine,
 } from "@/lib/listings";
@@ -18,30 +24,18 @@ type Props = {
   services: ServiceLine[];
   shopApproved: boolean;
   onPress: () => void;
-  /** Press and hold. Absent while another tile is being removed. */
   onRemove?: () => void;
 };
 
 /**
- * One sample on the wall.
+ * One listing as a quote strip.
  *
- * The photo leads because that is what a client picks with, and it sits in its
- * crop-mark frame so the wall reads as print samples rather than a shelf of
- * products. Under it, the two facts a shop checks when it glances at its own
- * board: what it is called, and what it costs. How fast it goes out lives on
- * the list and inside the listing.
- *
- * The chip is only drawn when something is wrong or hidden. A tile that is up
- * and finished says so by being plain — a wall of green ticks is a wall nobody
- * reads.
- *
- * Removing one is a press and hold rather than a control on every tile. A wall
- * of samples with a bin drawn on each of them stops reading as a wall, and the
- * hold is the gesture a phone already uses for "do something to this one" — so
- * a screen reader is offered the same thing as a named action rather than a
- * gesture it cannot make.
+ * The wall is for looking; this is for scanning. Sample on the left, what it is
+ * in the middle, the peso amount *and how it is sold* on the right — per piece
+ * or per pack is the difference between a ₱300 flyer and a ₱300 pack of a
+ * hundred, and a quote that drops the unit is not a quote a shop can stand by.
  */
-export function ListingCard({
+export function ListingRow({
   listing,
   catalog,
   services,
@@ -51,7 +45,9 @@ export function ListingCard({
 }: Props) {
   const context = boardContextFor(listing, services);
   const standing = boardStanding(listing, context, shopApproved);
+  const hours = effectiveTurnaroundHours(listing, context.inheritedTurnaroundHours);
   const first = listing.photos[0];
+  const money = formatPhp(fromPriceMinor(listing));
 
   return (
     <View collapsable={false} className="rounded-card border border-outline bg-surface">
@@ -59,34 +55,46 @@ export function ListingCard({
         onPress={onPress}
         onLongPress={onRemove}
         accessibilityRole="button"
-        accessibilityLabel={`${listing.name || "Untitled listing"}. ${standing.label}.`}
+        accessibilityLabel={`${listing.name || "Untitled listing"}. ${priceLine(listing)}. ${standing.label}.`}
         accessibilityHint={onRemove ? "Press and hold to remove this listing." : undefined}
         accessibilityActions={onRemove ? [{ name: "remove", label: "Remove this listing" }] : undefined}
         onAccessibilityAction={(event) => {
           if (event.nativeEvent.actionName === "remove") onRemove?.();
         }}
+        className="flex-row items-start gap-3 py-1 pr-4"
         style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
       >
-        <SamplePhoto
-          fileId={first?.fileId}
-          altText={first?.altText ?? listing.name}
-          emptyLabel="No sample yet"
-        />
-        <View className="gap-1 px-3 pb-3">
+        <View className="w-28 shrink-0">
+          <SamplePhoto
+            fileId={first?.fileId}
+            altText={first?.altText ?? listing.name}
+            emptyLabel="No sample yet"
+            gutter="tight"
+          />
+        </View>
+        <View className="min-w-0 flex-1 gap-1 py-3">
           <Text className="text-body font-medium text-text-primary" numberOfLines={2}>
             {listing.name || "Untitled listing"}
           </Text>
           <Text className="text-caption text-text-muted" numberOfLines={1}>
             {subcategoryName(catalog, listing.subcategoryCode)}
           </Text>
-          <Text className="text-body text-text-primary" numberOfLines={1}>
-            {priceLine(listing)}
+          <Text className="text-caption text-text-muted" numberOfLines={1}>
+            {readyInLine(hours)}
           </Text>
           {standing.label === "On the board" ? null : (
-            <View className="mt-1 flex-row">
+            <View className="mt-0.5 flex-row">
               <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
             </View>
           )}
+        </View>
+        <View className="max-w-[42%] shrink-0 items-end gap-0.5 py-3">
+          <Text className="text-body font-medium text-text-primary" numberOfLines={1}>
+            {hasPriceRange(listing) ? `From ${money}` : money}
+          </Text>
+          <Text className="text-right text-caption text-text-secondary" numberOfLines={2}>
+            {unitLine(listing)}
+          </Text>
         </View>
       </Pressable>
     </View>

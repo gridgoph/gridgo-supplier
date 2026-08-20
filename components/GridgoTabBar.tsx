@@ -121,11 +121,12 @@ const ICONS: Record<TabName, LucideIcon> = {
  * The GRIDGO supplier tab bar.
  *
  * Five labelled destinations. No raised action disc — every tab is a place.
- * The row is NativeWind `justify-evenly`: leftover width is split into the
- * same gutter between marks *and* from each phone edge, so the five-up uses
- * the whole bar. Items size to their own glyph and label (`flex-1` would eat
- * that leftover and half-space the trim). They bottom-align so all five share
- * a baseline.
+ * Each destination owns the same share of the bar (`flex-1`), icon and label
+ * centred in that share, the way a five-up phone bar is actually read: equal
+ * gaps between marks, and the same distance from the left edge to Home as from
+ * Account to the right edge. Sizing each column to its own label ("Home" vs
+ * "Catalogues") made those two distances different even when the leftover was
+ * split evenly around the boxes. They bottom-align so all five share a baseline.
  *
  * The surface paints the whole container, so the bar a person sees is exactly
  * `content region + design pad + system inset` and nothing has to be subtracted
@@ -157,7 +158,11 @@ export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
         className="absolute inset-0 border-t border-outline bg-surface"
       />
 
-      <View testID="gridgo-tab-bar-row" className="w-full flex-row items-end justify-evenly">
+      <View
+        testID="gridgo-tab-bar-row"
+        className="w-full flex-row items-end"
+        style={{ paddingLeft: insets.left, paddingRight: insets.right }}
+      >
         {state.routes.map((route, index) => {
           const tab = TABS.find((entry) => entry.name === route.name);
           if (!tab) return null;
@@ -218,7 +223,7 @@ function TabItem({ name, label, focused, onPress }: TabItemProps) {
       // Height and padding are the platform's, from `tabBarMetrics`. A minimum
       // rather than a fixed height, so the column still grows when the label
       // scales under dynamic type; never a rigid h-13, which clipped it.
-      className="min-w-12 items-center justify-end"
+      className="min-w-0 flex-1 items-center justify-end"
       style={{
         minHeight: TAB_BAR_METRICS.columnHeight,
         paddingTop: TAB_BAR_METRICS.itemPaddingTop,
@@ -259,8 +264,8 @@ function TabItem({ name, label, focused, onPress }: TabItemProps) {
             }}
             className={
               focused
-                ? "h-4 text-nav font-medium text-text-primary"
-                : "h-4 text-nav text-text-muted"
+                ? "h-4 w-full text-center text-nav font-medium text-text-primary"
+                : "h-4 w-full text-center text-nav text-text-muted"
             }
           >
             {label}

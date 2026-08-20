@@ -15,7 +15,7 @@ const request = {
 
 describe("askConfirm", () => {
   afterEach(() => {
-    useSheets.setState({ confirm: null, date: null });
+    useSheets.setState({ confirm: null, date: null, pick: null });
   });
 
   it("opens the sheet and only then hands the answer back", async () => {

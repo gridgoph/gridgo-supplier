@@ -271,27 +271,45 @@ describe("GridgoTabBar", () => {
   });
 
   /**
-   * Leftover width is split into the same gutter between marks and from each
-   * phone edge. `flex-1` would eat that leftover; `justify-evenly` spends it.
+   * Five equal columns, so Home's distance from the left edge is Account's
+   * from the right — even though "Catalogues" is a longer word than "Home".
+   * Side safe-area is applied equally; it is zero on a typical phone.
    */
   describe("icon gutters", () => {
-    it("spreads the row across the phone with even gutters, including the edges", async () => {
+    it("gives every destination the same share of the bar", async () => {
       await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
       const row = screen.getByTestId("gridgo-tab-bar-row");
       const className = String(row.props.className ?? "");
       expect(className).toContain("w-full");
-      expect(className).toContain("justify-evenly");
-      expect(flattenStyle(row.props.style).paddingHorizontal).toBeUndefined();
+      expect(className).not.toContain("justify-evenly");
+      expect(flattenStyle(row.props.style).paddingLeft).toBe(0);
+      expect(flattenStyle(row.props.style).paddingRight).toBe(0);
     });
 
-    it("lets each destination keep its own width so leftover can go to the gutters", async () => {
+    it("keeps left and right edge padding equal when the phone has a side inset", async () => {
+      await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />, {
+        top: 24,
+        left: 12,
+        right: 12,
+        bottom: 24,
+      });
+
+      const row = screen.getByTestId("gridgo-tab-bar-row");
+      const style = flattenStyle(row.props.style);
+      expect(style.paddingLeft).toBe(12);
+      expect(style.paddingRight).toBe(12);
+    });
+
+    it("centres each mark in an equal column, so a long label does not steal the edge", async () => {
       await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
       const home = screen.getByRole("tab", { name: "Home" });
-      const className = String(home.props.className ?? "");
-      expect(className).not.toContain("flex-1");
-      expect(className).toContain("min-w-12");
+      const catalogues = screen.getByRole("tab", { name: "Catalogues" });
+      expect(String(home.props.className ?? "")).toContain("flex-1");
+      expect(String(catalogues.props.className ?? "")).toContain("flex-1");
+      expect(String(home.props.className ?? "")).toContain("items-center");
+      expect(String(screen.getByText("Catalogues").props.className ?? "")).toContain("text-center");
     });
   });
 

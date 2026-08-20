@@ -96,11 +96,7 @@ export default function ScheduleScreen() {
           />
         }
       >
-        <ScreenHeader
-          title="Schedule"
-          subtitle="What is due, what is late, what is next"
-          right={<AlertsBell />}
-        />
+        <ScreenHeader title="Schedule" right={<AlertsBell />} />
 
         <SegmentedControl
           options={SCHEDULE_RANGES}

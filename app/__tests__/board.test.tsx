@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 jest.mock("expo-router", () => ({
@@ -35,12 +36,15 @@ jest.mock("@/lib/listingsApi", () => ({
   removeListing: jest.fn(),
 }));
 
-jest.mock("@/store/sheets", () => ({ askConfirm: jest.fn(async () => true) }));
+jest.mock("@/store/sheets", () => ({
+  askConfirm: jest.fn(async () => true),
+  askPick: jest.fn(async () => null),
+}));
 
 import BoardScreen from "@/app/(tabs)/catalogues";
 import type { Listing } from "@/lib/listings";
 import { loadBoard, removeListing } from "@/lib/listingsApi";
-import { askConfirm } from "@/store/sheets";
+import { askConfirm, askPick } from "@/store/sheets";
 import { useSession } from "@/store/session";
 
 const approvedShop = {
@@ -74,8 +78,9 @@ const listing: Listing = {
 };
 
 describe("the shop's board", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+    await AsyncStorage.clear();
     (askConfirm as jest.Mock).mockResolvedValue(true);
     useSession.setState({
       user: approvedShop,
@@ -122,15 +127,107 @@ describe("the shop's board", () => {
     await view.unmount();
   });
 
-  it("shows each listing's name, price and wait", async () => {
+  it("shows each listing's name and price on the wall, and adds from the plus", async () => {
     (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: [listing] });
 
     const view = await render(<BoardScreen />);
 
     expect(await screen.findByText("Tarpaulin, 13oz")).toBeTruthy();
     expect(screen.getByText("₱450.00 per piece")).toBeTruthy();
+    expect(screen.queryByText("Ready in 24 hours")).toBeNull();
+    expect(screen.queryByText(/still needs something/)).toBeNull();
+    expect(screen.getByLabelText("Add a listing")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Put something on the board" })).toBeNull();
+    await view.unmount();
+  });
+
+  it("flips to a list of quotes with the wait, the peso, and how it is sold", async () => {
+    (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: [listing] });
+
+    const view = await render(<BoardScreen />);
+
+    await screen.findByText("Tarpaulin, 13oz");
+    await fireEvent.press(screen.getByLabelText("Show as a list"));
+
     expect(screen.getByText("Ready in 24 hours")).toBeTruthy();
-    expect(screen.getByText("Add a listing")).toBeTruthy();
+    expect(screen.getByText("₱450.00")).toBeTruthy();
+    expect(screen.getByText("per piece")).toBeTruthy();
+    expect(String(screen.getByText("₱450.00").props.className ?? "")).toContain("text-body");
+    expect(String(screen.getByText("₱450.00").props.className ?? "")).not.toContain("text-h3");
+    await view.unmount();
+  });
+
+  it("filters by kind of work from the select", async () => {
+    const flyers: Listing = {
+      ...listing,
+      id: "item_2",
+      name: "Flyers 101",
+      subcategoryCode: "flyers",
+      onTheBoard: true,
+    };
+    (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: [listing, flyers] });
+    (askPick as jest.Mock).mockResolvedValueOnce("flyers");
+
+    const view = await render(<BoardScreen />);
+
+    expect(await screen.findByText("Tarpaulin, 13oz")).toBeTruthy();
+    expect(screen.getByText("Flyers 101")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Kind of work, All work"));
+    await waitFor(() => expect(askPick).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByText("Tarpaulin, 13oz")).toBeNull());
+    expect(screen.getByText("Flyers 101")).toBeTruthy();
+    await view.unmount();
+  });
+
+  it("toggles to listings that are on the board", async () => {
+    const hidden: Listing = { ...listing, id: "item_h", name: "Hidden cards", onTheBoard: false };
+    (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: [listing, hidden] });
+
+    const view = await render(<BoardScreen />);
+
+    expect(await screen.findByText("Tarpaulin, 13oz")).toBeTruthy();
+    expect(screen.getByText("Hidden cards")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("radio", { name: "On the board" }));
+    expect(screen.queryByText("Hidden cards")).toBeNull();
+    expect(screen.getByText("Tarpaulin, 13oz")).toBeTruthy();
+    await view.unmount();
+  });
+
+  it("sorts the board by name when the shop asks", async () => {
+    const zebra: Listing = { ...listing, id: "item_z", name: "Zebra tarp", sortOrder: 0 };
+    const alpha: Listing = { ...listing, id: "item_a", name: "Alpha tarp", sortOrder: 1 };
+    (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: [zebra, alpha] });
+    (askPick as jest.Mock).mockResolvedValueOnce("name");
+
+    const view = await render(<BoardScreen />);
+
+    await screen.findByText("Zebra tarp");
+    await fireEvent.press(screen.getByLabelText("Sort: Default"));
+    await waitFor(() => expect(askPick).toHaveBeenCalled());
+    await waitFor(() => {
+      const names = screen.getAllByText(/tarp/).map((node) => node.props.children);
+      expect(names[0]).toBe("Alpha tarp");
+      expect(names[1]).toBe("Zebra tarp");
+    });
+    await view.unmount();
+  });
+
+  it("pages when there are more than eight listings", async () => {
+    const rows = Array.from({ length: 9 }, (_, i) => ({
+      ...listing,
+      id: `item_${i}`,
+      name: `Listing ${i}`,
+      sortOrder: i,
+    }));
+    (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: rows });
+
+    const view = await render(<BoardScreen />);
+
+    expect(await screen.findByText("Listing 0")).toBeTruthy();
+    expect(screen.queryByText("Listing 8")).toBeNull();
+    await fireEvent.press(screen.getByLabelText("Next page"));
+    expect(await screen.findByText("Listing 8")).toBeTruthy();
+    expect(screen.queryByText("Listing 0")).toBeNull();
     await view.unmount();
   });
 
@@ -149,7 +246,7 @@ describe("the shop's board", () => {
 
     await screen.findByText("Tarpaulin, 13oz");
     await fireEvent(
-      screen.getByLabelText("Tarpaulin, 13oz. On the board."),
+      screen.getByLabelText(/Tarpaulin, 13oz\..*On the board/),
       "longPress",
     );
 
@@ -169,7 +266,7 @@ describe("the shop's board", () => {
 
     await screen.findByText("Tarpaulin, 13oz");
     await fireEvent(
-      screen.getByLabelText("Tarpaulin, 13oz. On the board."),
+      screen.getByLabelText(/Tarpaulin, 13oz\..*On the board/),
       "longPress",
     );
 
@@ -187,7 +284,7 @@ describe("the shop's board", () => {
 
     await screen.findByText("Tarpaulin, 13oz");
     await fireEvent(
-      screen.getByLabelText("Tarpaulin, 13oz. On the board."),
+      screen.getByLabelText(/Tarpaulin, 13oz\..*On the board/),
       "longPress",
     );
 

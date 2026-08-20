@@ -3,36 +3,47 @@ import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 
 import { AlertsBell } from "@/components/AlertsBell";
+import { BoardPager } from "@/components/BoardPager";
+import { BoardRail } from "@/components/BoardRail";
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { ListingCard } from "@/components/ListingCard";
-import { PrimaryButton } from "@/components/PrimaryButton";
+import { ListingRow } from "@/components/ListingRow";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { SectionHeader } from "@/components/SectionHeader";
 import { SkeletonBlock } from "@/components/Skeleton";
 import {
-  boardContextFor,
-  boardBlockers,
   EMPTY_BOARD_BODY,
   EMPTY_BOARD_TITLE,
   type Listing,
 } from "@/lib/listings";
+import {
+  CATALOGUE_SORTS,
+  PAGE_SIZE,
+  filterCatalogue,
+  kindsWithListings,
+  paginate,
+  sortCatalogue,
+  type CatalogueSort,
+  type OnBoardFilter,
+} from "@/lib/catalogueBoard";
 import { ARCHIVED_SENTENCE, BOARD_NOT_OPEN_YET, removeListing } from "@/lib/listingsApi";
 import { useBoard } from "@/hooks/useBoard";
+import { useCatalogueView } from "@/hooks/useCatalogueView";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
-import { askConfirm } from "@/store/sheets";
+import { askConfirm, askPick } from "@/store/sheets";
 import { isMatchable, useSession } from "@/store/session";
 
 /**
- * Catalogues — a two-column wall of the shop's own samples.
+ * Catalogues — the shop's own samples, as a wall or as a list of quotes.
  *
  * A print shop's board is a wall, not a spreadsheet: a client picks by looking
  * at what came off this shop's machine. So the photo is the tile and everything
- * else is a caption, and the wall keeps the shop's own order rather than
- * reordering itself by anything clever. There is exactly one ranking in this
- * app and it belongs to the job floor.
+ * else is a caption. A shop that is scanning prices can flip to a list of quote
+ * strips, filter by standing, and sort by name, quote or ready-in. The job
+ * floor still has the only ranking that decides which job is next; this is how
+ * the shop looks at its own samples.
  *
  * It is one of the five tabs now, where the alerts inbox used to be. A shop
  * changes a price or adds a sample between jobs, all day, and reaching that
@@ -51,6 +62,11 @@ export default function BoardScreen() {
   const { listings, catalog, services, loading, loaded, notOpenYet, error, reload, dropListing } =
     useBoard();
   const { refreshing, onRefresh } = usePullToRefresh(reload);
+  const [view, setView] = useCatalogueView();
+  const [kind, setKind] = useState("all");
+  const [onBoard, setOnBoard] = useState<OnBoardFilter>("all");
+  const [sort, setSort] = useState<CatalogueSort>("board");
+  const [page, setPage] = useState(1);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -94,9 +110,40 @@ export default function BoardScreen() {
   );
 
   const firstLoad = loading && !loaded;
-  const unfinished = listings.filter(
-    (listing) => boardBlockers(listing, boardContextFor(listing, services)).length > 0,
-  ).length;
+  const kinds = kindsWithListings(listings, catalog);
+  const activeKind = kind === "all" || kinds.some((entry) => entry.code === kind) ? kind : "all";
+  const filtered = sortCatalogue(filterCatalogue(listings, activeKind, onBoard), sort, services);
+  const paged = paginate(filtered, page);
+  const visible = paged.items;
+
+  async function pickKind() {
+    const picked = await askPick({
+      title: "Kind of work",
+      options: [
+        { value: "all", label: "All work" },
+        ...kinds.map((entry) => ({ value: entry.code, label: entry.name })),
+      ],
+      selected: activeKind,
+    });
+    if (!picked) return;
+    setKind(picked);
+    setPage(1);
+  }
+
+  async function pickSort() {
+    const picked = await askPick({
+      title: "Sort",
+      options: CATALOGUE_SORTS.map((entry) => ({
+        value: entry.value,
+        label: entry.label,
+        detail: entry.detail,
+      })),
+      selected: sort,
+    });
+    if (!picked) return;
+    setSort(picked as CatalogueSort);
+    setPage(1);
+  }
 
   return (
     <View className="gg-screen">
@@ -112,11 +159,7 @@ export default function BoardScreen() {
           />
         }
       >
-        <ScreenHeader
-          title="Catalogues"
-          subtitle="What clients see: your listings, your prices, your samples"
-          right={<AlertsBell />}
-        />
+        <ScreenHeader title="Catalogues" right={<AlertsBell />} />
 
         {/*
           Demoted to a footnote on purpose. It is a real thing to know once —
@@ -196,41 +239,53 @@ export default function BoardScreen() {
         ) : null}
 
         {listings.length ? (
-          <>
-            <View className="mt-8 gap-3">
-              <SectionHeader
-                title="LISTINGS"
-                count={listings.length}
-                hint={
-                  unfinished
-                    ? unfinished === 1
-                      ? "One listing still needs something before it can go up. Press and hold one to remove it."
-                      : `${unfinished} listings still need something before they can go up. Press and hold one to remove it.`
-                    : "Tap one to change its price, samples or steps. Press and hold to remove one."
-                }
-              />
-              {notice ? (
-                <View className="gg-panel">
-                  <Text className="text-body text-text-secondary">{notice}</Text>
-                </View>
-              ) : null}
-              {removeError ? <ErrorNotice message={removeError} /> : null}
-              <Wall
-                listings={listings}
-                catalog={catalog}
-                services={services}
-                shopApproved={approved}
-                onRemove={removing ? undefined : remove}
-              />
-            </View>
-
-            <View className="mt-6">
-              <PrimaryButton
-                label="Add a listing"
-                onPress={() => router.push("/shop/new")}
-              />
-            </View>
-          </>
+          <View className="mt-8 gap-3">
+            <BoardRail
+              count={listings.length}
+              view={view}
+              onViewChange={setView}
+              kinds={kinds}
+              kind={activeKind}
+              onPickKind={() => void pickKind()}
+              onBoard={onBoard}
+              onOnBoardChange={(next) => {
+                setOnBoard(next);
+                setPage(1);
+              }}
+              sort={sort}
+              onPickSort={() => void pickSort()}
+              onAdd={() => router.push("/shop/new")}
+            />
+            {notice ? (
+              <View className="gg-panel">
+                <Text className="text-body text-text-secondary">{notice}</Text>
+              </View>
+            ) : null}
+            {removeError ? <ErrorNotice message={removeError} /> : null}
+            {filtered.length === 0 ? (
+              <Text className="text-body text-text-secondary">
+                Nothing matches that cut. Show all work, or switch the on-the-board toggle.
+              </Text>
+            ) : (
+              <>
+                <Wall
+                  listings={visible}
+                  view={view}
+                  catalog={catalog}
+                  services={services}
+                  shopApproved={approved}
+                  onRemove={removing ? undefined : remove}
+                />
+                <BoardPager
+                  page={paged.page}
+                  pageCount={paged.pageCount}
+                  total={paged.total}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={setPage}
+                />
+              </>
+            )}
+          </View>
         ) : null}
       </ScrollView>
 
@@ -239,20 +294,42 @@ export default function BoardScreen() {
   );
 }
 
-/** Two columns, in the shop's own order. */
+/** The shop's own order: a wall of samples, or a stack of quotes. */
 function Wall({
   listings,
+  view,
   catalog,
   services,
   shopApproved,
   onRemove,
 }: {
   listings: Listing[];
+  view: ReturnType<typeof useCatalogueView>[0];
   catalog: ReturnType<typeof useBoard>["catalog"];
   services: ReturnType<typeof useBoard>["services"];
   shopApproved: boolean;
   onRemove?: (listing: Listing) => void;
 }) {
+  if (view === "list") {
+    return (
+      <View className="gap-2">
+        {listings.map((listing) => (
+          <ListingRow
+            key={listing.id}
+            listing={listing}
+            catalog={catalog}
+            services={services}
+            shopApproved={shopApproved}
+            onPress={() =>
+              router.push({ pathname: "/shop/[id]", params: { id: listing.id } })
+            }
+            onRemove={onRemove ? () => onRemove(listing) : undefined}
+          />
+        ))}
+      </View>
+    );
+  }
+
   return (
     <View className="-mx-1.5 flex-row flex-wrap">
       {listings.map((listing) => (
