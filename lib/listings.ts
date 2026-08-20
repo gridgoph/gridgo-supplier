@@ -715,6 +715,31 @@ export type BoardPrompt = {
 };
 
 /**
+ * The one sample that stands for the whole board.
+ *
+ * The board's own order decides it, not recency and not anything cleverer —
+ * there is one ranking in this app and it belongs to the job floor. A listing
+ * with no photo yet is skipped rather than shown as a blank, so a shop whose
+ * newest draft has no picture still sees the work it does have. Null means the
+ * board genuinely has nothing to show.
+ */
+export function boardFace(listings: Listing[]): string | null {
+  return listings.find((listing) => listing.photos.length)?.photos[0]?.fileId ?? null;
+}
+
+/**
+ * The board, counted aloud: "3 listings", "1 listing", "No listings yet".
+ *
+ * Written as its own sentence rather than a fragment, because both places that
+ * say it follow "Open your board." — and a label that reads "Open your board.
+ * no listings yet." is a label somebody wrote without listening to it.
+ */
+export function boardCountLine(count: number): string {
+  if (count === 0) return "No listings yet";
+  return count === 1 ? "1 listing" : `${count} listings`;
+}
+
+/**
  * Whether the job floor should say anything about the board, and what.
  *
  * Home is the job floor and must stay that. So the board only earns space there

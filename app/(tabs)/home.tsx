@@ -4,6 +4,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { ChevronRight } from "lucide-react-native";
 import { router, useFocusEffect } from "expo-router";
 
+import { BoardShortcut } from "@/components/BoardShortcut";
 import { EmptyState } from "@/components/EmptyState";
 import { ObligationRow } from "@/components/ObligationRow";
 import { SamplePhoto } from "@/components/SamplePhoto";
@@ -16,9 +17,8 @@ import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { clerkDisplayName } from "@/lib/clerk";
 import { buildObligations, greeting, homeHeadline, type Obligation } from "@/lib/homeBoard";
-import { boardPrompt, type Listing, type ServiceLine } from "@/lib/listings";
+import { boardCountLine, boardPrompt, type Listing, type ServiceLine } from "@/lib/listings";
 import { loadBoard } from "@/lib/listingsApi";
-import { buildSchedule } from "@/lib/schedule";
 import { useAlertsStore } from "@/store/alerts";
 import { isMatchable, useSession } from "@/store/session";
 import { loadServiceLines } from "@/hooks/useBoard";
@@ -101,7 +101,6 @@ export default function HomeScreen() {
   const headline = homeHeadline(jobs);
   const obligations = buildObligations(jobs);
   const [first, ...rest] = obligations;
-  const summary = buildSchedule(jobs, "today").summary;
   const board = boardOpen ? boardPrompt(listings, services, !waitingOnOps) : null;
   const needsBoardWork = board != null && board.kind !== "ready";
 
@@ -131,28 +130,26 @@ export default function HomeScreen() {
         {/*
           The mark is not here on purpose. A shop on its own floor knows whose
           app this is; what it does not know is what today looks like. So the
-          header carries the shop's own name and the one fact that changes what
-          it does next — what is promised today, and whether anything is late.
-          The lockup lives at the door: sign-in, onboarding, accreditation.
+          header carries the shop's own name, and the corner carries the one
+          room a shop otherwise has to go looking for. The lockup lives at the
+          door: sign-in, onboarding, accreditation.
+
+          What used to sit in that corner was a chip counting today's jobs, and
+          it read as an alerts bell — the captain drew an arrow from it straight
+          down to the Alerts tab. Alerts have a tab and a badge on it, and that
+          is the only place in this app they are announced. What is due and what
+          is late is said properly below, on the obligations this screen is
+          built around, and again on Schedule. Neither of those needs a pill up
+          here restating it in two words.
+
+          A pending shop gets the shortcut too. Operations wants a finished
+          listing before they accredit, so the shop that is waiting is the one
+          with the most reason to open its board.
         */}
         <ScreenHeader
           eyebrow={greeting(clerkDisplayName(clerkUser) || user?.name)}
           title={user?.supplierName || "Your shop"}
-          right={
-            firstLoad || waitingOnOps ? null : (
-              <StatusChip
-                tone={summary.late > 0 ? "error" : summary.today > 0 ? "info" : "neutral"}
-                icon={summary.late > 0 ? "triangle-alert" : "clock"}
-                label={
-                  summary.late > 0
-                    ? `${summary.late} late`
-                    : summary.today > 0
-                      ? `${summary.today} due today`
-                      : "Nothing due today"
-                }
-              />
-            )
-          }
+          right={boardOpen ? <BoardShortcut listings={listings} /> : null}
         />
 
         {/*
@@ -389,7 +386,7 @@ function SampleStrip({ listings }: { listings: Listing[] }) {
     <Pressable
       onPress={() => router.push("/shop")}
       accessibilityRole="button"
-      accessibilityLabel={`Open your board. ${listings.length} listings.`}
+      accessibilityLabel={`Open your board. ${boardCountLine(listings.length)}.`}
       className="gg-card-flush px-3 py-3"
       style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
     >
