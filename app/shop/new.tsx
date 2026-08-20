@@ -8,6 +8,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { FormScrollView } from "@/components/FormScrollView";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
+import { StarterChoice } from "@/components/StarterChoice";
 import { OptionList } from "@/components/controls/OptionList";
 import { TextField } from "@/components/controls/TextField";
 import {
@@ -16,6 +17,7 @@ import {
   type ListingStarter,
 } from "@/lib/listings";
 import { BOARD_NOT_OPEN_YET, createListing, loadStarters } from "@/lib/listingsApi";
+import { seedStarterSample } from "@/lib/starterSample";
 import { useBoard } from "@/hooks/useBoard";
 
 const BLANK = "__blank__";
@@ -29,11 +31,11 @@ const BLANK = "__blank__";
  * shop's own accredited categories are offered — accreditation is by category
  * and this screen cannot widen it.
  *
- * A starter is a copy, not a link: its steps and add-ons become the shop's own
- * rows the moment the listing exists, and the shop renames, reprices or deletes
- * any of them afterwards. That is the whole point of offering one — a shop
- * should not have to invent "Size / Material / Finish" from a blank screen to
- * sell a tarpaulin.
+ * A starter is a copy, not a link: its steps, add-ons and example sample
+ * become the shop's own the moment the listing exists, and the shop renames,
+ * reprices, replaces or deletes any of them afterwards. That is the whole
+ * point of offering one — a shop should not have to invent
+ * "Size / Material / Finish" from a blank screen to sell a tarpaulin.
  */
 export default function NewListingScreen() {
   const { catalog, services, loading, notOpenYet, error, reload } = useBoard();
@@ -43,6 +45,8 @@ export default function NewListingScreen() {
   const [subcategoryCode, setSubcategoryCode] = useState<string | null>(null);
   const [starterId, setStarterId] = useState<string>(BLANK);
   const [starters, setStarters] = useState<ListingStarter[]>([]);
+  const [startersLoading, setStartersLoading] = useState(false);
+  const [starterError, setStarterError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -58,36 +62,80 @@ export default function NewListingScreen() {
   useEffect(() => {
     setStarters([]);
     setStarterId(BLANK);
-    if (!subcategoryCode) return;
+    setStarterError(null);
+    if (!subcategoryCode) {
+      setStartersLoading(false);
+      return;
+    }
     let cancelled = false;
+    setStartersLoading(true);
     void (async () => {
-      const found = await loadStarters(subcategoryCode);
-      if (!cancelled) setStarters(found);
+      const result = await loadStarters(subcategoryCode);
+      if (cancelled) return;
+      setStartersLoading(false);
+      if (result.status === "ok") {
+        setStarters(result.value);
+        setStarterId(result.value[0]?.id ?? BLANK);
+        setStarterError(null);
+        return;
+      }
+      setStarters([]);
+      setStarterId(BLANK);
+      setStarterError(result.status === "failed" ? result.message : null);
     })();
     return () => {
       cancelled = true;
     };
   }, [subcategoryCode]);
 
+  function retryStarters() {
+    if (!subcategoryCode) return;
+    setStarterError(null);
+    setStartersLoading(true);
+    void (async () => {
+      const result = await loadStarters(subcategoryCode);
+      setStartersLoading(false);
+      if (result.status === "ok") {
+        setStarters(result.value);
+        setStarterId(result.value[0]?.id ?? BLANK);
+        setStarterError(null);
+        return;
+      }
+      setStarters([]);
+      setStarterId(BLANK);
+      setStarterError(result.status === "failed" ? result.message : null);
+    })();
+  }
+
   async function create() {
     if (!target || !subcategoryCode) return;
     setSaving(true);
     setSaveError(null);
+    const chosenStarter = starterId === BLANK ? null : starterId;
     const result = await createListing({
       serviceLineId: target.service.id,
       subcategoryCode,
       name: name.trim(),
-      starterId: starterId === BLANK ? null : starterId,
+      starterId: chosenStarter,
     });
-    setSaving(false);
 
-    if (result.status === "ok") {
-      // Replace, so the back gesture from the editor lands on the board rather
-      // than on a create screen that would open a second listing.
-      router.replace({ pathname: "/shop/[id]", params: { id: result.value.id } });
+    if (result.status !== "ok") {
+      setSaving(false);
+      setSaveError(result.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : result.message);
       return;
     }
-    setSaveError(result.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : result.message);
+
+    // SAMPLE PHOTOS only knows uploaded files. Copy the starter's example
+    // onto the listing before the editor opens so the shop is not staring at
+    // an empty frame they already chose a picture for. A failed copy still
+    // opens the listing — the shop can add a sample themselves.
+    if (chosenStarter) {
+      await seedStarterSample(chosenStarter, result.value.id);
+    }
+    setSaving(false);
+    // Replace, so the back gesture from the editor lands on the board rather
+    // than on a create screen that would open a second listing.
+    router.replace({ pathname: "/shop/[id]", params: { id: result.value.id } });
   }
 
   if (loading && !catalog) {
@@ -189,23 +237,26 @@ export default function NewListingScreen() {
         {subcategoryCode ? (
           <View className="mt-8 gap-3">
             <Text className="text-overline text-text-muted">WHERE TO START</Text>
-            <OptionList
-              options={[
-                ...starters.map((starter) => ({
-                  value: starter.id,
-                  label: `GRIDGO starter — ${starter.name}`,
-                  detail: starterDetail(starter),
-                })),
-                {
-                  value: BLANK,
-                  label: "Start blank",
-                  detail: "You add your own steps, add-ons and prices.",
-                },
-              ]}
-              value={starterId}
-              onChange={setStarterId}
-              accessibilityLabel="Where to start this listing from"
-            />
+            {startersLoading ? (
+              <View
+                accessibilityRole="progressbar"
+                accessibilityLabel="Loading GRIDGO starters"
+                className="gap-2"
+              >
+                <SkeletonBlock className="h-24 w-full rounded-field" />
+                <SkeletonBlock className="h-16 w-full rounded-field" />
+              </View>
+            ) : (
+              <StarterChoice
+                starters={starters}
+                value={starterId}
+                blankValue={BLANK}
+                onChange={setStarterId}
+              />
+            )}
+            {starterError ? (
+              <ErrorNotice message={starterError} onRetry={() => void retryStarters()} />
+            ) : null}
             {starters.length ? (
               <Text className="text-caption text-text-muted">
                 A starter is copied into your listing. Rename, reprice or delete anything in it
@@ -254,17 +305,4 @@ export default function NewListingScreen() {
       <BusyOverlay visible={saving} label="Opening your listing…" />
     </View>
   );
-}
-
-/** What a starter brings, so it can be chosen without opening it. */
-function starterDetail(starter: ListingStarter): string {
-  const parts: string[] = [];
-  if (starter.specCount) {
-    parts.push(starter.specCount === 1 ? "1 step" : `${starter.specCount} steps`);
-  }
-  if (starter.addOnCount) {
-    parts.push(starter.addOnCount === 1 ? "1 add-on" : `${starter.addOnCount} add-ons`);
-  }
-  if (starter.turnaroundHours) parts.push(`ready in ${starter.turnaroundHours} hours`);
-  return parts.length ? `Comes with ${parts.join(", ")}. All of it yours to change.` : "GRIDGO's own starting point for this work.";
 }

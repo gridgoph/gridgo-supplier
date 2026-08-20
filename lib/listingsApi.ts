@@ -468,14 +468,15 @@ export async function removePrepStep(
 /**
  * GRIDGO's own starting points for one kind of work.
  *
- * A deployment without them is not a failure worth showing: the shop simply
- * starts blank, which is a supported choice on that screen anyway. So this
- * answers an empty list rather than an outcome the screen has to branch on.
+ * An empty list is a real answer: that kind of work has no starter, and the
+ * shop starts blank. A missing route is `not_open_yet`. A failed load is a
+ * sentence the pick screen can retry — swallowing it used to hide starters
+ * behind a blank-only list.
  */
-export async function loadStarters(subcategoryCode: string): Promise<ListingStarter[]> {
-  try {
-    return normalizeStarters(await api.listListingStarters(subcategoryCode));
-  } catch {
-    return [];
-  }
+export async function loadStarters(
+  subcategoryCode: string,
+): Promise<BoardOutcome<ListingStarter[]>> {
+  return attempt("load GRIDGO starters", async () =>
+    normalizeStarters(await api.listListingStarters(subcategoryCode)),
+  );
 }
