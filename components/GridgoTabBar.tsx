@@ -54,6 +54,9 @@ import { useThemeColors } from "@/hooks/useTheme";
 /** Used only where the platform reserves no bottom inset of its own. */
 export const TAB_BAR_MIN_BOTTOM_GAP = 8;
 
+/** One outline size for every destination, so the row is one set. */
+export const TAB_ICON_SIZE = 24;
+
 export type TabBarMetrics = {
   /** The content row, above whatever the platform reserves below it. */
   columnHeight: number;
@@ -93,10 +96,6 @@ export function tabBarPaddingBottom(insetBottom: number): number {
 }
 
 /**
- * One Lucide glyph per tab, all outline, all the same optical weight, so the
- * row reads as one set.
- */
-/**
  * One glyph each, and the fourth is the only one worth arguing about.
  *
  * Catalogues is a wall of print samples, and Lucide's `Frame` is four rules
@@ -122,7 +121,11 @@ const ICONS: Record<TabName, LucideIcon> = {
  * The GRIDGO supplier tab bar.
  *
  * Five labelled destinations. No raised action disc — every tab is a place.
- * Columns bottom-align so all five share a baseline.
+ * The row is NativeWind `justify-evenly`: leftover width is split into the
+ * same gutter between marks *and* from each phone edge, so the five-up uses
+ * the whole bar. Items size to their own glyph and label (`flex-1` would eat
+ * that leftover and half-space the trim). They bottom-align so all five share
+ * a baseline.
  *
  * The surface paints the whole container, so the bar a person sees is exactly
  * `content region + design pad + system inset` and nothing has to be subtracted
@@ -136,9 +139,9 @@ const ICONS: Record<TabName, LucideIcon> = {
  * own item padding, bottom-aligned; on Android the residual slack inside the
  * 80dp container sits above the icon. The 44dp touch floor is exceeded on both.
  *
- * The open tab is said twice over: its glyph goes to action-yellow and its
- * label to medium yellow. The row still reads in grayscale via weight. Yellow
- * is spent only on the selected item.
+ * The open tab is said twice over, in colour and in weight, so the row still
+ * reads in grayscale. The open mark is the same off-white the rider bar uses
+ * (`textPrimary`); yellow stays on the shop's own buttons, not on the bar.
  */
 export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -154,7 +157,7 @@ export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
         className="absolute inset-0 border-t border-outline bg-surface"
       />
 
-      <View className="flex-row items-end">
+      <View testID="gridgo-tab-bar-row" className="w-full flex-row items-end justify-evenly">
         {state.routes.map((route, index) => {
           const tab = TABS.find((entry) => entry.name === route.name);
           if (!tab) return null;
@@ -215,7 +218,7 @@ function TabItem({ name, label, focused, onPress }: TabItemProps) {
       // Height and padding are the platform's, from `tabBarMetrics`. A minimum
       // rather than a fixed height, so the column still grows when the label
       // scales under dynamic type; never a rigid h-13, which clipped it.
-      className="flex-1 items-center justify-end"
+      className="min-w-12 items-center justify-end"
       style={{
         minHeight: TAB_BAR_METRICS.columnHeight,
         paddingTop: TAB_BAR_METRICS.itemPaddingTop,
@@ -227,9 +230,9 @@ function TabItem({ name, label, focused, onPress }: TabItemProps) {
         <>
           <View className={pressed ? "opacity-60" : undefined}>
             <Icon
-              size={24}
+              size={TAB_ICON_SIZE}
               strokeWidth={2}
-              color={focused ? colors.actionYellow : colors.textMuted}
+              color={focused ? colors.textPrimary : colors.textMuted}
             />
           </View>
           <Text
@@ -253,9 +256,12 @@ function TabItem({ name, label, focused, onPress }: TabItemProps) {
             style={{
               includeFontPadding: false,
               textAlignVertical: "center",
-              color: focused ? colors.actionYellow : colors.textMuted,
             }}
-            className={focused ? "h-4 text-nav font-medium" : "h-4 text-nav"}
+            className={
+              focused
+                ? "h-4 text-nav font-medium text-text-primary"
+                : "h-4 text-nav text-text-muted"
+            }
           >
             {label}
           </Text>

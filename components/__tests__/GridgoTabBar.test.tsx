@@ -7,6 +7,7 @@ import {
   GridgoTabBar,
   TAB_BAR_METRICS,
   TAB_BAR_MIN_BOTTOM_GAP,
+  TAB_ICON_SIZE,
   tabBarMetrics,
   tabBarPaddingBottom,
 } from "@/components/GridgoTabBar";
@@ -93,6 +94,18 @@ describe("GridgoTabBar", () => {
     expect(screen.queryAllByRole("tab", { selected: true })).toHaveLength(1);
   });
 
+  it("paints the open mark in the same off-white the rider bar uses, not yellow", async () => {
+    await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
+
+    const openLabel = screen.getByText("Home");
+    const restLabel = screen.getByText("Jobs");
+    expect(String(openLabel.props.className ?? "")).toContain("text-text-primary");
+    expect(String(openLabel.props.className ?? "")).toContain("font-medium");
+    expect(String(restLabel.props.className ?? "")).toContain("text-text-muted");
+    expect(String(openLabel.props.className ?? "")).not.toMatch(/yellow/i);
+    expect(flattenStyle(openLabel.props.style).color).toBeUndefined();
+  });
+
   it("navigates to a tab that is not open", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
@@ -159,7 +172,7 @@ describe("GridgoTabBar", () => {
       const m = tabBarMetrics("ios");
       expect(m.columnHeight).toBe(49);
       // 4 + 24 icon + 2 + 16 label + 3 = 49.
-      expect(m.itemPaddingTop + 24 + m.itemGap + 16 + m.itemPaddingBottom).toBe(49);
+      expect(m.itemPaddingTop + TAB_ICON_SIZE + m.itemGap + 16 + m.itemPaddingBottom).toBe(49);
     });
 
     it("is Material 3's 80dp container on Android, built from its own parts", () => {
@@ -168,7 +181,9 @@ describe("GridgoTabBar", () => {
       // 12 above the item and 16 below it, around a 24 icon and a 16 label.
       expect(m.itemPaddingTop).toBe(12);
       expect(m.itemPaddingBottom).toBe(16);
-      expect(m.itemPaddingTop + 24 + m.itemGap + 16 + m.itemPaddingBottom).toBeLessThanOrEqual(80);
+      expect(
+        m.itemPaddingTop + TAB_ICON_SIZE + m.itemGap + 16 + m.itemPaddingBottom,
+      ).toBeLessThanOrEqual(80);
     });
 
     it("clears the 44dp touch floor on both platforms", () => {
@@ -253,6 +268,31 @@ describe("GridgoTabBar", () => {
     // Constrained bar, not a hard lockout of accessibility text.
     expect(homeLabel.props.maxFontSizeMultiplier).toBe(1.4);
     expect(homeLabel.props.maxFontSizeMultiplier).toBeGreaterThan(1);
+  });
+
+  /**
+   * Leftover width is split into the same gutter between marks and from each
+   * phone edge. `flex-1` would eat that leftover; `justify-evenly` spends it.
+   */
+  describe("icon gutters", () => {
+    it("spreads the row across the phone with even gutters, including the edges", async () => {
+      await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
+
+      const row = screen.getByTestId("gridgo-tab-bar-row");
+      const className = String(row.props.className ?? "");
+      expect(className).toContain("w-full");
+      expect(className).toContain("justify-evenly");
+      expect(flattenStyle(row.props.style).paddingHorizontal).toBeUndefined();
+    });
+
+    it("lets each destination keep its own width so leftover can go to the gutters", async () => {
+      await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
+
+      const home = screen.getByRole("tab", { name: "Home" });
+      const className = String(home.props.className ?? "");
+      expect(className).not.toContain("flex-1");
+      expect(className).toContain("min-w-12");
+    });
   });
 
   /**
