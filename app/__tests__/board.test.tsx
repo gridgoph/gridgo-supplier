@@ -140,7 +140,9 @@ describe("the shop's board", () => {
    * bottom of the screen — so the wall offers it too, on the tile itself.
    */
   it("removes a listing from the wall, after asking", async () => {
-    (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: [listing] });
+    (loadBoard as jest.Mock)
+      .mockResolvedValueOnce({ status: "ok", value: [listing] })
+      .mockResolvedValue({ status: "ok", value: [] });
     (removeListing as jest.Mock).mockResolvedValue({ status: "ok", value: "deleted" });
 
     const view = await render(<BoardScreen />);
@@ -155,6 +157,7 @@ describe("the shop's board", () => {
     expect(askConfirm).toHaveBeenCalledWith(
       expect.objectContaining({ destructive: true, confirmLabel: "Remove it" }),
     );
+    await waitFor(() => expect(screen.queryByText("Tarpaulin, 13oz")).toBeNull());
     await view.unmount();
   });
 

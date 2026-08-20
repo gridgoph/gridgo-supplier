@@ -85,13 +85,15 @@ export function SamplePhoto({
     <CropMarkFrame gutter={gutter}>
       <View className={shape}>
         {uri && !failed ? (
-          <Image
-            source={{ uri }}
-            accessibilityLabel={altText || "Sample photo"}
-            resizeMode="cover"
-            style={{ width: "100%", height: "100%" }}
-            onError={() => setFailed(true)}
-          />
+          <View collapsable={false} style={{ width: "100%", height: "100%" }}>
+            <Image
+              source={{ uri }}
+              accessibilityLabel={altText || "Sample photo"}
+              resizeMode="cover"
+              style={{ width: "100%", height: "100%" }}
+              onError={() => setFailed(true)}
+            />
+          </View>
         ) : !fileId && !localUri ? (
           <View className="flex-1 items-center justify-center gap-1 p-3">
             <ImagePlus size={18} color={colors.textMuted} strokeWidth={2} />

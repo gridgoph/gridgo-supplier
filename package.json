@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start --dev-client",
+    "start:usb": "bash scripts/usb-tunnel.sh && expo start --dev-client --localhost --port 8082",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",

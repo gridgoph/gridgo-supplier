@@ -250,9 +250,8 @@ export default function ListingScreen() {
     if (result.status === "ok") {
       dirtyRef.current = false;
       if (result.value === "deleted") {
-        setBusy(false);
-        // The board reloads when it regains focus, so it never shows a listing
-        // GRIDGO no longer has.
+        // Leave the wait up until this screen is gone. Clearing it and
+        // popping in the same moment crashed the project on Android.
         router.back();
         return;
       }

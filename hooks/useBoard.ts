@@ -59,6 +59,8 @@ export type BoardData = {
   /** True once a load has finished, so a refresh does not blank the screen. */
   loaded: boolean;
   reload: () => Promise<void>;
+  /** Take one listing off the local wall immediately. */
+  dropListing: (id: string) => void;
 };
 
 export function useBoard(): BoardData {
@@ -100,13 +102,27 @@ export function useBoard(): BoardData {
     }
   }, []);
 
+  const dropListing = useCallback((id: string) => {
+    setListings((current) => current.filter((item) => item.id !== id));
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       void reload();
     }, [reload]),
   );
 
-  return { listings, catalog, services, loading, loaded, notOpenYet, error, reload };
+  return {
+    listings,
+    catalog,
+    services,
+    loading,
+    loaded,
+    notOpenYet,
+    error,
+    reload,
+    dropListing,
+  };
 }
 
 export type ListingData = {

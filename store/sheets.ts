@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { InteractionManager } from "react-native";
 import { create } from "zustand";
 
 /**
@@ -61,10 +62,35 @@ export const useSheets = create<SheetState>(() => ({
  * Resolves false when the sheet is dismissed by drag, back gesture, scrim tap,
  * or the cancel action — every one of those means "not this time".
  */
+/**
+ * Wait until a native sheet has actually left.
+ *
+ * `router.back()` only *asks* the sheet to dismiss. On Android the wall
+ * underneath is still a live native tree while that animation runs, and taking
+ * photo tiles out of it in that moment crashed the project (the OS reported
+ * that a view already had a parent). Callers continue only after the
+ * interaction queue drains.
+ */
+export function afterNativePresentation(): Promise<void> {
+  return new Promise((resolve) => {
+    const finish = () => {
+      InteractionManager.runAfterInteractions(() => resolve());
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => requestAnimationFrame(finish));
+    } else {
+      finish();
+    }
+  });
+}
+
 export function askConfirm(request: ConfirmRequest): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     useSheets.setState({ confirm: { request, resolve, settled: false } });
     router.push("/confirm");
+  }).then(async (answer) => {
+    await afterNativePresentation();
+    return answer;
   });
 }
 

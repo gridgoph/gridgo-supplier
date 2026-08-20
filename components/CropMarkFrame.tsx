@@ -29,8 +29,14 @@ export function CropMarkFrame({ children, gutter = "standard" }: Props) {
   const marks = gutter === "tight" ? TIGHT : STANDARD;
 
   return (
-    <View className={gutter === "tight" ? "relative p-1.5" : "relative p-2"}>
-      <View className="overflow-hidden rounded-sm border border-outline bg-surface-variant">
+    <View
+      collapsable={false}
+      className={gutter === "tight" ? "relative p-1.5" : "relative p-2"}
+    >
+      <View
+        collapsable={false}
+        className="overflow-hidden rounded-sm border border-outline bg-surface-variant"
+      >
         {children}
       </View>
       {marks.map((className) => (

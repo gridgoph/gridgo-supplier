@@ -302,6 +302,12 @@ export type ResolveApiBaseInput = {
   hostCandidates?: Array<string | null | undefined>;
   /** `Platform.OS` value used for the Android emulator loopback remap. */
   platformOS?: string;
+  /**
+   * `false` only for an Android emulator. Loopback then becomes `10.0.2.2`.
+   * A physical phone (or unknown) keeps IPv4 loopback so USB reverse of
+   * `:8787` works on any Wi-Fi without baking a LAN address into the app.
+   */
+  isDevice?: boolean;
 };
 
 /**
@@ -356,7 +362,9 @@ function collectExpoHostCandidates(): Array<string | null | undefined> {
  * Precedence:
  * 1. Non-empty `envUrl` (trailing slash stripped)
  * 2. Hostname from Expo dev-server host candidates → `http://<host>:<port>`
- * 3. If that host is loopback and platform is Android → `http://10.0.2.2:<port>`
+ * 3. If that host is loopback and platform is Android:
+ *    emulator (`isDevice === false`) → `http://10.0.2.2:<port>`
+ *    physical phone / unknown → `http://127.0.0.1:<port>` (USB reverse is IPv4)
  * 4. `http://127.0.0.1:<port>`
  */
 export function resolveApiBase(input: ResolveApiBaseInput = {}): string {
@@ -372,8 +380,13 @@ export function resolveApiBase(input: ResolveApiBaseInput = {}): string {
   }
 
   if (host) {
-    if ((host === "localhost" || host === "127.0.0.1") && input.platformOS === "android") {
-      return `http://10.0.2.2:${port}`;
+    const loopback = host === "localhost" || host === "127.0.0.1";
+    if (loopback && input.platformOS === "android") {
+      if (input.isDevice === false) {
+        return `http://10.0.2.2:${port}`;
+      }
+      // `localhost` can resolve to IPv6 ::1; adb reverse only tunnels IPv4.
+      return `http://127.0.0.1:${port}`;
     }
     return `http://${host}:${port}`;
   }
@@ -387,6 +400,7 @@ export function getApiBase(): string {
     envPort: process.env.EXPO_PUBLIC_API_PORT,
     hostCandidates: collectExpoHostCandidates(),
     platformOS: Platform.OS,
+    isDevice: Constants.isDevice,
   });
 }
 

@@ -48,7 +48,8 @@ export default function BoardScreen() {
   const colors = useThemeColors();
   const user = useSession((s) => s.user);
   const approved = isMatchable(user);
-  const { listings, catalog, services, loading, loaded, notOpenYet, error, reload } = useBoard();
+  const { listings, catalog, services, loading, loaded, notOpenYet, error, reload, dropListing } =
+    useBoard();
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export default function BoardScreen() {
       setNotice(null);
       const result = await removeListing(listing);
       if (result.status === "ok") {
+        dropListing(listing.id);
         setNotice(result.value === "archived" ? ARCHIVED_SENTENCE : null);
         await reload();
       } else {
@@ -88,7 +90,7 @@ export default function BoardScreen() {
       }
       setRemoving(false);
     },
-    [reload],
+    [dropListing, reload],
   );
 
   const firstLoad = loading && !loaded;
@@ -254,7 +256,7 @@ function Wall({
   return (
     <View className="-mx-1.5 flex-row flex-wrap">
       {listings.map((listing) => (
-        <View key={listing.id} className="w-1/2 px-1.5 pb-3">
+        <View key={listing.id} collapsable={false} className="w-1/2 px-1.5 pb-3">
           <ListingCard
             listing={listing}
             catalog={catalog}

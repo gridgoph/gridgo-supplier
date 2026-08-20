@@ -128,4 +128,17 @@ describe("every stack screen keeps a way back", () => {
 
     expect(tabs).toContain('animation: "none"');
   });
+
+  /**
+   * Removing a listing crashed the Android project when a frozen wall's photo
+   * tiles came down as the confirm sheet left. Tabs and pushed stacks stay live
+   * underneath a sheet.
+   */
+  it("does not freeze a screen that a confirmation sheet covers", () => {
+    const tabs = fs.readFileSync(path.join(ROOT, "app/(tabs)/_layout.tsx"), "utf8");
+    const stack = fs.readFileSync(path.join(ROOT, "lib/navigationOptions.ts"), "utf8");
+
+    expect(tabs).toContain("freezeOnBlur: false");
+    expect(stack).toContain("freezeOnBlur: false");
+  });
 });

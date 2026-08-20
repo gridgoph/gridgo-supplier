@@ -30,6 +30,10 @@ export function stackScreenOptions(scheme: ThemeName): ScreenOptions {
       name for VoiceOver.
     */
     headerBackButtonDisplayMode: "minimal",
+    // Same freeze crash as the tab wall: a listing editor under a confirm
+    // sheet must stay a live native tree so taking the listing off does not
+    // unmount photos inside a frozen screen.
+    freezeOnBlur: false,
   };
 }
 

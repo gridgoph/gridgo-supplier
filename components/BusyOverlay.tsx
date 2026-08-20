@@ -1,7 +1,5 @@
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import Animated, { FadeIn, useReducedMotion } from "react-native-reanimated";
 
-import { motion } from "@/constants/theme";
 import { useThemeColors } from "@/hooks/useTheme";
 
 type Props = {
@@ -21,15 +19,16 @@ type Props = {
  */
 export function BusyOverlay({ visible, label }: Props) {
   const colors = useThemeColors();
-  const reduceMotion = useReducedMotion();
 
   if (!visible) return null;
 
+  // A fade-in overlay here crashed the Android project when a listing came off
+  // the wall: the wait is the message, not the animation.
   return (
-    <Animated.View
-      entering={reduceMotion ? undefined : FadeIn.duration(motion.fast)}
+    <View
       style={StyleSheet.absoluteFill}
       className="items-center justify-center bg-scrim"
+      pointerEvents="auto"
       accessibilityRole="progressbar"
       accessibilityLabel={label}
     >
@@ -37,6 +36,6 @@ export function BusyOverlay({ visible, label }: Props) {
         <ActivityIndicator color={colors.textPrimary} />
         <Text className="text-center text-body text-text-primary">{label}</Text>
       </View>
-    </Animated.View>
+    </View>
   );
 }

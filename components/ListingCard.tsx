@@ -56,43 +56,44 @@ export function ListingCard({
   const first = listing.photos[0];
 
   return (
-    <Pressable
-      onPress={onPress}
-      onLongPress={onRemove}
-      accessibilityRole="button"
-      accessibilityLabel={`${listing.name || "Untitled listing"}. ${standing.label}.`}
-      accessibilityHint={onRemove ? "Press and hold to remove this listing." : undefined}
-      accessibilityActions={onRemove ? [{ name: "remove", label: "Remove this listing" }] : undefined}
-      onAccessibilityAction={(event) => {
-        if (event.nativeEvent.actionName === "remove") onRemove?.();
-      }}
-      className="gg-card-flush"
-      style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
-    >
-      <SamplePhoto
-        fileId={first?.fileId}
-        altText={first?.altText ?? listing.name}
-        emptyLabel="No sample yet"
-      />
-      <View className="gap-1 px-3 pb-3">
-        <Text className="text-body font-medium text-text-primary" numberOfLines={2}>
-          {listing.name || "Untitled listing"}
-        </Text>
-        <Text className="text-caption text-text-muted" numberOfLines={1}>
-          {subcategoryName(catalog, listing.subcategoryCode)}
-        </Text>
-        <Text className="text-body text-text-primary" numberOfLines={1}>
-          {priceLine(listing)}
-        </Text>
-        <Text className="text-caption text-text-muted" numberOfLines={1}>
-          {readyInLine(hours)}
-        </Text>
-        {standing.label === "On the board" ? null : (
-          <View className="mt-1 flex-row">
-            <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
-          </View>
-        )}
-      </View>
-    </Pressable>
+    <View collapsable={false} className="rounded-card border border-outline bg-surface">
+      <Pressable
+        onPress={onPress}
+        onLongPress={onRemove}
+        accessibilityRole="button"
+        accessibilityLabel={`${listing.name || "Untitled listing"}. ${standing.label}.`}
+        accessibilityHint={onRemove ? "Press and hold to remove this listing." : undefined}
+        accessibilityActions={onRemove ? [{ name: "remove", label: "Remove this listing" }] : undefined}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === "remove") onRemove?.();
+        }}
+        style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+      >
+        <SamplePhoto
+          fileId={first?.fileId}
+          altText={first?.altText ?? listing.name}
+          emptyLabel="No sample yet"
+        />
+        <View className="gap-1 px-3 pb-3">
+          <Text className="text-body font-medium text-text-primary" numberOfLines={2}>
+            {listing.name || "Untitled listing"}
+          </Text>
+          <Text className="text-caption text-text-muted" numberOfLines={1}>
+            {subcategoryName(catalog, listing.subcategoryCode)}
+          </Text>
+          <Text className="text-body text-text-primary" numberOfLines={1}>
+            {priceLine(listing)}
+          </Text>
+          <Text className="text-caption text-text-muted" numberOfLines={1}>
+            {readyInLine(hours)}
+          </Text>
+          {standing.label === "On the board" ? null : (
+            <View className="mt-1 flex-row">
+              <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
+            </View>
+          )}
+        </View>
+      </Pressable>
+    </View>
   );
 }
