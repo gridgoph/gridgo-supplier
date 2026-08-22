@@ -79,11 +79,14 @@ export function SamplePhoto({
     };
   }, [fileId, localUri]);
 
-  const shape = ratio === "wide" ? "aspect-[4/3] w-full" : "aspect-square w-full";
+  // Native aspectRatio is the plate. NativeWind's `aspect-[4/3]` is an
+  // arbitrary class this pipeline has shipped as a silent no-op before, and
+  // without a real ratio a dark sample fills the client's-eye screen.
+  const aspectRatio = ratio === "wide" ? 4 / 3 : 1;
 
   return (
     <CropMarkFrame gutter={gutter}>
-      <View className={shape}>
+      <View className="w-full" style={{ aspectRatio }}>
         {uri && !failed ? (
           <View collapsable={false} style={{ width: "100%", height: "100%" }}>
             <Image
