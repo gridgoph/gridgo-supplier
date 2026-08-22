@@ -774,10 +774,28 @@ export async function unregisterDevice(token: string): Promise<void> {
 }
 
 export async function me(options: { ignoreUnauthorized?: boolean } = {}): Promise<User> {
-  const result = await request<{ user: User }>("/auth/me", {
+  const result = await request<{
+    user: User;
+    memberships?: { role?: string }[];
+    approvalCases?: { kind?: string; status?: string }[];
+  }>("/auth/me", {
     ignoreUnauthorized: options.ignoreUnauthorized,
   });
-  return result.user;
+  const memberships = Array.isArray(result.memberships) ? result.memberships : [];
+  if (!memberships.some((membership) => membership.role === "supplier")) {
+    return result.user;
+  }
+  const supplierCase = (result.approvalCases || []).find((entry) => entry.kind === "supplier");
+  const status = supplierCase?.status;
+  const verificationStatus =
+    status === "approved" || status === "pending" || status === "rejected" || status === "suspended"
+      ? status
+      : result.user.verificationStatus;
+  return {
+    ...result.user,
+    role: "supplier",
+    ...(verificationStatus ? { verificationStatus } : {}),
+  };
 }
 
 export async function listOrders(): Promise<Order[]> {

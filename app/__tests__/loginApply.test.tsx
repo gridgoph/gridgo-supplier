@@ -71,7 +71,7 @@ describe("Sign in of an unmapped Clerk identity", () => {
       authSource: "none",
       identity: { kind: "signed_out" },
     });
-    (api.me as jest.Mock).mockReset().mockRejectedValue(new api.ApiError(401, { error: "unauthorized" }));
+    (api.me as jest.Mock).mockReset().mockRejectedValue(new api.ApiError(401, { error: "unmapped_identity" }));
     useSignupDraft.setState({
       draft: {
         ...EMPTY_SIGNUP_DRAFT,

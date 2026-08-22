@@ -48,7 +48,7 @@ describe("enterAfterClerkSession", () => {
   });
 
   it("sends a Clerk identity with no membership into apply, not access", async () => {
-    jest.spyOn(api, "me").mockRejectedValue(new api.ApiError(401, { error: "unauthorized" }));
+    jest.spyOn(api, "me").mockRejectedValue(new api.ApiError(401, { error: "unmapped_identity" }));
 
     const result = await enterAfterClerkSession(async () => "clerk-jwt");
 
@@ -56,6 +56,15 @@ describe("enterAfterClerkSession", () => {
     expect(hrefAfterClerkAuth({ kind: "apply" })).toBe("/(auth)/signup");
     expect(hrefAfterClerkAuth({ kind: "apply" })).not.toBe("/access");
     expect(useSession.getState().identity.kind).toBe("unassigned");
+  });
+
+  it("does not open apply when the token itself is rejected", async () => {
+    jest.spyOn(api, "me").mockRejectedValue(new api.ApiError(401, { error: "unauthorized" }));
+
+    const result = await enterAfterClerkSession(async () => "clerk-jwt");
+
+    expect(result.kind).toBe("blocked");
+    expect(useSession.getState().identity.kind).not.toBe("unassigned");
   });
 
   it("stays on Sign in when GRIDGO is unreachable, rather than opening apply", async () => {
@@ -71,7 +80,7 @@ describe("enterAfterClerkSession", () => {
   });
 
   it("resumes apply at the first unfinished step when a draft is already on the phone", async () => {
-    jest.spyOn(api, "me").mockRejectedValue(new api.ApiError(401, { error: "unauthorized" }));
+    jest.spyOn(api, "me").mockRejectedValue(new api.ApiError(401, { error: "unmapped_identity" }));
     useSignupDraft.setState({
       draft: {
         ...EMPTY_SIGNUP_DRAFT,
@@ -104,6 +113,16 @@ describe("enterAfterClerkSession", () => {
     expect(useSession.getState().user).toBeNull();
     expect(useSession.getState().identity.kind).not.toBe("mismatch");
     expect(useSession.getState().identity.kind).not.toBe("supplier");
+  });
+
+  it("opens apply at the door only for an unmapped identity", async () => {
+    jest.spyOn(api, "me").mockRejectedValue(new api.ApiError(401, { error: "unmapped_identity" }));
+    await expect(supplierDoorForClerkSession(async () => "clerk-jwt")).resolves.toBe("apply");
+  });
+
+  it("does not treat a dead token as a new shop at the door", async () => {
+    jest.spyOn(api, "me").mockRejectedValue(new api.ApiError(401, { error: "unauthorized" }));
+    await expect(supplierDoorForClerkSession(async () => "clerk-jwt")).resolves.toBe("unknown");
   });
 
   it("names a live client JWT as the wrong app before any email code is sent", async () => {

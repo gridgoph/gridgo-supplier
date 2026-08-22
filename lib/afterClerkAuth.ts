@@ -1,5 +1,5 @@
 import * as api from "@/lib/api";
-import { humanizeApiError } from "@/lib/apiErrors";
+import { humanizeApiError, isNonSupplierIdentity, isUnmappedIdentity } from "@/lib/apiErrors";
 import { awaitClerkSessionToken, type ClerkAccess, type ClerkGetToken } from "@/lib/clerk";
 import { debugAuth } from "@/lib/debugAuth";
 import { applyRoute } from "@/lib/onboardingSteps";
@@ -66,8 +66,10 @@ export async function supplierDoorForClerkSession(
   try {
     const user = await api.me({ ignoreUnauthorized: true });
     return user.role === APP_ROLE ? "supplier" : "wrong_app";
-  } catch {
-    return "apply";
+  } catch (error) {
+    if (isUnmappedIdentity(error)) return "apply";
+    if (isNonSupplierIdentity(error)) return "wrong_app";
+    return "unknown";
   }
 }
 
@@ -102,12 +104,16 @@ export async function enterAfterClerkSession(
     if (useSession.getState().adoptClerkUser(user)) return { kind: "home" };
     return { kind: "access" };
   } catch (error) {
-    if (error instanceof api.ApiError && error.status === 401) {
+    if (isUnmappedIdentity(error)) {
       debugAuth("after-clerk-me", { status: 401, next: "apply" });
       const current = useSession.getState().identity;
       const email = "email" in current ? current.email : undefined;
       useSession.getState().setClerkIdentity({ kind: "unassigned", email });
       return { kind: "apply" };
+    }
+    if (isNonSupplierIdentity(error)) {
+      debugAuth("after-clerk-me", { status: 403, next: "blocked" });
+      return { kind: "blocked", message: emailUnavailableMessage };
     }
     debugAuth("after-clerk-me", {
       status: error instanceof api.ApiError ? error.status : "network",

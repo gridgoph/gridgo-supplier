@@ -10,6 +10,26 @@ import * as api from "@/lib/api";
 export const supplierAccountNotFoundMessage =
   "No supplier account is connected to this sign-in. Apply as a shop, or ask Operations to check your invitation.";
 
+function apiErrorCode(error: unknown): string {
+  if (!(error instanceof api.ApiError)) return "";
+  const body = error.body;
+  return typeof body === "object" && body && "error" in body
+    ? String((body as { error: string }).error)
+    : "";
+}
+
+/** Verified Clerk session, no GRIDGO user yet — open apply, do not treat as a dead token. */
+export function isUnmappedIdentity(error: unknown): boolean {
+  return error instanceof api.ApiError && error.status === 401 && apiErrorCode(error) === "unmapped_identity";
+}
+
+/** Mapped GRIDGO identity that is not a shop. */
+export function isNonSupplierIdentity(error: unknown): boolean {
+  if (!(error instanceof api.ApiError) || error.status !== 403) return false;
+  const code = apiErrorCode(error);
+  return code === "supplier_account_not_found" || code === "membership_required";
+}
+
 const MESSAGES: Record<string, string> = {
   transition_not_allowed:
     "This job has already moved on. Pull down to refresh and take the step the job now shows.",
