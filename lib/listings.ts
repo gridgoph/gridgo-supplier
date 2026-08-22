@@ -325,6 +325,38 @@ export function normalizeListings(body: unknown): Listing[] {
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 }
 
+/** One page of the board, exactly as GRIDGO ordered and counted it. */
+export type BoardPage = {
+  listings: Listing[];
+  /** Feed back as `cursor` to ask for the page after this one. */
+  nextCursor: string | null;
+  /** How many listings match, across every page. */
+  total: number;
+};
+
+/**
+ * A page of the board.
+ *
+ * Deliberately *not* `normalizeListings`. That one re-sorts by the shop's own
+ * wall order, which is the right answer when the whole board arrives at once
+ * and the wrong one now: GRIDGO ranks a hunt, and sorts by name, quote or
+ * ready-in, in PostgreSQL. Re-sorting a ranked page on the phone would put the
+ * worst match first and quietly undo the sort the shop just picked.
+ */
+export function normalizeBoardPage(body: unknown): BoardPage {
+  const listings = collection(body, "items", "catalogItems", "listings")
+    .map((raw, index) => normalizeListing(raw, index))
+    .filter((listing): listing is Listing => listing != null);
+  const raw = body && typeof body === "object" ? (body as Raw) : {};
+  const total = num(pick(raw, "total"));
+  return {
+    listings,
+    nextCursor: str(pick(raw, "nextCursor", "next_cursor")),
+    // No `total` means GRIDGO answered with a bare page; this page is all of it.
+    total: total ?? listings.length,
+  };
+}
+
 export function normalizeStarters(body: unknown): ListingStarter[] {
   return collection(body, "starters", "listingStarters", "items")
     .map((raw): ListingStarter | null => {

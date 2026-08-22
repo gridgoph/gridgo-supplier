@@ -1,59 +1,94 @@
-import type { ReactNode } from "react";
-import { ArrowUpDown, LayoutGrid, List, Plus } from "lucide-react-native";
+import { useState, type ReactNode } from "react";
+import { ArrowUpDown, LayoutGrid, List, Plus, SlidersHorizontal } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
+import Animated, { FadeIn, useReducedMotion } from "react-native-reanimated";
 
+import { BoardHuntField } from "@/components/BoardHuntField";
 import { SelectField } from "@/components/controls/SelectField";
+import { motion } from "@/constants/theme";
 import type { CatalogueView } from "@/hooks/useCatalogueView";
 import { useThemeColors } from "@/hooks/useTheme";
 import {
   ON_BOARD_OPTIONS,
+  narrowingCount,
   sortLabel,
-  type CatalogueSort,
+  type BoardQuery,
   type KindOption,
   type OnBoardFilter,
 } from "@/lib/catalogueBoard";
 
 type Props = {
+  /** How many listings match, across every page. */
   count: number;
   view: CatalogueView;
   onViewChange: (view: CatalogueView) => void;
   kinds: KindOption[];
-  kind: string;
+  query: BoardQuery;
+  onHunt: (value: string) => void;
   onPickKind: () => void;
-  onBoard: OnBoardFilter;
   onOnBoardChange: (value: OnBoardFilter) => void;
-  sort: CatalogueSort;
   onPickSort: () => void;
   onAdd: () => void;
 };
 
 /**
- * How the shop hunts its board: kind of work, on the board or not, then sort.
+ * How the shop hunts its board: find a sample, then cut what comes back.
  *
- * Kind, standing and sort share one filter row. Overlines and full-width
- * fields stacked four deep; the closed select is a chip with a chevron, same
- * height as All / On the board / Hidden. The plus stays the one yellow action.
+ * The rail carries three things and, while a hunt is running, only two of them.
+ * That is the deliberate move here. Hunting and filtering are the same job done
+ * at different scales, and a shop that has typed "tarp" is not also reading
+ * four filter chips — so kind, standing and sort fold into one chip, and the
+ * chip keeps the count of how many are still narrowing the wall. That count is
+ * the whole reason it is a chip and not a word: a shop hunting with Hidden
+ * still selected finds nothing and would otherwise have no way to see why.
+ *
+ * What never folds is the count and the wall/list toggle — those describe the
+ * result, and the result is what the shop is looking at. The plus stays the one
+ * yellow control on the screen.
  */
 export function BoardRail({
   count,
   view,
   onViewChange,
   kinds,
-  kind,
+  query,
+  onHunt,
   onPickKind,
-  onBoard,
   onOnBoardChange,
-  sort,
   onPickSort,
   onAdd,
 }: Props) {
   const colors = useThemeColors();
-  const kindLabel = kind === "all" ? "All work" : (kinds.find((entry) => entry.code === kind)?.name ?? "All work");
+  const reduceMotion = useReducedMotion();
+  const [typing, setTyping] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const narrowing = narrowingCount(query);
+  const hunting = typing || query.q.length > 0;
+  const folded = hunting && !filtersOpen;
+  const kindLabel =
+    query.kind === "all"
+      ? "All work"
+      : (kinds.find((entry) => entry.code === query.kind)?.name ?? "All work");
+  const fade = reduceMotion ? undefined : FadeIn.duration(motion.fast);
 
   return (
     <View className="gap-3">
       <View className="flex-row items-center gap-3">
-        <View className="min-w-0 flex-1 flex-row items-center gap-2">
+        {/*
+          The eyebrow and the badge are one fact, so they are one thing to a
+          screen reader: "LISTINGS" then "12" is two announcements that mean
+          nothing apart, and the count is the answer to the hunt.
+        */}
+        <View
+          accessible
+          accessibilityLabel={
+            hunting
+              ? `${count} ${count === 1 ? "listing matches" : "listings match"} your hunt`
+              : `${count} ${count === 1 ? "listing" : "listings"} on your board`
+          }
+          className="min-w-0 flex-1 flex-row items-center gap-2"
+        >
           <Text className="text-overline text-text-muted">LISTINGS</Text>
           <View className="min-w-5 items-center rounded-pill bg-surface-variant px-1.5">
             <Text className="text-caption font-medium text-text-secondary">{count}</Text>
@@ -100,63 +135,126 @@ export function BoardRail({
         </Pressable>
       </View>
 
-      <View className="flex-row flex-wrap items-center gap-2">
-        {kinds.length > 1 ? (
-          <SelectField
-            label="Kind of work"
-            valueLabel={kindLabel}
-            accessibilityLabel={`Kind of work, ${kindLabel}`}
-            onPress={onPickKind}
-            density="chip"
-          />
-        ) : null}
+      <BoardHuntField value={query.q} onHunt={onHunt} onFocusChange={setTyping} />
 
-        <View
-          className="flex-row flex-wrap items-center gap-2"
-          accessibilityRole="radiogroup"
-          accessibilityLabel="On the board or hidden"
-        >
-          {ON_BOARD_OPTIONS.map((option) => {
-            const selected = onBoard === option.value;
-            return (
-              <Pressable
-                key={option.value}
-                onPress={() => onOnBoardChange(option.value)}
-                accessibilityRole="radio"
-                accessibilityState={{ selected }}
-                accessibilityLabel={option.label}
-                className={
-                  selected
-                    ? "gg-touch items-center justify-center rounded-pill border border-outline bg-surface-high px-3"
-                    : "gg-touch items-center justify-center rounded-pill border border-outline bg-surface px-3"
-                }
-                style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
-              >
-                <Text
-                  numberOfLines={1}
+      {folded ? (
+        <Animated.View key="folded" entering={fade} className="flex-row">
+          <FiltersChip
+            narrowing={narrowing}
+            open={false}
+            onPress={() => setFiltersOpen(true)}
+          />
+        </Animated.View>
+      ) : (
+        <Animated.View key="open" entering={fade} className="flex-row flex-wrap items-center gap-2">
+          {hunting ? (
+            <FiltersChip
+              narrowing={narrowing}
+              open
+              onPress={() => setFiltersOpen(false)}
+            />
+          ) : null}
+
+          {kinds.length > 1 ? (
+            <SelectField
+              label="Kind of work"
+              valueLabel={kindLabel}
+              accessibilityLabel={`Kind of work, ${kindLabel}`}
+              onPress={onPickKind}
+              density="chip"
+            />
+          ) : null}
+
+          <View
+            className="flex-row flex-wrap items-center gap-2"
+            accessibilityRole="radiogroup"
+            accessibilityLabel="On the board or hidden"
+          >
+            {ON_BOARD_OPTIONS.map((option) => {
+              const selected = query.onBoard === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => onOnBoardChange(option.value)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={option.label}
                   className={
                     selected
-                      ? "text-caption font-medium text-text-primary"
-                      : "text-caption text-text-secondary"
+                      ? "gg-touch items-center justify-center rounded-pill border border-outline bg-surface-high px-3"
+                      : "gg-touch items-center justify-center rounded-pill border border-outline bg-surface px-3"
                   }
+                  style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
                 >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+                  <Text
+                    numberOfLines={1}
+                    className={
+                      selected
+                        ? "text-caption font-medium text-text-primary"
+                        : "text-caption text-text-secondary"
+                    }
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
-        <SelectField
-          label="Sort"
-          valueLabel={`Sort: ${sortLabel(sort)}`}
-          accessibilityLabel={`Sort: ${sortLabel(sort)}`}
-          onPress={onPickSort}
-          density="chip"
-          icon={ArrowUpDown}
-        />
-      </View>
+          <SelectField
+            label="Sort"
+            valueLabel={`Sort: ${sortLabel(query.sort)}`}
+            accessibilityLabel={`Sort: ${sortLabel(query.sort)}`}
+            onPress={onPickSort}
+            density="chip"
+            icon={ArrowUpDown}
+          />
+        </Animated.View>
+      )}
     </View>
+  );
+}
+
+/**
+ * The three standing filters, as one control while the shop is hunting.
+ *
+ * It carries the number that are actually narrowing the wall, because that
+ * number is the answer to the only question a folded filter row raises.
+ */
+function FiltersChip({
+  narrowing,
+  open,
+  onPress,
+}: {
+  narrowing: number;
+  open: boolean;
+  onPress: () => void;
+}) {
+  const colors = useThemeColors();
+  const label = narrowing > 0 ? `Filters · ${narrowing}` : "Filters";
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
+      accessibilityLabel={
+        narrowing > 0
+          ? `Filters, ${narrowing} narrowing your board`
+          : "Filters"
+      }
+      className={
+        open
+          ? "gg-touch max-w-full flex-row items-center gap-1.5 rounded-pill border border-outline bg-surface-high px-3"
+          : "gg-touch max-w-full flex-row items-center gap-1.5 rounded-pill border border-outline bg-surface px-3"
+      }
+      style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+    >
+      <SlidersHorizontal size={14} color={colors.textMuted} strokeWidth={2} />
+      <Text numberOfLines={1} className="shrink text-caption font-medium text-text-primary">
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 

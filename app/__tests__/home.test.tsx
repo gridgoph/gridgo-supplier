@@ -145,7 +145,11 @@ describe("the corner of Home's masthead", () => {
     jest.clearAllMocks();
     (loadBoard as jest.Mock).mockResolvedValue({
       status: "ok",
-      value: [listing("a", ["f1"]), listing("b", ["f2"]), listing("c", [])],
+      value: {
+        listings: [listing("a", ["f1"]), listing("b", ["f2"]), listing("c", [])],
+        nextCursor: null,
+        total: 3,
+      },
     });
     signIn(approvedShop);
   });
@@ -182,7 +186,10 @@ describe("the corner of Home's masthead", () => {
 
   /** The board is a tab now; the card at the foot opens it, not a corner. */
   it("sends the board card to the Catalogues tab", async () => {
-    (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: [] });
+    (loadBoard as jest.Mock).mockResolvedValue({
+      status: "ok",
+      value: { listings: [], nextCursor: null, total: 0 },
+    });
 
     const view = await render(<HomeScreen />);
 

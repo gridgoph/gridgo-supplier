@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 
+import { HuntedName } from "@/components/HuntedName";
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { StatusChip } from "@/components/StatusChip";
 import { formatPhp } from "@/lib/api";
@@ -25,6 +26,8 @@ type Props = {
   shopApproved: boolean;
   onPress: () => void;
   onRemove?: () => void;
+  /** The hunt this strip came back for, so the matching run can be marked. */
+  hunt?: string;
 };
 
 /**
@@ -42,6 +45,7 @@ export function ListingRow({
   shopApproved,
   onPress,
   onRemove,
+  hunt,
 }: Props) {
   const context = boardContextFor(listing, services);
   const standing = boardStanding(listing, context, shopApproved);
@@ -73,9 +77,12 @@ export function ListingRow({
           />
         </View>
         <View className="min-w-0 flex-1 gap-1 py-3">
-          <Text className="text-body font-medium text-text-primary" numberOfLines={2}>
-            {listing.name || "Untitled listing"}
-          </Text>
+          <HuntedName
+            name={listing.name || "Untitled listing"}
+            hunt={hunt ?? ""}
+            className="text-body font-medium text-text-primary"
+            numberOfLines={2}
+          />
           <Text className="text-caption text-text-muted" numberOfLines={1}>
             {subcategoryName(catalog, listing.subcategoryCode)}
           </Text>

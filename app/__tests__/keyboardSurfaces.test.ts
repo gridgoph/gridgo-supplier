@@ -52,6 +52,7 @@ const HANDLED_BY_ITS_CALLERS = [
   "components/JobTicketCode.tsx",
   "components/SpecGroupEditor.tsx",
   "components/PrepStepEditor.tsx",
+  "components/BoardHuntField.tsx",
 ];
 
 /**
@@ -67,6 +68,10 @@ const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
   // Only the add form takes typing; the preview draws the read-only row and is
   // deliberately not checked, which is why this matches the button, not the row.
   { component: "AddPrepStepButton", users: /<AddPrepStepButton\b/, least: 1 },
+  // The hunt field sits in the board rail, and the rail sits on Catalogues —
+  // which is a wall of samples as well as a field, so its scroll surface is the
+  // keyboard-aware one rather than a plain ScrollView.
+  { component: "BoardRail", users: /<BoardRail\b/, least: 1 },
 ];
 
 describe("every field a shop types into sits in a keyboard-aware surface", () => {

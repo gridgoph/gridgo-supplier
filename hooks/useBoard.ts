@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
 import * as api from "@/lib/api";
-import { loadBoard, loadListing, loadPrepSteps } from "@/lib/listingsApi";
+import { loadBoard, loadBoardKinds, loadListing, loadPrepSteps } from "@/lib/listingsApi";
 import {
   normalizeServiceLines,
   type Listing,
@@ -48,10 +48,25 @@ export function routeId(value: string | string[] | undefined): string | null {
 }
 
 export type BoardData = {
+  /** This page of the board, in the order GRIDGO ranked or sorted it. */
   listings: Listing[];
+  /** Feed back as the cursor to ask for the page after this one. */
+  nextCursor: string | null;
+  /** How many listings match this question, across every page. */
+  total: number;
+  /**
+   * One listing per kind of work the shop's board covers, for the picker.
+   *
+   * Kept apart from `listings` because a page of eight cannot name every kind
+   * on a board of sixty — this accumulates, and never shrinks when a hunt cuts
+   * the wall down to one tile.
+   */
+  kindSource: Listing[];
   catalog: ServiceCatalog | null;
   services: ServiceLine[];
   loading: boolean;
+  /** True while what is on the wall answers an older question than this one. */
+  stale: boolean;
   /** True while GRIDGO has no board routes on this deployment. */
   notOpenYet: boolean;
   /** A real failure, in a sentence. Null when there is nothing wrong. */
@@ -63,47 +78,92 @@ export type BoardData = {
   dropListing: (id: string) => void;
 };
 
-export function useBoard(): BoardData {
+/**
+ * The board, one page at a time, for the question the shop is asking.
+ *
+ * `query` is a GRIDGO query, not a hint: the hunt, the kind of work, the
+ * standing and the sort are all predicates in PostgreSQL, so changing any of
+ * them is a new request rather than a new `.filter`. The hook re-reads whenever
+ * that question changes and on every focus, and answers stale in-flight reads
+ * by sequence — a shop typing "tarp" one letter at a time must not have "tar"
+ * land last and win.
+ */
+export function useBoard(
+  query: api.CatalogListQuery = {},
+  options: { trackKinds?: boolean } = {},
+): BoardData {
   const [listings, setListings] = useState<Listing[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
+  const [kindSource, setKindSource] = useState<Listing[]>([]);
   const [catalog, setCatalog] = useState<ServiceCatalog | null>(null);
   const [services, setServices] = useState<ServiceLine[]>([]);
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [notOpenYet, setNotOpenYet] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [settled, setSettled] = useState<string | null>(null);
+
+  const signature = JSON.stringify(query);
+  const latest = useRef(0);
+
+  /** Remember every kind of work the shop has been seen to have a listing in. */
+  const rememberKinds = useCallback((seen: readonly Listing[]) => {
+    setKindSource((current) => {
+      const known = new Set(current.map((item) => item.subcategoryCode));
+      const added = seen.filter((item) => {
+        if (!item.subcategoryCode || known.has(item.subcategoryCode)) return false;
+        known.add(item.subcategoryCode);
+        return true;
+      });
+      return added.length ? [...current, ...added] : current;
+    });
+  }, []);
 
   const reload = useCallback(async () => {
+    const ticket = (latest.current += 1);
     setLoading(true);
     try {
       const [board, taxonomy, lines] = await Promise.all([
-        loadBoard(),
+        loadBoard(JSON.parse(signature) as api.CatalogListQuery),
         api.getTaxonomy().catch(() => null),
         loadServiceLines(),
       ]);
+
+      // A page the shop has already typed past must not overwrite the one it
+      // is looking at.
+      if (ticket !== latest.current) return;
 
       if (taxonomy) setCatalog(buildCatalog(taxonomy));
       setServices(lines);
 
       if (board.status === "ok") {
-        setListings(board.value);
+        setListings(board.value.listings);
+        setNextCursor(board.value.nextCursor);
+        setTotal(board.value.total);
+        rememberKinds(board.value.listings);
         setNotOpenYet(false);
         setError(null);
       } else if (board.status === "not_open_yet") {
         setListings([]);
+        setNextCursor(null);
+        setTotal(0);
         setNotOpenYet(true);
         setError(null);
       } else {
         setNotOpenYet(false);
         setError(board.message);
       }
+      setSettled(signature);
       setLoaded(true);
     } finally {
-      setLoading(false);
+      if (ticket === latest.current) setLoading(false);
     }
-  }, []);
+  }, [rememberKinds, signature]);
 
   const dropListing = useCallback((id: string) => {
     setListings((current) => current.filter((item) => item.id !== id));
+    setTotal((current) => Math.max(0, current - 1));
   }, []);
 
   useFocusEffect(
@@ -112,11 +172,26 @@ export function useBoard(): BoardData {
     }, [reload]),
   );
 
+  // One capped, unfiltered read so the kind-of-work picker can name kinds that
+  // are not on this page. Once per screen, never on a keystroke, and only for
+  // the screen that draws a picker.
+  const probed = useRef(false);
+  const { trackKinds = false } = options;
+  useEffect(() => {
+    if (!trackKinds || probed.current) return;
+    probed.current = true;
+    void loadBoardKinds().then(rememberKinds);
+  }, [rememberKinds, trackKinds]);
+
   return {
     listings,
+    nextCursor,
+    total,
+    kindSource,
     catalog,
     services,
     loading,
+    stale: settled !== signature,
     loaded,
     notOpenYet,
     error,

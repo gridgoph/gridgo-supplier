@@ -949,9 +949,42 @@ function versioned(
   return init;
 }
 
-/** Every listing this shop owns, draft and on-the-board alike. */
-export async function listCatalogItems(): Promise<unknown> {
-  return request<unknown>("/me/catalog-items");
+/**
+ * What the shop asks its own board for.
+ *
+ * Every one of these is a GRIDGO predicate, not a local `.filter` — the hunt,
+ * the kind of work, on-the-board vs hidden and the sort all run in PostgreSQL
+ * so a shop with two hundred samples does not download two hundred samples to
+ * look at eight. `docs/SUPPLIER_CATALOG_API.md` in gridgo-api is the contract.
+ */
+export type CatalogListQuery = {
+  /** The hunt. Trimmed and capped at 80 by GRIDGO; blank is the whole board. */
+  q?: string | null;
+  sort?: string | null;
+  subcategoryCode?: string | null;
+  /** True for on the board, false for hidden, null/undefined for both. */
+  active?: boolean | null;
+  /** Page size. GRIDGO defaults to 20 and refuses more than 50. */
+  limit?: number | null;
+  /** An opaque `nextCursor` from the page before this one. */
+  cursor?: string | null;
+};
+
+/**
+ * Every listing this shop owns, draft and on-the-board alike, one page at a
+ * time. Answers `{ items, total, nextCursor? }`.
+ */
+export async function listCatalogItems(query: CatalogListQuery = {}): Promise<unknown> {
+  const params = new URLSearchParams();
+  const q = (query.q ?? "").trim();
+  if (q) params.set("q", q);
+  if (query.sort) params.set("sort", query.sort);
+  if (query.subcategoryCode) params.set("subcategoryCode", query.subcategoryCode);
+  if (query.active != null) params.set("active", query.active ? "true" : "false");
+  if (query.limit != null) params.set("limit", String(query.limit));
+  if (query.cursor) params.set("cursor", query.cursor);
+  const search = params.toString();
+  return request<unknown>(`/me/catalog-items${search ? `?${search}` : ""}`);
 }
 
 export async function getCatalogItem(itemId: string): Promise<unknown> {

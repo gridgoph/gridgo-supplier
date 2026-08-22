@@ -62,7 +62,7 @@ export default function HomeScreen() {
   const loadBoardQuietly = useCallback(async () => {
     const [board, lines] = await Promise.all([loadBoard(), loadServiceLines()]);
     setServices(lines);
-    setListings(board.status === "ok" ? board.value : []);
+    setListings(board.status === "ok" ? board.value.listings : []);
     setBoardOpen(board.status === "ok");
   }, []);
 

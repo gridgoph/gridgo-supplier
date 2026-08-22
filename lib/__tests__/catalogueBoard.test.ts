@@ -1,12 +1,14 @@
 import {
-  filterCatalogue,
+  DEFAULT_BOARD_QUERY,
+  isHunting,
   kindsWithListings,
-  paginate,
+  narrowingCount,
   PAGE_SIZE,
-  sortCatalogue,
+  pageWindow,
   sortLabel,
+  toListQuery,
 } from "@/lib/catalogueBoard";
-import type { Listing, ServiceLine } from "@/lib/listings";
+import type { Listing } from "@/lib/listings";
 
 function listing(partial: Partial<Listing> & Pick<Listing, "id" | "name">): Listing {
   return {
@@ -30,16 +32,6 @@ function listing(partial: Partial<Listing> & Pick<Listing, "id" | "name">): List
   };
 }
 
-const services: ServiceLine[] = [
-  {
-    id: "svc_1",
-    categoryCode: "marketing_promotional",
-    state: "live",
-    turnaroundHours: 48,
-    formatCodes: ["pdf"],
-  },
-];
-
 const tarp = listing({
   id: "a",
   name: "Tarpaulin",
@@ -57,7 +49,7 @@ const flyers = listing({
   sortOrder: 0,
 });
 
-describe("catalogue filter, sort and pages", () => {
+describe("the question the shop asks its board", () => {
   it("lists each kind of work that has a listing", () => {
     const kinds = kindsWithListings([tarp, flyers], null);
     expect(kinds.map((entry) => entry.code).sort()).toEqual([
@@ -66,27 +58,69 @@ describe("catalogue filter, sort and pages", () => {
     ]);
   });
 
-  it("keeps one kind of work, and on-the-board vs hidden", () => {
-    expect(filterCatalogue([tarp, flyers], "flyers", "all").map((row) => row.id)).toEqual(["b"]);
-    expect(filterCatalogue([tarp, flyers], "all", "on_the_board").map((row) => row.id)).toEqual(["a"]);
-    expect(filterCatalogue([tarp, flyers], "all", "hidden").map((row) => row.id)).toEqual(["b"]);
+  /**
+   * The whole point of this slice: the hunt, the cut and the sort are GRIDGO's
+   * predicates, so they must leave this app as query parameters and nothing
+   * else. A default that quietly sent `active=true` would hide half a shop's
+   * board and look like a platform bug.
+   */
+  it("sends the resting board as the shop's whole board", () => {
+    expect(toListQuery(DEFAULT_BOARD_QUERY)).toEqual({
+      q: null,
+      sort: "board",
+      subcategoryCode: null,
+      active: null,
+      limit: PAGE_SIZE,
+      cursor: null,
+    });
   });
 
-  it("sorts by the shop's own order, by name, by quote and by ready-in", () => {
-    expect(sortCatalogue([tarp, flyers], "board", services).map((row) => row.id)).toEqual(["b", "a"]);
-    expect(sortCatalogue([tarp, flyers], "name", services).map((row) => row.name)).toEqual([
-      "Flyers 101",
-      "Tarpaulin",
-    ]);
+  it("sends the hunt, the kind, the standing, the sort and the page", () => {
+    expect(
+      toListQuery(
+        { q: "  gold foil ", kind: "flyers", onBoard: "hidden", sort: "price_low" },
+        "cur_2",
+      ),
+    ).toEqual({
+      q: "gold foil",
+      sort: "price_low",
+      subcategoryCode: "flyers",
+      active: false,
+      limit: PAGE_SIZE,
+      cursor: "cur_2",
+    });
+
+    expect(toListQuery({ ...DEFAULT_BOARD_QUERY, onBoard: "on_the_board" }).active).toBe(true);
+  });
+
+  it("treats whitespace as no hunt at all", () => {
+    expect(isHunting({ ...DEFAULT_BOARD_QUERY, q: "   " })).toBe(false);
+    expect(isHunting({ ...DEFAULT_BOARD_QUERY, q: "tarp" })).toBe(true);
+    expect(toListQuery({ ...DEFAULT_BOARD_QUERY, q: "   " }).q).toBeNull();
+  });
+
+  /**
+   * The folded Filters chip carries this number, and it is the only thing that
+   * explains a hunt finding nothing while Hidden is still selected.
+   */
+  it("counts the standing filters that are narrowing the board", () => {
+    expect(narrowingCount(DEFAULT_BOARD_QUERY)).toBe(0);
+    expect(narrowingCount({ ...DEFAULT_BOARD_QUERY, q: "tarp" })).toBe(0);
+    expect(
+      narrowingCount({ q: "tarp", kind: "flyers", onBoard: "hidden", sort: "name" }),
+    ).toBe(3);
+  });
+
+  it("names the sort the way the sheet does", () => {
     expect(sortLabel("board")).toBe("Default");
+    expect(sortLabel("price_low")).toBe("Price, low to high");
   });
 
-  it("pages eight at a time and clamps a page that no longer exists", () => {
-    const rows = Array.from({ length: 9 }, (_, i) => listing({ id: `n${i}`, name: `N${i}` }));
-    const first = paginate(rows, 1);
-    expect(first.items).toHaveLength(PAGE_SIZE);
-    expect(first.pageCount).toBe(2);
-    expect(paginate(rows, 2).items).toHaveLength(1);
-    expect(paginate(rows, 99).page).toBe(2);
+  it("says which of the board a page is, from GRIDGO's own total", () => {
+    expect(pageWindow(1, 40)).toEqual({ from: 1, to: 8, pageCount: 5 });
+    expect(pageWindow(2, 40)).toEqual({ from: 9, to: 16, pageCount: 5 });
+    expect(pageWindow(5, 36)).toEqual({ from: 33, to: 36, pageCount: 5 });
+    // A hunt that found nothing has no window to describe.
+    expect(pageWindow(1, 0)).toEqual({ from: 0, to: 0, pageCount: 1 });
   });
 });

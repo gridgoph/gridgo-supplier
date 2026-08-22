@@ -2,6 +2,7 @@ import {
   addGroup,
   addOption,
   addPrepStep,
+  loadBoard,
   loadListing,
   removeListing,
   reorderPrepSteps,
@@ -86,6 +87,78 @@ function step(id: string, sortOrder: number): PrepStep {
 describe("what the board sends GRIDGO", () => {
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  /**
+   * The hunt is a GRIDGO predicate, so the whole question has to reach the
+   * wire. A parameter dropped here is a filter that silently stops filtering:
+   * the wall still draws a page, so nothing looks broken.
+   */
+  it("puts the hunt, the cut, the sort and the page in the query string", async () => {
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(answered(200, { items: [], total: 0 }));
+
+    await loadBoard({
+      q: "gold foil",
+      sort: "price_low",
+      subcategoryCode: "flyers",
+      active: false,
+      limit: 8,
+      cursor: "cur_2",
+    });
+
+    const url = new URL(sent(fetch).url, "http://gridgo.test");
+    expect(url.pathname).toBe("/me/catalog-items");
+    expect(url.searchParams.get("q")).toBe("gold foil");
+    expect(url.searchParams.get("sort")).toBe("price_low");
+    expect(url.searchParams.get("subcategoryCode")).toBe("flyers");
+    expect(url.searchParams.get("active")).toBe("false");
+    expect(url.searchParams.get("limit")).toBe("8");
+    expect(url.searchParams.get("cursor")).toBe("cur_2");
+  });
+
+  /** A blank hunt is the whole board, not a hunt for nothing. */
+  it("leaves an empty hunt off the wire entirely", async () => {
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(answered(200, { items: [], total: 0 }));
+
+    await loadBoard({ q: "   ", sort: "board", active: null, limit: 8, cursor: null });
+
+    const url = new URL(sent(fetch).url, "http://gridgo.test");
+    expect(url.searchParams.has("q")).toBe(false);
+    expect(url.searchParams.has("active")).toBe(false);
+    expect(url.searchParams.has("cursor")).toBe(false);
+    expect(url.searchParams.get("limit")).toBe("8");
+  });
+
+  /**
+   * GRIDGO ranks a hunt and sorts a board; re-sorting the page here would put
+   * the worst match first and undo the sort the shop just chose.
+   */
+  it("keeps the page in the order GRIDGO answered with", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue(
+      answered(200, {
+        items: [
+          { ...listing, id: "sci_2", name: "Zebra tarp", sortOrder: 9 },
+          { ...listing, id: "sci_3", name: "Alpha tarp", sortOrder: 0 },
+        ],
+        nextCursor: "cur_2",
+        total: 12,
+      }),
+    );
+
+    const result = await loadBoard({ sort: "name" });
+
+    expect(result).toMatchObject({ status: "ok" });
+    if (result.status !== "ok") throw new Error("expected a page");
+    expect(result.value.listings.map((item) => item.name)).toEqual([
+      "Zebra tarp",
+      "Alpha tarp",
+    ]);
+    expect(result.value.nextCursor).toBe("cur_2");
+    expect(result.value.total).toBe(12);
   });
 
   /**

@@ -1,5 +1,6 @@
-import { useCallback, useState } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { RefreshControl, Text, View } from "react-native";
+import Animated, { FadeIn, useReducedMotion } from "react-native-reanimated";
 import { router } from "expo-router";
 
 import { AlertsBell } from "@/components/AlertsBell";
@@ -8,26 +9,29 @@ import { BoardRail } from "@/components/BoardRail";
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { FormScrollView } from "@/components/FormScrollView";
 import { ListingCard } from "@/components/ListingCard";
 import { ListingRow } from "@/components/ListingRow";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
-import {
-  EMPTY_BOARD_BODY,
-  EMPTY_BOARD_TITLE,
-  type Listing,
-} from "@/lib/listings";
+import { EMPTY_BOARD_BODY, EMPTY_BOARD_TITLE, type Listing } from "@/lib/listings";
 import {
   CATALOGUE_SORTS,
-  PAGE_SIZE,
-  filterCatalogue,
+  DEFAULT_BOARD_QUERY,
+  EMPTY_CUT_SENTENCE,
+  EMPTY_HUNT_SENTENCE,
+  HUNTING_LABEL,
+  isHunting,
   kindsWithListings,
-  paginate,
-  sortCatalogue,
+  narrowingCount,
+  pageWindow,
+  toListQuery,
+  type BoardQuery,
   type CatalogueSort,
-  type OnBoardFilter,
 } from "@/lib/catalogueBoard";
 import { ARCHIVED_SENTENCE, BOARD_NOT_OPEN_YET, removeListing } from "@/lib/listingsApi";
+import { motion } from "@/constants/theme";
 import { useBoard } from "@/hooks/useBoard";
 import { useCatalogueView } from "@/hooks/useCatalogueView";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -45,6 +49,14 @@ import { isMatchable, useSession } from "@/store/session";
  * floor still has the only ranking that decides which job is next; this is how
  * the shop looks at its own samples.
  *
+ * **The hunt, the cut and the page are GRIDGO's, not this screen's.** A shop
+ * with two hundred samples used to download two hundred samples to look at
+ * eight; now the words, the kind of work, the standing, the sort and the page
+ * all go over the wire and PostgreSQL answers them. What is left here is
+ * holding the question and telling the three empty walls apart: a board with
+ * nothing on it, a hunt that found nothing, and a cut that found nothing are
+ * different facts and only one of them is about the shop's board being empty.
+ *
  * It is one of the five tabs now, where the alerts inbox used to be. A shop
  * changes a price or adds a sample between jobs, all day, and reaching that
  * through Account was three taps from anywhere. The masthead says "Catalogues"
@@ -59,17 +71,48 @@ export default function BoardScreen() {
   const colors = useThemeColors();
   const user = useSession((s) => s.user);
   const approved = isMatchable(user);
-  const { listings, catalog, services, loading, loaded, notOpenYet, error, reload, dropListing } =
-    useBoard();
-  const { refreshing, onRefresh } = usePullToRefresh(reload);
   const [view, setView] = useCatalogueView();
-  const [kind, setKind] = useState("all");
-  const [onBoard, setOnBoard] = useState<OnBoardFilter>("all");
-  const [sort, setSort] = useState<CatalogueSort>("board");
+  const [query, setQuery] = useState<BoardQuery>(DEFAULT_BOARD_QUERY);
   const [page, setPage] = useState(1);
+  /**
+   * The cursor that opens each page, first one first.
+   *
+   * GRIDGO pages by an opaque cursor, so the phone cannot jump to page four —
+   * but it can remember the way back, and that is all "Previous page" needs.
+   */
+  const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  const listQuery = useMemo(
+    () => toListQuery(query, cursors[page - 1] ?? null),
+    [cursors, page, query],
+  );
+  const {
+    listings,
+    nextCursor,
+    total,
+    kindSource,
+    catalog,
+    services,
+    loading,
+    loaded,
+    stale,
+    notOpenYet,
+    error,
+    reload,
+    dropListing,
+  } = useBoard(listQuery, { trackKinds: true });
+  const { refreshing, onRefresh } = usePullToRefresh(reload);
+
+  /** Any new question is a new first page; a cursor from the old one is junk. */
+  const ask = useCallback((next: Partial<BoardQuery>) => {
+    setQuery((current) => ({ ...current, ...next }));
+    setCursors([null]);
+    setPage(1);
+    setNotice(null);
+  }, []);
 
   /**
    * Take one listing off the shop, from the wall.
@@ -100,21 +143,37 @@ export default function BoardScreen() {
         setNotice(result.value === "archived" ? ARCHIVED_SENTENCE : null);
         await reload();
       } else {
-        setRemoveError(
-          result.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : result.message,
-        );
+        setRemoveError(result.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : result.message);
       }
       setRemoving(false);
     },
     [dropListing, reload],
   );
 
+  const hunting = isHunting(query);
+  const narrowing = narrowingCount(query);
+  const kinds = kindsWithListings(kindSource, catalog);
+  const { from, to, pageCount } = pageWindow(page, total);
+
+  const reduceMotion = useReducedMotion();
+  /** The question this wall is answering, so a new answer can fade in. */
+  const settledKey = `${query.q}|${query.kind}|${query.onBoard}|${query.sort}|${page}`;
+
   const firstLoad = loading && !loaded;
-  const kinds = kindsWithListings(listings, catalog);
-  const activeKind = kind === "all" || kinds.some((entry) => entry.code === kind) ? kind : "all";
-  const filtered = sortCatalogue(filterCatalogue(listings, activeKind, onBoard), sort, services);
-  const paged = paginate(filtered, page);
-  const visible = paged.items;
+  // The wall still holds the answer to an older question. Say so with the
+  // skeleton rather than leaving last question's samples up as this one's.
+  const settling = loading && stale;
+  const showSkeleton = firstLoad || settling;
+
+  /**
+   * Whether this shop has a board at all.
+   *
+   * The rail has to survive a hunt that found nothing — it is holding the field
+   * the shop clears the hunt from. So the rail is drawn for a shop that owns
+   * listings, not for a page that happens to have some on it. The kinds probe
+   * is the record of that, topped up by every page loaded.
+   */
+  const hasBoard = kindSource.length > 0 || total > 0;
 
   async function pickKind() {
     const picked = await askPick({
@@ -123,11 +182,10 @@ export default function BoardScreen() {
         { value: "all", label: "All work" },
         ...kinds.map((entry) => ({ value: entry.code, label: entry.name })),
       ],
-      selected: activeKind,
+      selected: query.kind,
     });
     if (!picked) return;
-    setKind(picked);
-    setPage(1);
+    ask({ kind: picked });
   }
 
   async function pickSort() {
@@ -138,19 +196,16 @@ export default function BoardScreen() {
         label: entry.label,
         detail: entry.detail,
       })),
-      selected: sort,
+      selected: query.sort,
     });
     if (!picked) return;
-    setSort(picked as CatalogueSort);
-    setPage(1);
+    ask({ sort: picked as CatalogueSort });
   }
 
   return (
     <View className="gg-screen">
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="gg-page pb-16"
-        showsVerticalScrollIndicator={false}
+      <FormScrollView
+        contentClassName="gg-page pb-16"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -185,22 +240,6 @@ export default function BoardScreen() {
           </View>
         ) : null}
 
-        {firstLoad ? (
-          <View
-            className="mt-8"
-            accessibilityRole="progressbar"
-            accessibilityLabel="Loading your board"
-          >
-            <View className="-mx-1.5 flex-row flex-wrap">
-              {[0, 1, 2, 3].map((key) => (
-                <View key={key} className="w-1/2 px-1.5 pb-3">
-                  <SkeletonBlock className="h-56 w-full rounded-card" />
-                </View>
-              ))}
-            </View>
-          </View>
-        ) : null}
-
         {notOpenYet ? (
           <View className="mt-8">
             <EmptyState
@@ -212,7 +251,7 @@ export default function BoardScreen() {
           </View>
         ) : null}
 
-        {error && !listings.length ? (
+        {error && !hasBoard ? (
           <View className="mt-8">
             <EmptyState
               title="Your board is not reachable"
@@ -227,7 +266,46 @@ export default function BoardScreen() {
           </View>
         ) : null}
 
-        {!firstLoad && !notOpenYet && !error && !listings.length ? (
+        {hasBoard ? (
+          <View className="mt-8 gap-3">
+            <BoardRail
+              count={total}
+              view={view}
+              onViewChange={setView}
+              kinds={kinds}
+              query={query}
+              onHunt={(value) => ask({ q: value })}
+              onPickKind={() => void pickKind()}
+              onOnBoardChange={(next) => ask({ onBoard: next })}
+              onPickSort={() => void pickSort()}
+              onAdd={() => router.push("/shop/new")}
+            />
+            {notice ? (
+              <View className="gg-panel">
+                <Text className="text-body text-text-secondary">{notice}</Text>
+              </View>
+            ) : null}
+            {removeError ? <ErrorNotice message={removeError} /> : null}
+          </View>
+        ) : null}
+
+        {showSkeleton ? (
+          <View
+            className={hasBoard ? "mt-3" : "mt-8"}
+            accessibilityRole="progressbar"
+            accessibilityLabel={hunting ? HUNTING_LABEL : "Loading your board"}
+          >
+            <View className="-mx-1.5 flex-row flex-wrap">
+              {[0, 1, 2, 3].map((key) => (
+                <View key={key} className="w-1/2 px-1.5 pb-3">
+                  <SkeletonBlock className="h-56 w-full rounded-card" />
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {!showSkeleton && !notOpenYet && !error && !hasBoard ? (
           <View className="mt-8">
             <EmptyState
               title={EMPTY_BOARD_TITLE}
@@ -238,56 +316,62 @@ export default function BoardScreen() {
           </View>
         ) : null}
 
-        {listings.length ? (
-          <View className="mt-8 gap-3">
-            <BoardRail
-              count={listings.length}
-              view={view}
-              onViewChange={setView}
-              kinds={kinds}
-              kind={activeKind}
-              onPickKind={() => void pickKind()}
-              onBoard={onBoard}
-              onOnBoardChange={(next) => {
-                setOnBoard(next);
-                setPage(1);
-              }}
-              sort={sort}
-              onPickSort={() => void pickSort()}
-              onAdd={() => router.push("/shop/new")}
-            />
-            {notice ? (
-              <View className="gg-panel">
-                <Text className="text-body text-text-secondary">{notice}</Text>
+        {!showSkeleton && hasBoard ? (
+          <View className="mt-3 gap-3">
+            {listings.length === 0 && hunting ? (
+              /*
+                A hunt that found nothing is not an empty board, and the copy
+                has to say which. The way out is a control, not a sentence the
+                shop has to work out — but a charcoal one: the plus above it is
+                the only yellow on this screen.
+              */
+              <View className="gg-card gap-3">
+                <Text className="text-body text-text-secondary">{EMPTY_HUNT_SENTENCE}</Text>
+                <SecondaryButton label="Clear the hunt" onPress={() => ask({ q: "" })} />
               </View>
-            ) : null}
-            {removeError ? <ErrorNotice message={removeError} /> : null}
-            {filtered.length === 0 ? (
-              <Text className="text-body text-text-secondary">
-                Nothing matches that cut. Show all work, or switch the on-the-board toggle.
-              </Text>
+            ) : listings.length === 0 && narrowing > 0 ? (
+              <Text className="text-body text-text-secondary">{EMPTY_CUT_SENTENCE}</Text>
             ) : (
               <>
-                <Wall
-                  listings={visible}
-                  view={view}
-                  catalog={catalog}
-                  services={services}
-                  shopApproved={approved}
-                  onRemove={removing ? undefined : remove}
-                />
+                {/*
+                  A new answer arrives rather than appearing: the wall is the
+                  result of what the shop just typed, and 160ms of fade is what
+                  connects the two. Keyed on the question so a page that has not
+                  changed does not blink. Reduced motion gets the answer alone.
+                */}
+                <Animated.View
+                  key={settledKey}
+                  entering={reduceMotion ? undefined : FadeIn.duration(motion.fast)}
+                >
+                  <Wall
+                    listings={listings}
+                    view={view}
+                    hunt={query.q}
+                    catalog={catalog}
+                    services={services}
+                    shopApproved={approved}
+                    onRemove={removing ? undefined : remove}
+                  />
+                </Animated.View>
                 <BoardPager
-                  page={paged.page}
-                  pageCount={paged.pageCount}
-                  total={paged.total}
-                  pageSize={PAGE_SIZE}
-                  onPageChange={setPage}
+                  page={page}
+                  pageCount={pageCount}
+                  from={from}
+                  to={to}
+                  total={total}
+                  hasNext={nextCursor != null}
+                  onPrev={() => setPage((current) => Math.max(1, current - 1))}
+                  onNext={() => {
+                    if (!nextCursor) return;
+                    setCursors((current) => [...current.slice(0, page), nextCursor]);
+                    setPage((current) => current + 1);
+                  }}
                 />
               </>
             )}
           </View>
         ) : null}
-      </ScrollView>
+      </FormScrollView>
 
       <BusyOverlay visible={removing} label="Removing this listing…" />
     </View>
@@ -298,6 +382,7 @@ export default function BoardScreen() {
 function Wall({
   listings,
   view,
+  hunt,
   catalog,
   services,
   shopApproved,
@@ -305,6 +390,7 @@ function Wall({
 }: {
   listings: Listing[];
   view: ReturnType<typeof useCatalogueView>[0];
+  hunt: string;
   catalog: ReturnType<typeof useBoard>["catalog"];
   services: ReturnType<typeof useBoard>["services"];
   shopApproved: boolean;
@@ -320,8 +406,12 @@ function Wall({
             catalog={catalog}
             services={services}
             shopApproved={shopApproved}
+            hunt={hunt}
             onPress={() =>
-              router.push({ pathname: "/shop/[id]", params: { id: listing.id } })
+              router.push({
+                pathname: "/shop/[id]",
+                params: { id: listing.id },
+              })
             }
             onRemove={onRemove ? () => onRemove(listing) : undefined}
           />
@@ -339,8 +429,12 @@ function Wall({
             catalog={catalog}
             services={services}
             shopApproved={shopApproved}
+            hunt={hunt}
             onPress={() =>
-              router.push({ pathname: "/shop/[id]", params: { id: listing.id } })
+              router.push({
+                pathname: "/shop/[id]",
+                params: { id: listing.id },
+              })
             }
             onRemove={onRemove ? () => onRemove(listing) : undefined}
           />

@@ -5,9 +5,10 @@ import {
   LISTING_CAPS,
   nextFreeSlot,
   normalizeListing,
-  normalizeListings,
+  normalizeBoardPage,
   normalizePrepSteps,
   normalizeStarters,
+  type BoardPage,
   type Listing,
   type ListingStarter,
   type PrepStep,
@@ -86,10 +87,38 @@ const UNREADABLE_LISTING =
    Listings
    -------------------------------------------------------------------------- */
 
-export async function loadBoard(): Promise<BoardOutcome<Listing[]>> {
+/**
+ * One page of the board, for the question the shop is actually asking.
+ *
+ * The hunt, the kind of work, the standing and the sort are GRIDGO's to answer
+ * — see `lib/catalogueBoard`'s `toListQuery`. Nothing here re-sorts or re-cuts
+ * what comes back: a ranked page reordered on the phone is a hunt whose best
+ * match is not first.
+ */
+export async function loadBoard(
+  query: api.CatalogListQuery = {},
+): Promise<BoardOutcome<BoardPage>> {
   return attempt("load your board", async () =>
-    normalizeListings(await api.listCatalogItems()),
+    normalizeBoardPage(await api.listCatalogItems(query)),
   );
+}
+
+/**
+ * The kinds of work the shop's board actually covers, for the picker.
+ *
+ * A page of eight cannot name every kind on a board of sixty, and a picker
+ * that only offers what happens to be on this page would hide a shop's own
+ * work from it. So this is one capped, unfiltered read — GRIDGO's ceiling is
+ * fifty — asked once when the screen opens and never again on a keystroke.
+ * Past fifty listings the screen tops it up from every page it loads.
+ */
+export async function loadBoardKinds(): Promise<Listing[]> {
+  try {
+    return normalizeBoardPage(await api.listCatalogItems({ limit: 50 })).listings;
+  } catch {
+    // The picker is not worth an error of its own; the wall reports the failure.
+    return [];
+  }
 }
 
 /** One listing, reloaded from GRIDGO. Never trusted from local state. */

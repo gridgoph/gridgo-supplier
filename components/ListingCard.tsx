@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 
+import { HuntedName } from "@/components/HuntedName";
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { StatusChip } from "@/components/StatusChip";
 import {
@@ -20,6 +21,8 @@ type Props = {
   onPress: () => void;
   /** Press and hold. Absent while another tile is being removed. */
   onRemove?: () => void;
+  /** The hunt this tile came back for, so the matching run can be marked. */
+  hunt?: string;
 };
 
 /**
@@ -48,6 +51,7 @@ export function ListingCard({
   shopApproved,
   onPress,
   onRemove,
+  hunt,
 }: Props) {
   const context = boardContextFor(listing, services);
   const standing = boardStanding(listing, context, shopApproved);
@@ -73,9 +77,12 @@ export function ListingCard({
           emptyLabel="No sample yet"
         />
         <View className="gap-1 px-3 pb-3">
-          <Text className="text-body font-medium text-text-primary" numberOfLines={2}>
-            {listing.name || "Untitled listing"}
-          </Text>
+          <HuntedName
+            name={listing.name || "Untitled listing"}
+            hunt={hunt ?? ""}
+            className="text-body font-medium text-text-primary"
+            numberOfLines={2}
+          />
           <Text className="text-caption text-text-muted" numberOfLines={1}>
             {subcategoryName(catalog, listing.subcategoryCode)}
           </Text>
