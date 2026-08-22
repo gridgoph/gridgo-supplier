@@ -7,7 +7,7 @@ import { PrepStepRow } from "@/components/PrepStepEditor";
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { modifierLine } from "@/components/SpecGroupEditor";
-import { fileFormatName, isLinkFormat } from "@/data/fileFormats";
+import { fileFormatName, isLinkFormat, PUBLISHED_FILE_FORMATS } from "@/data/fileFormats";
 import { formatPhp } from "@/lib/api";
 import {
   addOns,
@@ -89,8 +89,11 @@ export default function ListingPreviewScreen() {
   const blockers = boardBlockers(listing, context);
   const hours = effectiveTurnaroundHours(listing, context.inheritedTurnaroundHours);
   const formats = effectiveFormatCodes(listing, context.inheritedFormatCodes);
-  const uploads = formats.filter((code) => !isLinkFormat(code));
-  const links = formats.filter(isLinkFormat);
+  const uploads = formats.filter(
+    (code) => PUBLISHED_FILE_FORMATS.find((format) => format.code === code)?.uploadable === true,
+  );
+  const links = formats.filter((code) => isLinkFormat(code));
+  const unopened = formats.filter((code) => !uploads.includes(code) && !links.includes(code));
   const visible = listing.onTheBoard && approved && !blockers.length;
 
   return (
@@ -199,6 +202,12 @@ export default function ListingPreviewScreen() {
           {links.length ? (
             <Text className="text-body text-text-secondary">
               Or paste a link from {links.map(fileFormatName).join(", ")}
+            </Text>
+          ) : null}
+          {unopened.length ? (
+            <Text className="text-body text-text-secondary">
+              {unopened.map(fileFormatName).join(", ")} cannot be uploaded in GRIDGO yet —
+              send them as a link.
             </Text>
           ) : null}
           {!formats.length ? (

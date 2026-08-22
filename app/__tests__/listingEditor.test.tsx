@@ -20,6 +20,7 @@ jest.mock("@/lib/api", () => ({
   ...jest.requireActual("@/lib/api"),
   getTaxonomy: jest.fn(async () => ({ categories: [], materials: [], finishes: [] })),
   listMyCatalogServices: jest.fn(async () => []),
+  getAcceptedFileFormats: jest.fn(async () => []),
   getDownloadUrl: jest.fn(async () => ({ url: "https://example.test/photo", expiresInSeconds: 300 })),
 }));
 
@@ -252,5 +253,22 @@ describe("the listing editor", () => {
         }),
       ),
     );
+  });
+
+  it("lets a shop type AI and take a link instead of inventing a type", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({
+      status: "ok",
+      value: listingWith({ fileFormatMode: "override", formatCodes: ["pdf"] }),
+    });
+
+    view = await render(<ListingScreen />);
+
+    await fireEvent.press(await screen.findByLabelText("Another type"));
+    await fireEvent.changeText(screen.getByLabelText("Type of file they send"), "AI");
+    await fireEvent(screen.getByLabelText("Type of file they send"), "submitEditing");
+
+    expect(await screen.findByText(/GRIDGO can't take that file yet/)).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Use Any other https link"));
+    expect(screen.getByLabelText("Accept a Any other https link link on this listing")).toBeTruthy();
   });
 });

@@ -1,6 +1,8 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
+import type { PublishedFileFormat } from "@/data/fileFormats";
+import { readPublishedFormats } from "@/lib/fileFormatResolve";
 import type { DevicePlatform } from "@/lib/push";
 
 /**
@@ -821,6 +823,21 @@ export async function transitionOrder(
 export async function getTaxonomy(): Promise<Taxonomy> {
   const result = await request<{ taxonomy: Taxonomy }>("/taxonomy");
   return result.taxonomy;
+}
+
+/**
+ * Types a listing may tick, as GRIDGO names them today.
+ *
+ * A missing route is an empty list so the frozen chart can stand in. The plus
+ * field never invents a code from this response.
+ */
+export async function getAcceptedFileFormats(): Promise<PublishedFileFormat[]> {
+  try {
+    return readPublishedFormats(await request<unknown>("/accepted-file-formats"));
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 404 || error.status === 405)) return [];
+    throw error;
+  }
 }
 
 /** The signed-in shop's own service lines (the API scopes this by bearer). */

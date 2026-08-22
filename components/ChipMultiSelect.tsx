@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Check } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
@@ -20,6 +21,8 @@ type Props = {
   onToggle: (value: string) => void;
   accessibilityLabel: string;
   disabled?: boolean;
+  /** Sits in the wrap after the chips — the plus that finds another type. */
+  trailing?: ReactNode;
 };
 
 /**
@@ -37,6 +40,7 @@ export function ChipMultiSelect({
   onToggle,
   accessibilityLabel,
   disabled,
+  trailing,
 }: Props) {
   const colors = useThemeColors();
 
@@ -72,6 +76,7 @@ export function ChipMultiSelect({
           </Pressable>
         );
       })}
+      {trailing}
     </View>
   );
 }

@@ -17,18 +17,14 @@ import { AddGroupButton, SpecGroupEditor } from "@/components/SpecGroupEditor";
 import { AddPrepStepButton, PrepStepRow } from "@/components/PrepStepEditor";
 import { StatusChip } from "@/components/StatusChip";
 import { ChipMultiSelect } from "@/components/ChipMultiSelect";
+import { FormatPlusField } from "@/components/FormatPlusField";
 import { MoneyField } from "@/components/controls/MoneyField";
 import { NoteField } from "@/components/controls/NoteField";
 import { OptionList } from "@/components/controls/OptionList";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import { Stepper } from "@/components/controls/Stepper";
 import { TextField } from "@/components/controls/TextField";
-import {
-  fileFormatName,
-  LINK_FILE_FORMATS,
-  linkFormatInvitation,
-  UPLOADED_FILE_FORMATS,
-} from "@/data/fileFormats";
+import { fileFormatName, linkFormatInvitation } from "@/data/fileFormats";
 import { spacing } from "@/constants/theme";
 import {
   addOns,
@@ -59,8 +55,10 @@ import {
   setFileFormats,
   type BoardOutcome,
 } from "@/lib/listingsApi";
+import { linkFileOptions, uploadedFileOptions } from "@/lib/fileFormatResolve";
 import { parseMoney } from "@/lib/money";
 import { resolveCategoryCode } from "@/lib/taxonomy";
+import { useAcceptedFileFormats } from "@/hooks/useAcceptedFileFormats";
 import { routeId, useListing } from "@/hooks/useBoard";
 import { useThemeColors } from "@/hooks/useTheme";
 import { askConfirm } from "@/store/sheets";
@@ -86,6 +84,7 @@ export default function ListingScreen() {
   const id = routeId(params.id);
   const insets = useSafeAreaInsets();
   const approved = isMatchable(useSession((s) => s.user));
+  const formats = useAcceptedFileFormats();
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
@@ -167,37 +166,53 @@ export default function ListingScreen() {
       }
 
       savingRef.current = true;
+      setBusy(true);
+      setActionError(null);
       try {
-        const saved = await run(async () =>
-          saveListing(listing, {
-            name: working.name.trim(),
-            description: working.description.trim(),
-            basePriceMinor: money.minor ?? 0,
-            pricingUnit: working.pricingUnit,
-            packageQty: working.pricingUnit === "per_package" ? working.packageQty : null,
-            turnaroundMode: working.turnaroundMode,
-            turnaroundHours:
-              working.turnaroundMode === "override" ? working.turnaroundHours : null,
-            subcategoryCode: working.subcategoryCode,
-            ...(onTheBoard == null ? {} : { active: onTheBoard }),
-          }),
-        );
-        if (!saved) return false;
+        const saved = await saveListing(listing, {
+          name: working.name.trim(),
+          description: working.description.trim(),
+          basePriceMinor: money.minor ?? 0,
+          pricingUnit: working.pricingUnit,
+          packageQty: working.pricingUnit === "per_package" ? working.packageQty : null,
+          turnaroundMode: working.turnaroundMode,
+          turnaroundHours:
+            working.turnaroundMode === "override" ? working.turnaroundHours : null,
+          subcategoryCode: working.subcategoryCode,
+          ...(onTheBoard == null ? {} : { active: onTheBoard }),
+        });
+        if (saved.status !== "ok") {
+          setActionError(saved.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : saved.message);
+          return false;
+        }
         dirtyRef.current = false;
         setDraft(null);
 
         const formatsMoved =
           working.fileFormatMode !== listing.fileFormatMode ||
           working.formatCodes.join(",") !== listing.formatCodes.join(",");
-        if (!formatsMoved) return true;
-        return run(async () =>
-          setFileFormats(listing, working.fileFormatMode, working.formatCodes),
-        );
+        if (formatsMoved) {
+          const formatsSaved = await setFileFormats(
+            saved.value,
+            working.fileFormatMode,
+            working.formatCodes,
+          );
+          if (formatsSaved.status !== "ok") {
+            await reload();
+            setActionError(
+              formatsSaved.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : formatsSaved.message,
+            );
+            return false;
+          }
+        }
+        await reload();
+        return true;
       } finally {
         savingRef.current = false;
+        setBusy(false);
       }
     },
-    [listing, run, working],
+    [listing, reload, working],
   );
 
   /**
@@ -665,13 +680,28 @@ export default function ListingScreen() {
               <View className="gap-2">
                 <Text className="text-caption text-text-muted">Files they upload</Text>
                 <ChipMultiSelect
-                  options={UPLOADED_FILE_FORMATS.map((format) => ({
+                  options={uploadedFileOptions(formats, working.formatCodes).map((format) => ({
                     value: format.code,
                     label: format.name,
                   }))}
                   selected={working.formatCodes}
                   onToggle={(code) => setDraft({ ...working, formatCodes: toggle(working.formatCodes, code) })}
                   accessibilityLabel="Files this listing accepts"
+                  trailing={
+                    <FormatPlusField
+                      formats={formats}
+                      selected={working.formatCodes}
+                      onSelect={(code) =>
+                        setDraft({
+                          ...working,
+                          formatCodes: working.formatCodes.includes(code)
+                            ? working.formatCodes
+                            : [...working.formatCodes, code],
+                        })
+                      }
+                      disabled={busy}
+                    />
+                  }
                 />
               </View>
               <View className="gap-2">
@@ -680,10 +710,10 @@ export default function ListingScreen() {
                   <Text className="text-caption text-text-muted">Links you accept</Text>
                 </View>
                 <ChipMultiSelect
-                  options={LINK_FILE_FORMATS.map((format) => ({
+                  options={linkFileOptions(formats).map((format) => ({
                     value: format.code,
                     label: format.name,
-                    accessibilityLabel: linkFormatInvitation(format.code),
+                    accessibilityLabel: linkFormatInvitation(format.code, formats),
                   }))}
                   selected={working.formatCodes}
                   onToggle={(code) => setDraft({ ...working, formatCodes: toggle(working.formatCodes, code) })}
@@ -698,7 +728,7 @@ export default function ListingScreen() {
           ) : (
             <Text className="text-caption text-text-muted">
               {context.inheritedFormatCodes.length
-                ? context.inheritedFormatCodes.map(fileFormatName).join(", ")
+                ? context.inheritedFormatCodes.map((code) => fileFormatName(code, formats)).join(", ")
                 : "Your category has no artwork set yet. Choose it here, or set it once in Services you offer."}
             </Text>
           )}
