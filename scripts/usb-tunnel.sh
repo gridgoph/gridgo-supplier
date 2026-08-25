@@ -9,7 +9,10 @@ if [ -z "${device}" ]; then
   exit 1
 fi
 
-for port in 8081 8082 8083 8787 9000; do
+# The Android build asks for localhost:8081. This packager listens on 8082 so
+# it does not collide with the client app, so 8081 on the phone must land here.
+adb -s "${device}" reverse tcp:8081 tcp:8082
+for port in 8082 8083 8787 9000; do
   adb -s "${device}" reverse "tcp:${port}" "tcp:${port}"
 done
 
