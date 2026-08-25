@@ -196,17 +196,17 @@ export default function ListingPreviewScreen() {
           <Text className="text-overline text-text-muted">SEND YOUR ARTWORK AS</Text>
           {uploads.length ? (
             <Text className="text-body text-text-secondary">
-              Upload {uploads.map(fileFormatName).join(", ")}
+              Upload {uploads.map((code) => fileFormatName(code)).join(", ")}
             </Text>
           ) : null}
           {links.length ? (
             <Text className="text-body text-text-secondary">
-              Or paste a link from {links.map(fileFormatName).join(", ")}
+              Or paste a link from {links.map((code) => fileFormatName(code)).join(", ")}
             </Text>
           ) : null}
           {unopened.length ? (
             <Text className="text-body text-text-secondary">
-              {unopened.map(fileFormatName).join(", ")} cannot be uploaded in GRIDGO yet —
+              {unopened.map((code) => fileFormatName(code)).join(", ")} cannot be uploaded in GRIDGO yet —
               send them as a link.
             </Text>
           ) : null}
