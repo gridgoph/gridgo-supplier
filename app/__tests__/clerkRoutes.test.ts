@@ -77,7 +77,10 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(source("app/(auth)/signup/index.tsx")).toContain("Finish opening your shop");
     expect(source("app/(auth)/signup/index.tsx")).toContain("clerkSession");
     expect(source("app/(auth)/signup/review.tsx")).toContain("clerkSession");
-    expect(source("app/(auth)/signup/review.tsx")).toContain('!isSignedIn && fetchStatus === "fetching"');
+    // Apply stays tappable while Clerk loads its SignUp resource. Gating the
+    // send control on `fetchStatus === "fetching"` froze it on a live session.
+    expect(source("app/(auth)/signup/review.tsx")).toContain("const sending = busy");
+    expect(source("app/(auth)/signup/review.tsx")).not.toContain('fetchStatus === "fetching"');
   });
 
   it("uses the same job-ticket code on login, signup, and recovery", () => {

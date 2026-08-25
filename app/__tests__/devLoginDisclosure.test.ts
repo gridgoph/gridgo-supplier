@@ -92,7 +92,10 @@ describe("dev login credential disclosure", () => {
               "pk_live_Z3JpZGdvLmV4YW1wbGUuY29tJA",
           },
           stdio: ["ignore", "pipe", "pipe"],
-          timeout: 180_000,
+          // `--clear` forces a cold Metro rebuild. A measured web export on
+          // this machine is ~199s, so 180s timed the spawn out after the
+          // bundle had already done the work.
+          timeout: 300_000,
         },
       );
 
@@ -104,6 +107,6 @@ describe("dev login credential disclosure", () => {
         stdio: ["ignore", "pipe", "pipe"],
       });
     },
-    240_000,
+    360_000,
   );
 });
