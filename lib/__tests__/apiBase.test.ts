@@ -1,4 +1,4 @@
-import { hostnameFromHostUri, resolveApiBase } from "@/lib/api";
+import { hostnameFromHostUri, notificationImageUrl, resolveApiBase } from "@/lib/api";
 
 describe("hostnameFromHostUri", () => {
   it("extracts host from host:port", () => {
@@ -53,6 +53,7 @@ describe("resolveApiBase", () => {
       resolveApiBase({
         hostCandidates: ["localhost:8081"],
         platformOS: "android",
+        isDevice: false,
       }),
     ).toBe("http://10.0.2.2:8787");
 
@@ -60,8 +61,28 @@ describe("resolveApiBase", () => {
       resolveApiBase({
         hostCandidates: ["127.0.0.1:8081"],
         platformOS: "android",
+        isDevice: false,
       }),
     ).toBe("http://10.0.2.2:8787");
+  });
+
+  it("Android USB phone: uses IPv4 loopback so a reverse reaches GRIDGO on any Wi-Fi", () => {
+    expect(
+      resolveApiBase({
+        hostCandidates: ["localhost:8082"],
+        platformOS: "android",
+        isDevice: true,
+      }),
+    ).toBe("http://127.0.0.1:8787");
+  });
+
+  it("Android loopback defaults to USB IPv4 when device kind is unknown", () => {
+    expect(
+      resolveApiBase({
+        hostCandidates: ["localhost:8082"],
+        platformOS: "android",
+      }),
+    ).toBe("http://127.0.0.1:8787");
   });
 
   it("iOS simulator: keeps localhost (no 10.0.2.2 remap)", () => {
@@ -138,5 +159,15 @@ describe("resolveApiBase", () => {
         platformOS: "ios",
       }),
     ).toBe("http://10.20.30.40:8787");
+  });
+});
+
+describe("notificationImageUrl", () => {
+  it("leaves a public picture link alone and ignores blanks", () => {
+    expect(notificationImageUrl("https://cdn.gridgo.example/update.png")).toBe(
+      "https://cdn.gridgo.example/update.png",
+    );
+    expect(notificationImageUrl("  ")).toBeNull();
+    expect(notificationImageUrl(undefined)).toBeNull();
   });
 });

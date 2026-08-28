@@ -81,7 +81,7 @@ describe("pushTargetRoute", () => {
 
   it("opens the alerts list when there is no job behind the alert", () => {
     expect(pushTargetRoute(parsePushData({ type: "account_update" }))).toBe(
-      "/(tabs)/notifications",
+      "/alerts",
     );
   });
 
@@ -90,7 +90,7 @@ describe("pushTargetRoute", () => {
     // Guessing a screen from a string added after this build shipped is how a
     // tap lands somewhere that cannot explain itself.
     expect(pushTargetRoute(parsePushData({ type: "invented_in_2027" }))).toBe(
-      "/(tabs)/notifications",
+      "/alerts",
     );
   });
 });

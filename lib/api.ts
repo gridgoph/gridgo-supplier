@@ -1,6 +1,8 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
+import type { PublishedFileFormat } from "@/data/fileFormats";
+import { readPublishedFormats } from "@/lib/fileFormatResolve";
 import type { DevicePlatform } from "@/lib/push";
 
 /**
@@ -165,7 +167,9 @@ export type StoredFile = {
     | "fulfilment_proof"
     | "delivery_photo"
     | "service_image"
-    | "verification_document";
+    | "verification_document"
+    /** A sample photo on one of the shop's own listings. Provisional. */
+    | "catalog_item_photo";
   originalFilename: string;
   declaredContentType: string;
   detectedContentType: string;
@@ -194,6 +198,8 @@ export type Notification = {
   orderId?: string;
   title: string;
   body: string;
+  /** Broadcast picture. Public HTTPS link or `/public/announcement-images/<fileId>`. */
+  imageUrl?: string | null;
   read: boolean;
   at: string;
 };
@@ -298,6 +304,12 @@ export type ResolveApiBaseInput = {
   hostCandidates?: Array<string | null | undefined>;
   /** `Platform.OS` value used for the Android emulator loopback remap. */
   platformOS?: string;
+  /**
+   * `false` only for an Android emulator. Loopback then becomes `10.0.2.2`.
+   * A physical phone (or unknown) keeps IPv4 loopback so USB reverse of
+   * `:8787` works on any Wi-Fi without baking a LAN address into the app.
+   */
+  isDevice?: boolean;
 };
 
 /**
@@ -352,7 +364,9 @@ function collectExpoHostCandidates(): Array<string | null | undefined> {
  * Precedence:
  * 1. Non-empty `envUrl` (trailing slash stripped)
  * 2. Hostname from Expo dev-server host candidates → `http://<host>:<port>`
- * 3. If that host is loopback and platform is Android → `http://10.0.2.2:<port>`
+ * 3. If that host is loopback and platform is Android:
+ *    emulator (`isDevice === false`) → `http://10.0.2.2:<port>`
+ *    physical phone / unknown → `http://127.0.0.1:<port>` (USB reverse is IPv4)
  * 4. `http://127.0.0.1:<port>`
  */
 export function resolveApiBase(input: ResolveApiBaseInput = {}): string {
@@ -368,8 +382,13 @@ export function resolveApiBase(input: ResolveApiBaseInput = {}): string {
   }
 
   if (host) {
-    if ((host === "localhost" || host === "127.0.0.1") && input.platformOS === "android") {
-      return `http://10.0.2.2:${port}`;
+    const loopback = host === "localhost" || host === "127.0.0.1";
+    if (loopback && input.platformOS === "android") {
+      if (input.isDevice === false) {
+        return `http://10.0.2.2:${port}`;
+      }
+      // `localhost` can resolve to IPv6 ::1; adb reverse only tunnels IPv4.
+      return `http://127.0.0.1:${port}`;
     }
     return `http://${host}:${port}`;
   }
@@ -383,7 +402,16 @@ export function getApiBase(): string {
     envPort: process.env.EXPO_PUBLIC_API_PORT,
     hostCandidates: collectExpoHostCandidates(),
     platformOS: Platform.OS,
+    isDevice: Constants.isDevice,
   });
+}
+
+/** In-app picture URL. Hosted broadcast paths resolve against this app's API. */
+export function notificationImageUrl(imageUrl?: string | null): string | null {
+  const value = typeof imageUrl === "string" ? imageUrl.trim() : "";
+  if (!value) return null;
+  if (value.startsWith("/")) return `${getApiBase().replace(/\/$/, "")}${value}`;
+  return value;
 }
 
 export function setToken(token: string | null): void {
@@ -449,6 +477,9 @@ type RequestOptions = RequestInit & {
   ignoreUnauthorized?: boolean;
 };
 
+/** GRIDGO must fail an apply rather than spin until the shop force-closes. */
+export const API_REQUEST_MS = 20_000;
+
 async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   const { ignoreUnauthorized, ...fetchInit } = init;
   const headers: Record<string, string> = {
@@ -456,10 +487,37 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     ...(fetchInit.headers as Record<string, string> | undefined),
   };
   if (fetchInit.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
-  const token = await getAuthToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(`${getApiBase()}${path}`, { ...fetchInit, headers });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_REQUEST_MS);
+  const aborted = new Promise<never>((_, reject) => {
+    const fail = () => {
+      const error = new Error("Aborted");
+      error.name = "AbortError";
+      reject(error);
+    };
+    if (controller.signal.aborted) fail();
+    else controller.signal.addEventListener("abort", fail, { once: true });
+  });
+  let res: Response;
+  try {
+    const token = await Promise.race([getAuthToken(), aborted]);
+    if (token) headers.Authorization = `Bearer ${token}`;
+    res = await fetch(`${getApiBase()}${path}`, {
+      ...fetchInit,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    const timedOut =
+      (error instanceof Error && error.name === "AbortError") ||
+      (typeof error === "object" && error !== null && "name" in error && error.name === "AbortError");
+    if (timedOut) {
+      throw new Error("GRIDGO did not answer in time. Check this phone’s connection, then try again.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
   const text = await res.text();
   let data: unknown = null;
   if (text) {
@@ -716,10 +774,28 @@ export async function unregisterDevice(token: string): Promise<void> {
 }
 
 export async function me(options: { ignoreUnauthorized?: boolean } = {}): Promise<User> {
-  const result = await request<{ user: User }>("/auth/me", {
+  const result = await request<{
+    user: User;
+    memberships?: { role?: string }[];
+    approvalCases?: { kind?: string; status?: string }[];
+  }>("/auth/me", {
     ignoreUnauthorized: options.ignoreUnauthorized,
   });
-  return result.user;
+  const memberships = Array.isArray(result.memberships) ? result.memberships : [];
+  if (!memberships.some((membership) => membership.role === "supplier")) {
+    return result.user;
+  }
+  const supplierCase = (result.approvalCases || []).find((entry) => entry.kind === "supplier");
+  const status = supplierCase?.status;
+  const verificationStatus =
+    status === "approved" || status === "pending" || status === "rejected" || status === "suspended"
+      ? status
+      : result.user.verificationStatus;
+  return {
+    ...result.user,
+    role: "supplier",
+    ...(verificationStatus ? { verificationStatus } : {}),
+  };
 }
 
 export async function listOrders(): Promise<Order[]> {
@@ -765,6 +841,21 @@ export async function transitionOrder(
 export async function getTaxonomy(): Promise<Taxonomy> {
   const result = await request<{ taxonomy: Taxonomy }>("/taxonomy");
   return result.taxonomy;
+}
+
+/**
+ * Types a listing may tick, as GRIDGO names them today.
+ *
+ * A missing route is an empty list so the frozen chart can stand in. The plus
+ * field never invents a code from this response.
+ */
+export async function getAcceptedFileFormats(): Promise<PublishedFileFormat[]> {
+  try {
+    return readPublishedFormats(await request<unknown>("/accepted-file-formats"));
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 404 || error.status === 405)) return [];
+    throw error;
+  }
 }
 
 /** The signed-in shop's own service lines (the API scopes this by bearer). */
@@ -862,6 +953,418 @@ export async function getDownloadUrl(fileId: string): Promise<DownloadUrl> {
   return request(`/files/${fileId}/download-url`);
 }
 
+
+/* --------------------------------------------------------------------------
+   The shop's own board — listings
+
+   The contract is `docs/SUPPLIER_CATALOG_API.md` in gridgo-api. Read it before
+   touching anything here; nothing below invents a path.
+
+   Two shapes run through every call:
+
+   - These return the response body as `unknown`. `lib/listings.ts` is the only
+     place that reads a listing's shape, exactly as `lib/taxonomy.ts` is the
+     only place that reads the chart's — so a field the platform renames costs
+     one normaliser, not fifteen screens.
+   - **Every mutation of an existing record carries its version**, as both
+     `expectedVersion` in the body and `If-Match` in the header, or GRIDGO
+     answers `400 expected_version_required`. Which record's version depends on
+     what is being changed: the *item* for the listing, its formats, its photos
+     and for creating a group; the *group* for renaming it, deleting it, and for
+     every option inside it. Getting that wrong is a `409`, not a silent write.
+   -------------------------------------------------------------------------- */
+
+/** Body plus `If-Match`. GRIDGO accepts either; sending both is unambiguous. */
+function versioned(
+  version: number | null | undefined,
+  body: Record<string, unknown> = {},
+): RequestOptions {
+  const init: RequestOptions = { body: JSON.stringify({ ...body, expectedVersion: version }) };
+  if (version != null) init.headers = { "If-Match": String(version) };
+  return init;
+}
+
+/**
+ * What the shop asks its own board for.
+ *
+ * Every one of these is a GRIDGO predicate, not a local `.filter` — the hunt,
+ * the kind of work, on-the-board vs hidden and the sort all run in PostgreSQL
+ * so a shop with two hundred samples does not download two hundred samples to
+ * look at eight. `docs/SUPPLIER_CATALOG_API.md` in gridgo-api is the contract.
+ */
+export type CatalogListQuery = {
+  /** The hunt. Trimmed and capped at 80 by GRIDGO; blank is the whole board. */
+  q?: string | null;
+  sort?: string | null;
+  subcategoryCode?: string | null;
+  /** True for on the board, false for hidden, null/undefined for both. */
+  active?: boolean | null;
+  /** Page size. GRIDGO defaults to 20 and refuses more than 50. */
+  limit?: number | null;
+  /** An opaque `nextCursor` from the page before this one. */
+  cursor?: string | null;
+};
+
+/**
+ * Every listing this shop owns, draft and on-the-board alike, one page at a
+ * time. Answers `{ items, total, nextCursor? }`.
+ */
+export async function listCatalogItems(query: CatalogListQuery = {}): Promise<unknown> {
+  const params = new URLSearchParams();
+  const q = (query.q ?? "").trim();
+  if (q) params.set("q", q);
+  if (query.sort) params.set("sort", query.sort);
+  if (query.subcategoryCode) params.set("subcategoryCode", query.subcategoryCode);
+  if (query.active != null) params.set("active", query.active ? "true" : "false");
+  if (query.limit != null) params.set("limit", String(query.limit));
+  if (query.cursor) params.set("cursor", query.cursor);
+  const search = params.toString();
+  return request<unknown>(`/me/catalog-items${search ? `?${search}` : ""}`);
+}
+
+export async function getCatalogItem(itemId: string): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}`);
+}
+
+/**
+ * The shop's own accreditation lines, as the catalog contract projects them.
+ *
+ * `/supplier-services` is the older route the accreditation screens use and it
+ * carries no `acceptedFormats`, which is exactly what a listing inherits — so
+ * the board reads the `/me` projection instead of guessing that a line accepts
+ * nothing.
+ */
+export async function listMyCatalogServices(): Promise<unknown> {
+  return request<unknown>("/me/supplier-services");
+}
+
+/**
+ * Open a listing. `starterId` clones a GRIDGO starter's steps and add-ons into
+ * the shop's own rows at create time; without one the listing starts blank.
+ */
+export async function createCatalogItem(body: Record<string, unknown>): Promise<unknown> {
+  return request<unknown>("/me/catalog-items", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateCatalogItem(
+  itemId: string,
+  version: number | null,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}`, {
+    method: "PATCH",
+    ...versioned(version, body),
+  });
+}
+
+/**
+ * Take a listing off the shop.
+ *
+ * A listing a client has already ordered from is archived rather than deleted,
+ * and GRIDGO says which by what it returns: the archived item, or `{ ok: true }`.
+ * The caller has to tell the shop which happened — "gone" and "kept for a job
+ * you already have" are different facts.
+ */
+export async function deleteCatalogItem(
+  itemId: string,
+  version: number | null,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}`, {
+    method: "DELETE",
+    ...versioned(version),
+  });
+}
+
+/**
+ * Replace the listing's accepted-format set.
+ *
+ * `mode` is the field GRIDGO reads: `inherit` keeps no item rows and follows
+ * the service line, `override` requires at least one active governed code.
+ */
+export async function putCatalogItemFileFormats(
+  itemId: string,
+  version: number | null,
+  mode: "inherit" | "override",
+  formatCodes: string[],
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}/file-formats`, {
+    method: "PUT",
+    ...versioned(version, { mode, formatCodes }),
+  });
+}
+
+/**
+ * Open a step or an add-on.
+ *
+ * GRIDGO will not create an empty group — a step with nothing to choose is a
+ * dead end on a client's screen — so the first option goes in the same call.
+ */
+export async function createCatalogOptionGroup(
+  itemId: string,
+  itemVersion: number | null,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}/option-groups`, {
+    method: "POST",
+    ...versioned(itemVersion, body),
+  });
+}
+
+export async function updateCatalogOptionGroup(
+  itemId: string,
+  groupId: string,
+  groupVersion: number | null,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(
+    `/me/catalog-items/${encodeURIComponent(itemId)}/option-groups/${encodeURIComponent(groupId)}`,
+    { method: "PATCH", ...versioned(groupVersion, body) },
+  );
+}
+
+export async function deleteCatalogOptionGroup(
+  itemId: string,
+  groupId: string,
+  groupVersion: number | null,
+): Promise<unknown> {
+  return request<unknown>(
+    `/me/catalog-items/${encodeURIComponent(itemId)}/option-groups/${encodeURIComponent(groupId)}`,
+    { method: "DELETE", ...versioned(groupVersion) },
+  );
+}
+
+export async function createCatalogOption(
+  groupId: string,
+  groupVersion: number | null,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-option-groups/${encodeURIComponent(groupId)}/options`, {
+    method: "POST",
+    ...versioned(groupVersion, body),
+  });
+}
+
+export async function updateCatalogOption(
+  groupId: string,
+  optionId: string,
+  groupVersion: number | null,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(
+    `/me/catalog-option-groups/${encodeURIComponent(groupId)}/options/${encodeURIComponent(optionId)}`,
+    { method: "PATCH", ...versioned(groupVersion, body) },
+  );
+}
+
+export async function deleteCatalogOption(
+  groupId: string,
+  optionId: string,
+  groupVersion: number | null,
+): Promise<unknown> {
+  return request<unknown>(
+    `/me/catalog-option-groups/${encodeURIComponent(groupId)}/options/${encodeURIComponent(optionId)}`,
+    { method: "DELETE", ...versioned(groupVersion) },
+  );
+}
+
+/**
+ * Set the order of a listing's sample photos. The first id is the board thumb.
+ *
+ * GRIDGO requires the **whole current set**, so this reorders and nothing else
+ * — a shorter list is rejected as stale rather than quietly dropping a sample.
+ */
+export async function reorderCatalogItemPhotos(
+  itemId: string,
+  version: number | null,
+  fileIds: string[],
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}/photos/reorder`, {
+    method: "POST",
+    ...versioned(version, { fileIds }),
+  });
+}
+
+/**
+ * Bind an uploaded photo to one listing.
+ *
+ * Attaching at a `sortOrder` a photo already holds **replaces** that photo,
+ * which is the only way a sample comes off a listing: the contract has no
+ * detach, and an attached file cannot be deleted while it is referenced.
+ */
+export async function attachCatalogItemPhoto(
+  fileId: string,
+  catalogItemId: string,
+  sortOrder: number,
+  altText?: string,
+): Promise<unknown> {
+  const body: Record<string, unknown> = { catalogItemId, sortOrder };
+  if (altText) body.altText = altText;
+  return request<unknown>(`/files/${encodeURIComponent(fileId)}/attach`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * GRIDGO's own starters for one kind of work.
+ *
+ * Platform seed data, not records the shop mutates: creating from one copies
+ * its steps and add-ons into the shop's own rows, and the starter is never
+ * referenced again.
+ */
+export async function listListingStarters(subcategoryCode: string): Promise<unknown> {
+  return request<unknown>(
+    `/listing-starters?subcategoryCode=${encodeURIComponent(subcategoryCode)}`,
+  );
+}
+
+/* --------------------------------------------------------------------------
+   What a client does before it sends work
+
+   `docs/SUPPLIER_CATALOG_API.md` carries these now: a collection under the
+   item, its member route, a reorder route, and the **item's** version on every
+   write. A listing holds at most eight.
+
+   They are still the newest thing on GRIDGO, so `lib/listingsApi.ts` — the only
+   caller — keeps treating a missing route as a fact to state rather than an
+   error to swallow. A deployment that has not caught up says so; it does not
+   turn red.
+   -------------------------------------------------------------------------- */
+
+export async function listPrepSteps(itemId: string): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps`);
+}
+
+export async function createPrepStep(
+  itemId: string,
+  version: number | null,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps`, {
+    method: "POST",
+    ...versioned(version, body),
+  });
+}
+
+export async function updatePrepStep(
+  itemId: string,
+  stepId: string,
+  version: number | null,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(
+    `/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps/${encodeURIComponent(stepId)}`,
+    { method: "PATCH", ...versioned(version, body) },
+  );
+}
+
+export async function deletePrepStep(
+  itemId: string,
+  stepId: string,
+  version: number | null,
+): Promise<unknown> {
+  return request<unknown>(
+    `/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps/${encodeURIComponent(stepId)}`,
+    { method: "DELETE", ...versioned(version) },
+  );
+}
+
+/**
+ * Put the prep steps in the order a client should read them.
+ *
+ * The whole current set goes with it, exactly as the photo reorder does, and a
+ * set that no longer matches is refused as stale rather than half-applied. This
+ * is also why a step never moves by patching one position: two steps swapping
+ * would collide on the position they are passing through.
+ */
+export async function reorderPrepSteps(
+  itemId: string,
+  version: number | null,
+  stepIds: string[],
+): Promise<unknown> {
+  return request<unknown>(
+    `/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps/reorder`,
+    { method: "POST", ...versioned(version, { stepIds }) },
+  );
+}
+
+/* --------------------------------------------------------------------------
+   Provisional — the shop's own details
+
+   The record behind the identity card on Account: the name clients and riders
+   see, the person GRIDGO talks to, and the number the rider calls. GRIDGO is
+   adding `/me/supplier-profile` in parallel with this app, so a 404 is a fact
+   to state rather than an error to swallow — `lib/shopProfile.ts` is the only
+   caller and owns that decision.
+
+   The write carries the version it was read at, as both `expectedVersion` in
+   the body and `If-Match` in the header, or GRIDGO answers
+   `400 expected_version_required`. It is sent inline here rather than through
+   the board's own helper so this pair stays readable on its own.
+
+   Email is deliberately absent from the patch type. It belongs to the GRIDGO
+   sign-in, and the platform refuses it — so this app never offers it.
+   -------------------------------------------------------------------------- */
+
+export type SupplierProfile = {
+  userId: string;
+  shopName: string;
+  contactName: string;
+  /** Canonical `+639XXXXXXXXX`, or null when the shop has never given one. */
+  phone: string | null;
+  /** Owned by the GRIDGO sign-in. Read-only everywhere in this app. */
+  email: string;
+  shop: ShopLocation | null;
+  pickupAvailable: boolean;
+  /** Round-tripped on every write. A stale one is a 409, not a silent write. */
+  version: number;
+  updatedAt: string;
+  /**
+   * The shop's own pictures, as the platform projects them. Nothing in this
+   * app reads them yet, so the shape stays unread rather than guessed.
+   */
+  media: unknown;
+};
+
+/**
+ * What this app may change on the shop's own record.
+ *
+ * `email` is not here on purpose — see the note above.
+ */
+export type SupplierProfilePatch = {
+  shopName?: string;
+  contactName?: string;
+  phone?: string;
+};
+
+/** Provisional. The signed-in shop's own details (the API scopes this by bearer). */
+export async function getSupplierProfile(): Promise<SupplierProfile> {
+  const result = await request<{ profile: SupplierProfile }>("/me/supplier-profile");
+  return result.profile;
+}
+
+/**
+ * Provisional. Change the shop's own details.
+ *
+ * `version` is the one the profile was read at. GRIDGO compares it and refuses
+ * a write built on details that have since moved, so the caller has to offer
+ * the latest rather than overwrite what it cannot see.
+ */
+export async function updateSupplierProfile(
+  version: number,
+  patch: SupplierProfilePatch,
+): Promise<SupplierProfile> {
+  const result = await request<{ profile: SupplierProfile }>("/me/supplier-profile", {
+    method: "PATCH",
+    headers: { "If-Match": String(version) },
+    body: JSON.stringify({ ...patch, expectedVersion: version }),
+  });
+  return result.profile;
+}
+
 /** Format PHP minor units (centavos) for display. */
 export function formatPhp(minor: number): string {
   return `₱${(minor / 100).toLocaleString("en-PH", {
@@ -869,3 +1372,4 @@ export function formatPhp(minor: number): string {
     maximumFractionDigits: 2,
   })}`;
 }
+

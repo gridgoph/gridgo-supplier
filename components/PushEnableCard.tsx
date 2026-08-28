@@ -19,7 +19,7 @@ import { isSignedIn, useSession } from "@/store/session";
  *
  * Where it is drawn is this app's decision, and it is three places:
  *
- * - **The Alerts tab**, where a shop is already reading the things push would
+ * - **The alerts list**, where a shop is already reading the things push would
  *   deliver.
  * - **A job waiting on somebody else** — a shop that has just accepted an offer
  *   or filed its evidence is standing at a counter with nothing to do until a
@@ -32,7 +32,7 @@ import { isSignedIn, useSession } from "@/store/session";
  * answer, and the permission dialog would spend the one ask on a stranger.
  *
  * Refusal is a first-class outcome. Nothing is blocked, no screen changes, and
- * the Alerts tab keeps every update: the card simply becomes a pointer to the
+ * the alerts list keeps every update: the card simply becomes a pointer to the
  * phone's own settings, which is the only place a blocked permission can be
  * taken back.
  *

@@ -1,11 +1,5 @@
 import { useRef } from "react";
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -28,11 +22,11 @@ type Props = {
 };
 
 /**
- * Six tear-off docket stubs for a job number — not six generic PIN boxes.
+ * Six digit boxes over one native OTP field.
  *
- * The hidden field sits over the strip so the OS can autofill a one-time
- * code. One stub is current at a time; yellow is spent on the perforation,
- * the focused tear-off edge, and Verify.
+ * The boxes are the product surface. The hidden field sits on top so iOS and
+ * Android can autofill a one-time code — a second visible field would steal it.
+ * Yellow is spent on the current box and Verify, nothing else.
  */
 export function JobTicketCode({
   title = "Check your email",
@@ -49,7 +43,7 @@ export function JobTicketCode({
   const colors = useThemeColors();
   const inputRef = useRef<TextInput>(null);
   const digits = digitsOf(value);
-  const focused = Math.min(digits.length, LENGTH - 1);
+  const caret = Math.min(digits.length, LENGTH - 1);
 
   return (
     <View className="gap-6">
@@ -67,50 +61,25 @@ export function JobTicketCode({
       )}
 
       <Pressable onPress={() => inputRef.current?.focus()} className="relative">
-        <View
-          className="flex-row overflow-hidden border border-outline bg-surface"
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-        >
-          {Array.from({ length: LENGTH }, (_, index) => (
-            <View key={index} className="min-h-14 min-w-0 flex-1">
+        <View className="flex-row gap-2" pointerEvents="none">
+          {Array.from({ length: LENGTH }, (_, index) => {
+            const filled = Boolean(digits[index]);
+            const current = !busy && index === caret && digits.length < LENGTH;
+            return (
               <View
-                className="flex-1 items-center justify-center"
-                style={
-                  index === focused
-                    ? { borderBottomWidth: 2, borderBottomColor: colors.actionYellow }
-                    : undefined
+                key={index}
+                className={
+                  current
+                    ? "h-14 min-w-0 flex-1 items-center justify-center rounded-field border-2 border-action-yellow bg-surface"
+                    : filled
+                      ? "h-14 min-w-0 flex-1 items-center justify-center rounded-field border border-outline bg-surface-high"
+                      : "h-14 min-w-0 flex-1 items-center justify-center rounded-field border border-outline bg-surface"
                 }
               >
-                <View
-                  style={[
-                    styles.stubTab,
-                    {
-                      backgroundColor:
-                        index === focused ? colors.actionYellow : colors.outline,
-                    },
-                  ]}
-                />
                 <Text className="text-h2 text-text-primary">{digits[index] ?? ""}</Text>
               </View>
-              {index < LENGTH - 1 ? (
-                <View
-                  pointerEvents="none"
-                  style={[styles.perf, { borderColor: colors.actionYellow }]}
-                >
-                  <View
-                    style={[styles.punch, { backgroundColor: colors.canvas, top: -5 }]}
-                  />
-                  <View
-                    style={[
-                      styles.punch,
-                      { backgroundColor: colors.canvas, bottom: -5 },
-                    ]}
-                  />
-                </View>
-              ) : null}
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         <TextInput
@@ -121,16 +90,21 @@ export function JobTicketCode({
             if (digits.length === LENGTH && !busy) onVerify();
           }}
           keyboardType="number-pad"
+          inputMode="numeric"
           textContentType="oneTimeCode"
-          autoComplete="one-time-code"
+          autoComplete={process.env.EXPO_OS === "android" ? "sms-otp" : "one-time-code"}
           autoCapitalize="none"
           autoCorrect={false}
+          autoFocus
           maxLength={LENGTH}
           caretHidden
           importantForAutofill="yes"
           accessibilityLabel="6-digit job number"
           editable={!busy}
-          style={styles.hiddenInput}
+          style={[
+            styles.hiddenInput,
+            { color: colors.textPrimary },
+          ]}
         />
       </Pressable>
 
@@ -163,31 +137,9 @@ function digitsOf(value: string): string {
 }
 
 const styles = StyleSheet.create({
-  stubTab: {
-    position: "absolute",
-    top: 0,
-    width: 18,
-    height: 5,
-  },
-  perf: {
-    position: "absolute",
-    top: 8,
-    bottom: 8,
-    right: 0,
-    borderRightWidth: 1,
-    borderStyle: "dashed",
-  },
-  punch: {
-    position: "absolute",
-    right: -5,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
   hiddenInput: {
     ...StyleSheet.absoluteFillObject,
     opacity: 0.02,
-    color: "transparent",
     fontSize: 16,
   },
 });

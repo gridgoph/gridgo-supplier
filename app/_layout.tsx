@@ -25,6 +25,7 @@ import { useAlertStream } from "@/hooks/useAlertStream";
 import { useAppFonts } from "@/hooks/useAppFonts";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
+import { authDoorOpen } from "@/lib/launch";
 import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions";
 import { resolveClerkPublishableKey } from "@/lib/clerk";
 import { isMatchable, isSignedIn, useSession } from "@/store/session";
@@ -140,11 +141,9 @@ function RootStack() {
   const signedIn = isSignedIn(user);
   const matchable = signedIn && isMatchable(user);
   const accessBlocked = identity.kind === "mismatch" || identity.kind === "error";
-  // Unassigned Clerk (just created, not yet enrolled) stays on apply so
-  // Send can enroll without bouncing to the closed-shop screen.
-  const signedOut =
-    !signedIn &&
-    (identity.kind === "signed_out" || identity.kind === "unassigned");
+  // Unassigned Clerk stays on apply so Send can enroll. Loading stays on the
+  // door too — dropping it unmounted welcome and left a black canvas.
+  const signedOut = authDoorOpen(identity, user);
 
   // Live alerts for as long as there is a session to receive them.
   useAlertStream(signedIn);
@@ -199,6 +198,19 @@ function RootStack() {
           }}
         />
         {/*
+          Alerts open from the bell in every masthead rather than from a tab.
+          Signed-in rather than matchable on purpose: the shop waiting on
+          accreditation is the one with the most reason to read its inbox,
+          because the message it is waiting for arrives in it.
+        */}
+        <Stack.Screen
+          name="alerts"
+          options={{
+            title: "Alerts",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
           The shop's pin is reachable from both signed-in states on purpose: a
           shop waiting on accreditation is exactly the shop most likely to have
           put its pin on the wrong corner, and making it wait for approval to
@@ -212,6 +224,41 @@ function RootStack() {
           }}
         />
         {/*
+          The shop's own name and number sit behind the same guard, and for a
+          sharper version of the same reason: Operations rings that number to
+          progress the application, so a waiting shop is the one that most needs
+          to fix a typo in it.
+        */}
+        <Stack.Screen
+          name="shop-details"
+          options={{
+            title: "Your shop details",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
+          The sign-in address, behind the same guard as the details it is
+          reached from. A shop that mistyped its email while applying cannot
+          sign in anywhere else to fix it, so the screen has to be open to a
+          shop Operations has not approved yet.
+        */}
+        <Stack.Screen
+          name="change-email"
+          options={{
+            title: "Change email",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
+          The board itself is a tab now; this group is what opens on top of it —
+          adding a listing, and the editor with its samples and preview. It sits
+          under the signed-in guard rather than the matchable one because
+          approval requires a finished listing, so trapping a waiting shop out
+          of the screens where it builds one would hold it behind the thing it
+          is waiting for. The stack draws its own headers.
+        */}
+        <Stack.Screen name="shop" options={{ headerShown: false, title: "Listings" }} />
+        {/*
           Sheets the app asks for and waits on. Both are routes so the platform
           owns the presentation — see `sheetScreenOptions`. They sit with the
           signed-in guard rather than the matchable one because a waiting shop
@@ -219,6 +266,7 @@ function RootStack() {
         */}
         <Stack.Screen name="confirm" options={sheetScreenOptions(scheme)} />
         <Stack.Screen name="pick-date" options={sheetScreenOptions(scheme)} />
+        <Stack.Screen name="pick" options={sheetScreenOptions(scheme)} />
       </Stack.Protected>
 
       <Stack.Protected guard={matchable}>

@@ -1,4 +1,4 @@
-import { ArrowUp, Check, Plus } from "lucide-react-native";
+import { ArrowUp, Plus, X } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
 import { useThemeColors } from "@/hooks/useTheme";
@@ -23,9 +23,9 @@ type Props = {
  *
  * The numbering is the data, not decoration: GRIDGO matches on rank, so first
  * place means "send me this before anything else". A shop adds a category by
- * tapping it, which puts it at the bottom of what it has chosen, and moves it
- * up one place at a time — the smallest control that can express an order, and
- * one that cannot produce the gaps or duplicates the platform rejects.
+ * tapping it, which puts it at the bottom of what it has chosen, moves it up
+ * one place at a time, and drops it with the X — the same toggle as adding,
+ * drawn as a close so it cannot be mistaken for "done".
  */
 export function CategoryRankList({ categories, value, onToggle, onPromote }: Props) {
   const colors = useThemeColors();
@@ -75,7 +75,7 @@ export function CategoryRankList({ categories, value, onToggle, onPromote }: Pro
                 className="gg-touch items-center justify-center"
                 style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
               >
-                <Check size={20} color={colors.accent} strokeWidth={2} />
+                <X size={20} color={colors.textMuted} strokeWidth={2} />
               </Pressable>
             </View>
           ))}

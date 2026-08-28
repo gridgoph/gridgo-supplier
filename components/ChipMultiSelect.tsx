@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Check } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
@@ -6,6 +7,12 @@ import { useThemeColors } from "@/hooks/useTheme";
 export type ChipOption = {
   value: string;
   label: string;
+  /**
+   * What the chip is called out loud, when the visible word is a shorthand the
+   * group's heading completes. "Canva" under "Links you accept" is clear on
+   * screen and means nothing read on its own.
+   */
+  accessibilityLabel?: string;
 };
 
 type Props = {
@@ -14,6 +21,8 @@ type Props = {
   onToggle: (value: string) => void;
   accessibilityLabel: string;
   disabled?: boolean;
+  /** Sits in the wrap after the chips — the plus that finds another type. */
+  trailing?: ReactNode;
 };
 
 /**
@@ -31,6 +40,7 @@ export function ChipMultiSelect({
   onToggle,
   accessibilityLabel,
   disabled,
+  trailing,
 }: Props) {
   const colors = useThemeColors();
 
@@ -49,7 +59,7 @@ export function ChipMultiSelect({
             disabled={disabled}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: on, disabled: Boolean(disabled) }}
-            accessibilityLabel={option.label}
+            accessibilityLabel={option.accessibilityLabel ?? option.label}
             className={
               on
                 ? "gg-chip gg-touch border-accent bg-accent px-3"
@@ -66,6 +76,7 @@ export function ChipMultiSelect({
           </Pressable>
         );
       })}
+      {trailing}
     </View>
   );
 }

@@ -84,6 +84,20 @@ export function resolveClerkPublishableKey(
   );
 }
 
+/**
+ * The machine code Clerk put on its first refusal, if it put one there.
+ *
+ * Read only to tell one refusal apart from another — `form_identifier_exists`
+ * needs a different sentence and a different next step from every other reason
+ * an address can be rejected. The code itself never reaches a screen.
+ */
+export function clerkErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object") return null;
+  const candidate = error as { errors?: { code?: unknown }[] };
+  const code = candidate.errors?.[0]?.code;
+  return typeof code === "string" && code ? code : null;
+}
+
 /** True when Clerk refused a second session because one is already live. */
 export function isAlreadySignedInError(error: unknown): boolean {
   const message = clerkErrorMessage(error, "").toLowerCase();
@@ -95,19 +109,68 @@ export function isAlreadySignedInError(error: unknown): boolean {
   );
 }
 
+/** True when Clerk is complaining that there is no session to act on. */
+export function isClerkSignedOutError(error: unknown): boolean {
+  const message = clerkErrorMessage(error, "").toLowerCase();
+  if (!message) return false;
+  return (
+    message.includes("signed out") ||
+    message.includes("logged out") ||
+    message.includes("no active session") ||
+    message.includes("session not found") ||
+    message.includes("unable to authenticate")
+  );
+}
+
 export type ClerkGetToken = (options?: { skipCache?: boolean }) => Promise<string | null | undefined>;
 
 /**
- * Fresh JWT for gridgo-api. Cached leftovers are often expired or empty, and a
- * signed-out Clerk throws rather than returning null — answer null either way.
+ * Cached JWT first — a shop who just signed in already has one, and
+ * skipCache on a phone can take longer than a short deadline, which used
+ * to look like "GRIDGO could not confirm your sign-in".
  */
-export async function clerkSessionToken(getToken: ClerkGetToken): Promise<string | null> {
+export const CLERK_CACHED_TOKEN_MS = 8_000;
+/** Fresh Clerk refresh. Slow wifi must still finish; a hang must not. */
+export const CLERK_TOKEN_ATTEMPT_MS = 12_000;
+
+async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const token = (await getToken({ skipCache: true }))?.trim() ?? "";
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("GRIDGO_DEADLINE")), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function readClerkToken(
+  getToken: ClerkGetToken,
+  skipCache: boolean,
+  ms: number,
+): Promise<string | null> {
+  try {
+    const token =
+      (
+        await withDeadline(
+          Promise.resolve().then(() => getToken(skipCache ? { skipCache: true } : undefined)),
+          ms,
+        )
+      )?.trim() ?? "";
     return token || null;
   } catch {
     return null;
   }
+}
+
+export async function clerkSessionToken(getToken: ClerkGetToken): Promise<string | null> {
+  return (
+    (await readClerkToken(getToken, false, CLERK_CACHED_TOKEN_MS)) ??
+    (await readClerkToken(getToken, true, CLERK_TOKEN_ATTEMPT_MS))
+  );
 }
 
 /**
@@ -134,6 +197,23 @@ export function splitPersonName(value: string): { firstName: string; lastName?: 
   const parts = value.trim().split(/\s+/).filter(Boolean);
   const firstName = parts.shift() ?? "";
   return parts.length ? { firstName, lastName: parts.join(" ") } : { firstName };
+}
+
+/**
+ * The person currently signed in, from Clerk.
+ *
+ * GRIDGO still stores a copy for Operations and mail. Account and the Home
+ * greeting prefer this live name so a dashboard rename is visible before the
+ * copy lands.
+ */
+export function clerkDisplayName(
+  user: { firstName?: string | null; lastName?: string | null } | null | undefined,
+): string | undefined {
+  const name = [user?.firstName, user?.lastName]
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter(Boolean)
+    .join(" ");
+  return name || undefined;
 }
 
 /** Pick Clerk's person-readable message without exposing codes or payloads. */

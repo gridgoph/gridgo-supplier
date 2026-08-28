@@ -2,7 +2,7 @@ import { useAuth, useClerk, useUser } from "@clerk/expo";
 import { useEffect, type ReactNode } from "react";
 
 import * as api from "@/lib/api";
-import { supplierProjectionErrorMessage } from "@/lib/apiErrors";
+import { isUnmappedIdentity, supplierProjectionErrorMessage } from "@/lib/apiErrors";
 import { awaitClerkSessionToken, clerkAccessFor } from "@/lib/clerk";
 import {
   setClerkSignOutHandler,
@@ -33,9 +33,8 @@ export function ClerkSessionBridge({ children }: Props) {
     const session = useSession.getState();
 
     if (!isLoaded) {
-      if (session.authSource !== "legacy") {
-        session.setClerkIdentity({ kind: "loading" });
-      }
+      // Leave signed_out in place so welcome stays mounted. Flipping this to
+      // loading used to unmount the door and leave the dark canvas empty.
       return () => {
         cancelled = true;
       };
@@ -68,6 +67,8 @@ export function ClerkSessionBridge({ children }: Props) {
         const token = await awaitClerkSessionToken(getToken);
         if (!token) {
           if (cancelled) return;
+          if (alreadyAdopted) return;
+          // A finishing Clerk step has no JWT yet. That is not "new shop".
           if (access.kind === "supplier") {
             useSession.getState().setClerkIdentity({
               kind: "error",
@@ -76,7 +77,7 @@ export function ClerkSessionBridge({ children }: Props) {
             });
             return;
           }
-          useSession.getState().setClerkIdentity({ kind: "unassigned", email });
+          useSession.getState().setClerkIdentity({ kind: "loading" });
           return;
         }
         const supplier = await api.me({
@@ -87,6 +88,10 @@ export function ClerkSessionBridge({ children }: Props) {
         if (cancelled) return;
         const current = useSession.getState();
         if (current.identity.kind === "supplier" && current.user) return;
+        if (isUnmappedIdentity(error)) {
+          current.setClerkIdentity({ kind: "unassigned", email });
+          return;
+        }
         if (access.kind === "supplier") {
           current.setClerkIdentity({
             kind: "error",
@@ -95,7 +100,11 @@ export function ClerkSessionBridge({ children }: Props) {
           });
           return;
         }
-        current.setClerkIdentity({ kind: "unassigned", email });
+        current.setClerkIdentity({
+          kind: "error",
+          email,
+          message: supplierProjectionErrorMessage(error),
+        });
       }
     })();
 

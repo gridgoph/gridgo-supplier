@@ -21,6 +21,7 @@ import {
 import { continuationAfterSignUp } from "@/lib/clerkSignUp";
 import { firstIncompleteStep, stepAt, type OnboardingStep as Step } from "@/lib/onboardingSteps";
 import { coordinateText, isPlaced } from "@/lib/shopLocation";
+import { debugAuth } from "@/lib/debugAuth";
 import { enrollmentIdempotencyKey, toEnrollRequest } from "@/lib/signup";
 import { useSession } from "@/store/session";
 import { useSignupDraft } from "@/store/signupDraft";
@@ -40,18 +41,23 @@ export default function ReviewStep() {
   const draft = useSignupDraft((s) => s.draft);
   const patch = useSignupDraft((s) => s.patch);
   const clearDraft = useSignupDraft((s) => s.clear);
-  const { enrollSupplier, loading, error, clearError } = useSession();
-  const { signUp, fetchStatus } = useSignUp();
+  const { enrollSupplier, error, clearError } = useSession();
+  const { signUp } = useSignUp();
   const { isSignedIn, getToken } = useAuth();
   const { setActive } = useClerk();
   const step = stepAt("review");
-  const incomplete = firstIncompleteStep(draft);
+  const incomplete = firstIncompleteStep(draft, { clerkSession: Boolean(isSignedIn) });
   const [verifying, setVerifying] = useState(false);
   const [code, setCode] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const sending = loading || busy || fetchStatus === "fetching";
+  // Only the Send / verify action owns this overlay. Session `loading` is
+  // Clerk projecting `/auth/me` for any signed-in identity — including a
+  // shop that has not enrolled yet. Sign-up `fetchStatus` is Clerk loading
+  // its SignUp resource. Either one staying "in flight" used to paint
+  // "Opening your shop account" with no way to finish or fail.
+  const sending = busy;
   const shownError = localError ?? error;
 
   async function continueSignUp(options?: { allowEmailCode?: boolean }): Promise<"ready" | "email_code" | "blocked"> {
@@ -120,12 +126,14 @@ export default function ReviewStep() {
 
     api.setTokenProvider(getToken);
     const token = await awaitClerkSessionToken(getToken);
+    debugAuth("enroll-token", { hasToken: Boolean(token), clerkSignedIn: Boolean(isSignedIn) });
     if (!token) {
       setLocalError("GRIDGO could not confirm your sign-in. Wait a moment and try again.");
       return false;
     }
 
     const created = await enrollSupplier(request, key);
+    debugAuth("enroll-result", { created });
     if (!created) return false;
     clearDraft();
     router.replace("/(tabs)/home");

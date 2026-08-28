@@ -265,8 +265,11 @@ describe("root stack auth guard wiring", () => {
     expect(tabsAt).toBeGreaterThan(-1);
     expect(matchableAt).toBeGreaterThan(-1);
     expect(tabsAt).toBeLessThan(matchableAt);
-    // Login is the complementary unauthenticated half of the pair.
-    expect(src).toContain("identity.kind === \"signed_out\" || identity.kind === \"unassigned\"");
+    // Login is the complementary unauthenticated half of the pair. The door
+    // stays mounted while Clerk restores — a loading-only guard left a black
+    // canvas because welcome was unmounted and index painted nothing.
+    expect(src).toContain("authDoorOpen");
+    expect(src).toContain("const signedOut = authDoorOpen(identity, user);");
     expect(src).toMatch(/guard=\{signedOut\}[\s\S]*name="\(auth\)\/login"/);
     expect(src).toMatch(/guard=\{accessBlocked\}[\s\S]*name="access"/);
   });

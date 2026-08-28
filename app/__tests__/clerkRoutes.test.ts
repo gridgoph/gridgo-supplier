@@ -14,9 +14,19 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(login).toContain("GoogleSignInButton");
     expect(login).toContain("New shop? Sign up");
     expect(login).toContain('router.push("/(auth)/signup")');
-    expect(login).not.toContain("Ask Operations to invite this email");
+    expect(login).not.toContain("Use local supplier demo");
+    expect(login).not.toContain("GRIDGO on ");
+    expect(login).not.toContain("DevDemoLogin");
+    expect(login).not.toContain("DevConnectionLine");
     expect(login).not.toContain("Client accounts");
     expect(login).not.toMatch(/signUp\./);
+    // A leftover Clerk session is not a login failure. Sign it out and retry
+    // the typed password — never show Clerk's "already signed in" copy.
+    expect(login).toContain("withSettledClerkSession");
+    expect(login).toContain("isAlreadySignedInError");
+    expect(login).toContain("releaseClerkSession");
+    expect(login).toContain("leftoverActionForTypedEmail");
+    expect(login).not.toContain('door === "unknown" && next.reason === "client_trust"');
   });
 
   it("does not ask to turn on alerts at the door", () => {
@@ -30,7 +40,9 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(welcome).toContain('router.push("/(auth)/signup")');
     expect(welcome).toContain("Already have an account");
     expect(welcome).toContain("Have an invitation? Open it");
-    expect(welcome).toContain("welcome.svg");
+    expect(welcome).toContain("welcome.webp");
+    expect(welcome).toContain("Take the job. Run production. Get paid from one floor.");
+    expect(welcome).not.toContain("Operations reviews");
     expect(welcome).not.toContain("Client accounts");
     expect(welcome).not.toContain('label="Accept an invitation"');
   });
@@ -62,16 +74,28 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(source("app/(auth)/signup/review.tsx")).toContain("JobTicketCode");
     expect(source("app/(auth)/signup/review.tsx")).toContain('router.replace("/(tabs)/home")');
     expect(source("app/(auth)/signup/review.tsx")).not.toContain('label="Verification code"');
+    expect(source("app/(auth)/signup/index.tsx")).toContain("Finish opening your shop");
+    expect(source("app/(auth)/signup/index.tsx")).toContain("clerkSession");
+    expect(source("app/(auth)/signup/review.tsx")).toContain("clerkSession");
+    // Apply stays tappable while Clerk loads its SignUp resource. Gating the
+    // send control on `fetchStatus === "fetching"` froze it on a live session.
+    expect(source("app/(auth)/signup/review.tsx")).toContain("const sending = busy");
+    expect(source("app/(auth)/signup/review.tsx")).not.toContain('fetchStatus === "fetching"');
   });
 
   it("uses the same job-ticket code on login, signup, and recovery", () => {
     expect(source("app/(auth)/login.tsx")).toContain("JobTicketCode");
     expect(source("app/(auth)/login.tsx")).toContain("continuationAfterSignIn");
+    expect(source("app/(auth)/login.tsx")).toContain("supplierDoorForClerkSession");
+    expect(source("app/(auth)/login.tsx")).toContain("emailUnavailableMessage");
+    expect(source("app/(auth)/login.tsx")).toContain("gridgoUnreachableMessage");
+    expect(source("app/(auth)/login.tsx")).toContain("prepareApplyDraft");
     expect(source("lib/clerkSignIn.ts")).toContain("needs_second_factor");
     expect(source("lib/clerkSignIn.ts")).toContain("needs_client_trust");
     expect(source("app/(auth)/recover-password.tsx")).toContain("JobTicketCode");
     expect(source("components/JobTicketCode.tsx")).toContain("Send another code");
     expect(source("components/JobTicketCode.tsx")).toContain('textContentType="oneTimeCode"');
+    expect(source("components/JobTicketCode.tsx")).toContain('inputMode="numeric"');
     expect(source("components/JobTicketCode.tsx")).not.toContain("Verification code");
   });
 
@@ -110,8 +134,11 @@ describe("public apply and Clerk sign-in routes", () => {
 
     expect(index).toContain("launchHref");
     expect(index).not.toContain("/accreditation");
+    expect(index).not.toMatch(/if \(!href\) return null/);
     expect(launch).toContain('"/(tabs)/home"');
     expect(launch).not.toContain("/accreditation");
+    expect(launch).not.toMatch(/if \(identity\.kind === "loading"\) return null/);
+    expect(layout).toContain("authDoorOpen");
     expect(layout).toMatch(/guard=\{signedIn\}[\s\S]*name="\(tabs\)"/);
     expect(home).toContain("Operations is reviewing your shop");
     expect(home).toContain("The floor stays empty until they approve.");
@@ -127,6 +154,13 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(layout).toContain("tokenCache={tokenCache}");
     expect(bridge).toContain("clerkAccessFor(user.publicMetadata)");
     expect(bridge).toContain("api.me(");
+    // Clerk restoration must not blank the door. Setting loading before
+    // isLoaded unmounts welcome and paints the dark canvas with nothing on it.
+    const restoring = bridge.slice(
+      bridge.indexOf("if (!isLoaded)"),
+      bridge.indexOf("if (!isSignedIn"),
+    );
+    expect(restoring).not.toContain('setClerkIdentity({ kind: "loading" })');
     expect(access).toContain("Supplier work stays closed here");
   });
 

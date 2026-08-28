@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 let mockSignUpStatus = "missing_requirements";
+let mockIsSignedIn = false;
+let mockFetchStatus = "idle";
+let mockSessionLoading = false;
 const mockSendEmailCode = jest.fn(async () => ({ error: null }));
 const mockVerifyEmailCode = jest.fn(async () => {
   mockSignUpStatus = "complete";
@@ -16,7 +19,7 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("@clerk/expo", () => ({
-  useAuth: () => ({ isSignedIn: false, getToken: mockGetToken }),
+  useAuth: () => ({ isSignedIn: mockIsSignedIn, getToken: mockGetToken }),
   useClerk: () => ({ setActive: jest.fn() }),
   useSignUp: () => ({
     signUp: {
@@ -33,7 +36,9 @@ jest.mock("@clerk/expo", () => ({
         verifyEmailCode: mockVerifyEmailCode,
       },
     },
-    fetchStatus: "idle",
+    get fetchStatus() {
+      return mockFetchStatus;
+    },
   }),
 }));
 
@@ -43,7 +48,7 @@ jest.mock("@/store/session", () => {
     ...actual,
     useSession: () => ({
       enrollSupplier: mockEnrollSupplier,
-      loading: false,
+      loading: mockSessionLoading,
       error: null,
       clearError: jest.fn(),
     }),
@@ -69,6 +74,9 @@ const mockRouter = jest.requireMock("expo-router").router as {
 describe("signup verify then enroll", () => {
   beforeEach(() => {
     mockSignUpStatus = "missing_requirements";
+    mockIsSignedIn = false;
+    mockFetchStatus = "idle";
+    mockSessionLoading = false;
     mockRouter.replace.mockClear();
     mockRouter.push.mockClear();
     mockSendEmailCode.mockClear();
@@ -117,5 +125,47 @@ describe("signup verify then enroll", () => {
       expect(mockEnrollSupplier).toHaveBeenCalled();
       expect(mockRouter.replace).toHaveBeenCalledWith("/(tabs)/home");
     });
+  });
+
+  it("does not treat a live Clerk session's sign-up fetch as sending the application", async () => {
+    mockIsSignedIn = true;
+    mockFetchStatus = "fetching";
+
+    await render(<ReviewStep />);
+
+    expect(screen.getByRole("button", { name: "Send my application" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sending your application…" })).toBeNull();
+    expect(
+      screen.queryByLabelText("Opening your shop account. Do not close the app."),
+    ).toBeNull();
+  });
+
+  it("does not treat Clerk projecting the session as sending the application", async () => {
+    mockIsSignedIn = true;
+    mockSessionLoading = true;
+    mockFetchStatus = "fetching";
+
+    await render(<ReviewStep />);
+
+    expect(screen.getByRole("button", { name: "Send my application" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sending your application…" })).toBeNull();
+    expect(
+      screen.queryByLabelText("Opening your shop account. Do not close the app."),
+    ).toBeNull();
+  });
+
+  it("enrolls a live Clerk session without mailing a code", async () => {
+    mockIsSignedIn = true;
+    mockFetchStatus = "fetching";
+
+    await render(<ReviewStep />);
+    await fireEvent.press(screen.getByRole("button", { name: "Send my application" }));
+
+    await waitFor(() => {
+      expect(mockEnrollSupplier).toHaveBeenCalled();
+      expect(mockRouter.replace).toHaveBeenCalledWith("/(tabs)/home");
+    });
+    expect(mockSendEmailCode).not.toHaveBeenCalled();
+    expect(mockPassword).not.toHaveBeenCalled();
   });
 });

@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 
 import { MapFrame, type MapFrameHandle } from "@/components/MapFrame";
 import { ErrorNotice } from "@/components/ErrorNotice";
-import { singleLineFieldTextStyle } from "@/constants/theme";
+import { multilineFieldTextStyle, singleLineFieldTextStyle, spacing } from "@/constants/theme";
 import {
   geocodeFailureMessage,
   isSearchable,
@@ -145,14 +145,42 @@ export function ShopLocationPicker({ pin, onChange }: Props) {
   );
 
   const placed = isPlaced(pin);
+  const searchEndInset = query ? 48 : spacing.lg;
 
   return (
     <View className="flex-1">
-      {/* Search — one row, one verb, and it only fires when asked. */}
-      <View className="gg-page pb-3">
-        <View className="flex-row items-center gap-2">
-          <View className="min-w-0 flex-1 flex-row items-center gap-2 rounded-field border border-outline bg-surface px-3">
-            <Search size={18} color={colors.textMuted} strokeWidth={2} />
+      {/* The map owns the middle of the screen, so panning never fights a list. */}
+      <View className="mx-4 flex-1 overflow-hidden rounded-card border border-outline">
+        <MapFrame
+          ref={frame}
+          html={initialHtml}
+          onReady={() => push(pin, Boolean(pin))}
+          onEvent={onEvent}
+          accessibilityLabel="Map of Davao City. Tap to place your shop, or drag the pin."
+        />
+
+        {/*
+          Same search the rider Maps tab uses: one field on the tiles, the
+          magnifier inset so Android never draws the first letter under it,
+          submit on the icon or the keyboard — never on a keystroke.
+        */}
+        <View pointerEvents="box-none" className="absolute inset-x-0 top-0 p-3">
+          <View className="relative justify-center">
+            <Pressable
+              onPress={() => void runSearch()}
+              disabled={searching}
+              accessibilityRole="button"
+              accessibilityLabel="Search"
+              accessibilityState={{ disabled: searching }}
+              className="absolute left-0 top-0 z-10 h-12 w-12 items-center justify-center"
+              style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+            >
+              {searching ? (
+                <ActivityIndicator size="small" color={colors.textPrimary} />
+              ) : (
+                <Search size={20} color={colors.textSecondary} strokeWidth={2} />
+              )}
+            </Pressable>
             <TextInput
               value={query}
               onChangeText={setQuery}
@@ -160,10 +188,18 @@ export function ShopLocationPicker({ pin, onChange }: Props) {
               placeholderTextColor={colors.textMuted}
               accessibilityLabel="Search for your shop's address"
               returnKeyType="search"
+              autoCapitalize="none"
               autoCorrect={false}
+              underlineColorAndroid="transparent"
               onSubmitEditing={() => void runSearch()}
-              className="h-12 min-w-0 flex-1 text-body text-text-primary"
-              style={singleLineFieldTextStyle}
+              className="gg-field"
+              style={{
+                ...singleLineFieldTextStyle,
+                paddingStart: 48,
+                paddingLeft: 48,
+                paddingEnd: searchEndInset,
+                paddingRight: searchEndInset,
+              }}
             />
             {query ? (
               <Pressable
@@ -174,40 +210,14 @@ export function ShopLocationPicker({ pin, onChange }: Props) {
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Clear the search"
-                className="gg-touch items-center justify-center"
+                className="absolute right-0 top-0 z-10 h-12 w-12 items-center justify-center"
                 style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
               >
                 <X size={18} color={colors.textMuted} strokeWidth={2} />
               </Pressable>
             ) : null}
           </View>
-          <Pressable
-            onPress={() => void runSearch()}
-            disabled={searching}
-            accessibilityRole="button"
-            accessibilityLabel="Search"
-            accessibilityState={{ disabled: searching }}
-            className={searching ? "gg-btn-secondary gg-disabled" : "gg-btn-secondary"}
-            style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
-          >
-            {searching ? (
-              <ActivityIndicator size="small" color={colors.textPrimary} />
-            ) : (
-              <Text className="text-button text-text-primary">Search</Text>
-            )}
-          </Pressable>
         </View>
-      </View>
-
-      {/* The map owns the middle of the screen, so panning never fights a list. */}
-      <View className="mx-4 flex-1 overflow-hidden rounded-card border border-outline">
-        <MapFrame
-          ref={frame}
-          html={initialHtml}
-          onReady={() => push(pin, Boolean(pin))}
-          onEvent={onEvent}
-          accessibilityLabel="Map of Davao City. Tap to place your shop, or drag the pin."
-        />
 
         {/*
           Results take the whole map rather than a strip across the top of it.
@@ -302,16 +312,25 @@ export function ShopLocationPicker({ pin, onChange }: Props) {
                 value={naming ? "" : (pin?.label ?? "")}
                 onChangeText={(label) => pin && onChange({ ...pin, label })}
                 editable={!naming}
+                multiline
+                numberOfLines={2}
                 placeholder={naming ? "Finding the address…" : "The address a rider reads at your door"}
                 placeholderTextColor={colors.textMuted}
                 accessibilityLabel="Address at this pin"
-                className="gg-field"
-                style={singleLineFieldTextStyle}
+                underlineColorAndroid="transparent"
+                className="min-h-14 rounded-field border border-outline bg-surface text-body text-text-primary"
+                style={{
+                  ...multilineFieldTextStyle,
+                  paddingLeft: spacing.lg,
+                  paddingRight: spacing.lg,
+                  paddingTop: spacing.md,
+                  paddingBottom: spacing.md,
+                }}
               />
             </View>
           ) : (
             <Text className="text-body text-text-secondary">
-              Search for your street above, or tap your shop on the map.
+              Search the map for your street, or tap your shop on it.
             </Text>
           )}
 

@@ -1,4 +1,4 @@
-import { launchHref } from "@/lib/launch";
+import { authDoorOpen, launchHref } from "@/lib/launch";
 import type { User } from "@/lib/api";
 import type { IdentityState } from "@/store/session";
 
@@ -40,7 +40,40 @@ describe("launchHref", () => {
     ).toBe("/access");
   });
 
-  it("waits while Clerk is still restoring", () => {
-    expect(launchHref({ kind: "loading" }, null)).toBeNull();
+  it("sends a restoring session to the door, never a blank screen", () => {
+    expect(launchHref({ kind: "loading" }, null)).toBe("/(auth)/welcome");
+  });
+
+  it("never returns null — a blank index is a black canvas on a dark phone", () => {
+    const identities: IdentityState[] = [
+      { kind: "loading" },
+      { kind: "signed_out" },
+      { kind: "unassigned", email: "shop@example.com" },
+      { kind: "mismatch", destination: "GRIDGO for clients" },
+      { kind: "error", message: "GRIDGO could not open this shop" },
+      { kind: "supplier" },
+    ];
+    for (const identity of identities) {
+      expect(launchHref(identity, null)).not.toBeNull();
+      expect(launchHref(identity, pendingShop)).not.toBeNull();
+    }
+  });
+});
+
+describe("authDoorOpen", () => {
+  it("keeps welcome mounted while Clerk is still restoring", () => {
+    expect(authDoorOpen({ kind: "loading" }, null)).toBe(true);
+    expect(authDoorOpen({ kind: "signed_out" }, null)).toBe(true);
+    expect(authDoorOpen({ kind: "unassigned", email: "shop@example.com" }, null)).toBe(
+      true,
+    );
+  });
+
+  it("closes the door once a shop is signed in or access is blocked", () => {
+    expect(authDoorOpen({ kind: "supplier" }, pendingShop)).toBe(false);
+    expect(
+      authDoorOpen({ kind: "mismatch", destination: "GRIDGO for clients" }, null),
+    ).toBe(false);
+    expect(authDoorOpen({ kind: "error", message: "offline" }, null)).toBe(false);
   });
 });

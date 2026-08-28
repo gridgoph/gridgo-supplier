@@ -6,6 +6,30 @@ import * as api from "@/lib/api";
  * screen — this module is the only place that reads them.
  */
 
+/** A Clerk identity that GRIDGO will not project as a shop. */
+export const supplierAccountNotFoundMessage =
+  "No supplier account is connected to this sign-in. Apply as a shop, or ask Operations to check your invitation.";
+
+function apiErrorCode(error: unknown): string {
+  if (!(error instanceof api.ApiError)) return "";
+  const body = error.body;
+  return typeof body === "object" && body && "error" in body
+    ? String((body as { error: string }).error)
+    : "";
+}
+
+/** Verified Clerk session, no GRIDGO user yet — open apply, do not treat as a dead token. */
+export function isUnmappedIdentity(error: unknown): boolean {
+  return error instanceof api.ApiError && error.status === 401 && apiErrorCode(error) === "unmapped_identity";
+}
+
+/** Mapped GRIDGO identity that is not a shop. */
+export function isNonSupplierIdentity(error: unknown): boolean {
+  if (!(error instanceof api.ApiError) || error.status !== 403) return false;
+  const code = apiErrorCode(error);
+  return code === "supplier_account_not_found" || code === "membership_required";
+}
+
 const MESSAGES: Record<string, string> = {
   transition_not_allowed:
     "This job has already moved on. Pull down to refresh and take the step the job now shows.",
@@ -58,8 +82,7 @@ const MESSAGES: Record<string, string> = {
     "This shop application is already open. Sign in with the same email to continue.",
   clerk_unavailable:
     "GRIDGO could not confirm your sign-in just now. Wait a moment and try again.",
-  supplier_account_not_found:
-    "No supplier account is connected to this sign-in. Apply as a shop, or ask Operations to check your invitation.",
+  supplier_account_not_found: supplierAccountNotFoundMessage,
 
   // Money and evidence.
   invalid_money:
@@ -75,6 +98,40 @@ const MESSAGES: Record<string, string> = {
     "GRIDGO has retired that way of paying. The client pays digitally in two parts, and nothing is collected at your counter.",
   assignment_notification_required:
     "The client has not been told your price yet. Pull down to refresh and try again.",
+
+  // The shop's own board.
+  catalog_item_not_found:
+    "That listing is no longer on your board. Pull down to refresh and open it again.",
+  catalog_item_stale:
+    "This listing changed on another device while you were editing it. Pull down to refresh, then make your change again.",
+  invalid_catalog_item:
+    "Some details on this listing are missing or not valid. Check the name, price and pack size, then try again.",
+  invalid_catalog_options:
+    "Every step needs at least one option a client can choose. Add one, or remove the step.",
+  invalid_subcategory_code:
+    "GRIDGO has changed what it publishes since this screen loaded. Pull down to refresh and pick the kind of work again.",
+  invalid_file_format:
+    "GRIDGO no longer accepts one of those file types. Refresh and choose from the current list.",
+  catalog_item_incomplete:
+    "This listing is not finished yet, so it cannot go on the board. The listing screen says what is still missing.",
+  catalog_photo_limit:
+    "A listing holds eight sample photos. Remove one before adding another.",
+  catalog_group_limit:
+    "A listing holds six steps. Remove one before adding another.",
+  catalog_option_limit:
+    "A step holds twenty options. Remove one before adding another.",
+  catalog_item_in_use:
+    "A client has already ordered from this listing, so it is kept for that job's history. Hide it instead of removing it.",
+
+  // The shop's own details.
+  invalid_supplier_profile:
+    "Some of your shop details are missing or not valid. Check the shop name, contact person and mobile number, then try again.",
+  supplier_profile_stale:
+    "Your shop details changed somewhere else while this screen was open. Load the latest, then make your change again.",
+  expected_version_required:
+    "GRIDGO could not tell which version of your details this change was made against. Load the latest and make the change again.",
+  email_not_editable:
+    "Your email belongs to your GRIDGO sign-in, so it cannot be changed here. Change it where you sign in and it changes here too.",
 };
 
 export function humanizeApiError(error: unknown, fallback: string): string {
@@ -84,6 +141,13 @@ export function humanizeApiError(error: unknown, fallback: string): string {
       typeof body === "object" && body && "error" in body
         ? String((body as { error: string }).error)
         : "";
+    const fields =
+      typeof body === "object" && body && "fields" in body && body.fields && typeof body.fields === "object"
+        ? Object.keys(body.fields as object)
+        : [];
+    if (code === "invalid_application" && fields.some((field) => field.startsWith("serviceCategories"))) {
+      return "GRIDGO does not recognize one of the print categories you picked. Pull down to refresh and pick again.";
+    }
     const known = MESSAGES[code];
     if (known) return known;
     if (error.status === 401) {

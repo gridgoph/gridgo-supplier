@@ -67,4 +67,26 @@ describe("enrollSupplier", () => {
     });
     expect(JSON.parse(String((fetch.mock.calls[0][1] as RequestInit).body))).toEqual(enrollment);
   });
+
+  it("fails an enroll that never gets an answer instead of spinning", async () => {
+    jest.useFakeTimers();
+    jest.spyOn(global, "fetch").mockImplementation((_input, init) => {
+      return new Promise((_, reject) => {
+        const fail = () => {
+          const error = new Error("Aborted");
+          error.name = "AbortError";
+          reject(error);
+        };
+        const signal = (init as RequestInit | undefined)?.signal;
+        if (signal?.aborted) fail();
+        else signal?.addEventListener("abort", fail, { once: true });
+      });
+    });
+
+    const pending = api.enrollSupplier(enrollment, "supplier-enroll-test");
+    const assertion = expect(pending).rejects.toThrow(/did not answer in time/i);
+    await jest.advanceTimersByTimeAsync(api.API_REQUEST_MS);
+    await assertion;
+    jest.useRealTimers();
+  });
 });

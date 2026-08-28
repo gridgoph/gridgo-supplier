@@ -7,6 +7,7 @@ import {
   GridgoTabBar,
   TAB_BAR_METRICS,
   TAB_BAR_MIN_BOTTOM_GAP,
+  TAB_ICON_SIZE,
   tabBarMetrics,
   tabBarPaddingBottom,
 } from "@/components/GridgoTabBar";
@@ -93,12 +94,24 @@ describe("GridgoTabBar", () => {
     expect(screen.queryAllByRole("tab", { selected: true })).toHaveLength(1);
   });
 
+  it("paints the open mark in the same off-white the rider bar uses, not yellow", async () => {
+    await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
+
+    const openLabel = screen.getByText("Home");
+    const restLabel = screen.getByText("Jobs");
+    expect(String(openLabel.props.className ?? "")).toContain("text-text-primary");
+    expect(String(openLabel.props.className ?? "")).toContain("font-medium");
+    expect(String(restLabel.props.className ?? "")).toContain("text-text-muted");
+    expect(String(openLabel.props.className ?? "")).not.toMatch(/yellow/i);
+    expect(flattenStyle(openLabel.props.style).color).toBeUndefined();
+  });
+
   it("navigates to a tab that is not open", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    fireEvent.press(screen.getByRole("tab", { name: "Alerts" }));
+    fireEvent.press(screen.getByRole("tab", { name: "Catalogues" }));
 
-    expect(navigate).toHaveBeenCalledWith("notifications");
+    expect(navigate).toHaveBeenCalledWith("catalogues");
   });
 
   it("stays put when the open tab is pressed again", async () => {
@@ -119,32 +132,31 @@ describe("GridgoTabBar", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it("announces unread alerts on the Alerts tab", async () => {
-    useAlertsStore.setState({ unreadCount: 3 });
-
-    await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
-
-    expect(screen.getByRole("tab", { name: "Alerts, 3 unread" })).toBeTruthy();
-    expect(screen.getByText("3")).toBeTruthy();
-  });
-
-  it("caps the unread badge at 9+ without a fixed column height that clips it", async () => {
+  /**
+   * Alerts left the bar for a bell in every masthead, and the unread badge went
+   * with them. A bar that carries a number on one column is a bar a shop reads
+   * for numbers; these five are places.
+   */
+  it("counts nothing, whatever is unread", async () => {
     useAlertsStore.setState({ unreadCount: 12 });
 
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    expect(screen.getByRole("tab", { name: "Alerts, 12 unread" })).toBeTruthy();
-    expect(screen.getByText("9+")).toBeTruthy();
+    expect(screen.queryByText("12")).toBeNull();
+    expect(screen.queryByText("9+")).toBeNull();
+    for (const tab of TABS) {
+      expect(screen.getByRole("tab", { name: tab.label })).toBeTruthy();
+    }
+  });
 
-    // The column grows with its content: a fixed height clips the badge's
-    // overhang and a label that has grown under dynamic type.
-    const alertsTab = screen.getByRole("tab", { name: "Alerts, 12 unread" });
-    const className = String(alertsTab.props.className ?? "");
+  it("lets a column grow rather than clipping a label under dynamic type", async () => {
+    await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
+
+    const tab = screen.getByRole("tab", { name: "Catalogues" });
+    const className = String(tab.props.className ?? "");
     expect(className).toContain("justify-end");
     expect(className).not.toContain("h-13");
-    expect(flattenStyle(alertsTab.props.style).minHeight).toBe(
-      TAB_BAR_METRICS.columnHeight,
-    );
+    expect(flattenStyle(tab.props.style).minHeight).toBe(TAB_BAR_METRICS.columnHeight);
   });
 
   /**
@@ -160,17 +172,18 @@ describe("GridgoTabBar", () => {
       const m = tabBarMetrics("ios");
       expect(m.columnHeight).toBe(49);
       // 4 + 24 icon + 2 + 16 label + 3 = 49.
-      expect(m.itemPaddingTop + 24 + m.itemGap + 16 + m.itemPaddingBottom).toBe(49);
+      expect(m.itemPaddingTop + TAB_ICON_SIZE + m.itemGap + 16 + m.itemPaddingBottom).toBe(49);
     });
 
     it("is Material 3's 80dp container on Android, built from its own parts", () => {
       const m = tabBarMetrics("android");
       expect(m.columnHeight).toBe(80);
-      // 12 above the item and 16 below it, around a 24 icon and a 16 label,
-      // leaves the slack that carries the badge's overhang.
+      // 12 above the item and 16 below it, around a 24 icon and a 16 label.
       expect(m.itemPaddingTop).toBe(12);
       expect(m.itemPaddingBottom).toBe(16);
-      expect(m.itemPaddingTop + 24 + m.itemGap + 16 + m.itemPaddingBottom).toBeLessThanOrEqual(80);
+      expect(
+        m.itemPaddingTop + TAB_ICON_SIZE + m.itemGap + 16 + m.itemPaddingBottom,
+      ).toBeLessThanOrEqual(80);
     });
 
     it("clears the 44dp touch floor on both platforms", () => {
@@ -255,6 +268,49 @@ describe("GridgoTabBar", () => {
     // Constrained bar, not a hard lockout of accessibility text.
     expect(homeLabel.props.maxFontSizeMultiplier).toBe(1.4);
     expect(homeLabel.props.maxFontSizeMultiplier).toBeGreaterThan(1);
+  });
+
+  /**
+   * Five equal columns, so Home's distance from the left edge is Account's
+   * from the right — even though "Catalogues" is a longer word than "Home".
+   * Side safe-area is applied equally; it is zero on a typical phone.
+   */
+  describe("icon gutters", () => {
+    it("gives every destination the same share of the bar", async () => {
+      await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
+
+      const row = screen.getByTestId("gridgo-tab-bar-row");
+      const className = String(row.props.className ?? "");
+      expect(className).toContain("w-full");
+      expect(className).not.toContain("justify-evenly");
+      expect(flattenStyle(row.props.style).paddingLeft).toBe(0);
+      expect(flattenStyle(row.props.style).paddingRight).toBe(0);
+    });
+
+    it("keeps left and right edge padding equal when the phone has a side inset", async () => {
+      await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />, {
+        top: 24,
+        left: 12,
+        right: 12,
+        bottom: 24,
+      });
+
+      const row = screen.getByTestId("gridgo-tab-bar-row");
+      const style = flattenStyle(row.props.style);
+      expect(style.paddingLeft).toBe(12);
+      expect(style.paddingRight).toBe(12);
+    });
+
+    it("centres each mark in an equal column, so a long label does not steal the edge", async () => {
+      await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
+
+      const home = screen.getByRole("tab", { name: "Home" });
+      const catalogues = screen.getByRole("tab", { name: "Catalogues" });
+      expect(String(home.props.className ?? "")).toContain("flex-1");
+      expect(String(catalogues.props.className ?? "")).toContain("flex-1");
+      expect(String(home.props.className ?? "")).toContain("items-center");
+      expect(String(screen.getByText("Catalogues").props.className ?? "")).toContain("text-center");
+    });
   });
 
   /**

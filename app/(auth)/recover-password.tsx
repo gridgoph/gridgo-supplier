@@ -11,7 +11,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { PasswordField } from "@/components/controls/PasswordField";
 import { TextField } from "@/components/controls/TextField";
-import { enterAfterClerkSession, hrefAfterClerkAuth } from "@/lib/afterClerkAuth";
+import { enterAfterClerkSession, hrefAfterClerkAuth, prepareApplyDraft } from "@/lib/afterClerkAuth";
 import { clerkErrorMessage, type ClerkGetToken } from "@/lib/clerk";
 
 type Step = "email" | "code" | "password";
@@ -68,6 +68,7 @@ export default function RecoverPasswordScreen() {
       if (completed.error) throw completed.error;
       const next = await enterAfterClerkSession(getToken as ClerkGetToken);
       if (next.kind === "blocked") throw new Error(next.message);
+      if (next.kind === "apply") prepareApplyDraft(email);
       router.replace(hrefAfterClerkAuth(next));
     }, "GRIDGO could not save that password. Try again.");
   }

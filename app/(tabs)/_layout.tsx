@@ -25,6 +25,9 @@ export default function TabsLayout() {
         headerShown: false,
         animation: "none",
         sceneStyle: { backgroundColor: colors.canvas },
+        // A frozen tab whose photo tiles come down as a confirm sheet leaves
+        // crashed the Android project. The wall stays live underneath a sheet.
+        freezeOnBlur: false,
       }}
     >
       {TABS.map((tab) => (

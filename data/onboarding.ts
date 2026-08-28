@@ -9,7 +9,8 @@
  * describing features.
  */
 
-import type { IllustrationName } from "@/components/illustrations";
+/** Raster beat, keyed to `images.onboarding`. */
+export type OnboardingArt = "invoices" | "checklist" | "payment";
 
 export type OnboardingSlide = {
   id: string;
@@ -19,8 +20,8 @@ export type OnboardingSlide = {
   body: string;
   /** A clear verb. Changes on the last slide, which is the one that starts. */
   cta: string;
-  /** Which piece of art carries this beat. */
-  art: IllustrationName;
+  /** Picture for this beat. */
+  art: OnboardingArt;
 };
 
 export const onboardingSlides: readonly OnboardingSlide[] = [
@@ -30,7 +31,7 @@ export const onboardingSlides: readonly OnboardingSlide[] = [
     title: "Jobs find your shop",
     body: "GRIDGO matches print work to your capacity. Accept or decline inside the SLA — no sales chase, no Messenger ping-pong.",
     cta: "Next",
-    art: "storefront",
+    art: "invoices",
   },
   {
     id: "produce",
@@ -38,7 +39,7 @@ export const onboardingSlides: readonly OnboardingSlide[] = [
     title: "Produce and check it",
     body: "Work the approved spec and artwork. Upload self-QC evidence before you mark the job ready for pickup.",
     cta: "Next",
-    art: "working",
+    art: "checklist",
   },
   {
     id: "handoff",
@@ -46,6 +47,6 @@ export const onboardingSlides: readonly OnboardingSlide[] = [
     title: "Hand off and get paid",
     body: "Stage the job for the rider, then track protected payment status as settlement clears.",
     cta: "Get Started",
-    art: "packages",
+    art: "payment",
   },
 ] as const;

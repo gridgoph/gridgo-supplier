@@ -17,8 +17,8 @@ import * as api from "@/lib/api";
  *
  * **When the routes land**: point this module at the shipped shapes, then
  * delete `store/alerts.ts`'s `dismissed` and `deleted` lists — the whole
- * device-local fallback — and the caveat lines on `app/(tabs)/notifications`
- * that exist to describe it. Nothing else reads them.
+ * device-local fallback — and the caveat lines on `app/alerts.tsx` that exist
+ * to describe it. Nothing else reads them.
  */
 
 export type AlertWriteOutcome =

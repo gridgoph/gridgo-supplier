@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { Platform, View } from "react-native";
+import type { ReactElement, ReactNode } from "react";
+import { Platform, View, type RefreshControlProps } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
 import { spacing } from "@/constants/theme";
@@ -12,6 +12,8 @@ type Props = {
   fillHeight?: boolean;
   /** Room between the caret and the keyboard. Raise it to clear a footer. */
   bottomOffset?: number;
+  /** Pull to refresh, for a screen that is a list as well as a form. */
+  refreshControl?: ReactElement<RefreshControlProps>;
 };
 
 /**
@@ -49,6 +51,7 @@ export function FormScrollView({
   contentClassName,
   fillHeight,
   bottomOffset,
+  refreshControl,
 }: Props) {
   return (
     <KeyboardAwareScrollView
@@ -58,6 +61,7 @@ export function FormScrollView({
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
       showsVerticalScrollIndicator={false}
+      refreshControl={refreshControl}
     >
       <View className={contentClassName}>{children}</View>
     </KeyboardAwareScrollView>
