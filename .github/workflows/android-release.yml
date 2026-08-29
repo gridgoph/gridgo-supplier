@@ -68,6 +68,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free disk space for the Android build
+        run: |
+          set -euo pipefail
+          df -h /
+          # GitHub-hosted images ship .NET, Haskell, CodeQL, extra NDKs and
+          # leftover Docker layers. An Expo release Gradle run fills the disk
+          # without this: 2026-08-28 client/supplier/rider all died mid-build
+          # with "No space left on device".
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/share/swift \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/powershell \
+            /usr/local/lib/android/sdk/ndk \
+            /usr/local/lib/android/sdk/ndk-bundle
+          sudo apt-get clean
+          docker image prune -af >/dev/null 2>&1 || true
+          df -h /
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
