@@ -181,6 +181,9 @@ export type ListingPatch = {
   minimumHeightMilli?: number | null;
   minimumLengthMilli?: number | null;
   minimumOrderQuantity?: number | null;
+  /** Replaced as a set: removing a break removes it. */
+  priceTiers?: Listing["priceTiers"];
+  speedTiers?: Listing["speedTiers"];
   turnaroundMode?: Listing["turnaroundMode"];
   turnaroundHours?: number | null;
   subcategoryCode?: string;

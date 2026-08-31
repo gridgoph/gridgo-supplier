@@ -21,6 +21,7 @@ import { FormatPlusField } from "@/components/FormatPlusField";
 import { MoneyField } from "@/components/controls/MoneyField";
 import { NoteField } from "@/components/controls/NoteField";
 import { OptionList } from "@/components/controls/OptionList";
+import { PriceTierEditor, SpeedTierEditor } from "@/components/listing/TierEditor";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import { Stepper } from "@/components/controls/Stepper";
 import { TextField } from "@/components/controls/TextField";
@@ -34,6 +35,7 @@ import {
   boardStanding,
   LISTING_CAPS,
   MEASURE_UNITS,
+  unitLine,
   measurementKind,
   PRICING_UNITS,
   priceLine,
@@ -192,6 +194,8 @@ export default function ListingScreen() {
             measurementKind(working.pricingUnit) === "length" ? toMilli(working.minimumLength) : null,
           minimumOrderQuantity:
             asksQuantity(working.pricingUnit) ? working.minimumOrderQuantity : null,
+          priceTiers: asksQuantity(working.pricingUnit) ? working.priceTiers : [],
+          speedTiers: working.speedTiers,
           turnaroundMode: working.turnaroundMode,
           turnaroundHours:
             working.turnaroundMode === "override" ? working.turnaroundHours : null,
@@ -564,6 +568,14 @@ export default function ListingScreen() {
           ) : null}
 
           {asksQuantity(working.pricingUnit) ? (
+            <PriceTierEditor
+              tiers={working.priceTiers}
+              unitLabel={unitLine(merged)}
+              onChange={(next) => setDraft({ ...working, priceTiers: next })}
+            />
+          ) : null}
+
+          {asksQuantity(working.pricingUnit) ? (
             <View className="gap-2">
               <Text className="text-caption text-text-muted">
                 Least you will run — optional
@@ -591,6 +603,10 @@ export default function ListingScreen() {
             value={working.turnaroundMode}
             onChange={(value) => setDraft({ ...working, turnaroundMode: value })}
             accessibilityLabel="How long this listing takes"
+          />
+          <SpeedTierEditor
+            tiers={working.speedTiers}
+            onChange={(next) => setDraft({ ...working, speedTiers: next })}
           />
           {working.turnaroundMode === "override" ? (
             <Stepper
@@ -1011,6 +1027,8 @@ type Draft = {
   minimumHeight: number | null;
   minimumLength: number | null;
   minimumOrderQuantity: number | null;
+  priceTiers: Listing["priceTiers"];
+  speedTiers: Listing["speedTiers"];
   turnaroundMode: Listing["turnaroundMode"];
   turnaroundHours: number | null;
   subcategoryCode: string;
@@ -1030,6 +1048,8 @@ function draftFrom(listing: Listing): Draft {
     minimumHeight: fromMilli(listing.minimumHeightMilli),
     minimumLength: fromMilli(listing.minimumLengthMilli),
     minimumOrderQuantity: listing.minimumOrderQuantity,
+    priceTiers: listing.priceTiers,
+    speedTiers: listing.speedTiers,
     turnaroundMode: listing.turnaroundMode,
     turnaroundHours: listing.turnaroundHours,
     subcategoryCode: listing.subcategoryCode,
@@ -1051,6 +1071,8 @@ export function sameDraft(left: Draft, right: Draft): boolean {
     left.minimumHeight === right.minimumHeight &&
     left.minimumLength === right.minimumLength &&
     left.minimumOrderQuantity === right.minimumOrderQuantity &&
+    tierKey(left.priceTiers) === tierKey(right.priceTiers) &&
+    speedKey(left.speedTiers) === speedKey(right.speedTiers) &&
     left.turnaroundMode === right.turnaroundMode &&
     left.turnaroundHours === right.turnaroundHours &&
     left.subcategoryCode === right.subcategoryCode &&
@@ -1083,6 +1105,8 @@ function applyDraft(listing: Listing, draft: Draft): Listing {
     minimumHeightMilli: measurementKind(draft.pricingUnit) === "area" ? toMilli(draft.minimumHeight) : null,
     minimumLengthMilli: measurementKind(draft.pricingUnit) === "length" ? toMilli(draft.minimumLength) : null,
     minimumOrderQuantity: asksQuantity(draft.pricingUnit) ? draft.minimumOrderQuantity : null,
+    priceTiers: asksQuantity(draft.pricingUnit) ? draft.priceTiers : [],
+    speedTiers: draft.speedTiers,
     turnaroundMode: draft.turnaroundMode,
     turnaroundHours: draft.turnaroundMode === "override" ? draft.turnaroundHours : null,
     subcategoryCode: draft.subcategoryCode,
@@ -1165,4 +1189,15 @@ function unitHint(unit: Listing["pricingUnit"]): string {
     case "whole_job": return "One price for the whole thing. No quantity is asked.";
     default: return "A price each. The client says how many.";
   }
+}
+
+/** Tier lists compare by content, so an unchanged ladder is not a dirty draft. */
+function tierKey(tiers: Listing["priceTiers"]): string {
+  return tiers.map((tier) => `${tier.minQuantity}:${tier.unitPriceMinor}`).join(",");
+}
+
+function speedKey(tiers: Listing["speedTiers"]): string {
+  return tiers
+    .map((tier) => `${tier.turnaroundHours}:${tier.label}:${tier.priceMinor ?? "-"}:${tier.surchargeMinor ?? "-"}`)
+    .join(",");
 }
