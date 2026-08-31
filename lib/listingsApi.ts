@@ -175,6 +175,12 @@ export type ListingPatch = {
   basePriceMinor?: number;
   pricingUnit?: Listing["pricingUnit"];
   packageQty?: number | null;
+  measureUnit?: Listing["measureUnit"];
+  /** Thousandths of `measureUnit`, which is how the platform stores a size. */
+  minimumWidthMilli?: number | null;
+  minimumHeightMilli?: number | null;
+  minimumLengthMilli?: number | null;
+  minimumOrderQuantity?: number | null;
   turnaroundMode?: Listing["turnaroundMode"];
   turnaroundHours?: number | null;
   subcategoryCode?: string;

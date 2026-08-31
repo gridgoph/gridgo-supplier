@@ -28,11 +28,16 @@ import { fileFormatName, linkFormatInvitation } from "@/data/fileFormats";
 import { spacing } from "@/constants/theme";
 import {
   addOns,
+  asksQuantity,
   boardBlockers,
   boardContextFor,
   boardStanding,
   LISTING_CAPS,
+  MEASURE_UNITS,
+  measurementKind,
+  PRICING_UNITS,
   priceLine,
+  unitChoiceLabel,
   readyInLine,
   specs,
   subcategoryName,
@@ -175,6 +180,18 @@ export default function ListingScreen() {
           basePriceMinor: money.minor ?? 0,
           pricingUnit: working.pricingUnit,
           packageQty: working.pricingUnit === "per_package" ? working.packageQty : null,
+          // A rule only exists while its unit does: a square-foot minimum left
+          // on a listing switched to per-piece would price the next order off
+          // something nobody can see any more.
+          measureUnit: needsMeasure(working.pricingUnit) ? working.measureUnit : null,
+          minimumWidthMilli:
+            measurementKind(working.pricingUnit) === "area" ? toMilli(working.minimumWidth) : null,
+          minimumHeightMilli:
+            measurementKind(working.pricingUnit) === "area" ? toMilli(working.minimumHeight) : null,
+          minimumLengthMilli:
+            measurementKind(working.pricingUnit) === "length" ? toMilli(working.minimumLength) : null,
+          minimumOrderQuantity:
+            asksQuantity(working.pricingUnit) ? working.minimumOrderQuantity : null,
           turnaroundMode: working.turnaroundMode,
           turnaroundHours:
             working.turnaroundMode === "override" ? working.turnaroundHours : null,
@@ -445,11 +462,17 @@ export default function ListingScreen() {
           title="PRICE"
           hint="Your own asking price. What GRIDGO charges the client on top is not yours to set."
         >
-          <SegmentedControl
-            options={[
-              { value: "per_unit", label: "Per piece" },
-              { value: "per_package", label: "Per pack" },
-            ]}
+          {/*
+            Six ways to sell something, as a list rather than a segmented row:
+            the labels are too long to sit side by side, and the choice decides
+            which questions a client is asked, so it is worth reading properly.
+          */}
+          <OptionList
+            options={PRICING_UNITS.map((unit) => ({
+              value: unit,
+              label: unitChoiceLabel(unit),
+              hint: unitHint(unit),
+            }))}
             value={working.pricingUnit}
             onChange={(value) => setDraft({ ...working, pricingUnit: value })}
             accessibilityLabel="How this listing is priced"
@@ -459,6 +482,7 @@ export default function ListingScreen() {
             onChange={(value) => setDraft({ ...working, price: value })}
             accessibilityLabel="Your price"
           />
+
           {working.pricingUnit === "per_package" ? (
             <View className="gap-2">
               <Text className="text-caption text-text-muted">How many pieces in a pack</Text>
@@ -470,6 +494,88 @@ export default function ListingScreen() {
                 step={PACK_STEP}
                 unit="pieces"
                 accessibilityLabel="Pieces in a pack"
+              />
+            </View>
+          ) : null}
+
+          {needsMeasure(working.pricingUnit) ? (
+            <View className="gap-2">
+              <Text className="text-caption text-text-muted">What you measure in</Text>
+              <SegmentedControl
+                options={MEASURE_UNITS.map((unit) => ({ value: unit, label: unit }))}
+                value={working.measureUnit ?? "ft"}
+                onChange={(value) => setDraft({ ...working, measureUnit: value })}
+                accessibilityLabel="Measurement unit"
+              />
+            </View>
+          ) : null}
+
+          {/*
+            The smallest job worth setting up. Waste is the same on a small one,
+            and without this a shop is underpaid on every one of them.
+          */}
+          {measurementKind(working.pricingUnit) === "area" ? (
+            <View className="gap-2">
+              <Text className="text-caption text-text-muted">
+                Smallest size you charge for — optional
+              </Text>
+              <View className="flex-row gap-3">
+                <View className="flex-1">
+                  <Stepper
+                    value={working.minimumWidth ?? 0}
+                    onChange={(value) => setDraft({ ...working, minimumWidth: value || null })}
+                    min={0}
+                    max={100}
+                    step={1}
+                    unit={`${working.measureUnit ?? "ft"} wide`}
+                    accessibilityLabel="Smallest billable width"
+                  />
+                </View>
+                <View className="flex-1">
+                  <Stepper
+                    value={working.minimumHeight ?? 0}
+                    onChange={(value) => setDraft({ ...working, minimumHeight: value || null })}
+                    min={0}
+                    max={100}
+                    step={1}
+                    unit={`${working.measureUnit ?? "ft"} tall`}
+                    accessibilityLabel="Smallest billable height"
+                  />
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          {measurementKind(working.pricingUnit) === "length" ? (
+            <View className="gap-2">
+              <Text className="text-caption text-text-muted">
+                Shortest you charge for — optional
+              </Text>
+              <Stepper
+                value={working.minimumLength ?? 0}
+                onChange={(value) => setDraft({ ...working, minimumLength: value || null })}
+                min={0}
+                max={100}
+                step={1}
+                unit={working.measureUnit ?? "ft"}
+                accessibilityLabel="Shortest billable length"
+              />
+            </View>
+          ) : null}
+
+          {asksQuantity(working.pricingUnit) ? (
+            <View className="gap-2">
+              <Text className="text-caption text-text-muted">
+                Least you will run — optional
+              </Text>
+              <Stepper
+                value={working.minimumOrderQuantity ?? 0}
+                onChange={(value) => setDraft({ ...working, minimumOrderQuantity: value || null })}
+                min={0}
+                max={1000}
+                step={1}
+                unit={working.minimumOrderQuantity ? "minimum" : "no minimum"}
+                accessibilityLabel="Smallest order you will take"
               />
             </View>
           ) : null}
@@ -899,6 +1005,12 @@ type Draft = {
   price: string;
   pricingUnit: Listing["pricingUnit"];
   packageQty: number | null;
+  measureUnit: Listing["measureUnit"];
+  /** Smallest billable size, in whole units of `measureUnit` as the shop types them. */
+  minimumWidth: number | null;
+  minimumHeight: number | null;
+  minimumLength: number | null;
+  minimumOrderQuantity: number | null;
   turnaroundMode: Listing["turnaroundMode"];
   turnaroundHours: number | null;
   subcategoryCode: string;
@@ -913,6 +1025,11 @@ function draftFrom(listing: Listing): Draft {
     price: listing.basePriceMinor ? (listing.basePriceMinor / 100).toFixed(2) : "",
     pricingUnit: listing.pricingUnit,
     packageQty: listing.packageQty,
+    measureUnit: listing.measureUnit,
+    minimumWidth: fromMilli(listing.minimumWidthMilli),
+    minimumHeight: fromMilli(listing.minimumHeightMilli),
+    minimumLength: fromMilli(listing.minimumLengthMilli),
+    minimumOrderQuantity: listing.minimumOrderQuantity,
     turnaroundMode: listing.turnaroundMode,
     turnaroundHours: listing.turnaroundHours,
     subcategoryCode: listing.subcategoryCode,
@@ -929,6 +1046,11 @@ export function sameDraft(left: Draft, right: Draft): boolean {
     left.price === right.price &&
     left.pricingUnit === right.pricingUnit &&
     left.packageQty === right.packageQty &&
+    left.measureUnit === right.measureUnit &&
+    left.minimumWidth === right.minimumWidth &&
+    left.minimumHeight === right.minimumHeight &&
+    left.minimumLength === right.minimumLength &&
+    left.minimumOrderQuantity === right.minimumOrderQuantity &&
     left.turnaroundMode === right.turnaroundMode &&
     left.turnaroundHours === right.turnaroundHours &&
     left.subcategoryCode === right.subcategoryCode &&
@@ -953,6 +1075,14 @@ function applyDraft(listing: Listing, draft: Draft): Listing {
     basePriceMinor: money.ok ? (money.minor ?? 0) : listing.basePriceMinor,
     pricingUnit: draft.pricingUnit,
     packageQty: draft.pricingUnit === "per_package" ? draft.packageQty : null,
+    // A field only exists while its unit does. Keeping a stale square-foot
+    // minimum on a listing a shop just switched to per-piece would price the
+    // next order off a rule nobody can see any more.
+    measureUnit: needsMeasure(draft.pricingUnit) ? draft.measureUnit : null,
+    minimumWidthMilli: measurementKind(draft.pricingUnit) === "area" ? toMilli(draft.minimumWidth) : null,
+    minimumHeightMilli: measurementKind(draft.pricingUnit) === "area" ? toMilli(draft.minimumHeight) : null,
+    minimumLengthMilli: measurementKind(draft.pricingUnit) === "length" ? toMilli(draft.minimumLength) : null,
+    minimumOrderQuantity: asksQuantity(draft.pricingUnit) ? draft.minimumOrderQuantity : null,
     turnaroundMode: draft.turnaroundMode,
     turnaroundHours: draft.turnaroundMode === "override" ? draft.turnaroundHours : null,
     subcategoryCode: draft.subcategoryCode,
@@ -1009,4 +1139,30 @@ function DestinationRow({
       <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
     </Pressable>
   );
+}
+
+/** Thousandths of the shop's measure unit, which is how the platform stores a size. */
+function toMilli(value: number | null): number | null {
+  return value == null || value <= 0 ? null : Math.round(value * 1000);
+}
+
+function fromMilli(value: number | null): number | null {
+  return value == null ? null : value / 1000;
+}
+
+function needsMeasure(unit: Listing["pricingUnit"]): boolean {
+  const kind = measurementKind(unit);
+  return kind === "area" || kind === "length";
+}
+
+/** What choosing this unit means for the shop, and for what a client is asked. */
+function unitHint(unit: Listing["pricingUnit"]): string {
+  switch (unit) {
+    case "per_package": return "A price for a pack. You say how many are in one.";
+    case "per_page": return "A price a page. The client says how many copies.";
+    case "per_area": return "A price a square unit. The client gives a width and a height.";
+    case "per_length": return "A price a unit of length. The client gives one measurement.";
+    case "whole_job": return "One price for the whole thing. No quantity is asked.";
+    default: return "A price each. The client says how many.";
+  }
 }

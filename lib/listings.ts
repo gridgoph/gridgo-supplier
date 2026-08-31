@@ -33,7 +33,59 @@ import {
  * repeated here so a screen can stop a shop before GRIDGO has to.
  */
 
-export type PricingUnit = "per_unit" | "per_package";
+/**
+ * How a shop sells the thing.
+ *
+ * It was two: a piece, or a pack. Three of the five shops on the platform
+ * price work that cannot say -- a tarpaulin by the square foot, a plaque by the
+ * inch of its height, a document by the page. The unit is what decides which
+ * questions a client is asked, so getting it wrong means asking the wrong ones.
+ */
+export type PricingUnit =
+  | "per_unit"
+  | "per_package"
+  | "per_page"
+  | "per_area"
+  | "per_length"
+  | "whole_job";
+
+export const PRICING_UNITS: readonly PricingUnit[] = [
+  "per_unit", "per_package", "per_page", "per_area", "per_length", "whole_job",
+] as const;
+
+/** The unit a shop states its measurements in. Area is that unit squared. */
+export type MeasureUnit = "mm" | "cm" | "in" | "ft" | "m";
+export const MEASURE_UNITS: readonly MeasureUnit[] = ["mm", "cm", "in", "ft", "m"] as const;
+
+/** A bulk break: at this many, the rate becomes this. */
+export type PriceTier = { minQuantity: number; unitPriceMinor: number };
+
+/**
+ * A speed the shop sells. It either replaces the price outright -- hardbound is
+ * PHP 250 at five days and PHP 700 at two hours, which are two prices for the
+ * same book -- or adds a flat fee to the order, which is how a rush charge
+ * works. Never both.
+ */
+export type SpeedTier = {
+  id: string;
+  label: string;
+  turnaroundHours: number;
+  priceMinor: number | null;
+  surchargeMinor: number | null;
+};
+
+/** What a client has to be asked before this listing can be priced at all. */
+export function measurementKind(unit: PricingUnit): "none" | "area" | "length" | "pages" {
+  if (unit === "per_area") return "area";
+  if (unit === "per_length") return "length";
+  if (unit === "per_page") return "pages";
+  return "none";
+}
+
+/** `whole_job` is one thing at one price: asking "how many" would be wrong. */
+export function asksQuantity(unit: PricingUnit): boolean {
+  return unit !== "whole_job";
+}
 export type TurnaroundMode = "inherit" | "override";
 export type FileFormatMode = "inherit" | "override";
 
@@ -92,6 +144,16 @@ export type Listing = {
   basePriceMinor: number;
   pricingUnit: PricingUnit;
   packageQty: number | null;
+  /** Required by an area or length unit, meaningless to the others. */
+  measureUnit: MeasureUnit | null;
+  /** Smallest size the shop bills for, in thousandths of `measureUnit`. */
+  minimumWidthMilli: number | null;
+  minimumHeightMilli: number | null;
+  minimumLengthMilli: number | null;
+  /** The least the shop will run. */
+  minimumOrderQuantity: number | null;
+  priceTiers: PriceTier[];
+  speedTiers: SpeedTier[];
   turnaroundMode: TurnaroundMode;
   turnaroundHours: number | null;
   fileFormatMode: FileFormatMode;
@@ -283,8 +345,14 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
   const id = str(pick(raw, "id", "itemId", "catalogItemId"));
   if (!id) return null;
 
-  const pricingUnit: PricingUnit =
-    str(pick(raw, "pricingUnit", "pricing_unit")) === "per_package" ? "per_package" : "per_unit";
+  const declaredUnit = str(pick(raw, "pricingUnit", "pricing_unit"));
+  const pricingUnit: PricingUnit = PRICING_UNITS.includes(declaredUnit as PricingUnit)
+    ? (declaredUnit as PricingUnit)
+    : "per_unit";
+  const declaredMeasure = str(pick(raw, "measureUnit", "measure_unit"));
+  const measureUnit: MeasureUnit | null = MEASURE_UNITS.includes(declaredMeasure as MeasureUnit)
+    ? (declaredMeasure as MeasureUnit)
+    : null;
   const turnaroundMode: TurnaroundMode =
     str(pick(raw, "turnaroundMode", "turnaround_mode")) === "override" ? "override" : "inherit";
   const fileFormatMode: FileFormatMode =
@@ -300,6 +368,13 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     basePriceMinor: num(pick(raw, "basePriceMinor", "base_price_minor")) ?? 0,
     pricingUnit,
     packageQty: num(pick(raw, "packageQty", "package_qty")),
+    measureUnit,
+    minimumWidthMilli: num(pick(raw, "minimumWidthMilli", "minimum_width_milli")),
+    minimumHeightMilli: num(pick(raw, "minimumHeightMilli", "minimum_height_milli")),
+    minimumLengthMilli: num(pick(raw, "minimumLengthMilli", "minimum_length_milli")),
+    minimumOrderQuantity: num(pick(raw, "minimumOrderQuantity", "minimum_order_quantity")),
+    priceTiers: readPriceTiers(pick(raw, "priceTiers", "price_tiers")),
+    speedTiers: readSpeedTiers(pick(raw, "speedTiers", "speed_tiers")),
     turnaroundMode,
     turnaroundHours: num(pick(raw, "turnaroundHours", "turnaround_hours")),
     fileFormatMode,
@@ -428,12 +503,67 @@ export function pickLine(group: SpecGroup): string {
   return group.required ? "Pick 1" : "Optional";
 }
 
-/** "per piece" / "per pack of 100" — the unit, in the words a shop uses. */
-export function unitLine(listing: Listing): string {
-  if (listing.pricingUnit === "per_package") {
-    return listing.packageQty ? `per pack of ${listing.packageQty}` : "per pack";
+/** The unit, in the words a shop and a client both use. */
+export function unitLine(listing: Pick<Listing, "pricingUnit" | "packageQty" | "measureUnit">): string {
+  switch (listing.pricingUnit) {
+    case "per_package":
+      return listing.packageQty ? `per pack of ${listing.packageQty}` : "per pack";
+    case "per_page":
+      return "per page";
+    case "per_area":
+      return listing.measureUnit ? `per sq.${listing.measureUnit}` : "per square unit";
+    case "per_length":
+      return listing.measureUnit ? `per ${listing.measureUnit}` : "per unit of length";
+    case "whole_job":
+      return "for the whole job";
+    default:
+      return "per piece";
   }
-  return "per piece";
+}
+
+/** What the shop is choosing between, said plainly, for the price block. */
+export function unitChoiceLabel(unit: PricingUnit): string {
+  switch (unit) {
+    case "per_package": return "Per pack";
+    case "per_page": return "Per page";
+    case "per_area": return "Per area";
+    case "per_length": return "Per length";
+    case "whole_job": return "Whole job";
+    default: return "Per piece";
+  }
+}
+
+function readPriceTiers(value: unknown): PriceTier[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row) => {
+      if (!isRecord(row)) return null;
+      const minQuantity = num(pick(row, "minQuantity", "min_quantity"));
+      const unitPriceMinor = num(pick(row, "unitPriceMinor", "unit_price_minor"));
+      if (!minQuantity || minQuantity < 1 || unitPriceMinor == null || unitPriceMinor < 0) return null;
+      return { minQuantity, unitPriceMinor };
+    })
+    .filter((row): row is PriceTier => row !== null)
+    .sort((left, right) => left.minQuantity - right.minQuantity);
+}
+
+function readSpeedTiers(value: unknown): SpeedTier[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row, index) => {
+      if (!isRecord(row)) return null;
+      const turnaroundHours = num(pick(row, "turnaroundHours", "turnaround_hours"));
+      if (!turnaroundHours || turnaroundHours < 1) return null;
+      return {
+        id: str(pick(row, "id")) ?? `speed_${index}`,
+        label: str(pick(row, "label")) ?? `${turnaroundHours} hours`,
+        turnaroundHours,
+        priceMinor: num(pick(row, "priceMinor", "price_minor")),
+        surchargeMinor: num(pick(row, "surchargeMinor", "surcharge_minor")),
+      };
+    })
+    .filter((row): row is SpeedTier => row !== null)
+    .sort((left, right) => left.turnaroundHours - right.turnaroundHours);
 }
 
 /**
@@ -527,6 +657,16 @@ export function boardBlockers(listing: Listing, context: BoardContext): string[]
   }
   if (listing.pricingUnit === "per_package" && (listing.packageQty ?? 0) < 2) {
     out.push("Say how many pieces are in a pack.");
+  }
+  if (measurementKind(listing.pricingUnit) === "area" || measurementKind(listing.pricingUnit) === "length") {
+    if (!listing.measureUnit) {
+      out.push("Say what you measure in — feet, inches, metres — so a client can be asked for a size.");
+    }
+  }
+  if (
+    (listing.minimumWidthMilli == null) !== (listing.minimumHeightMilli == null)
+  ) {
+    out.push("A smallest billable size needs both a width and a height.");
   }
   if (
     listing.turnaroundMode === "override" &&
