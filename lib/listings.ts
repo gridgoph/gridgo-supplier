@@ -112,11 +112,35 @@ export type SamplePhoto = {
 export type SpecOption = {
   id: string;
   label: string;
-  /** Signed centavos, added to the base price. Never a multiplier. */
+  /** Signed centavos added to the base price. Zero when this multiplies. */
   priceModifierMinor: number;
+  /**
+   * An extra that multiplies the price instead of adding to it, in basis
+   * points — "x2 the price" is 20000.
+   *
+   * The shape a flat amount cannot hold: back-to-back doubles whatever the
+   * price is now, where a flat amount has to be re-entered by hand every time
+   * the price moves and in practice stops being right. An extra does one or
+   * the other, never both.
+   */
+  priceMultiplierBps: number | null;
   active: boolean;
   sortOrder: number;
 };
+
+/** "x2", "x1.5" — a multiplier in the words a shop writes it in. */
+export function multiplierLabel(bps: number): string {
+  const times = bps / 10_000;
+  return `x${Number.isInteger(times) ? times : times.toFixed(2).replace(/0+$/, "")}`;
+}
+
+/** Basis points from what a shop typed, or null when it is not a multiple. */
+export function toMultiplierBps(text: string): number | null {
+  const times = Number.parseFloat(text.trim().replace(/^x/i, ""));
+  if (!Number.isFinite(times) || times <= 0) return null;
+  const bps = Math.round(times * 10_000);
+  return bps > 0 ? bps : null;
+}
 
 export type SpecGroup = {
   id: string;
@@ -278,6 +302,7 @@ function readOption(raw: Raw, index: number): SpecOption | null {
     id,
     label,
     priceModifierMinor: num(pick(raw, "priceModifierMinor", "price_modifier_minor")) ?? 0,
+    priceMultiplierBps: num(pick(raw, "priceMultiplierBps", "price_multiplier_bps")) ?? null,
     active: pick(raw, "active") !== false,
     sortOrder: num(pick(raw, "sortOrder", "sort_order")) ?? index,
   };

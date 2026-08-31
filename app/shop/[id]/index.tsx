@@ -641,8 +641,14 @@ export default function ListingScreen() {
               onSetRequired={(required) => {
                 void run(async () => saveGroup(listing, group, { required }));
               }}
-              onAddOption={(label, minor) =>
-                run(async () => addOption(group, { label, priceModifierMinor: minor }))
+              onAddOption={(label, minor, multiplier) =>
+                run(async () =>
+                  addOption(group, {
+                    label,
+                    priceModifierMinor: minor,
+                    priceMultiplierBps: multiplier,
+                  }),
+                )
               }
               onRemoveOption={(optionId) => {
                 void run(async () => removeOption(group, optionId));
@@ -686,8 +692,14 @@ export default function ListingScreen() {
               step={null}
               busy={busy}
               onSetRequired={() => undefined}
-              onAddOption={(label, minor) =>
-                run(async () => addOption(group, { label, priceModifierMinor: minor }))
+              onAddOption={(label, minor, multiplier) =>
+                run(async () =>
+                  addOption(group, {
+                    label,
+                    priceModifierMinor: minor,
+                    priceMultiplierBps: multiplier,
+                  }),
+                )
               }
               onRemoveOption={(optionId) => {
                 void run(async () => removeOption(group, optionId));

@@ -53,6 +53,7 @@ const group: SpecGroup = {
       id: "cop_1",
       label: "Ready in 24 hours",
       priceModifierMinor: 20000,
+      priceMultiplierBps: null,
       active: true,
       sortOrder: 0,
     },

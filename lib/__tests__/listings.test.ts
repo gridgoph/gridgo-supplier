@@ -6,12 +6,14 @@ import {
   boardStanding,
   boardTargets,
   fromPriceMinor,
+  measurementKind,
+  multiplierLabel,
   normalizeListing,
   normalizeListings,
-  measurementKind,
   normalizeStarters,
   priceLine,
   readyInLine,
+  toMultiplierBps,
   unitLine,
   type Listing,
   type ServiceLine,
@@ -146,8 +148,8 @@ describe("what a listing costs", () => {
           sortOrder: 0,
           version: 1,
           options: [
-            { id: "o1", label: "3 × 5", priceModifierMinor: 15000, active: true, sortOrder: 0 },
-            { id: "o2", label: "2 × 3", priceModifierMinor: 5000, active: true, sortOrder: 1 },
+            { id: "o1", label: "3 × 5", priceModifierMinor: 15000, priceMultiplierBps: null, active: true, sortOrder: 0 },
+            { id: "o2", label: "2 × 3", priceModifierMinor: 5000, priceMultiplierBps: null, active: true, sortOrder: 1 },
           ],
         },
         {
@@ -159,7 +161,7 @@ describe("what a listing costs", () => {
           sortOrder: 1,
           version: 1,
           options: [
-            { id: "o3", label: "Every 2ft", priceModifierMinor: 9000, active: true, sortOrder: 0 },
+            { id: "o3", label: "Every 2ft", priceModifierMinor: 9000, priceMultiplierBps: null, active: true, sortOrder: 0 },
           ],
         },
       ],
@@ -186,7 +188,7 @@ describe("what a listing costs", () => {
             sortOrder: 0,
             version: 1,
             options: [
-              { id: "o", label: "Greyscale", priceModifierMinor: -9000, active: true, sortOrder: 0 },
+              { id: "o", label: "Greyscale", priceModifierMinor: -9000, priceMultiplierBps: null, active: true, sortOrder: 0 },
             ],
           },
         ],
@@ -374,5 +376,29 @@ describe("how a shop says it sells something", () => {
     });
     expect(parsed?.priceTiers.map((tier) => tier.minQuantity)).toEqual([1, 250]);
     expect(parsed?.speedTiers.map((tier) => tier.turnaroundHours)).toEqual([24, 120]);
+  });
+});
+
+describe("an extra priced as a multiple", () => {
+  it("reads what a shop typed as basis points", () => {
+    // "x2 the price" is 20000. Basis points because no float may reach money,
+    // and a multiplier written as a flat amount stops being right the moment
+    // the base price moves.
+    expect(toMultiplierBps("2")).toBe(20_000);
+    expect(toMultiplierBps("x2")).toBe(20_000);
+    expect(toMultiplierBps("1.5")).toBe(15_000);
+    expect(toMultiplierBps(" X1.25 ")).toBe(12_500);
+  });
+
+  it("refuses anything that is not a multiple", () => {
+    expect(toMultiplierBps("")).toBeNull();
+    expect(toMultiplierBps("free")).toBeNull();
+    expect(toMultiplierBps("0")).toBeNull();
+    expect(toMultiplierBps("-2")).toBeNull();
+  });
+
+  it("says it back the way a shop wrote it", () => {
+    expect(multiplierLabel(20_000)).toBe("x2");
+    expect(multiplierLabel(15_000)).toBe("x1.5");
   });
 });
