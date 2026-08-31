@@ -33,3 +33,31 @@ describe("humanizeApiError", () => {
     );
   });
 });
+
+describe("a refusal is not a dead connection", () => {
+  it("never tells a shop to check its signal when GRIDGO answered", () => {
+    // The captain's report: pressing start on a job the platform had
+    // deliberately refused said "Cannot reach GRIDGO. Check this device's
+    // connection." The connection was fine, so trying again did the same
+    // thing, forever.
+    const refused = new ApiError(409, { error: "some_new_rule" });
+    const message = humanizeApiError(refused, offlineMessage("save this step"));
+    expect(message).not.toMatch(/Cannot reach GRIDGO/);
+    expect(message).not.toMatch(/connection/i);
+    // And still no platform code on a screen, which is this app's own rule.
+    expect(message).not.toMatch(/some_new_rule/);
+    expect(message).not.toMatch(/_/);
+    expect(message).toMatch(/[Nn]othing was changed/);
+  });
+
+  it("still says so when the request really never arrived", () => {
+    expect(humanizeApiError(new Error("network"), offlineMessage("save this step")))
+      .toMatch(/Cannot reach GRIDGO/);
+  });
+
+  it("names the refusal a shop can actually act on", () => {
+    const contained = new ApiError(409, { error: "pickup_fulfillment_not_available" });
+    expect(humanizeApiError(contained, offlineMessage("save this step")))
+      .toMatch(/Operations/);
+  });
+});

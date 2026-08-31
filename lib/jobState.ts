@@ -119,10 +119,13 @@ export function actionsForJob(order: Pick<Order, "state" | "payoutMilestones" | 
         {
           kind: "accept",
           label: "Accept job",
-          targetState: "supplier_accepted",
+          // The client chose this shop's listing, paid its price and was given
+          // a date, all before the job arrived here. Accepting is confirming
+          // the shop can run it — there is nothing left to quote.
+          targetState: "payment_authorized",
           primary: true,
           consequence:
-            "Your shop commits to producing this job at the price you name, by the finish time you promise. The client is told both straight away.",
+            "Your shop commits to producing this job at the price on your board, by the date GRIDGO has already promised the client.",
           resultLabel: "Accepted",
         },
         {

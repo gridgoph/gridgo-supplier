@@ -297,8 +297,11 @@ describe("routeForAction", () => {
 
 describe("findAction", () => {
   it("only finds an action that is valid in the job's current state", () => {
+    // Accepting moves the job straight to production being payable. There is
+    // no quote step: the client bought this shop's listing at its own price
+    // and was given a date before the job ever arrived here.
     expect(findAction(job({ id: "a", state: "supplier_assigned" }), "accept")?.targetState).toBe(
-      "supplier_accepted",
+      "payment_authorized",
     );
     expect(findAction(job({ id: "b", state: "production" }), "accept")).toBeNull();
   });

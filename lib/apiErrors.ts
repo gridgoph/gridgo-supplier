@@ -130,6 +130,8 @@ const MESSAGES: Record<string, string> = {
     "Your shop details changed somewhere else while this screen was open. Load the latest, then make your change again.",
   expected_version_required:
     "GRIDGO could not tell which version of your details this change was made against. Load the latest and make the change again.",
+  pickup_fulfillment_not_available:
+    "Collecting from your counter is not switched on yet. Ask Operations to move this job to delivery.",
   email_not_editable:
     "Your email belongs to your GRIDGO sign-in, so it cannot be changed here. Change it where you sign in and it changes here too.",
 };
@@ -159,6 +161,22 @@ export function humanizeApiError(error: unknown, fallback: string): string {
     if (error.status >= 500) {
       return "GRIDGO could not complete this. Wait a moment and try again.";
     }
+    /*
+     A refusal is not a dead connection.
+
+     Most callers pass a sentence worth keeping — push explains that alerts
+     still arrive in the app — and those stand. What cannot stand is an offline
+     sentence: a shop pressing start on a job GRIDGO had deliberately refused
+     was told to check its signal, checked a connection that was working, tried
+     again, and got the same thing.
+
+     So only that one is replaced, and only when the server demonstrably
+     answered. The platform's code stays out of it — no snake_case reaches a
+     screen in this app, and a shop cannot act on one anyway.
+    */
+    if (fallback.startsWith(OFFLINE_PREFIX)) {
+      return "GRIDGO would not accept this, and nothing was changed. Try once more, and tell Operations if it keeps happening.";
+    }
     return fallback;
   }
   return fallback;
@@ -172,7 +190,16 @@ export function supplierProjectionErrorMessage(error: unknown): string {
   return "GRIDGO could not open this supplier account. Try again, or ask Operations to check the invitation.";
 }
 
+/**
+ * How an offline sentence starts, so a refusal can be told from a dead line.
+ *
+ * `humanizeApiError` needs to know whether the fallback it was handed claims
+ * the request never arrived. Comparing against this is what lets a caller with
+ * a better sentence keep it while an offline one is corrected.
+ */
+const OFFLINE_PREFIX = "Cannot reach GRIDGO to ";
+
 /** Wording for a request that never reached the server at all. */
 export function offlineMessage(subject: string): string {
-  return `Cannot reach GRIDGO to ${subject}. Check this device's connection, then try again.`;
+  return `${OFFLINE_PREFIX}${subject}. Check this device's connection, then try again.`;
 }
