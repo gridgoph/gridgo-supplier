@@ -16,6 +16,8 @@ import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { blackoutOnDay } from "@/lib/blackouts";
+import { monthGrid } from "@/lib/queueCalendar";
+import { QueueCalendar } from "@/components/QueueCalendar";
 import { shopDailyCapacity } from "@/lib/capacity";
 import { buildSchedule, SCHEDULE_RANGES, type ScheduleRange } from "@/lib/schedule";
 import { useShopPlan } from "@/store/shopPlan";
@@ -71,6 +73,11 @@ export default function ScheduleScreen() {
 
   const schedule = useMemo(() => buildSchedule(jobs, range, now), [jobs, range, now]);
   const dailyCapacity = useMemo(() => shopDailyCapacity(services), [services]);
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const calendarDays = useMemo(
+    () => monthGrid({ month: now, jobs, services, blackouts, now }),
+    [now, jobs, services, blackouts],
+  );
   const hasAnything =
     schedule.days.some((d) => d.jobs.length > 0) ||
     schedule.lateJobs.length > 0 ||
@@ -98,12 +105,29 @@ export default function ScheduleScreen() {
       >
         <ScreenHeader title="Schedule" right={<AlertsBell />} />
 
-        <SegmentedControl
-          options={SCHEDULE_RANGES}
-          value={range}
-          onChange={setRange}
-          accessibilityLabel="Schedule range"
-        />
+        {/*
+          The month first, then the list. A shop's own question is "which days
+          am I already spoken for" and it is answered in one look; the agenda
+          below answers "and what exactly is on them", which is the second
+          question and reads better after the first.
+        */}
+        <View className="mt-2">
+          <QueueCalendar
+            days={calendarDays}
+            month={now}
+            selectedDayKey={selectedDayKey}
+            onSelectDay={(day) => setSelectedDayKey(day.inMonth ? day.dayKey : null)}
+          />
+        </View>
+
+        <View className="mt-8">
+          <SegmentedControl
+            options={SCHEDULE_RANGES}
+            value={range}
+            onChange={setRange}
+            accessibilityLabel="Schedule range"
+          />
+        </View>
 
         <View className="mt-4 flex-row gap-3">
           <StatTile label="Late" value={schedule.summary.late} tone="error" />
