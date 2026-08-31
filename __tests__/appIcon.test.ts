@@ -5,7 +5,8 @@ import { join } from "node:path";
 import type { ExpoConfig } from "expo/config";
 
 /**
- * The home-screen icon is the GRIDGO 3×3 mark, not the Expo chevron.
+ * The home-screen icon is the GRIDGO SUPPLIER wordmark lockup on a
+ * black plate, not the Expo chevron and not the 3×3 mark.
  *
  * `app.json` is the source of the paths Expo prebuild copies into the
  * native project. A leftover `react-logo*` asset or the default Expo
@@ -100,7 +101,7 @@ describe("GRIDGO app icon", () => {
   it("points icon, adaptive layers, favicon and splash at the mark files", () => {
     expect(appJson.expo.icon).toBe("./assets/images/icon.png");
     expect(appJson.expo.android?.adaptiveIcon).toEqual({
-      backgroundColor: "#111111",
+      backgroundColor: "#000000",
       foregroundImage: "./assets/images/android-icon-foreground.png",
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
@@ -109,15 +110,15 @@ describe("GRIDGO app icon", () => {
 
     const splash = pluginOptions("expo-splash-screen");
     expect(splash.image).toBe("./assets/images/splash-icon.png");
-    expect(splash.backgroundColor).toBe("#111111");
+    expect(splash.backgroundColor).toBe("#000000");
     expect(splash.dark).toEqual({
       image: "./assets/images/splash-icon-dark.png",
-      backgroundColor: "#111111",
+      backgroundColor: "#000000",
     });
   });
 
-  it("uses the legacy cockpit plate, not Expo blue, white, or #000000", () => {
-    expect(appJson.expo.android?.adaptiveIcon?.backgroundColor).toBe("#111111");
+  it("uses a black plate, not Expo blue or white", () => {
+    expect(appJson.expo.android?.adaptiveIcon?.backgroundColor).toBe("#000000");
     const encoded = JSON.stringify(appJson);
     expect(encoded).not.toContain("#E6F4FE");
     expect(encoded).not.toContain("#e6f4fe");
@@ -149,26 +150,28 @@ describe("GRIDGO app icon", () => {
     expect(names).not.toContain("partial-react-logo.png");
   });
 
-  it("paints yellow / muted / muted on the right column, whites elsewhere", () => {
+  it("paints the GRIDGO SUPPLIER lockup, not the 3x3 mark", () => {
     const icon = join(images, "icon.png");
-    // 108-viewport centres 38/54/70 scaled onto 1024 — same as the generator.
-    const at = (cx: number, cy: number) =>
+    expect(hexRgb(pngPixel(icon, 8, 8))).toBe("#000000");
+    // 3x3 yellow cell on the printing_app viewport — lockup leaves this plate.
+    expect(
       hexRgb(
         pngPixel(
           icon,
-          Math.round((cx / 108) * 1024),
-          Math.round((cy / 108) * 1024),
+          Math.round((70 / 108) * 1024),
+          Math.round((38 / 108) * 1024),
         ),
-      );
-    expect([
-      [at(38, 38), at(54, 38), at(70, 38)],
-      [at(38, 54), at(54, 54), at(70, 54)],
-      [at(38, 70), at(54, 70), at(70, 70)],
-    ]).toEqual([
-      ["#FFFFFF", "#FFFFFF", "#FFDE58"],
-      ["#FFFFFF", "#FFFFFF", "#8A8A8A"],
-      ["#FFFFFF", "#FFFFFF", "#8A8A8A"],
-    ]);
-    expect(hexRgb(pngPixel(icon, 8, 8))).toBe("#111111");
+      ),
+    ).toBe("#000000");
+    // GO yellow and the SUPPLIER line, sampled off the committed lockup.
+    expect(hexRgb(pngPixel(icon, 634, 491))).toBe("#FFE05A");
+    expect(hexRgb(pngPixel(icon, 512, 573))).toBe("#FBFBFB");
+
+    const generator = readFileSync(
+      join(root, "scripts/generate-app-icon.py"),
+      "utf8",
+    );
+    expect(generator).toContain("wordmark lockup");
+    expect(generator).not.toContain("CENTRES = (38, 54, 70)");
   });
 });
