@@ -30,7 +30,8 @@ type Props = {
  * dismiss the keyboard on its way through.
  *
  * Default is hidden. Revealing is the deliberate act. The accessible name
- * changes with state ("Show password" / "Hide password").
+ * includes the field's own label ("Show Current password") so three password
+ * boxes on one screen stay distinct to a screen reader.
  */
 export function PasswordField({
   value,
@@ -45,7 +46,7 @@ export function PasswordField({
   const colors = useThemeColors();
   const [visible, setVisible] = useState(false);
   const Icon = visible ? EyeOff : Eye;
-  const toggleLabel = visible ? "Hide password" : "Show password";
+  const toggleLabel = visible ? `Hide ${accessibilityLabel}` : `Show ${accessibilityLabel}`;
 
   return (
     <View

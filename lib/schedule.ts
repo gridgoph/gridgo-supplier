@@ -57,7 +57,15 @@ export function isAgendaEligible(job: Pick<Order, "state">): boolean {
 
 /** Work that has left the shop is history, not agenda. */
 export function isStillInShop(job: Pick<Order, "state">): boolean {
-  return !["picked_up", "out_for_delivery", "delivered", "issue_window_open", "completed", "payout_released"].includes(
+  return ![
+    "picked_up",
+    "out_for_delivery",
+    "awaiting_collection",
+    "delivered",
+    "issue_window_open",
+    "completed",
+    "payout_released",
+  ].includes(
     job.state,
   );
 }

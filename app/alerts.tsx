@@ -1,13 +1,15 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useNavigation } from "expo-router";
 
 import { AlertCard } from "@/components/AlertCard";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { PushEnableCard } from "@/components/PushEnableCard";
+import { SecondaryButton } from "@/components/SecondaryButton";
 import { SectionHeader } from "@/components/SectionHeader";
 import { SkeletonList } from "@/components/Skeleton";
+import { spacing, touchTarget, typography } from "@/constants/theme";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { localOnlyCaveat } from "@/lib/alertsApi";
@@ -34,16 +36,20 @@ import { useThemeColors } from "@/hooks/useTheme";
  *
  * Clearing and deleting both go to GRIDGO first; see `lib/alertsApi` for what
  * happens when a route is not deployed yet, and for the cleanup that is owed
- * once they all are.
+ * once they all are. "Clear notifications" is the same delete, for every
+ * alert on screen — the client's bulk action lives after the list; this
+ * screen also puts it in the header because the title row is free.
  */
 export default function NotificationsScreen() {
   const colors = useThemeColors();
+  const navigation = useNavigation();
   const dismissed = useAlertsStore((s) => s.dismissed);
   const deleted = useAlertsStore((s) => s.deleted);
   const localOnly = useAlertsStore((s) => s.localOnly);
   const markRead = useAlertsStore((s) => s.markRead);
   const markManyRead = useAlertsStore((s) => s.markManyRead);
   const removeAlert = useAlertsStore((s) => s.remove);
+  const removeMany = useAlertsStore((s) => s.removeMany);
   const syncFrom = useAlertsStore((s) => s.syncFrom);
   const [items, setItems] = useState<api.Notification[]>([]);
   const [jobs, setJobs] = useState<api.Order[]>([]);
@@ -106,6 +112,7 @@ export default function NotificationsScreen() {
   );
 
   const shown = useMemo(() => visibleAlerts(items, deleted), [items, deleted]);
+  const clearableIds = useMemo(() => shown.map((alert) => alert.id), [shown]);
 
   const { unread, read } = useMemo(
     () => ({
@@ -158,6 +165,39 @@ export default function NotificationsScreen() {
     const outcome = await removeAlert(alert.id);
     if (outcome.status === "failed") setActionError(outcome.message);
   }
+
+  /**
+   * Empty the inbox that is on screen.
+   *
+   * Same confirmation as a single swipe-delete, because the platform's delete
+   * is permanent and there is no undo. Only the ids already drawn — an alert
+   * that arrives while the sheet is open is one the shop has never been shown.
+   */
+  const confirmClearAll = useCallback(async () => {
+    if (!clearableIds.length) return;
+    const confirmed = await askConfirm({
+      question: "Clear all notifications?",
+      consequence:
+        "They go for good, and GRIDGO will not send them again. The jobs they are about are not affected — you can still open them from Jobs.",
+      confirmLabel: "Clear notifications",
+      cancelLabel: "Keep them",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setActionError(null);
+    const outcome = await removeMany(clearableIds);
+    if (outcome.status === "failed") setActionError(outcome.message);
+  }, [clearableIds, removeMany]);
+
+  const canClear = loaded && clearableIds.length > 0;
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: canClear
+        ? () => <ClearHeaderButton onPress={() => void confirmClearAll()} />
+        : () => null,
+    });
+  }, [canClear, confirmClearAll, navigation]);
 
   async function clearOne(alert: api.Notification) {
     setActionError(null);
@@ -277,10 +317,56 @@ export default function NotificationsScreen() {
           </View>
         ) : null}
 
+        {canClear ? (
+          <View className={shown.length ? "mt-6" : undefined}>
+            <SecondaryButton
+              label="Clear notifications"
+              onPress={() => void confirmClearAll()}
+            />
+          </View>
+        ) : null}
+
         {loaded && shown.length > 0 && caveat ? (
           <Text className="mt-6 text-caption text-text-muted">{caveat}</Text>
         ) : null}
       </ScrollView>
     </View>
+  );
+}
+
+/**
+ * The inbox action in the stack header.
+ *
+ * NativeWind does not reach a React Navigation header control, so the type
+ * and the 44dp target are tokens in `style` — the same ink as "Mark all read"
+ * on the page, just where this screen's title row actually lives.
+ */
+function ClearHeaderButton({ onPress }: { onPress: () => void }) {
+  const colors = useThemeColors();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Clear notifications"
+      style={{
+        minHeight: touchTarget,
+        minWidth: touchTarget,
+        justifyContent: "center",
+        alignItems: "flex-end",
+        paddingHorizontal: spacing.xs,
+      }}
+    >
+      {({ pressed }) => (
+        <Text
+          style={{
+            ...typography.button,
+            color: colors.textPrimary,
+            opacity: pressed ? 0.6 : 1,
+          }}
+        >
+          Clear
+        </Text>
+      )}
+    </Pressable>
   );
 }

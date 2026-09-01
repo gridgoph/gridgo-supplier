@@ -20,6 +20,7 @@ import { monthGrid } from "@/lib/queueCalendar";
 import { QueueCalendar } from "@/components/QueueCalendar";
 import { shopDailyCapacity } from "@/lib/capacity";
 import { buildSchedule, SCHEDULE_RANGES, type ScheduleRange } from "@/lib/schedule";
+import { useSession } from "@/store/session";
 import { useShopPlan } from "@/store/shopPlan";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -33,6 +34,7 @@ import { useThemeColors } from "@/hooks/useTheme";
 export default function ScheduleScreen() {
   const colors = useThemeColors();
   const blackouts = useShopPlan((s) => s.blackouts);
+  const shopLabel = useSession((s) => s.user?.shop?.label ?? null);
   const [jobs, setJobs] = useState<api.Order[]>([]);
   const [services, setServices] = useState<api.SupplierService[]>([]);
   const [range, setRange] = useState<ScheduleRange>("week");
@@ -74,9 +76,10 @@ export default function ScheduleScreen() {
   const schedule = useMemo(() => buildSchedule(jobs, range, now), [jobs, range, now]);
   const dailyCapacity = useMemo(() => shopDailyCapacity(services), [services]);
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [viewMonth, setViewMonth] = useState(() => new Date());
   const calendarDays = useMemo(
-    () => monthGrid({ month: now, jobs, services, blackouts, now }),
-    [now, jobs, services, blackouts],
+    () => monthGrid({ month: viewMonth, jobs, services, blackouts, now }),
+    [viewMonth, jobs, services, blackouts, now],
   );
   const hasAnything =
     schedule.days.some((d) => d.jobs.length > 0) ||
@@ -114,9 +117,11 @@ export default function ScheduleScreen() {
         <View className="mt-2">
           <QueueCalendar
             days={calendarDays}
-            month={now}
+            month={viewMonth}
             selectedDayKey={selectedDayKey}
+            placeLabel={shopLabel}
             onSelectDay={(day) => setSelectedDayKey(day.inMonth ? day.dayKey : null)}
+            onChangeMonth={setViewMonth}
           />
         </View>
 

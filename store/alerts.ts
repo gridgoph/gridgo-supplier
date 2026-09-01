@@ -33,6 +33,11 @@ type AlertsState = {
   /** Mark exactly these read — never "everything", see `lib/alertsApi`. */
   markManyRead: (ids: string[]) => Promise<alertsApi.AlertWriteOutcome>;
   remove: (id: string) => Promise<alertsApi.AlertWriteOutcome>;
+  /**
+   * Delete exactly these. Same path as a single swipe-delete, one after another,
+   * so a refusal mid-way keeps what already went and leaves the rest on screen.
+   */
+  removeMany: (ids: string[]) => Promise<alertsApi.AlertWriteOutcome>;
   /** Recount from a freshly loaded list, honouring local decisions. */
   syncFrom: (alerts: Notification[]) => void;
 };
@@ -93,6 +98,14 @@ export const useAlertsStore = create<AlertsState>()(
         });
         if (outcome.status === "not_open_yet") set({ localOnly: true });
         return outcome;
+      },
+      removeMany: async (ids) => {
+        let last: alertsApi.AlertWriteOutcome = { status: "saved" };
+        for (const id of ids) {
+          last = await get().remove(id);
+          if (last.status === "failed") return last;
+        }
+        return last;
       },
       syncFrom: (alerts) => {
         const { dismissed, deleted } = get();

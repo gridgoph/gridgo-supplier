@@ -2,7 +2,10 @@ import type { Order, SupplierService } from "@/lib/api";
 import type { Blackout } from "@/lib/blackouts";
 import {
   DEFAULT_WORKING_DAYS,
+  calendarPlaceLabel,
   dayDetail,
+  dayDiscKind,
+  dayDiscLiquid,
   monthGrid,
   monthTally,
   stateFor,
@@ -137,6 +140,59 @@ describe("what a day says when a shop taps it", () => {
       month: MARCH, jobs: [job("2026-03-10", 420)], services: [service(null)], now: NOW,
     });
     expect(dayDetail(dayOf(noLimit, "2026-03-10"))).toContain("no daily limit set");
+  });
+});
+
+describe("how a day is drawn", () => {
+  const grid = (jobs: Order[] = [], capacity: number | null = 500, blackouts: Blackout[] = []) =>
+    monthGrid({ month: MARCH, jobs, services: [service(capacity)], blackouts, now: NOW });
+
+  it("paints neighbouring months quiet, not as this month's work", () => {
+    const outside = grid().find((day) => !day.inMonth);
+    if (!outside) throw new Error("expected padding cells");
+    expect(dayDiscKind(outside)).toBe("placeholder");
+    expect(dayDiscLiquid(outside)).toBeNull();
+  });
+
+  it("paints a closed Sunday shut even when it is still ahead", () => {
+    expect(dayDiscKind(dayOf(grid(), "2026-03-15"))).toBe("shut");
+    expect(dayDiscLiquid(dayOf(grid(), "2026-03-15"))).toBeNull();
+  });
+
+  it("paints an empty day that has gone shut, and an empty day still ahead open", () => {
+    // Monday 9 March is "now". Friday 6 is past and vacant; Tuesday 10 is free.
+    expect(dayDiscKind(dayOf(grid(), "2026-03-06"))).toBe("shut");
+    expect(dayDiscKind(dayOf(grid(), "2026-03-10"))).toBe("open");
+  });
+
+  it("fills a working day as a liquid from the shop's own load", () => {
+    const days = grid([job("2026-03-10", 200)]);
+    expect(dayDiscKind(dayOf(days, "2026-03-10"))).toBe("progress");
+    expect(dayDiscLiquid(dayOf(days, "2026-03-10"))).toBeCloseTo(0.4);
+  });
+
+  it("paints a full day solid, so the cup is not a gauge once it is at the limit", () => {
+    const days = grid([job("2026-03-11", 500)]);
+    expect(dayDiscKind(dayOf(days, "2026-03-11"))).toBe("full");
+    expect(dayDiscLiquid(dayOf(days, "2026-03-11"))).toBeNull();
+  });
+
+  it("uses a half-cup when work is on and no limit is set", () => {
+    const days = monthGrid({
+      month: MARCH, jobs: [job("2026-03-10", 420)], services: [service(null)], now: NOW,
+    });
+    expect(dayDiscKind(dayOf(days, "2026-03-10"))).toBe("progress");
+    expect(dayDiscLiquid(dayOf(days, "2026-03-10"))).toBe(0.5);
+  });
+});
+
+describe("the masthead place", () => {
+  it("uses a short shop place and refuses a street dump or an invented city", () => {
+    expect(calendarPlaceLabel("Davao City")).toBe("Davao City");
+    expect(calendarPlaceLabel("12 Claveria St, Davao City")).toBe("Davao City");
+    expect(calendarPlaceLabel("A very long street address without a city comma")).toBeNull();
+    expect(calendarPlaceLabel(null)).toBeNull();
+    expect(calendarPlaceLabel("")).toBeNull();
   });
 });
 

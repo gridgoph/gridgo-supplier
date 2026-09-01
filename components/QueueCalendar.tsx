@@ -1,31 +1,42 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { ChevronLeft, ChevronRight } from "lucide-react-native";
+import { useReducedMotion } from "react-native-reanimated";
 
-import { useThemeColors } from "@/hooks/useTheme";
+import { fontFamily } from "@/constants/fonts";
+import { colors as palette } from "@/constants/theme";
+import { useThemeColors, useThemeName } from "@/hooks/useTheme";
+import { formatClockTime } from "@/lib/dates";
 import {
+  calendarPlaceLabel,
   dayDetail,
+  dayDiscKind,
+  dayDiscLiquid,
   monthTally,
   stateLabel,
   type CalendarDay,
+  type DayDiscKind,
   type DayState,
 } from "@/lib/queueCalendar";
 
 /**
- * The shop's month, as a wall calendar.
+ * The shop's month, as a wall of dots.
  *
- * The composition is the captain's reference: an oversized day numeral, the
- * month beneath it with the year quieter still, the weekday off to the right,
- * then a grid of dots under their weekday letters. What changes is the palette,
- * which is GRIDGO's.
+ * Palette is pinned to the captain's board: gold numeral, white month,
+ * muted year, weekday and clock on the right, then a 7-wide circle grid.
+ * Surrounding chrome stays GRIDGO's. The one risk is the grid itself —
+ * every cell is a disc, and a day being worked fills from the bottom like
+ * a cup, not a pie.
  *
- * Each dot is a gauge rather than a flat colour — it fills from the bottom as
- * the day fills. That is the difference between a calendar that says "busy"
- * and one a shop can plan against: a day at a fifth and a day at four fifths
- * are both "ongoing", and only one of them can take a rush job.
+ *   canvas / black   #000000
+ *   gold             actionYellow #FFDE58
+ *   closed / past    light error  #C62828
+ *   open             white
+ *   padding days     surfaceVariant
  *
- * It also means the calendar survives greyscale, which the three colours alone
- * would not: an empty ring, a part-filled one and a solid disc are three
- * different shapes before they are three different colours.
+ * Display is Satoshi-Black on the selected day number only. Everything else
+ * stays the UI scale. The liquid surface is a straight line; reduced motion
+ * leaves it still.
  */
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"] as const;
@@ -34,20 +45,34 @@ const MONTHS = [
   "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
 ] as const;
 const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const WEEKDAY_FULL = [
+  "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+] as const;
+
+const DISC_SIZE = 40;
+const RING = 2;
 
 export function QueueCalendar({
   days,
   month,
   selectedDayKey,
+  placeLabel,
   onSelectDay,
+  onChangeMonth,
 }: {
   days: CalendarDay[];
   /** Any date inside the month being drawn. */
   month: Date;
   selectedDayKey: string | null;
+  /** Shop pin label, if the shop has given GRIDGO one. Never invented. */
+  placeLabel?: string | null;
   onSelectDay: (day: CalendarDay) => void;
+  onChangeMonth: (month: Date) => void;
 }) {
   const colors = useThemeColors();
+  const clock = useTickingClock();
+  const place = calendarPlaceLabel(placeLabel);
+  const showSeconds = useReducedMotion() !== true;
 
   const headline = useMemo(() => {
     const selected = days.find((day) => day.dayKey === selectedDayKey && day.inMonth);
@@ -57,35 +82,57 @@ export function QueueCalendar({
 
   const headlineDate = headline ? new Date(`${headline.dayKey}T00:00:00`) : month;
   const tally = useMemo(() => monthTally(days), [days]);
+  const clockLine = place
+    ? `${formatClockTime(clock, { seconds: showSeconds })} · ${place}`
+    : formatClockTime(clock, { seconds: showSeconds });
 
   return (
     <View className="gap-6">
-      {/*
-        The masthead. The numeral is the largest thing on the screen because
-        the shop's own question is about a day, not a month — and it takes
-        GRIDGO's gold rather than the primary yellow, which is spent on the
-        one control a screen is for and is unreadable at this size on white.
-      */}
-      <View>
-        <Text
-          className="font-bold"
-          // Larger than any step on the scale, which is the point: this is the
-          // one number a shop opens the screen for. The size is inline because
-          // the type scale deliberately stops at 32.
-          style={{ fontSize: 96, lineHeight: 100, letterSpacing: -4, color: colors.brand }}
-          accessibilityRole="header"
-        >
-          {String(headlineDate.getDate()).padStart(2, "0")}
-        </Text>
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="flex-1">
+          <Text
+            className="font-black"
+            style={{ fontSize: 96, lineHeight: 100, letterSpacing: -4, color: colors.brand }}
+            accessibilityRole="header"
+            accessibilityLabel={`${WEEKDAY_FULL[headlineDate.getDay()]} ${headlineDate.getDate()} ${MONTHS[headlineDate.getMonth()]} ${headlineDate.getFullYear()}`}
+          >
+            {String(headlineDate.getDate()).padStart(2, "0")}
+          </Text>
+          <Text className="text-h2 text-text-primary">{MONTHS[headlineDate.getMonth()]}</Text>
+          <Text className="text-body text-text-muted">{headlineDate.getFullYear()}</Text>
+        </View>
 
-        <View className="mt-1 flex-row items-baseline justify-between gap-3">
-          <View>
-            <Text className="text-h2 text-text-primary">{MONTHS[headlineDate.getMonth()]}</Text>
-            <Text className="text-h3 text-text-muted">{headlineDate.getFullYear()}</Text>
-          </View>
-          <Text className="text-h3 text-text-secondary">
+        <View className="items-end pt-3">
+          <Text className="text-h3 text-text-primary">
             {WEEKDAY_NAMES[headlineDate.getDay()]}
           </Text>
+          <Text className="text-caption text-text-muted">{clockLine}</Text>
+          <View className="mt-6 flex-row items-center">
+            <Pressable
+              onPress={() =>
+                onChangeMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))
+              }
+              accessibilityRole="button"
+              accessibilityLabel="Previous month"
+              hitSlop={6}
+              className="gg-touch items-center justify-center"
+              style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+            >
+              <ChevronLeft size={22} color={colors.textPrimary} strokeWidth={2} />
+            </Pressable>
+            <Pressable
+              onPress={() =>
+                onChangeMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))
+              }
+              accessibilityRole="button"
+              accessibilityLabel="Next month"
+              hitSlop={6}
+              className="gg-touch items-center justify-center"
+              style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+            >
+              <ChevronRight size={22} color={colors.textPrimary} strokeWidth={2} />
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -115,16 +162,15 @@ export function QueueCalendar({
         </View>
       </View>
 
-      {/*
-        The key, and the month in one line. Without the words this is a grid
-        of coloured circles, which is the one thing a status in this product
-        may never be.
-      */}
       <View className="gap-2">
         <View className="flex-row flex-wrap gap-x-4 gap-y-2">
           {(["vacant", "ongoing", "full", "closed"] as DayState[]).map((state) => (
             <View key={state} className="flex-row items-center gap-2">
-              <Dot state={state} fraction={state === "ongoing" ? 0.55 : null} size={12} />
+              <Disc
+                kind={legendKind(state)}
+                liquid={state === "ongoing" ? 0.55 : null}
+                size={12}
+              />
               <Text className="text-caption text-text-secondary">
                 {stateLabel(state)}
                 {tally[state] ? ` · ${tally[state]}` : ""}
@@ -147,6 +193,19 @@ export function QueueCalendar({
   );
 }
 
+function legendKind(state: DayState): DayDiscKind {
+  switch (state) {
+    case "vacant":
+      return "open";
+    case "ongoing":
+      return "progress";
+    case "full":
+      return "full";
+    case "closed":
+      return "shut";
+  }
+}
+
 function DayDot({
   day,
   selected,
@@ -157,6 +216,7 @@ function DayDot({
   onPress: () => void;
 }) {
   const colors = useThemeColors();
+  const kind = dayDiscKind(day);
 
   return (
     <View style={{ width: `${100 / 7}%` }} className="items-center py-1">
@@ -165,7 +225,6 @@ function DayDot({
         disabled={!day.inMonth}
         accessibilityRole="button"
         accessibilityState={{ selected, disabled: !day.inMonth }}
-        // The whole answer, because a screen reader gets no colour at all.
         accessibilityLabel={`${day.day}: ${stateLabel(day.state)}. ${dayDetail(day)}`}
         hitSlop={6}
         className="gg-touch items-center justify-center"
@@ -173,16 +232,18 @@ function DayDot({
       >
         <View
           style={{
-            // Today keeps the reference's accent ring, which is also the one
-            // place on this screen the primary yellow is spent.
-            borderWidth: selected || day.isToday ? 2 : 0,
-            borderColor: selected ? colors.textPrimary : colors.actionYellow,
+            borderWidth: RING,
+            borderColor: selected ? colors.actionYellow : "transparent",
             borderRadius: 999,
             padding: 2,
-            opacity: day.inMonth ? (day.isPast ? 0.4 : 1) : 0.15,
           }}
         >
-          <Dot state={day.state} fraction={day.fraction} size={30} />
+          <Disc
+            kind={kind}
+            liquid={dayDiscLiquid(day)}
+            size={DISC_SIZE}
+            label={String(day.day)}
+          />
         </View>
       </Pressable>
     </View>
@@ -190,54 +251,26 @@ function DayDot({
 }
 
 /**
- * One day, drawn as how full it is.
- *
- * The fill rises from the bottom in proportion to the day's load, so a fifth
- * booked and four fifths booked are visibly different rather than both simply
- * "ongoing". A day with work but no capacity set gets a fixed half — GRIDGO
- * knows something is on it and honestly cannot say how much.
+ * One disc. Solid for open / full / shut / padding; a cup of yellow for a
+ * day that is only part-booked. The fill is a rectangle clipped by the
+ * circle, so its top edge stays a flat liquid line.
  */
-function Dot({
-  state,
-  fraction,
+function Disc({
+  kind,
+  liquid,
   size,
+  label,
 }: {
-  state: DayState;
-  fraction: number | null;
+  kind: DayDiscKind;
+  liquid: number | null;
   size: number;
+  label?: string;
 }) {
-  const colors = useThemeColors();
-
-  if (state === "closed") {
-    return (
-      <View
-        style={{
-          width: size,
-          height: size,
-          borderRadius: 999,
-          borderWidth: 1,
-          borderColor: colors.outline,
-          backgroundColor: colors.surfaceVariant,
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-        }}
-      >
-        {/* A strike, so "shut" is a shape and not a shade. */}
-        <View
-          style={{
-            width: size * 1.4,
-            height: 1.5,
-            backgroundColor: colors.textMuted,
-            transform: [{ rotate: "-45deg" }],
-          }}
-        />
-      </View>
-    );
-  }
-
-  const filled = state === "full" ? 1 : state === "ongoing" ? (fraction ?? 0.5) : 0;
-  const fill = state === "full" ? colors.error : colors.actionYellow;
+  const theme = useThemeName();
+  const tokens = useThemeColors();
+  const paint = discPaint(kind, theme, tokens, liquid);
+  const inner = size - paint.outlineWidth * 2;
+  const fillHeight = liquid != null ? inner * liquid : 0;
 
   return (
     <View
@@ -245,16 +278,115 @@ function Dot({
         width: size,
         height: size,
         borderRadius: 999,
-        borderWidth: 1,
-        borderColor: state === "vacant" ? colors.outline : fill,
-        backgroundColor: colors.surface,
+        borderWidth: paint.outlineWidth,
+        borderColor: paint.outline,
+        backgroundColor: paint.background,
         overflow: "hidden",
         justifyContent: "flex-end",
       }}
     >
-      {filled > 0 ? (
-        <View style={{ height: `${Math.min(1, filled) * 100}%`, backgroundColor: fill }} />
+      {liquid != null && fillHeight > 0 ? (
+        <View
+          testID={label ? `day-liquid-${label}` : undefined}
+          style={{ height: fillHeight, width: "100%", backgroundColor: paint.fill }}
+        />
+      ) : null}
+      {label ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text
+            style={{
+              color: paint.text,
+              fontFamily: fontFamily.bold,
+              fontSize: Math.round(size * 0.34),
+              lineHeight: Math.round(size * 0.4),
+              includeFontPadding: false,
+            }}
+          >
+            {label}
+          </Text>
+        </View>
       ) : null}
     </View>
   );
+}
+
+function discPaint(
+  kind: DayDiscKind,
+  theme: "light" | "dark",
+  tokens: ReturnType<typeof useThemeColors>,
+  liquid: number | null,
+) {
+  const closed = palette.light.error;
+  const white = palette.light.surface;
+  const onWhite = palette.light.textPrimary;
+  const onRed = palette.light.accentOn;
+
+  switch (kind) {
+    case "placeholder":
+      return {
+        background: tokens.surfaceVariant,
+        fill: tokens.surfaceVariant,
+        outline: "transparent",
+        outlineWidth: 0,
+        text: tokens.textMuted,
+      };
+    case "shut":
+      return {
+        background: closed,
+        fill: closed,
+        outline: "transparent",
+        outlineWidth: 0,
+        text: onRed,
+      };
+    case "full":
+      return {
+        background: tokens.actionYellow,
+        fill: tokens.actionYellow,
+        outline: "transparent",
+        outlineWidth: 0,
+        text: tokens.actionYellowOn,
+      };
+    case "open":
+      return {
+        background: white,
+        fill: white,
+        outline: theme === "light" ? tokens.outline : "transparent",
+        outlineWidth: theme === "light" ? 1 : 0,
+        text: onWhite,
+      };
+    case "progress": {
+      const onYellow = (liquid ?? 0) >= 0.5;
+      return {
+        background: tokens.canvas,
+        fill: tokens.actionYellow,
+        outline: theme === "dark" ? tokens.textPrimary : tokens.outline,
+        outlineWidth: 1.5,
+        text: onYellow ? tokens.actionYellowOn : tokens.textPrimary,
+      };
+    }
+  }
+}
+
+function useTickingClock(): Date {
+  const reduceMotion = useReducedMotion();
+  const [clock, setClock] = useState(() => new Date());
+
+  useEffect(() => {
+    const interval = reduceMotion ? 60_000 : 1_000;
+    const id = setInterval(() => setClock(new Date()), interval);
+    return () => clearInterval(id);
+  }, [reduceMotion]);
+
+  return clock;
 }

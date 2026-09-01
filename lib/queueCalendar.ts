@@ -187,3 +187,54 @@ export function monthTally(days: CalendarDay[]): Record<DayState, number> {
   }
   return tally;
 }
+
+/**
+ * How a day is drawn. The four shop states stay the same; this is only the
+ * disc the month paints so a shop can read the board in one look.
+ *
+ * - Neighbouring-month padding → quiet grey
+ * - Closed, or an empty day that has already gone → deep red
+ * - Work on, not yet at the shop's own limit → yellow liquid
+ * - At capacity → solid gold
+ * - Open and still ahead → solid white
+ */
+export type DayDiscKind = "placeholder" | "shut" | "progress" | "full" | "open";
+
+export function dayDiscKind(day: CalendarDay): DayDiscKind {
+  if (!day.inMonth) return "placeholder";
+  if (day.state === "closed") return "shut";
+  if (day.state === "full") return "full";
+  if (day.state === "ongoing") return "progress";
+  if (day.isPast) return "shut";
+  return "open";
+}
+
+/**
+ * How far the yellow liquid rises on a day that is being worked.
+ *
+ * Null on every solid disc — those are a colour, not a gauge. A day with work
+ * on and no daily limit set gets a fixed half: GRIDGO knows something is
+ * booked and honestly cannot say how much.
+ */
+export function dayDiscLiquid(day: CalendarDay): number | null {
+  if (dayDiscKind(day) !== "progress") return null;
+  if (day.fraction == null) return 0.5;
+  return Math.min(1, Math.max(0, day.fraction));
+}
+
+/**
+ * A short place name from the shop's own pin, or nothing.
+ *
+ * The masthead may show the city the shop already gave GRIDGO. It must not
+ * invent one, and it must not dump a street address into a caption.
+ */
+export function calendarPlaceLabel(label: string | null | undefined): string | null {
+  if (!label) return null;
+  const parts = label
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const candidate = parts.length > 1 ? parts[parts.length - 1] : (parts[0] ?? "");
+  if (!candidate || candidate.length > 18) return null;
+  return candidate;
+}

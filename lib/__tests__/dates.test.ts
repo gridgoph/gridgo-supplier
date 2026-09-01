@@ -1,4 +1,4 @@
-import { formatRelativeDay, nextPromisedDeadline } from "@/lib/dates";
+import { formatClockTime, formatRelativeDay, nextPromisedDeadline } from "@/lib/dates";
 
 describe("formatRelativeDay", () => {
   const now = new Date("2026-08-08T12:00:00+08:00");
@@ -10,6 +10,20 @@ describe("formatRelativeDay", () => {
 
   it("flags overdue days", () => {
     expect(formatRelativeDay("2026-08-06T09:00:00+08:00", now)).toBe("2 days overdue");
+  });
+});
+
+describe("formatClockTime", () => {
+  it("shows the local clock with seconds, in the same locale as other times", () => {
+    const stamp = formatClockTime(new Date(2026, 8, 1, 12, 59, 30));
+    expect(stamp).toMatch(/12:59:30/);
+    expect(stamp).toMatch(/PM/i);
+  });
+
+  it("can drop seconds when the clock should sit still", () => {
+    const stamp = formatClockTime(new Date(2026, 8, 1, 12, 59, 30), { seconds: false });
+    expect(stamp).toMatch(/12:59/);
+    expect(stamp).not.toMatch(/12:59:30/);
   });
 });
 

@@ -46,6 +46,7 @@ export const ALERT_STAGES: readonly AlertStage[] = [
     states: [
       "picked_up",
       "out_for_delivery",
+      "awaiting_collection",
       "delivered",
       "issue_window_open",
       "completed",

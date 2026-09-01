@@ -24,6 +24,15 @@ export function formatDeadlineTime(iso: string | null | undefined): string {
   });
 }
 
+/** The shop's local clock, in the same locale every other time on this app uses. */
+export function formatClockTime(date: Date, opts?: { seconds?: boolean }): string {
+  return date.toLocaleTimeString("en-PH", {
+    hour: "numeric",
+    minute: "2-digit",
+    ...(opts?.seconds === false ? {} : { second: "2-digit" }),
+  });
+}
+
 export function formatDeadlineFull(iso: string | null | undefined): string {
   if (!iso) return "Not set";
   const d = new Date(iso);

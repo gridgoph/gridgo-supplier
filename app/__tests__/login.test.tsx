@@ -81,14 +81,14 @@ describe("Sign in", () => {
     await render(<LoginScreen />);
 
     expect(screen.getByLabelText("Password").props.secureTextEntry).toBe(true);
-    expect(screen.getByLabelText("Show password")).toBeTruthy();
+    expect(screen.getByLabelText("Show Password")).toBeTruthy();
 
-    fireEvent.press(screen.getByLabelText("Show password"));
+    fireEvent.press(screen.getByLabelText("Show Password"));
 
     await waitFor(() => {
       expect(screen.getByLabelText("Password").props.secureTextEntry).toBe(false);
     });
-    expect(screen.getByLabelText("Hide password")).toBeTruthy();
+    expect(screen.getByLabelText("Hide Password")).toBeTruthy();
     expect(screen.getByLabelText("Password").props.value).toBe("");
   });
 
