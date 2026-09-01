@@ -29,7 +29,13 @@ function routesAbsent() {
 
 describe("alerts store", () => {
   beforeEach(() => {
-    useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, localOnly: false });
+    useAlertsStore.setState({
+      dismissed: [],
+      deleted: [],
+      unreadCount: 0,
+      localOnly: false,
+      streamCursor: null,
+    });
     platformAccepts();
   });
 
@@ -64,6 +70,11 @@ describe("alerts store", () => {
     expect(useAlertsStore.getState().deleted).toEqual([]);
   });
 
+  it("remembers the last stream event so a refresh does not replay the inbox", () => {
+    useAlertsStore.getState().rememberStreamCursor("ntf_last");
+    expect(useAlertsStore.getState().streamCursor).toBe("ntf_last");
+  });
+
   it("marks exactly the ids it was given, never everything", async () => {
     useAlertsStore.getState().syncFrom([alert("a"), alert("b"), alert("c")]);
     await useAlertsStore.getState().markManyRead(["a", "b"]);
@@ -80,7 +91,13 @@ describe("alerts store", () => {
  */
 describe("deleting", () => {
   beforeEach(() => {
-    useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, localOnly: false });
+    useAlertsStore.setState({
+      dismissed: [],
+      deleted: [],
+      unreadCount: 0,
+      localOnly: false,
+      streamCursor: null,
+    });
     platformAccepts();
   });
 
@@ -141,7 +158,13 @@ describe("deleting", () => {
 
 describe("when a route is not deployed yet", () => {
   beforeEach(() => {
-    useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, localOnly: false });
+    useAlertsStore.setState({
+      dismissed: [],
+      deleted: [],
+      unreadCount: 0,
+      localOnly: false,
+      streamCursor: null,
+    });
     routesAbsent();
   });
 
@@ -160,7 +183,13 @@ describe("when a route is not deployed yet", () => {
 
 describe("when GRIDGO refuses", () => {
   beforeEach(() => {
-    useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, localOnly: false });
+    useAlertsStore.setState({
+      dismissed: [],
+      deleted: [],
+      unreadCount: 0,
+      localOnly: false,
+      streamCursor: null,
+    });
     jest
       .spyOn(alertsApi, "remove")
       .mockResolvedValue({ status: "failed", message: "GRIDGO could not delete that alert." });

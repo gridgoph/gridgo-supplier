@@ -53,6 +53,7 @@ const HANDLED_BY_ITS_CALLERS = [
   "components/SpecGroupEditor.tsx",
   "components/PrepStepEditor.tsx",
   "components/BoardHuntField.tsx",
+  "components/JobDocketRail.tsx",
   "components/FormatPlusField.tsx",
   "components/listing/TierEditor.tsx",
 ];
@@ -74,6 +75,8 @@ const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
   // which is a wall of samples as well as a field, so its scroll surface is the
   // keyboard-aware one rather than a plain ScrollView.
   { component: "BoardRail", users: /<BoardRail\b/, least: 1 },
+  // Find-a-job sits in the docket rail, and the rail sits on Jobs.
+  { component: "JobDocketRail", users: /<JobDocketRail\b/, least: 1 },
   // Another artwork type on a listing — typed from a plus on the chip row.
   { component: "FormatPlusField", users: /<FormatPlusField\b/, least: 1 },
   // Bulk breaks and speeds are both edited inside the listing screen, which

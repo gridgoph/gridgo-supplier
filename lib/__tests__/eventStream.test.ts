@@ -132,4 +132,32 @@ describe("stream authentication", () => {
     expect(xhr.send).toHaveBeenCalledTimes(1);
     stream.close();
   });
+
+  it("resumes from the last seen alert instead of replaying the inbox", async () => {
+    const headers: Record<string, string> = {};
+    const xhr = {
+      readyState: 1,
+      status: 0,
+      responseText: "",
+      onreadystatechange: null as (() => void) | null,
+      open: jest.fn(),
+      setRequestHeader: jest.fn((name: string, value: string) => {
+        headers[name] = value;
+      }),
+      send: jest.fn(),
+      abort: jest.fn(),
+    };
+    global.XMLHttpRequest = jest.fn(() => xhr) as never;
+    api.setToken("tok");
+
+    const stream = openAlertStream({
+      onNotification: jest.fn(),
+      getResumeFrom: () => "ntf_last",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(headers["Last-Event-ID"]).toBe("ntf_last");
+    stream.close();
+  });
 });

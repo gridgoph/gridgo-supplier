@@ -918,9 +918,25 @@ export async function withdrawSupplierService(
   return result.service;
 }
 
+export type NotificationInbox = {
+  notifications: Notification[];
+  /** Last append for this shop. Open the live stream from here, or it will replay the inbox. */
+  snapshot: string | null;
+};
+
+export async function listNotificationInbox(): Promise<NotificationInbox> {
+  const result = await request<{
+    notifications?: Notification[];
+    snapshot?: string | null;
+  }>("/notifications");
+  return {
+    notifications: Array.isArray(result.notifications) ? result.notifications : [],
+    snapshot: result.snapshot ?? null,
+  };
+}
+
 export async function listNotifications(): Promise<Notification[]> {
-  const result = await request<{ notifications: Notification[] }>("/notifications");
-  return result.notifications;
+  return (await listNotificationInbox()).notifications;
 }
 
 /**
