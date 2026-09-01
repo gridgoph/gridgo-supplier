@@ -5,7 +5,7 @@ jest.mock("@/store/sheets", () => ({
 }));
 
 import { JobDocketRail } from "@/components/JobDocketRail";
-import { DEFAULT_JOB_BOARD_QUERY, type JobBoardQuery } from "@/lib/jobBoard";
+import { DEFAULT_JOB_BOARD_QUERY } from "@/lib/jobBoard";
 import { askPick } from "@/store/sheets";
 
 const COUNTS = {
@@ -53,7 +53,7 @@ describe("Jobs docket rail", () => {
 
   it("opens the sort sheet and applies the chosen order", async () => {
     (askPick as jest.Mock).mockResolvedValue("newest");
-    const onChange = jest.fn<(query: JobBoardQuery) => void>();
+    const onChange = jest.fn();
     view = await render(
       <JobDocketRail
         query={DEFAULT_JOB_BOARD_QUERY}
