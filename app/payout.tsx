@@ -16,6 +16,8 @@ import {
   payoutRows,
   PAYOUT_FILTERS,
   sortPayoutRows,
+  statementLines,
+  statementMonths,
   unreleasedMinor,
   type PayoutFilter,
 } from "@/lib/payout";
@@ -34,6 +36,27 @@ import { useThemeColors } from "@/hooks/useTheme";
  * has one part released, one with GRIDGO and one still owing evidence. The
  * separation lives inside each row, which is where it is true.
  */
+/**
+ * How much of the ledger this screen carries.
+ *
+ * A statement is for checking what arrived, not for auditing a year. Past these
+ * the phone is scrolling records a shop would open a job to read anyway.
+ */
+const MONTHS_SHOWN = 6;
+const LINES_SHOWN = 20;
+
+/** The day the money landed, in Davao time. The shop banks on that calendar. */
+function formatReleasedOn(releasedAt: string): string {
+  const parsed = Date.parse(releasedAt);
+  if (Number.isNaN(parsed)) return "date not recorded";
+  return new Intl.DateTimeFormat("en-PH", {
+    timeZone: "Asia/Manila",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(parsed));
+}
+
 export default function PayoutScreen() {
   const colors = useThemeColors();
   const [jobs, setJobs] = useState<api.Order[]>([]);
@@ -69,6 +92,8 @@ export default function PayoutScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(reload);
 
   const total = useMemo(() => addSplits(allRows.map((row) => row.split)), [allRows]);
+  const lines = useMemo(() => statementLines(jobs), [jobs]);
+  const months = useMemo(() => statementMonths(lines), [lines]);
   const outstanding = unreleasedMinor(total);
   const firstLoad = loading && !loaded;
 
@@ -140,7 +165,70 @@ export default function PayoutScreen() {
           </View>
         ) : null}
 
-        <View className="mt-6">
+        {months.length ? (
+          <View className="mt-8 gap-3">
+            <Text className="text-overline text-text-muted">WHAT GRIDGO SENT YOU</Text>
+            {/*
+              By month, in Davao time, because the only use of this figure is
+              handing it to whoever keeps the books — and a rolling window means
+              something different every day it is opened.
+            */}
+            <View className="gg-card gap-3">
+              {months.slice(0, MONTHS_SHOWN).map((month, index) => (
+                <View key={month.key}>
+                  {index > 0 ? <View className="gg-divider mb-3" /> : null}
+                  <View className="flex-row items-baseline justify-between gap-3">
+                    <View className="min-w-0 flex-1">
+                      <Text className="text-body text-text-primary">{month.label}</Text>
+                      <Text className="text-caption text-text-muted">
+                        {month.releaseCount === 1
+                          ? "1 release"
+                          : `${month.releaseCount} releases`}
+                      </Text>
+                    </View>
+                    <Text className="text-body font-medium text-text-primary">
+                      {api.formatPhp(month.totalMinor)}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {lines.length ? (
+          <View className="mt-8 gap-3">
+            <Text className="text-overline text-text-muted">EVERY RELEASE</Text>
+            <View className="gg-card gap-3">
+              {lines.slice(0, LINES_SHOWN).map((line, index) => (
+                <View key={`${line.orderId}-${line.code}`}>
+                  {index > 0 ? <View className="gg-divider mb-3" /> : null}
+                  <View className="flex-row items-baseline justify-between gap-3">
+                    <View className="min-w-0 flex-1 gap-0.5">
+                      <Text className="text-body text-text-primary" numberOfLines={1}>
+                        {line.title}
+                      </Text>
+                      <Text className="text-caption text-text-muted">
+                        {line.label} · {formatReleasedOn(line.releasedAt)}
+                      </Text>
+                    </View>
+                    <Text className="text-body font-medium text-text-primary">
+                      {api.formatPhp(line.amountMinor)}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+            {lines.length > LINES_SHOWN ? (
+              <Text className="text-caption text-text-muted">
+                The {LINES_SHOWN} most recent. Older releases stay on their own job.
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        <View className="mt-8">
+          <Text className="text-overline text-text-muted mb-3">BY JOB</Text>
           <SegmentedControl
             options={PAYOUT_FILTERS}
             value={filter}

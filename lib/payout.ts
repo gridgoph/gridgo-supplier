@@ -1,7 +1,8 @@
-import type { Order } from "@/lib/api";
+import type { MilestoneCode, Order } from "@/lib/api";
 import {
   addSplits,
   earningsSplit,
+  milestoneDefinition,
   milestoneViews,
   type EarningsSplit,
   type MilestoneView,
@@ -92,4 +93,102 @@ export function unreleasedMinor(split: EarningsSplit): number {
   return (
     split.needsProofMinor + split.awaitingReleaseMinor + split.heldMinor + split.laterMinor
   );
+}
+
+// ---------------------------------------------------------------------------
+// The statement
+// ---------------------------------------------------------------------------
+
+/**
+ * One release, as a line a shop can reconcile against its own bank.
+ *
+ * A job row answers "how is this job going". It cannot answer "what did GRIDGO
+ * send me last month", because one job's four parts land on four different
+ * days and a shop reads its bank by date, not by job.
+ */
+export type StatementLine = {
+  orderId: string;
+  title: string;
+  code: MilestoneCode;
+  /** What the shop calls this part. */
+  label: string;
+  amountMinor: number;
+  /** ISO instant the money was released. Never null: unreleased parts are not statement lines. */
+  releasedAt: string;
+};
+
+export function statementLines(jobs: Order[]): StatementLine[] {
+  const lines: StatementLine[] = [];
+  for (const job of jobs) {
+    for (const milestone of job.payoutMilestones ?? []) {
+      if (milestone.status !== "released" || !milestone.releasedAt) continue;
+      lines.push({
+        orderId: job.id,
+        title: job.title,
+        code: milestone.code,
+        label: milestoneDefinition(milestone.code).label,
+        amountMinor: milestone.amountMinor,
+        releasedAt: milestone.releasedAt,
+      });
+    }
+  }
+  // Newest first: a shop opening this is checking what just arrived.
+  return lines.sort((left, right) => right.releasedAt.localeCompare(left.releasedAt));
+}
+
+/**
+ * A calendar month of releases, in Davao time.
+ *
+ * Real accounting periods rather than a rolling window, because the figure has
+ * to mean the same thing in August every time it is opened -- that is the whole
+ * use of it, which is handing it to somebody who keeps the books.
+ */
+export type StatementMonth = {
+  /** `YYYY-MM`, so it sorts and keys without a Date. */
+  key: string;
+  /** "August 2026", for the screen. */
+  label: string;
+  totalMinor: number;
+  releaseCount: number;
+};
+
+const MANILA = "Asia/Manila";
+
+/** The Davao month a release landed in. Never the phone's own timezone. */
+export function statementMonthKey(releasedAt: string): string | null {
+  const parsed = Date.parse(releasedAt);
+  if (Number.isNaN(parsed)) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: MANILA,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date(parsed));
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  return year && month ? `${year}-${month}` : null;
+}
+
+export function statementMonthLabel(key: string): string {
+  const [year, month] = key.split("-").map(Number);
+  if (!year || !month) return key;
+  return new Intl.DateTimeFormat("en-PH", {
+    timeZone: MANILA,
+    year: "numeric",
+    month: "long",
+  }).format(new Date(Date.UTC(year, month - 1, 15)));
+}
+
+export function statementMonths(lines: StatementLine[]): StatementMonth[] {
+  const totals = new Map<string, { totalMinor: number; releaseCount: number }>();
+  for (const line of lines) {
+    const key = statementMonthKey(line.releasedAt);
+    if (!key) continue;
+    const bucket = totals.get(key) ?? { totalMinor: 0, releaseCount: 0 };
+    bucket.totalMinor += line.amountMinor;
+    bucket.releaseCount += 1;
+    totals.set(key, bucket);
+  }
+  return [...totals.entries()]
+    .map(([key, bucket]) => ({ key, label: statementMonthLabel(key), ...bucket }))
+    .sort((left, right) => right.key.localeCompare(left.key));
 }
