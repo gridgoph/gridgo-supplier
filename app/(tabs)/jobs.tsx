@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { RefreshControl, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { FormScrollView } from "@/components/FormScrollView";
 import { JobCard } from "@/components/JobCard";
 import { JobDocketRail } from "@/components/JobDocketRail";
 import { AlertsBell } from "@/components/AlertsBell";
@@ -75,10 +76,8 @@ export default function JobsScreen() {
 
   return (
     <View className="gg-screen">
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="gg-page pb-10"
-        showsVerticalScrollIndicator={false}
+      <FormScrollView
+        contentClassName="gg-page pb-10"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -173,7 +172,7 @@ export default function JobsScreen() {
             one the moment it needs your shop.
           </Text>
         ) : null}
-      </ScrollView>
+      </FormScrollView>
     </View>
   );
 }
