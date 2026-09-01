@@ -40,6 +40,13 @@ export type AlertStreamHandlers = {
   onNotification: (notification: api.Notification) => void;
   /** Fired on connect and disconnect so a caller can note liveness. */
   onStatus?: (live: boolean) => void;
+  /**
+   * Last event this phone has already rendered. Sent as `Last-Event-ID` so the
+   * server does not replay the inbox. Read fresh on every connect.
+   */
+  getResumeFrom?: () => string | null;
+  /** The stored cursor is gone. Clear it and fetch a fresh list snapshot. */
+  onResumeUnavailable?: () => void | Promise<void>;
 };
 
 export type AlertStreamHandle = {
@@ -131,7 +138,11 @@ export function openAlertStream(handlers: AlertStreamHandlers): AlertStreamHandl
     xhr.open("GET", `${api.getApiBase()}${STREAM_PATH}`);
     xhr.setRequestHeader("Accept", "text/event-stream");
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-    if (lastEventId) xhr.setRequestHeader("Last-Event-ID", lastEventId);
+    const resumeFrom = handlers.getResumeFrom?.() ?? lastEventId;
+    if (resumeFrom) {
+      lastEventId = resumeFrom;
+      xhr.setRequestHeader("Last-Event-ID", resumeFrom);
+    }
 
     xhr.onreadystatechange = () => {
       if (closed || request !== xhr) return;
@@ -148,6 +159,15 @@ export function openAlertStream(handlers: AlertStreamHandlers): AlertStreamHandl
             // app is already correct without the stream.
             if (xhr.status === 401 || xhr.status === 404 || xhr.status === 501) {
               closed = true;
+              return;
+            }
+            // 409: Last-Event-ID is gone. Drop it or the next retry replays
+            // nothing useful and keeps failing on the same cursor.
+            if (xhr.status === 409) {
+              lastEventId = null;
+              void Promise.resolve(handlers.onResumeUnavailable?.()).finally(() => {
+                if (!closed) scheduleRetry(null);
+              });
               return;
             }
             scheduleRetry(null);

@@ -27,6 +27,12 @@ type AlertsState = {
   /** Alert ids this device has deleted because GRIDGO could not. */
   deleted: string[];
   hydrated: boolean;
+  /**
+   * Last stream event this phone has already seen. The live socket must resume
+   * from here; opening with no cursor replays the whole inbox as if it were new.
+   */
+  streamCursor: string | null;
+  rememberStreamCursor: (id: string | null) => void;
   /** True once any change had to fall back to this device. Drives the caveat. */
   localOnly: boolean;
   markRead: (id: string) => Promise<alertsApi.AlertWriteOutcome>;
@@ -59,6 +65,8 @@ export const useAlertsStore = create<AlertsState>()(
       deleted: [],
       localOnly: false,
       hydrated: false,
+      streamCursor: null,
+      rememberStreamCursor: (id) => set({ streamCursor: id }),
       markRead: async (id) => {
         const outcome = await alertsApi.markRead(id);
         if (outcome.status === "failed") return outcome;
@@ -125,8 +133,14 @@ export const useAlertsStore = create<AlertsState>()(
     }),
     {
       name: "gridgo-supplier-alerts",
-      storage: createPersistStorage<Pick<AlertsState, "dismissed" | "deleted">>(),
-      partialize: (state) => ({ dismissed: state.dismissed, deleted: state.deleted }),
+      storage: createPersistStorage<
+        Pick<AlertsState, "dismissed" | "deleted" | "streamCursor">
+      >(),
+      partialize: (state) => ({
+        dismissed: state.dismissed,
+        deleted: state.deleted,
+        streamCursor: state.streamCursor,
+      }),
       onRehydrateStorage: () => (state) => {
         if (state) state.hydrated = true;
       },

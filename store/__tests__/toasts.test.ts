@@ -18,6 +18,15 @@ describe("what is worth interrupting for", () => {
   it("stays quiet on the alerts list, where it would already be visible", () => {
     expect(shouldToast({ orderId: "ord_2" }, { orderId: null, onAlerts: true })).toBe(false);
   });
+
+  it("does not interrupt for an alert the shop has already read", () => {
+    expect(
+      shouldToast({ id: "ntf_1", read: true }, { orderId: null, onAlerts: false }),
+    ).toBe(false);
+    expect(
+      shouldToast({ id: "ntf_1", read: false }, { orderId: null, onAlerts: false }, ["ntf_1"]),
+    ).toBe(false);
+  });
 });
 
 describe("the stack", () => {

@@ -1,16 +1,26 @@
 import { useCallback, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { RefreshControl, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { FormScrollView } from "@/components/FormScrollView";
 import { JobCard } from "@/components/JobCard";
+import { JobDocketRail } from "@/components/JobDocketRail";
 import { AlertsBell } from "@/components/AlertsBell";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SectionHeader } from "@/components/SectionHeader";
 import { SkeletonList } from "@/components/Skeleton";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import {
+  DEFAULT_JOB_BOARD_QUERY,
+  emptyJobBoardCopy,
+  filterJobs,
+  isJobBoardNarrowed,
+  jobStageCounts,
+  type JobBoardQuery,
+} from "@/lib/jobBoard";
 import { needsSupplierAction } from "@/lib/jobState";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -24,6 +34,7 @@ import { useThemeColors } from "@/hooks/useTheme";
 export default function JobsScreen() {
   const colors = useThemeColors();
   const [jobs, setJobs] = useState<api.Order[]>([]);
+  const [query, setQuery] = useState<JobBoardQuery>(DEFAULT_JOB_BOARD_QUERY);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,26 +58,26 @@ export default function JobsScreen() {
     }, [reload]),
   );
 
-  const { waiting, running } = useMemo(() => {
-    const byDate = (a: api.Order, b: api.Order) =>
-      String(a.deadline || a.promisedDate || "").localeCompare(
-        String(b.deadline || b.promisedDate || ""),
-      );
-    return {
-      waiting: jobs.filter(needsSupplierAction).sort(byDate),
-      running: jobs.filter((j) => !needsSupplierAction(j)).sort(byDate),
-    };
-  }, [jobs]);
+  const counts = useMemo(() => jobStageCounts(jobs), [jobs]);
+  const visible = useMemo(() => filterJobs(jobs, query), [jobs, query]);
+  const { waiting, running } = useMemo(
+    () => ({
+      waiting: visible.filter(needsSupplierAction),
+      running: visible.filter((j) => !needsSupplierAction(j)),
+    }),
+    [visible],
+  );
+  const narrowed = isJobBoardNarrowed(query);
+  const emptyDocket = loaded && !error && jobs.length > 0 && visible.length === 0;
+  const emptyCopy = emptyDocket ? emptyJobBoardCopy(query) : null;
 
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const firstLoad = loading && !loaded;
 
   return (
     <View className="gg-screen">
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="gg-page pb-10"
-        showsVerticalScrollIndicator={false}
+      <FormScrollView
+        contentClassName="gg-page pb-10"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -76,6 +87,16 @@ export default function JobsScreen() {
         }
       >
         <ScreenHeader title="Jobs" right={<AlertsBell />} />
+
+        {loaded && jobs.length > 0 ? (
+          <JobDocketRail
+            query={query}
+            counts={counts}
+            shown={visible.length}
+            total={jobs.length}
+            onChange={setQuery}
+          />
+        ) : null}
 
         {firstLoad ? (
           <SkeletonList label="Loading your assignments" count={3} sectioned />
@@ -102,6 +123,15 @@ export default function JobsScreen() {
             onAction={() => router.push("/services")}
             secondaryLabel="Set capacity"
             onSecondary={() => router.push("/capacity")}
+          />
+        ) : null}
+
+        {emptyCopy ? (
+          <EmptyState
+            title={emptyCopy.title}
+            body={emptyCopy.body}
+            actionLabel="Show all jobs"
+            onAction={() => setQuery(DEFAULT_JOB_BOARD_QUERY)}
           />
         ) : null}
 
@@ -136,13 +166,13 @@ export default function JobsScreen() {
           </View>
         ) : null}
 
-        {loaded && !error && jobs.length > 0 && !waiting.length ? (
+        {loaded && !error && jobs.length > 0 && !waiting.length && !narrowed ? (
           <Text className="mt-6 text-caption text-text-muted">
             Every job here is waiting on the client, GRIDGO, or a rider. You will see a new
             one the moment it needs your shop.
           </Text>
         ) : null}
-      </ScrollView>
+      </FormScrollView>
     </View>
   );
 }
