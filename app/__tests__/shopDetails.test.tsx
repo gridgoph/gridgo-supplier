@@ -100,6 +100,24 @@ describe("the shop's own details", () => {
   });
 
   /**
+   * The password is the sign-in, so changing it is a screen of its own — three
+   * fields and a consequence, never a keystroke in this form. Shown as a mask
+   * and the way to change it, matching the email row.
+   */
+  it("states a masked password and offers the screen that changes it", async () => {
+    load();
+
+    const view = await render(<ShopDetailsScreen />);
+
+    expect(await screen.findByLabelText("Change password")).toBeTruthy();
+    expect(screen.getByText(/signs you out of GRIDGO everywhere else/)).toBeTruthy();
+
+    await fireEvent.press(screen.getByLabelText("Change password"));
+    expect(mockRouter.push).toHaveBeenCalledWith("/change-password");
+    await view.unmount();
+  });
+
+  /**
    * The portrait belongs to the GRIDGO sign-in, not to GRIDGO's file store, so
    * nothing about it goes through `/me/supplier-profile`.
    */

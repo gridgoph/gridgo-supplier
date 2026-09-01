@@ -175,6 +175,15 @@ export type ListingPatch = {
   basePriceMinor?: number;
   pricingUnit?: Listing["pricingUnit"];
   packageQty?: number | null;
+  measureUnit?: Listing["measureUnit"];
+  /** Thousandths of `measureUnit`, which is how the platform stores a size. */
+  minimumWidthMilli?: number | null;
+  minimumHeightMilli?: number | null;
+  minimumLengthMilli?: number | null;
+  minimumOrderQuantity?: number | null;
+  /** Replaced as a set: removing a break removes it. */
+  priceTiers?: Listing["priceTiers"];
+  speedTiers?: Listing["speedTiers"];
   turnaroundMode?: Listing["turnaroundMode"];
   turnaroundHours?: number | null;
   subcategoryCode?: string;
@@ -350,12 +359,15 @@ export async function removeGroup(
  */
 export async function addOption(
   group: SpecGroup,
-  input: { label: string; priceModifierMinor: number },
+  input: { label: string; priceModifierMinor: number; priceMultiplierBps?: number | null },
 ): Promise<BoardOutcome<null>> {
   return attempt("add this choice", async () => {
     await api.createCatalogOption(group.id, group.version, {
       label: input.label,
       priceModifierMinor: input.priceModifierMinor,
+      // Sent only when the shop chose a multiple. An extra multiplies or it
+      // adds, and GRIDGO refuses both at once rather than picking one.
+      ...(input.priceMultiplierBps ? { priceMultiplierBps: input.priceMultiplierBps } : {}),
       sortOrder: nextFreeSlot(
         group.options.map((option) => option.sortOrder),
         LISTING_CAPS.optionsPerGroup,

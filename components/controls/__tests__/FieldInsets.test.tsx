@@ -74,7 +74,7 @@ describe("field text insets", () => {
     );
 
     expectNativeInset("Password");
-    expect(screen.getByLabelText("Show password")).toBeTruthy();
+    expect(screen.getByLabelText("Show Password")).toBeTruthy();
   });
 
   it("applies native insets to compound money fields", async () => {

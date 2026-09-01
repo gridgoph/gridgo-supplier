@@ -6,11 +6,14 @@ import * as ImagePicker from "expo-image-picker";
 
 import {
   changeShopPortrait,
+  changeSignInPassword,
   confirmEmailChange,
   emailKeptByGridgo,
   EMAIL_ALREADY_REGISTERED,
   EMAIL_UNCHANGED,
   newEmailProblem,
+  passwordProblems,
+  passwordReady,
   portraitFile,
   startEmailChange,
   type ClerkEmailAddress,
@@ -205,5 +208,89 @@ describe("when GRIDGO keeps its own address", () => {
   it("keeps the already-registered refusal free of codes and retries", () => {
     expect(EMAIL_ALREADY_REGISTERED).toContain("already has a GRIDGO sign-in");
     expect(EMAIL_ALREADY_REGISTERED).not.toMatch(/form_|Clerk|error/i);
+  });
+});
+
+describe("passwordProblems", () => {
+  it("passes a real change", () => {
+    const draft = { current: "oldpassword", next: "newpassword", confirm: "newpassword" };
+    expect(passwordProblems(draft)).toEqual({});
+    expect(passwordReady(draft)).toBe(true);
+  });
+
+  it("asks for the current password before anything else", () => {
+    expect(
+      passwordProblems({ current: "", next: "newpassword", confirm: "newpassword" }).current,
+    ).toMatch(/sign in with now/i);
+  });
+
+  it("holds the new one to apply's own bar, in apply's own words", () => {
+    expect(
+      passwordProblems({ current: "oldpassword", next: "short", confirm: "short" }).next,
+    ).toMatch(/at least 8 characters/i);
+  });
+
+  it("refuses the password the shop already has", () => {
+    expect(
+      passwordProblems({ current: "samepassword", next: "samepassword", confirm: "samepassword" })
+        .next,
+    ).toMatch(/already have/i);
+  });
+
+  it("catches a typo in the confirmation, on the confirmation", () => {
+    const problems = passwordProblems({
+      current: "oldpassword",
+      next: "newpassword",
+      confirm: "newpasswrod",
+    });
+    expect(problems.confirm).toMatch(/do not match/i);
+    expect(problems.next).toBeUndefined();
+  });
+});
+
+describe("changeSignInPassword", () => {
+  const draft = { current: "oldpassword", next: "newpassword", confirm: "newpassword" };
+
+  it("signs every other session out, and does not offer not to", async () => {
+    const user = { updatePassword: jest.fn(async () => undefined) };
+    expect(await changeSignInPassword(user, draft)).toEqual({ status: "ok" });
+    expect(user.updatePassword).toHaveBeenCalledWith({
+      currentPassword: "oldpassword",
+      newPassword: "newpassword",
+      signOutOfOtherSessions: true,
+    });
+  });
+
+  it("points a wrong current password at the current-password field", async () => {
+    const user = {
+      updatePassword: jest.fn(async () => {
+        throw clerkError("form_password_incorrect");
+      }),
+    };
+    expect(await changeSignInPassword(user, draft)).toEqual({ status: "wrong_current" });
+  });
+
+  it("puts a pwned or weak new password on the new-password field", async () => {
+    const user = {
+      updatePassword: jest.fn(async () => {
+        throw clerkError("form_password_pwned", "This password has been found in a breach.");
+      }),
+    };
+    expect(await changeSignInPassword(user, draft)).toEqual({
+      status: "new_rejected",
+      message: "This password has been found in a breach.",
+    });
+  });
+
+  it("keeps Clerk's own sentence for anything else", async () => {
+    const user = {
+      updatePassword: jest.fn(async () => {
+        throw clerkError("too_many_requests", "Too many attempts. Try again later.");
+      }),
+    };
+    expect(await changeSignInPassword(user, draft)).toEqual({
+      status: "failed",
+      message: "Too many attempts. Try again later.",
+    });
   });
 });

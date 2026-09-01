@@ -16,8 +16,11 @@ import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { blackoutOnDay } from "@/lib/blackouts";
+import { monthGrid } from "@/lib/queueCalendar";
+import { QueueCalendar } from "@/components/QueueCalendar";
 import { shopDailyCapacity } from "@/lib/capacity";
 import { buildSchedule, SCHEDULE_RANGES, type ScheduleRange } from "@/lib/schedule";
+import { useSession } from "@/store/session";
 import { useShopPlan } from "@/store/shopPlan";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -31,6 +34,7 @@ import { useThemeColors } from "@/hooks/useTheme";
 export default function ScheduleScreen() {
   const colors = useThemeColors();
   const blackouts = useShopPlan((s) => s.blackouts);
+  const shopLabel = useSession((s) => s.user?.shop?.label ?? null);
   const [jobs, setJobs] = useState<api.Order[]>([]);
   const [services, setServices] = useState<api.SupplierService[]>([]);
   const [range, setRange] = useState<ScheduleRange>("week");
@@ -71,6 +75,12 @@ export default function ScheduleScreen() {
 
   const schedule = useMemo(() => buildSchedule(jobs, range, now), [jobs, range, now]);
   const dailyCapacity = useMemo(() => shopDailyCapacity(services), [services]);
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [viewMonth, setViewMonth] = useState(() => new Date());
+  const calendarDays = useMemo(
+    () => monthGrid({ month: viewMonth, jobs, services, blackouts, now }),
+    [viewMonth, jobs, services, blackouts, now],
+  );
   const hasAnything =
     schedule.days.some((d) => d.jobs.length > 0) ||
     schedule.lateJobs.length > 0 ||
@@ -98,12 +108,31 @@ export default function ScheduleScreen() {
       >
         <ScreenHeader title="Schedule" right={<AlertsBell />} />
 
-        <SegmentedControl
-          options={SCHEDULE_RANGES}
-          value={range}
-          onChange={setRange}
-          accessibilityLabel="Schedule range"
-        />
+        {/*
+          The month first, then the list. A shop's own question is "which days
+          am I already spoken for" and it is answered in one look; the agenda
+          below answers "and what exactly is on them", which is the second
+          question and reads better after the first.
+        */}
+        <View className="mt-2">
+          <QueueCalendar
+            days={calendarDays}
+            month={viewMonth}
+            selectedDayKey={selectedDayKey}
+            placeLabel={shopLabel}
+            onSelectDay={(day) => setSelectedDayKey(day.inMonth ? day.dayKey : null)}
+            onChangeMonth={setViewMonth}
+          />
+        </View>
+
+        <View className="mt-8">
+          <SegmentedControl
+            options={SCHEDULE_RANGES}
+            value={range}
+            onChange={setRange}
+            accessibilityLabel="Schedule range"
+          />
+        </View>
 
         <View className="mt-4 flex-row gap-3">
           <StatTile label="Late" value={schedule.summary.late} tone="error" />

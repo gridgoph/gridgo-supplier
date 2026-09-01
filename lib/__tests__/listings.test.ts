@@ -1,15 +1,19 @@
 import {
+  asksQuantity,
   boardBlockers,
   boardContextFor,
   boardPrompt,
   boardStanding,
   boardTargets,
   fromPriceMinor,
+  measurementKind,
+  multiplierLabel,
   normalizeListing,
   normalizeListings,
   normalizeStarters,
   priceLine,
   readyInLine,
+  toMultiplierBps,
   unitLine,
   type Listing,
   type ServiceLine,
@@ -25,6 +29,13 @@ const READY: Listing = {
   basePriceMinor: 45000,
   pricingUnit: "per_unit",
   packageQty: null,
+  measureUnit: null,
+  minimumWidthMilli: null,
+  minimumHeightMilli: null,
+  minimumLengthMilli: null,
+  minimumOrderQuantity: null,
+  priceTiers: [],
+  speedTiers: [],
   turnaroundMode: "override",
   turnaroundHours: 24,
   fileFormatMode: "override",
@@ -137,8 +148,8 @@ describe("what a listing costs", () => {
           sortOrder: 0,
           version: 1,
           options: [
-            { id: "o1", label: "3 × 5", priceModifierMinor: 15000, active: true, sortOrder: 0 },
-            { id: "o2", label: "2 × 3", priceModifierMinor: 5000, active: true, sortOrder: 1 },
+            { id: "o1", label: "3 × 5", priceModifierMinor: 15000, priceMultiplierBps: null, active: true, sortOrder: 0 },
+            { id: "o2", label: "2 × 3", priceModifierMinor: 5000, priceMultiplierBps: null, active: true, sortOrder: 1 },
           ],
         },
         {
@@ -150,7 +161,7 @@ describe("what a listing costs", () => {
           sortOrder: 1,
           version: 1,
           options: [
-            { id: "o3", label: "Every 2ft", priceModifierMinor: 9000, active: true, sortOrder: 0 },
+            { id: "o3", label: "Every 2ft", priceModifierMinor: 9000, priceMultiplierBps: null, active: true, sortOrder: 0 },
           ],
         },
       ],
@@ -177,7 +188,7 @@ describe("what a listing costs", () => {
             sortOrder: 0,
             version: 1,
             options: [
-              { id: "o", label: "Greyscale", priceModifierMinor: -9000, active: true, sortOrder: 0 },
+              { id: "o", label: "Greyscale", priceModifierMinor: -9000, priceMultiplierBps: null, active: true, sortOrder: 0 },
             ],
           },
         ],
@@ -310,5 +321,84 @@ describe("where a shop may file a listing", () => {
   it("inherits the line's turnaround and formats", () => {
     const context = boardContextFor(READY, [line({ formatCodes: ["pdf"] })]);
     expect(context).toEqual({ inheritedTurnaroundHours: 48, inheritedFormatCodes: ["pdf"] });
+  });
+});
+
+describe("how a shop says it sells something", () => {
+  const base = READY;
+
+  it("says the unit in words a shop and a client both use", () => {
+    expect(unitLine({ ...base, pricingUnit: "per_unit", packageQty: null, measureUnit: null })).toBe("per piece");
+    expect(unitLine({ ...base, pricingUnit: "per_package", packageQty: 100, measureUnit: null })).toBe("per pack of 100");
+    expect(unitLine({ ...base, pricingUnit: "per_page", packageQty: null, measureUnit: null })).toBe("per page");
+    expect(unitLine({ ...base, pricingUnit: "per_area", packageQty: null, measureUnit: "ft" })).toBe("per sq.ft");
+    expect(unitLine({ ...base, pricingUnit: "per_length", packageQty: null, measureUnit: "in" })).toBe("per in");
+    expect(unitLine({ ...base, pricingUnit: "whole_job", packageQty: null, measureUnit: null })).toBe("for the whole job");
+  });
+
+  it("knows which question each unit makes the client answer", () => {
+    expect(measurementKind("per_area")).toBe("area");
+    expect(measurementKind("per_length")).toBe("length");
+    expect(measurementKind("per_page")).toBe("pages");
+    expect(measurementKind("per_unit")).toBe("none");
+    // One thing at one price: asking "how many" would be the wrong question.
+    expect(asksQuantity("whole_job")).toBe(false);
+    expect(asksQuantity("per_area")).toBe(true);
+  });
+
+  it("keeps a measured listing off the board until it says what it measures in", () => {
+    const unmeasured = { ...base, pricingUnit: "per_area" as const, measureUnit: null };
+    expect(boardBlockers(unmeasured, NOTHING_INHERITED).join(" ")).toContain("what you measure in");
+
+    const measured = { ...base, pricingUnit: "per_area" as const, measureUnit: "ft" as const };
+    expect(boardBlockers(measured, NOTHING_INHERITED).join(" ")).not.toContain("what you measure in");
+  });
+
+  it("refuses half a minimum size, because half a rule prices nothing", () => {
+    const half = { ...base, pricingUnit: "per_area" as const, measureUnit: "ft" as const, minimumWidthMilli: 2000, minimumHeightMilli: null };
+    expect(boardBlockers(half, NOTHING_INHERITED).join(" ")).toContain("both a width and a height");
+  });
+
+  it("reads volume breaks and speeds cheapest-quantity and fastest first", () => {
+    const parsed = normalizeListing({
+      id: "item",
+      name: "Mugs",
+      basePriceMinor: 10_000,
+      pricingUnit: "per_unit",
+      priceTiers: [
+        { minQuantity: 250, unitPriceMinor: 6_000 },
+        { minQuantity: 1, unitPriceMinor: 10_000 },
+      ],
+      speedTiers: [
+        { id: "s5", label: "5 days", turnaroundHours: 120, priceMinor: 25_000 },
+        { id: "s1", label: "1 day", turnaroundHours: 24, priceMinor: 50_000 },
+      ],
+    });
+    expect(parsed?.priceTiers.map((tier) => tier.minQuantity)).toEqual([1, 250]);
+    expect(parsed?.speedTiers.map((tier) => tier.turnaroundHours)).toEqual([24, 120]);
+  });
+});
+
+describe("an extra priced as a multiple", () => {
+  it("reads what a shop typed as basis points", () => {
+    // "x2 the price" is 20000. Basis points because no float may reach money,
+    // and a multiplier written as a flat amount stops being right the moment
+    // the base price moves.
+    expect(toMultiplierBps("2")).toBe(20_000);
+    expect(toMultiplierBps("x2")).toBe(20_000);
+    expect(toMultiplierBps("1.5")).toBe(15_000);
+    expect(toMultiplierBps(" X1.25 ")).toBe(12_500);
+  });
+
+  it("refuses anything that is not a multiple", () => {
+    expect(toMultiplierBps("")).toBeNull();
+    expect(toMultiplierBps("free")).toBeNull();
+    expect(toMultiplierBps("0")).toBeNull();
+    expect(toMultiplierBps("-2")).toBeNull();
+  });
+
+  it("says it back the way a shop wrote it", () => {
+    expect(multiplierLabel(20_000)).toBe("x2");
+    expect(multiplierLabel(15_000)).toBe("x1.5");
   });
 });

@@ -111,6 +111,32 @@ describe("deleting", () => {
     await useAlertsStore.getState().remove("a");
     expect(useAlertsStore.getState().unreadCount).toBe(1);
   });
+
+  it("clears every id it was given, and empties the badge", async () => {
+    useAlertsStore.getState().syncFrom([alert("a"), alert("b"), alert("c")]);
+    await useAlertsStore.getState().removeMany(["a", "b", "c"]);
+    expect(alertsApi.remove).toHaveBeenCalledTimes(3);
+    expect(useAlertsStore.getState().deleted).toEqual(["a", "b", "c"]);
+    expect(useAlertsStore.getState().unreadCount).toBe(0);
+    expect(visibleAlerts([alert("a"), alert("b"), alert("c")], useAlertsStore.getState().deleted)).toEqual(
+      [],
+    );
+  });
+
+  it("keeps what already went when GRIDGO refuses one", async () => {
+    jest
+      .spyOn(alertsApi, "remove")
+      .mockResolvedValueOnce({ status: "saved" })
+      .mockResolvedValueOnce({ status: "failed", message: "GRIDGO could not delete that alert." });
+    useAlertsStore.getState().syncFrom([alert("a"), alert("b")]);
+    const outcome = await useAlertsStore.getState().removeMany(["a", "b"]);
+    expect(outcome).toEqual({
+      status: "failed",
+      message: "GRIDGO could not delete that alert.",
+    });
+    expect(useAlertsStore.getState().deleted).toEqual(["a"]);
+    expect(useAlertsStore.getState().unreadCount).toBe(1);
+  });
 });
 
 describe("when a route is not deployed yet", () => {

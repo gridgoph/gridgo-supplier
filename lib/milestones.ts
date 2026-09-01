@@ -120,6 +120,7 @@ function reachedForProof(code: MilestoneCode, state: string): boolean {
     "rider_assigned",
     "picked_up",
     "out_for_delivery",
+    "awaiting_collection",
     "delivered",
     "issue_window_open",
     "completed",

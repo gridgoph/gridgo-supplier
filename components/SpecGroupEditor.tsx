@@ -7,7 +7,13 @@ import { MoneyField } from "@/components/controls/MoneyField";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import { TextField } from "@/components/controls/TextField";
 import { formatPhp } from "@/lib/api";
-import { LISTING_CAPS, pickLine, type SpecGroup } from "@/lib/listings";
+import {
+  LISTING_CAPS,
+  multiplierLabel,
+  pickLine,
+  toMultiplierBps,
+  type SpecGroup,
+} from "@/lib/listings";
 import { parseMoney } from "@/lib/money";
 import { useThemeColors } from "@/hooks/useTheme";
 
@@ -17,7 +23,11 @@ type Props = {
   step: number | null;
   busy: boolean;
   onSetRequired: (required: boolean) => void;
-  onAddOption: (label: string, priceModifierMinor: number) => Promise<boolean>;
+  onAddOption: (
+    label: string,
+    priceModifierMinor: number,
+    priceMultiplierBps: number | null,
+  ) => Promise<boolean>;
   onRemoveOption: (optionId: string) => void;
   onRemoveGroup: () => void;
 };
@@ -50,7 +60,8 @@ export function SpecGroupEditor({
   const colors = useThemeColors();
   const [label, setLabel] = useState("");
   const [amount, setAmount] = useState("");
-  const [direction, setDirection] = useState<"adds" | "takes">("adds");
+  const [multiple, setMultiple] = useState("");
+  const [direction, setDirection] = useState<"adds" | "takes" | "times">("adds");
   const [error, setError] = useState<string | null>(null);
   const full = group.options.length >= LISTING_CAPS.optionsPerGroup;
 
@@ -60,6 +71,24 @@ export function SpecGroupEditor({
       setError("Name this choice first — a client picks it by its name.");
       return;
     }
+
+    if (direction === "times") {
+      const bps = toMultiplierBps(multiple);
+      if (!bps) {
+        setError("Say how many times the price this makes it — 2 for double.");
+        return;
+      }
+      setError(null);
+      // An extra multiplies or it adds. GRIDGO refuses both, so the amount is
+      // deliberately not carried across when a shop switches to a multiple.
+      if (await onAddOption(trimmed, 0, bps)) {
+        setLabel("");
+        setMultiple("");
+        setDirection("adds");
+      }
+      return;
+    }
+
     const money = parseMoney(amount);
     if (!money.ok) {
       setError(money.error);
@@ -67,7 +96,7 @@ export function SpecGroupEditor({
     }
     const minor = (money.minor ?? 0) * (direction === "takes" ? -1 : 1);
     setError(null);
-    if (await onAddOption(trimmed, minor)) {
+    if (await onAddOption(trimmed, minor, null)) {
       setLabel("");
       setAmount("");
       setDirection("adds");
@@ -103,7 +132,9 @@ export function SpecGroupEditor({
                   {option.label}
                 </Text>
                 <Text className="text-body text-text-primary">
-                  {modifierLine(option.priceModifierMinor)}
+                  {option.priceMultiplierBps
+                    ? `${multiplierLabel(option.priceMultiplierBps)} the price`
+                    : modifierLine(option.priceModifierMinor)}
                 </Text>
                 <Pressable
                   onPress={() => onRemoveOption(option.id)}
@@ -159,24 +190,42 @@ export function SpecGroupEditor({
             />
             <View className="flex-row gap-3">
               <View className="flex-1">
+                {/*
+                  A third shape, because some extras are a multiple rather than
+                  an amount. "Back-to-back, x2 the price" written as a flat
+                  figure has to be re-entered by hand every time the price
+                  moves, and in practice stops being right — so a shop that
+                  thinks in multiples can say so.
+                */}
                 <SegmentedControl
                   options={[
                     { value: "adds", label: "Adds" },
                     { value: "takes", label: "Takes off" },
+                    { value: "times", label: "Multiplies" },
                   ]}
                   value={direction}
                   onChange={setDirection}
-                  accessibilityLabel="Whether this choice adds to or takes off the price"
+                  accessibilityLabel="Whether this choice adds to, takes off, or multiplies the price"
                   disabled={busy}
                 />
               </View>
               <View className="flex-1">
-                <MoneyField
-                  value={amount}
-                  onChange={setAmount}
-                  accessibilityLabel="What this choice changes the price by"
-                  editable={!busy}
-                />
+                {direction === "times" ? (
+                  <TextField
+                    value={multiple}
+                    onChange={setMultiple}
+                    placeholder="2"
+                    accessibilityLabel="How many times the price this choice makes it"
+                    kind="text"
+                  />
+                ) : (
+                  <MoneyField
+                    value={amount}
+                    onChange={setAmount}
+                    accessibilityLabel="What this choice changes the price by"
+                    editable={!busy}
+                  />
+                )}
               </View>
             </View>
             {error ? <Text className="text-caption text-error">{error}</Text> : null}

@@ -54,6 +54,7 @@ const HANDLED_BY_ITS_CALLERS = [
   "components/PrepStepEditor.tsx",
   "components/BoardHuntField.tsx",
   "components/FormatPlusField.tsx",
+  "components/listing/TierEditor.tsx",
 ];
 
 /**
@@ -75,6 +76,10 @@ const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
   { component: "BoardRail", users: /<BoardRail\b/, least: 1 },
   // Another artwork type on a listing — typed from a plus on the chip row.
   { component: "FormatPlusField", users: /<FormatPlusField\b/, least: 1 },
+  // Bulk breaks and speeds are both edited inside the listing screen, which
+  // owns the keyboard-aware surface they are typed into.
+  { component: "PriceTierEditor", users: /<PriceTierEditor\b/, least: 1 },
+  { component: "SpeedTierEditor", users: /<SpeedTierEditor\b/, least: 1 },
 ];
 
 describe("every field a shop types into sits in a keyboard-aware surface", () => {

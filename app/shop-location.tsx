@@ -1,5 +1,5 @@
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { router } from "expo-router";
@@ -8,6 +8,7 @@ import { BusyOverlay } from "@/components/BusyOverlay";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ShopLocationPicker } from "@/components/ShopLocationPicker";
+import * as api from "@/lib/api";
 import { isSamePin, pinProblem, type ShopPin } from "@/lib/shopLocation";
 import { PIN_NOT_OPEN_YET, saveShopLocation } from "@/lib/verification";
 import { askConfirm } from "@/store/sheets";
@@ -37,6 +38,23 @@ export default function ShopLocationScreen() {
   const [pin, setPin] = useState<ShopPin | null>(saved);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .getSupplierProfile()
+      .then((profile) => {
+        if (cancelled || !profile.shop) return;
+        setPin((current) => {
+          if (current && saved && !isSamePin(current, saved)) return current;
+          return profile.shop;
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const problem = pinProblem(pin, pin?.label ?? "");
   const unchanged = isSamePin(saved, pin);

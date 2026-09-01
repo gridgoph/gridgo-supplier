@@ -7,13 +7,16 @@
  *
  * Tiles are OpenStreetMap (light) and Carto dark (night), the same stack the
  * rider app ships. Attribution is a licence condition and is always visible.
- * There is no Google here and no API key anywhere in the fleet.
+ * There is no Google here. Dark Carto tiles take `EXPO_PUBLIC_CARTO_API_KEY`
+ * from gitignored env, the same token Rider and Client use.
  *
  * The host pushes a model in (`applyModel`) and the document posts the pin back
  * out whenever a person moves it. Both directions use the same JSON string on
  * `window.postMessage` / `ReactNativeWebView.postMessage`, so the web fallback
  * in `MapFrame.web.tsx` needs no second implementation.
  */
+
+import { cartoDarkTileUrl } from "@/lib/cartoTiles";
 
 export type MapTheme = "light" | "dark";
 
@@ -35,7 +38,6 @@ export type ShopMapEvent =
   | { type: "pin"; lat: number; lng: number };
 
 const LIGHT_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const DARK_TILES = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 
 /** Davao City centre — where a shop that has placed nothing starts looking. */
 export const DAVAO_CENTRE: LatLng = { lat: 7.0731, lng: 125.6128 };
@@ -220,7 +222,7 @@ export function buildShopMapHtml(model: ShopMapModel): string {
 
       if (tileLayer) map.removeLayer(tileLayer);
       tileLayer = L.tileLayer(
-        night ? ${JSON.stringify(DARK_TILES)} : ${JSON.stringify(LIGHT_TILES)},
+        night ? ${JSON.stringify(cartoDarkTileUrl())} : ${JSON.stringify(LIGHT_TILES)},
         {
           maxZoom: 19,
           attribution: night

@@ -4,6 +4,8 @@ import {
   payoutRows,
   derivePayoutRow,
   sortPayoutRows,
+  statementLines,
+  statementMonths,
   summarizePayouts,
   unreleasedMinor,
 } from "@/lib/payout";
@@ -297,5 +299,77 @@ describe("summarizePayouts", () => {
     const total = summarizePayouts([]);
     expect(total.jobCount).toBe(0);
     expect(unreleasedMinor(total)).toBe(0);
+  });
+});
+
+describe("the statement", () => {
+  const job = (id: string, title: string, milestones: PayoutMilestone[]): Order =>
+    ({ id, title, payoutMilestones: milestones } as unknown as Order);
+  const part = (
+    code: PayoutMilestone["code"],
+    amountMinor: number,
+    releasedAt: string | null,
+  ): PayoutMilestone =>
+    ({
+      code,
+      sharePercent: 50,
+      amountMinor,
+      status: releasedAt ? "released" : "pending_pof",
+      pofFileIds: [],
+      releasedAt,
+    }) as PayoutMilestone;
+
+  it("is a line per release, newest first, and never an unreleased part", () => {
+    // A job row answers "how is this job going". Only a dated line answers
+    // "what did GRIDGO send me", which is the question a bank statement asks.
+    const lines = statementLines([
+      job("ord_a", "Staff polos", [
+        part("printing", 55_000, "2026-08-02T03:00:00.000Z"),
+        part("packaging_qc", 16_500, null),
+      ]),
+      job("ord_b", "Seminar handouts", [
+        part("printing", 30_000, "2026-08-20T03:00:00.000Z"),
+      ]),
+    ]);
+    expect(lines.map((line) => line.orderId)).toEqual(["ord_b", "ord_a"]);
+    expect(lines).toHaveLength(2);
+    expect(lines[0].label).toBe("Printing");
+  });
+
+  it("groups by the Davao month, not the phone's own", () => {
+    // A release at 09:00 on 1 September in Manila is 01:00 UTC that day, but a
+    // release at 07:00 on 1 September Manila is 23:00 on 31 August UTC — and it
+    // belongs in September, because that is the month the shop banked it in.
+    const lines = statementLines([
+      job("ord_a", "Booth backdrops", [
+        part("printing", 10_000, "2026-08-31T23:00:00.000Z"),
+        part("delivered", 5_000, "2026-08-31T15:00:00.000Z"),
+      ]),
+    ]);
+    const months = statementMonths(lines);
+    expect(months.map((month) => month.key)).toEqual(["2026-09", "2026-08"]);
+    expect(months[0].totalMinor).toBe(10_000);
+    expect(months[1].totalMinor).toBe(5_000);
+    expect(months[0].label).toMatch(/September 2026/);
+  });
+
+  it("counts the releases behind each month's figure", () => {
+    const lines = statementLines([
+      job("ord_a", "Exam papers", [
+        part("printing", 10_000, "2026-08-05T03:00:00.000Z"),
+        part("packaging_qc", 3_000, "2026-08-06T03:00:00.000Z"),
+      ]),
+    ]);
+    const [august] = statementMonths(lines);
+    expect(august.releaseCount).toBe(2);
+    expect(august.totalMinor).toBe(13_000);
+  });
+
+  it("keeps an unparseable release date out of the months rather than guessing", () => {
+    const lines = statementLines([
+      job("ord_a", "Window decals", [part("printing", 10_000, "not a date")]),
+    ]);
+    expect(lines).toHaveLength(1);
+    expect(statementMonths(lines)).toEqual([]);
   });
 });

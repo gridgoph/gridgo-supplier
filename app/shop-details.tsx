@@ -42,9 +42,10 @@ import { useThemeColors } from "@/hooks/useTheme";
  *
  * Two owners meet on this screen and the layout says which is which. GRIDGO
  * holds the shop name, the contact person and the number, and those are three
- * fields with one Save. The picture and the sign-in email belong to the
- * account, and neither is a keystroke — one opens the camera roll and the other
- * opens a screen of its own — so neither wears a field's clothing.
+ * fields with one Save. The picture, the sign-in email and the password belong
+ * to the account, and none of them is a keystroke — one opens the camera roll
+ * and the other two open a screen of their own — so none wears a field's
+ * clothing.
  *
  * Nothing is drawn to press until something has actually changed — a disabled
  * yellow button is not a state — and a save carries the version the details
@@ -346,6 +347,35 @@ export default function ShopDetailsScreen() {
                   first.
                 </Text>
               </View>
+
+              {/*
+                Same grammar as the email: the fact, and under it the way to
+                change it. The value is never the real password — only a mask —
+                because this row is a door, not a field.
+              */}
+              <View className="gap-2">
+                <Text className="text-caption text-text-muted">Password</Text>
+                <Pressable
+                  onPress={() => router.push("/change-password")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Change password"
+                  accessibilityHint="Set a new password for your GRIDGO sign-in"
+                  className="gg-touch flex-row items-center gap-3 rounded-field border border-outline bg-surface px-3 py-3"
+                  style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+                >
+                  <View className="min-w-0 flex-1 gap-0.5">
+                    <Text className="text-body text-text-primary" accessibilityElementsHidden>
+                      ••••••••
+                    </Text>
+                    <Text className="text-caption text-text-muted">Change password</Text>
+                  </View>
+                  <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+                </Pressable>
+                <Text className="text-caption text-text-muted">
+                  This is what you sign in with. Changing it signs you out of GRIDGO everywhere
+                  else.
+                </Text>
+              </View>
             </View>
 
             {saveNotice ? (
@@ -392,7 +422,7 @@ function DetailsSkeleton() {
       accessibilityRole="progressbar"
       accessibilityLabel="Loading your shop details"
     >
-      {[0, 1, 2, 3].map((row) => (
+      {[0, 1, 2, 3, 4].map((row) => (
         <View key={row} className="gap-2">
           <SkeletonBlock className="h-4 w-28" />
           <SkeletonBlock className="h-12 w-full" />

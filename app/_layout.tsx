@@ -250,6 +250,18 @@ function RootStack() {
           }}
         />
         {/*
+          The sign-in password, behind the same guard as the details it is
+          reached from. A shop that needs to lock another session out cannot
+          wait on accreditation to do it.
+        */}
+        <Stack.Screen
+          name="change-password"
+          options={{
+            title: "Password",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
           The board itself is a tab now; this group is what opens on top of it —
           adding a listing, and the editor with its samples and preview. It sits
           under the signed-in guard rather than the matchable one because

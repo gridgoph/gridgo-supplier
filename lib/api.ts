@@ -105,6 +105,15 @@ export type Order = {
    * GRIDGO's commission on top of it never reaches this app at all.
    */
   supplierPriceMinor?: number;
+  /**
+   * The date this shop is held to — its own, not the client's.
+   *
+   * GRIDGO pads the shop's finish date before promising the client, and the
+   * gap absorbs a bad afternoon. The padded date is deliberately withheld from
+   * this app: a shop shown it works to it, and the allowance is gone before
+   * the job starts.
+   */
+  readyBy?: string | null;
   /** Client-visible print subtotal. Includes commission the shop cannot see. */
   subtotalMinor?: number;
   totalMinor: number;
@@ -633,13 +642,16 @@ export async function deleteNotification(id: string): Promise<void> {
   await request(`/notifications/${id}`, { method: "DELETE" });
 }
 
-/** Provisional. Move the signed-in shop's own pin. */
-export async function updateShopLocation(shop: ShopLocation): Promise<User> {
-  const result = await request<{ user: User }>("/auth/me/shop", {
-    method: "PATCH",
-    body: JSON.stringify({ shop }),
-  });
-  return result.user;
+/**
+ * Move the signed-in shop's own pin through the live profile record.
+ *
+ * `PATCH /auth/me/shop` was never opened. The pin lives on
+ * `/me/supplier-profile` next to the shop name, so a write here is the same
+ * versioned patch as a name change — read the version, send the point.
+ */
+export async function updateShopLocation(shop: ShopLocation): Promise<SupplierProfile> {
+  const profile = await getSupplierProfile();
+  return updateSupplierProfile(profile.version, { shop });
 }
 
 /**
@@ -1338,6 +1350,8 @@ export type SupplierProfilePatch = {
   shopName?: string;
   contactName?: string;
   phone?: string;
+  /** The shop's own pin. GRIDGO measures delivery distance from this point. */
+  shop?: ShopLocation;
 };
 
 /** Provisional. The signed-in shop's own details (the API scopes this by bearer). */

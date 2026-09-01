@@ -73,6 +73,10 @@ export function presentOrderState(state: string): StatePresentation {
       return { label: "Picked up", tone: "info", icon: "circle-check" };
     case "out_for_delivery":
       return { label: "Out for delivery", tone: "info", icon: "clock" };
+    // The client collects this one. It reached GRIDGO's counter and waits there
+    // for them, which is a step past the shop's own work either way.
+    case "awaiting_collection":
+      return { label: "Waiting for the client", tone: "info", icon: "clock" };
     case "delivered":
       return { label: "Delivered", tone: "success", icon: "circle-check" };
     case "issue_window_open":
@@ -119,10 +123,13 @@ export function actionsForJob(order: Pick<Order, "state" | "payoutMilestones" | 
         {
           kind: "accept",
           label: "Accept job",
-          targetState: "supplier_accepted",
+          // The client chose this shop's listing, paid its price and was given
+          // a date, all before the job arrived here. Accepting is confirming
+          // the shop can run it — there is nothing left to quote.
+          targetState: "payment_authorized",
           primary: true,
           consequence:
-            "Your shop commits to producing this job at the price you name, by the finish time you promise. The client is told both straight away.",
+            "Your shop commits to producing this job at the price on your board, by the date GRIDGO has already promised the client.",
           resultLabel: "Accepted",
         },
         {
@@ -232,7 +239,11 @@ export const JOB_JOURNEY = [
   { id: "production", label: "Production", states: ["payment_authorized", "production"] },
   { id: "self_qc", label: "Self-QC", states: ["supplier_self_qc"] },
   { id: "pickup", label: "Pickup", states: ["ready_for_dispatch", "rider_assigned"] },
-  { id: "delivery", label: "Delivery", states: ["picked_up", "out_for_delivery", "delivered"] },
+  {
+    id: "delivery",
+    label: "Delivery",
+    states: ["picked_up", "out_for_delivery", "awaiting_collection", "delivered"],
+  },
   {
     id: "settled",
     label: "Payout",
@@ -304,6 +315,11 @@ export function waitingOn(state: string): { title: string; body: string } {
       return {
         title: "With the rider",
         body: "The job has left your shop. The delivered part of your earnings releases on the rider's evidence.",
+      };
+    case "awaiting_collection":
+      return {
+        title: "Waiting for the client",
+        body: "The job reached GRIDGO's counter and the client is collecting it there. Nothing here is yours to do.",
       };
     case "delivered":
     case "issue_window_open":

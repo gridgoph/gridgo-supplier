@@ -53,6 +53,9 @@ export function custodyForOrder(order: Pick<Order, "state" | "riderId">): Custod
       };
     case "picked_up":
     case "out_for_delivery":
+    // A collected job is with GRIDGO from the shop's point of view either way:
+    // it left, and getting it to the client is no longer the shop's leg.
+    case "awaiting_collection":
       return {
         state: "with_rider",
         label: "Rider has the job",
