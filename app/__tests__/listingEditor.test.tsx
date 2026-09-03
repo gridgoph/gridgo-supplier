@@ -61,6 +61,7 @@ function listingWith(overrides: Partial<Listing> = {}): Listing {
     minimumWidthMilli: null,
     minimumHeightMilli: null,
     minimumLengthMilli: null,
+    printerMaxWidthFeet: null,
     minimumOrderQuantity: null,
     priceTiers: [],
     speedTiers: [],
@@ -257,6 +258,73 @@ describe("the listing editor", () => {
           kind: "addon",
           required: false,
           firstOption: { label: "Ready in 24 hours", priceModifierMinor: 20000 },
+        }),
+      ),
+    );
+  });
+
+  it("asks a tarpaulin listing for max printer width in feet before it can go up", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({
+      status: "ok",
+      value: listingWith({
+        description: "Printed on 13oz matte tarpaulin.",
+        basePriceMinor: 45000,
+        turnaroundMode: "override",
+        turnaroundHours: 24,
+        fileFormatMode: "override",
+        formatCodes: ["pdf"],
+        photos: [{ fileId: "file_1", sortOrder: 0, altText: null }],
+        printerMaxWidthFeet: null,
+      }),
+    });
+
+    view = await render(<ListingScreen />);
+
+    expect(await screen.findByLabelText("Max printer width in feet")).toBeTruthy();
+    expect(screen.getByText(/5 ft printers/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Put on the board" }).props.accessibilityState).toEqual(
+      expect.objectContaining({ disabled: true }),
+    );
+    expect(
+      screen.getAllByText("Set your max printer width in feet before it can go on the board.").length,
+    ).toBeGreaterThan(0);
+
+    await fireEvent.press(screen.getByLabelText("Increase Max printer width in feet"));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Put on the board" }).props.accessibilityState).toEqual(
+        expect.objectContaining({ disabled: false }),
+      );
+    });
+
+    await fireEvent.press(screen.getByRole("button", { name: "Put on the board" }));
+    await waitFor(() =>
+      expect(saveListing).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "sci_1" }),
+        expect.objectContaining({ printerMaxWidthFeet: 1, active: true }),
+      ),
+    );
+  });
+
+  it("hides the printer cap on every other kind of work and clears it on save", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({
+      status: "ok",
+      value: listingWith({ printerMaxWidthFeet: 5 }),
+    });
+
+    view = await render(<ListingScreen />);
+
+    expect(await screen.findByLabelText("Max printer width in feet")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("radio", { name: "Flyers" }));
+    expect(screen.queryByLabelText("Max printer width in feet")).toBeNull();
+
+    await fireEvent.press(screen.getByLabelText("See what clients see"));
+
+    await waitFor(() =>
+      expect(saveListing).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "sci_1" }),
+        expect.objectContaining({
+          subcategoryCode: "flyers",
+          printerMaxWidthFeet: null,
         }),
       ),
     );

@@ -48,6 +48,7 @@ function listingWith(photos: string[]): Listing {
     minimumWidthMilli: null,
     minimumHeightMilli: null,
     minimumLengthMilli: null,
+    printerMaxWidthFeet: null,
     minimumOrderQuantity: null,
     priceTiers: [],
     speedTiers: [],

@@ -11,9 +11,12 @@ import { SkeletonBlock } from "@/components/Skeleton";
 import { StarterChoice } from "@/components/StarterChoice";
 import { OptionList } from "@/components/controls/OptionList";
 import { TextField } from "@/components/controls/TextField";
+import { PrinterCapField } from "@/components/listing/PrinterCapField";
 import {
   boardTargets,
+  isPrinterCapSet,
   LISTING_CAPS,
+  needsPrinterCap,
   type ListingStarter,
 } from "@/lib/listings";
 import { BOARD_NOT_OPEN_YET, createListing, loadStarters } from "@/lib/listingsApi";
@@ -48,6 +51,7 @@ export default function NewListingScreen() {
   const [startersLoading, setStartersLoading] = useState(false);
   const [starterError, setStarterError] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [printerMaxWidthFeet, setPrinterMaxWidthFeet] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -117,6 +121,7 @@ export default function NewListingScreen() {
       subcategoryCode,
       name: name.trim(),
       starterId: chosenStarter,
+      printerMaxWidthFeet: needsPrinterCap(subcategoryCode) ? printerMaxWidthFeet : null,
     });
 
     if (result.status !== "ok") {
@@ -180,7 +185,11 @@ export default function NewListingScreen() {
     );
   }
 
-  const ready = Boolean(target && subcategoryCode && name.trim());
+  const printerCapReady =
+    !subcategoryCode ||
+    !needsPrinterCap(subcategoryCode) ||
+    isPrinterCapSet(printerMaxWidthFeet);
+  const ready = Boolean(target && subcategoryCode && name.trim() && printerCapReady);
 
   return (
     <View className="gg-screen">
@@ -228,9 +237,19 @@ export default function NewListingScreen() {
                 detail: cover.examples,
               }))}
               value={subcategoryCode}
-              onChange={setSubcategoryCode}
+              onChange={(value) => {
+                setSubcategoryCode(value);
+                setPrinterMaxWidthFeet(null);
+              }}
               accessibilityLabel="What kind of work this listing is"
             />
+          </View>
+        ) : null}
+
+        {subcategoryCode && needsPrinterCap(subcategoryCode) ? (
+          <View className="mt-8 gap-3">
+            <Text className="text-overline text-text-muted">MAX PRINTER WIDTH</Text>
+            <PrinterCapField value={printerMaxWidthFeet} onChange={setPrinterMaxWidthFeet} />
           </View>
         ) : null}
 
