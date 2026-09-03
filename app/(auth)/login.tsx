@@ -36,6 +36,7 @@ import {
   releaseClerkSession,
   withSettledClerkSession,
 } from "@/lib/clerkSignIn";
+import { SessionWait } from "@/components/SessionWait";
 import { completeGoogleSso } from "@/lib/googleSso";
 import { useSession } from "@/store/session";
 
@@ -54,6 +55,8 @@ export default function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [healthState, setHealthState] = useState<HealthState>("checking");
+  const sessionWait = useSession((state) => state.sessionWait);
+  const identity = useSession((state) => state.identity);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +75,7 @@ export default function LoginScreen() {
   async function refuseNonSupplier() {
     setVerifying(false);
     setProblem(emailUnavailableMessage);
+    useSession.getState().clearSessionWait();
     await releaseClerkSession(() => signOut());
     useSession.getState().clearClerkIdentity();
   }
@@ -83,6 +87,7 @@ export default function LoginScreen() {
         await refuseNonSupplier();
         return;
       }
+      useSession.getState().clearSessionWait();
       setProblem(next.message);
       return;
     }
@@ -225,18 +230,30 @@ export default function LoginScreen() {
         setActive: (args) => setActive(args),
       });
       if (outcome.status === "cancelled") {
+        useSession.getState().clearSessionWait();
         return;
       }
       if (outcome.status === "activated" || outcome.status === "already_signed_in") {
+        useSession.getState().beginSessionWait("in");
         await adoptAndEnter();
         return;
       }
-      setProblem("Google did not finish signing in. Try again.");
+      // Native callback still adopting — it starts the wait once Google has returned.
     } catch (error) {
+      useSession.getState().clearSessionWait();
       setProblem(clerkErrorMessage(error, "Google could not sign you in just now. Try again."));
     } finally {
       setBusy(false);
     }
+  }
+
+  if (
+    sessionWait &&
+    !problem &&
+    identity.kind !== "mismatch" &&
+    identity.kind !== "error"
+  ) {
+    return <SessionWait tone={sessionWait} role="supplier" />;
   }
 
   return (

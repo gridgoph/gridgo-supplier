@@ -1,11 +1,13 @@
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { Pressable, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { GridgoLogo } from "@/components/GridgoLogo";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
+import { SessionWait } from "@/components/SessionWait";
+import { useSession } from "@/store/session";
 
 /** Source pixels of `welcome.webp` — width / height. */
 const ART_RATIO = 1100 / 1055;
@@ -20,8 +22,15 @@ const ART_RATIO = 1100 / 1055;
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  const sessionWait = useSession((state) => state.sessionWait);
+  const identity = useSession((state) => state.identity);
   const artWidth = Math.round(Math.min(width * 0.78, height * 0.34 * ART_RATIO));
   const artHeight = Math.round(artWidth / ART_RATIO);
+
+  if (identity.kind === "mismatch" || identity.kind === "error") {
+    return <Redirect href="/access" />;
+  }
+  if (sessionWait) return <SessionWait tone={sessionWait} role="supplier" />;
 
   return (
     <View

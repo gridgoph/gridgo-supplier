@@ -20,6 +20,7 @@ import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-c
 
 import { ToastHost } from "@/components/ToastHost";
 import { ClerkSessionBridge } from "@/components/ClerkSessionBridge";
+
 import { colors, type ThemeName } from "@/constants/theme";
 import { useAlertStream } from "@/hooks/useAlertStream";
 import { useAppFonts } from "@/hooks/useAppFonts";

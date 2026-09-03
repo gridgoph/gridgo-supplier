@@ -12,6 +12,8 @@ const mockPassword = jest.fn(async () => {
 const mockSendEmailCode = jest.fn(async () => ({ error: null }));
 const mockGetToken = jest.fn(async (): Promise<string | null> => "clerk-jwt");
 const mockSignOut = jest.fn(async () => undefined);
+const mockSetActive = jest.fn(async () => undefined);
+const mockStartSSOFlow = jest.fn();
 const mockFinalize = jest.fn(async (): Promise<{ error: unknown }> => ({ error: null }));
 
 jest.mock("expo-router", () => ({
@@ -21,7 +23,7 @@ jest.mock("expo-router", () => ({
 
 jest.mock("@clerk/expo", () => ({
   useAuth: () => ({ isSignedIn: mockIsSignedIn, getToken: mockGetToken }),
-  useClerk: () => ({ setActive: jest.fn(), signOut: mockSignOut }),
+  useClerk: () => ({ setActive: mockSetActive, signOut: mockSignOut }),
   useUser: () => ({ user: null }),
   useSignIn: () => ({
     signIn: {
@@ -40,7 +42,7 @@ jest.mock("@clerk/expo", () => ({
 }));
 
 jest.mock("@clerk/expo/experimental", () => ({
-  useSSO: () => ({ startSSOFlow: jest.fn() }),
+  useSSO: () => ({ startSSOFlow: mockStartSSOFlow }),
 }));
 
 jest.mock("@/lib/api", () => {
@@ -93,12 +95,15 @@ describe("Sign in of a GRIDGO client identity", () => {
     mockFinalize.mockReset().mockResolvedValue({ error: null });
     mockGetToken.mockReset().mockResolvedValue("clerk-jwt");
     mockSignOut.mockReset().mockResolvedValue(undefined);
+    mockStartSSOFlow.mockReset();
+    mockSetActive.mockReset().mockResolvedValue(undefined);
     useSession.setState({
       user: null,
       loading: false,
       error: null,
       authSource: "none",
       identity: { kind: "signed_out" },
+      sessionWait: null,
     });
     (api.me as jest.Mock).mockResolvedValue(clientUser);
   });
@@ -126,6 +131,25 @@ describe("Sign in of a GRIDGO client identity", () => {
       expect(screen.getByText("Check your email")).toBeTruthy();
     });
     expect(screen.queryByText(emailUnavailableMessage)).toBeNull();
+  });
+
+  it("does not keep Signing you in when Google returns a client account", async () => {
+    mockStartSSOFlow.mockResolvedValue({
+      createdSessionId: "sess_google",
+      authSessionResult: { type: "success" },
+    });
+
+    await render(<LoginScreen />);
+    fireEvent.press(screen.getByLabelText("Continue with Google"));
+
+    await waitFor(() => {
+      expect(screen.getByText(emailUnavailableMessage)).toBeTruthy();
+    });
+    expect(screen.queryByText("Signing you in")).toBeNull();
+    expect(screen.getByLabelText("Continue with Google")).toBeTruthy();
+    expect(mockSignOut).toHaveBeenCalled();
+    expect(mockRouter.replace).not.toHaveBeenCalledWith("/access");
+    expect(useSession.getState().sessionWait).toBeNull();
   });
 
   it("stays on Sign in after a complete password, never the closed-shop screen", async () => {
