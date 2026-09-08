@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type { User } from "@/lib/api";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import { sessionWaitHold } from "@/lib/sessionWait";
 import { usePush } from "@/store/push";
 
 /** Expected role for this binary — mismatched login is rejected. */
@@ -75,6 +76,7 @@ type SessionState = {
   error: string | null;
   authSource: AuthSource;
   identity: IdentityState;
+  sessionWait: "in" | "out" | null;
   setClerkIdentity: (identity: IdentityState) => void;
   adoptClerkUser: (user: User) => boolean;
   clearClerkIdentity: () => void;
@@ -85,6 +87,8 @@ type SessionState = {
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
+  beginSessionWait: (tone: "in" | "out") => void;
+  clearSessionWait: () => void;
 };
 
 export const useSession = create<SessionState>((set, get) => ({
@@ -93,15 +97,24 @@ export const useSession = create<SessionState>((set, get) => ({
   error: null,
   authSource: "none",
   identity: { kind: "signed_out" },
+  sessionWait: null,
   clearError: () => set({ error: null }),
+  beginSessionWait: (tone) => set({ sessionWait: tone }),
+  clearSessionWait: () => set({ sessionWait: null }),
   setClerkIdentity: (identity) =>
-    set({
+    set((state) => ({
       user: null,
       loading: identity.kind === "loading",
       error: null,
       authSource: "clerk",
       identity,
-    }),
+      // Leftover Clerk restore must not raise Signing you in on the login
+      // tap. Google's callback / activated path sets sessionWait itself.
+      sessionWait:
+        identity.kind === "loading" || identity.kind === "signed_out"
+          ? state.sessionWait
+          : null,
+    })),
   adoptClerkUser: (user) => {
     if (user.role !== APP_ROLE) {
       set({
@@ -113,6 +126,7 @@ export const useSession = create<SessionState>((set, get) => ({
           kind: "mismatch",
           destination: appForRole(user.role),
         },
+        sessionWait: null,
       });
       return false;
     }
@@ -123,6 +137,7 @@ export const useSession = create<SessionState>((set, get) => ({
       error: null,
       authSource: "clerk",
       identity: { kind: "supplier" },
+      sessionWait: null,
     });
     return true;
   },
@@ -136,6 +151,7 @@ export const useSession = create<SessionState>((set, get) => ({
       error: null,
       authSource: "none",
       identity: { kind: "signed_out" },
+      sessionWait: get().sessionWait === "out" ? "out" : null,
     });
   },
   refresh: async () => {
@@ -211,6 +227,8 @@ export const useSession = create<SessionState>((set, get) => ({
     }
   },
   logout: async () => {
+    const startedAt = Date.now();
+    set({ sessionWait: "out" });
     // The device token rides along with the sign-out rather than being
     // unregistered separately: afterwards the bearer token is dead, so a phone
     // that signed out first could no longer authenticate the unregister and
@@ -240,8 +258,11 @@ export const useSession = create<SessionState>((set, get) => ({
         error: null,
         authSource: "none",
         identity: { kind: "signed_out" },
+        sessionWait: "out",
       });
       void usePush.getState().release();
+      await sessionWaitHold(startedAt);
+      set({ sessionWait: null });
     }
   },
 }));

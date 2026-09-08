@@ -7,6 +7,7 @@ import {
   boardContextFor,
   boardStanding,
   priceLine,
+  printerCapLine,
   subcategoryName,
   type Listing,
   type ServiceLine,
@@ -56,6 +57,7 @@ export function ListingCard({
   const context = boardContextFor(listing, services);
   const standing = boardStanding(listing, context, shopApproved);
   const first = listing.photos[0];
+  const cap = printerCapLine(listing);
 
   return (
     <View collapsable={false} className="rounded-card border border-outline bg-surface">
@@ -86,6 +88,11 @@ export function ListingCard({
           <Text className="text-caption text-text-muted" numberOfLines={1}>
             {subcategoryName(catalog, listing.subcategoryCode)}
           </Text>
+          {cap ? (
+            <Text className="text-caption text-text-muted" numberOfLines={1}>
+              {cap}
+            </Text>
+          ) : null}
           <Text className="text-body text-text-primary" numberOfLines={1}>
             {priceLine(listing)}
           </Text>

@@ -13,13 +13,15 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 
+import { BrandIntro } from "@/components/BrandIntro";
 import { ToastHost } from "@/components/ToastHost";
 import { ClerkSessionBridge } from "@/components/ClerkSessionBridge";
+
 import { colors, type ThemeName } from "@/constants/theme";
 import { useAlertStream } from "@/hooks/useAlertStream";
 import { useAppFonts } from "@/hooks/useAppFonts";
@@ -61,7 +63,7 @@ export default function RootLayout() {
   useHydrateTheme();
   const scheme = useThemeName();
   const token = useThemeColors();
-  const fontsReady = useAppFonts();
+  useAppFonts();
 
   // Keeps the window behind the navigator on canvas, so theme changes and
   // screen transitions never flash the wrong background.
@@ -69,11 +71,17 @@ export default function RootLayout() {
     SystemUI.setBackgroundColorAsync(token.canvas);
   }, [token.canvas]);
 
+  // The opening matches the legacy splash: start on the first frame, do not
+  // wait for fonts. Satoshi has ~1.8s before the wordmark, and the overlay
+  // covers any fallback under it.
   useEffect(() => {
-    if (fontsReady) SplashScreen.hideAsync();
-  }, [fontsReady]);
+    void SplashScreen.hideAsync();
+  }, []);
 
-  if (!fontsReady) return null;
+  // The opening plays once per launch, over everything. This layout mounts
+  // once, so the flag is the whole gate — no route, no back-stack entry, and
+  // nothing about where the launch lands is decided here.
+  const [introPlaying, setIntroPlaying] = useState(true);
 
   return (
     // Without the metrics the platform already knows at launch, the provider
@@ -111,6 +119,7 @@ export default function RootLayout() {
                 */}
                 <ToastHost />
                 <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+                {introPlaying ? <BrandIntro onDone={() => setIntroPlaying(false)} /> : null}
               </ThemeProvider>
             </SafeAreaProvider>
           </KeyboardProvider>

@@ -18,6 +18,7 @@ import {
   fromPriceMinor,
   hasPriceRange,
   pickLine,
+  printerCapLine,
   readyInLine,
   specs,
   subcategoryName,
@@ -148,6 +149,9 @@ export default function ListingPreviewScreen() {
           <Text className="text-caption text-text-muted">
             {subcategoryName(catalog, listing.subcategoryCode)}
           </Text>
+          {printerCapLine(listing) ? (
+            <Text className="text-caption text-text-muted">{printerCapLine(listing)}</Text>
+          ) : null}
           {/*
             The headline price is the cheapest a client can leave with: the
             shop's own base plus the cheapest option of every step they must

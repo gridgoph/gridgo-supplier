@@ -103,6 +103,49 @@ export const LISTING_CAPS = {
   helpTextChars: 240,
 } as const;
 
+/** The only kind of work that names a printer's max width. */
+export const TARP_SUBCATEGORY_CODE = "tarpaulins_outdoor_banners";
+
+/** Whole feet the shop's machine can print, as GRIDGO stores it. */
+export const PRINTER_MAX_WIDTH_FEET = { min: 1, max: 20 } as const;
+
+export function needsPrinterCap(subcategoryCode: string): boolean {
+  return subcategoryCode === TARP_SUBCATEGORY_CODE;
+}
+
+/** True when the shop has named a cap GRIDGO will accept. */
+export function isPrinterCapSet(feet: number | null | undefined): feet is number {
+  return (
+    feet != null &&
+    Number.isInteger(feet) &&
+    feet >= PRINTER_MAX_WIDTH_FEET.min &&
+    feet <= PRINTER_MAX_WIDTH_FEET.max
+  );
+}
+
+/**
+ * What goes on the wire for `printerMaxWidthFeet`.
+ *
+ * A number only for tarpaulin, and only when it is in range. Every other family
+ * is `null` so a leftover 5 ft from a switched listing cannot hitch a ride.
+ */
+export function printerMaxWidthFeetForPayload(
+  subcategoryCode: string,
+  feet: number | null | undefined,
+): number | null {
+  if (!needsPrinterCap(subcategoryCode) || !isPrinterCapSet(feet)) return null;
+  return feet;
+}
+
+/** "Prints up to 5 ft" — absent when the listing has no cap to show. */
+export function printerCapLine(
+  listing: Pick<Listing, "printerMaxWidthFeet">,
+): string | null {
+  return isPrinterCapSet(listing.printerMaxWidthFeet)
+    ? `Prints up to ${listing.printerMaxWidthFeet} ft`
+    : null;
+}
+
 export type SamplePhoto = {
   fileId: string;
   sortOrder: number;
@@ -174,6 +217,14 @@ export type Listing = {
   minimumWidthMilli: number | null;
   minimumHeightMilli: number | null;
   minimumLengthMilli: number | null;
+  /**
+   * Widest the shop's machine can print, in whole feet.
+   *
+   * Required on tarpaulin & outdoor banners before the listing can go on the
+   * board. Other families omit it — never a millimetre figure, and never a
+   * leftover number after the kind of work changes.
+   */
+  printerMaxWidthFeet: number | null;
   /** The least the shop will run. */
   minimumOrderQuantity: number | null;
   priceTiers: PriceTier[];
@@ -354,6 +405,12 @@ function readPhotos(value: unknown): SamplePhoto[] {
     .sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+function readPrinterCap(value: unknown): number | null {
+  const feet = num(value);
+  if (feet == null || !Number.isInteger(feet)) return null;
+  return feet;
+}
+
 function readFormatCodes(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   const codes: string[] = [];
@@ -397,6 +454,7 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     minimumWidthMilli: num(pick(raw, "minimumWidthMilli", "minimum_width_milli")),
     minimumHeightMilli: num(pick(raw, "minimumHeightMilli", "minimum_height_milli")),
     minimumLengthMilli: num(pick(raw, "minimumLengthMilli", "minimum_length_milli")),
+    printerMaxWidthFeet: readPrinterCap(pick(raw, "printerMaxWidthFeet", "printer_max_width_feet")),
     minimumOrderQuantity: num(pick(raw, "minimumOrderQuantity", "minimum_order_quantity")),
     priceTiers: readPriceTiers(pick(raw, "priceTiers", "price_tiers")),
     speedTiers: readSpeedTiers(pick(raw, "speedTiers", "speed_tiers")),
@@ -692,6 +750,9 @@ export function boardBlockers(listing: Listing, context: BoardContext): string[]
     (listing.minimumWidthMilli == null) !== (listing.minimumHeightMilli == null)
   ) {
     out.push("A smallest billable size needs both a width and a height.");
+  }
+  if (needsPrinterCap(listing.subcategoryCode) && !isPrinterCapSet(listing.printerMaxWidthFeet)) {
+    out.push("Set your max printer width in feet before it can go on the board.");
   }
   if (
     listing.turnaroundMode === "override" &&

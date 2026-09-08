@@ -60,6 +60,7 @@
      text on top, one primary CTA per screen or bounded panel. */
   --color-action-yellow: #ffde58;
   --color-action-yellow-on: #1a1a1a;
+  --color-action-yellow-on-muted: #5b5b5b;
 
   /* Semantic state — always paired with an icon and a label */
   --color-success: #2e7d32;

@@ -64,7 +64,12 @@ export function ClerkSessionBridge({ children }: Props) {
     api.setTokenProvider(getToken);
     void (async () => {
       try {
-        const token = await awaitClerkSessionToken(getToken);
+        const joining = useSession.getState().sessionWait === "in";
+        const token = await awaitClerkSessionToken(
+          getToken,
+          joining ? 10 : 5,
+          joining ? 400 : 120,
+        );
         if (!token) {
           if (cancelled) return;
           if (alreadyAdopted) return;

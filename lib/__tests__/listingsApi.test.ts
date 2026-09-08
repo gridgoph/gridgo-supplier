@@ -2,10 +2,12 @@ import {
   addGroup,
   addOption,
   addPrepStep,
+  createListing,
   loadBoard,
   loadListing,
   removeListing,
   reorderPrepSteps,
+  saveListing,
 } from "@/lib/listingsApi";
 import type { Listing, PrepStep, SpecGroup } from "@/lib/listings";
 
@@ -73,6 +75,7 @@ const listing: Listing = {
   minimumWidthMilli: null,
   minimumHeightMilli: null,
   minimumLengthMilli: null,
+  printerMaxWidthFeet: 5,
   minimumOrderQuantity: null,
   priceTiers: [],
   speedTiers: [],
@@ -263,6 +266,67 @@ describe("what the board sends GRIDGO", () => {
     const call = sent(fetch);
     expect(call.url).toContain("/me/catalog-items/sci_1/prep-steps/reorder");
     expect(call.body).toEqual({ stepIds: ["cps_2", "cps_1"], expectedVersion: 7 });
+  });
+});
+
+describe("the printer cap on the wire", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("names printerMaxWidthFeet on a tarpaulin create and omits it on every other family", async () => {
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(answered(201, { item: listing }));
+
+    await createListing({
+      serviceLineId: "svc_1",
+      subcategoryCode: "tarpaulins_outdoor_banners",
+      name: "Tarpaulin, 13oz",
+      printerMaxWidthFeet: 5,
+    });
+    expect(sent(fetch).body).toEqual(
+      expect.objectContaining({ printerMaxWidthFeet: 5, subcategoryCode: "tarpaulins_outdoor_banners" }),
+    );
+
+    fetch.mockClear();
+    await createListing({
+      serviceLineId: "svc_1",
+      subcategoryCode: "flyers",
+      name: "Flyers 101",
+      printerMaxWidthFeet: 5,
+    });
+    expect(sent(fetch).body).not.toHaveProperty("printerMaxWidthFeet");
+    expect(sent(fetch).body?.subcategoryCode).toBe("flyers");
+  });
+
+  it("clears a leftover number when the kind of work is no longer tarpaulin", async () => {
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(answered(200, { item: listing }));
+
+    await saveListing(listing, {
+      subcategoryCode: "flyers",
+      printerMaxWidthFeet: 5,
+    });
+
+    expect(sent(fetch).body).toEqual(
+      expect.objectContaining({
+        subcategoryCode: "flyers",
+        printerMaxWidthFeet: null,
+      }),
+    );
+  });
+
+  it("sends the integer feet on a tarpaulin save under the exact field name", async () => {
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(answered(200, { item: listing }));
+
+    await saveListing(listing, { printerMaxWidthFeet: 7 });
+
+    expect(sent(fetch).body).toEqual(expect.objectContaining({ printerMaxWidthFeet: 7 }));
+    expect(JSON.stringify(sent(fetch).body)).not.toMatch(/milli/i);
   });
 });
 

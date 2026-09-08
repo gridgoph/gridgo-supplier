@@ -22,6 +22,7 @@ function listing(partial: Partial<Listing> & Pick<Listing, "id" | "name">): List
     minimumWidthMilli: null,
     minimumHeightMilli: null,
     minimumLengthMilli: null,
+    printerMaxWidthFeet: null,
     minimumOrderQuantity: null,
     priceTiers: [],
     speedTiers: [],

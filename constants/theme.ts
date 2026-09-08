@@ -52,6 +52,8 @@ export const colors = {
     actionYellow: "#FFDE58",
     /** Text/icon on actionYellow */
     actionYellowOn: "#1A1A1A",
+    /** Recessive ink on the yellow field - the mark's "GO" and the launch line. */
+    actionYellowOnMuted: "#5B5B5B",
 
     /** Approved, completed */
     success: "#2E7D32",
@@ -87,6 +89,8 @@ export const colors = {
 
     actionYellow: "#FFDE58",
     actionYellowOn: "#1A1A1A",
+    /** Recessive ink on the yellow field - the mark's "GO" and the launch line. */
+    actionYellowOnMuted: "#5B5B5B",
 
     success: "#66BB6A",
     error: "#EF5350",

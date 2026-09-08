@@ -32,7 +32,7 @@ On a physical device, use your machine's LAN IP instead of `127.0.0.1`.
 
 | Command | Does |
 |---|---|
-| `npm start` | Expo dev server |
+| `npm start` | Metro for Expo Go (`expo start --go --port 8082`) |
 | `npm run android` / `npm run ios` | Platform-targeted |
 | `npm run lint` | ESLint |
 | `npm test` | Jest |

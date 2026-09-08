@@ -42,6 +42,7 @@ jest.mock("@/lib/api", () => {
 
 import LoginScreen from "@/app/(auth)/login";
 import * as api from "@/lib/api";
+import { useSession } from "@/store/session";
 
 const mockRouter = jest.requireMock("expo-router").router as {
   push: jest.Mock;
@@ -56,6 +57,14 @@ const mockRouter = jest.requireMock("expo-router").router as {
 describe("Sign in", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    useSession.setState({
+      user: null,
+      loading: false,
+      error: null,
+      authSource: "none",
+      identity: { kind: "signed_out" },
+      sessionWait: null,
+    });
   });
 
   it("keeps Clerk fields empty and does not offer a local demo", async () => {
@@ -121,5 +130,22 @@ describe("Sign in", () => {
     expect(mockSetActive.mock.invocationCallOrder[0]).toBeLessThan(
       mockRouter.replace.mock.invocationCallOrder[0],
     );
+  });
+
+  it("does not show Signing you in until Google has authenticated", async () => {
+    mockStartSSOFlow.mockResolvedValue({
+      createdSessionId: null,
+      authSessionResult: { type: "success" },
+    });
+    await render(<LoginScreen />);
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText("Continue with Google"));
+    });
+
+    await waitFor(() => expect(mockStartSSOFlow).toHaveBeenCalled());
+    expect(screen.queryByText("Signing you in")).toBeNull();
+    expect(useSession.getState().sessionWait).toBeNull();
+    expect(screen.getByLabelText("Continue with Google")).toBeTruthy();
   });
 });

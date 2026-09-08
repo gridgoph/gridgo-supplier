@@ -190,6 +190,17 @@ describe("session clearing paths feed the same guard", () => {
       kind: "mismatch",
       destination: "GRIDGO for clients",
     });
+    expect(useSession.getState().sessionWait).toBeNull();
+  });
+
+  it("drops Signing you in when a refused Clerk identity is cleared", () => {
+    useSession.setState({ sessionWait: "in" });
+    useSession.getState().setClerkIdentity({ kind: "loading" });
+    expect(useSession.getState().sessionWait).toBe("in");
+
+    useSession.getState().clearClerkIdentity();
+    expect(useSession.getState().identity.kind).toBe("signed_out");
+    expect(useSession.getState().sessionWait).toBeNull();
   });
 
   it("signs out Clerk after sending GRIDGO the device release", async () => {

@@ -71,6 +71,7 @@ const listing: Listing = {
   minimumWidthMilli: null,
   minimumHeightMilli: null,
   minimumLengthMilli: null,
+  printerMaxWidthFeet: 5,
   minimumOrderQuantity: null,
   priceTiers: [],
   speedTiers: [],
@@ -169,6 +170,7 @@ describe("the shop's board", () => {
     const view = await render(<BoardScreen />);
 
     expect(await screen.findByText("Tarpaulin, 13oz")).toBeTruthy();
+    expect(screen.getByText("Prints up to 5 ft")).toBeTruthy();
     expect(screen.getByText("₱450.00 per piece")).toBeTruthy();
     expect(screen.queryByText("Ready in 24 hours")).toBeNull();
     expect(screen.queryByText(/still needs something/)).toBeNull();

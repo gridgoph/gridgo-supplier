@@ -41,6 +41,11 @@ const catalog: ServiceCatalog = {
       covers: [
         { code: "flyers", name: "Flyers", examples: "Handouts" },
         { code: "brochures", name: "Brochures", examples: "Folds" },
+        {
+          code: "tarpaulins_outdoor_banners",
+          name: "Tarpaulins & outdoor banners",
+          examples: "Event banners",
+        },
       ],
     },
   ],
@@ -132,6 +137,7 @@ describe("Add a listing", () => {
     });
     const body = (createListing as jest.Mock).mock.calls[0][0];
     expect(body).not.toHaveProperty("photos");
+    expect(body.printerMaxWidthFeet).toBeNull();
     expect(seedStarterSample).toHaveBeenCalledWith("lst_flyers", "item_1");
     expect(router.replace).toHaveBeenCalledWith({
       pathname: "/shop/[id]",
@@ -162,5 +168,52 @@ describe("Add a listing", () => {
       );
     });
     expect(seedStarterSample).not.toHaveBeenCalled();
+  });
+
+  it("hides the printer cap on Flyers and requires it on tarpaulin", async () => {
+    const tarpStarter = {
+      ...flyersStarter,
+      id: "lst_tarpaulins_outdoor_banners",
+      name: "Tarpaulin",
+      subcategoryCode: "tarpaulins_outdoor_banners",
+      pricingUnit: "per_unit" as const,
+      packageQty: null,
+    };
+    (loadStarters as jest.Mock).mockImplementation(async (code: string) =>
+      code === "tarpaulins_outdoor_banners"
+        ? { status: "ok", value: [tarpStarter] }
+        : { status: "ok", value: [flyersStarter] },
+    );
+
+    await render(<NewListingScreen />);
+    await fireEvent.press(screen.getByRole("radio", { name: "Flyers" }));
+    expect(screen.queryByLabelText("Max printer width in feet")).toBeNull();
+
+    await fireEvent.press(screen.getByRole("radio", { name: "Tarpaulins & outdoor banners" }));
+    expect(await screen.findByLabelText("Max printer width in feet")).toBeTruthy();
+    expect(screen.getByText(/5 ft printers/)).toBeTruthy();
+
+    await fireEvent.changeText(screen.getByLabelText("Listing name"), "Event tarp");
+    expect(screen.getByRole("button", { name: "Create listing" }).props.accessibilityState).toEqual(
+      expect.objectContaining({ disabled: true }),
+    );
+
+    await fireEvent.press(screen.getByLabelText("Increase Max printer width in feet"));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Create listing" }).props.accessibilityState).toEqual(
+        expect.objectContaining({ disabled: false }),
+      );
+    });
+    await fireEvent.press(screen.getByRole("button", { name: "Create listing" }));
+
+    await waitFor(() => {
+      expect(createListing).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subcategoryCode: "tarpaulins_outdoor_banners",
+          name: "Event tarp",
+          printerMaxWidthFeet: 1,
+        }),
+      );
+    });
   });
 });

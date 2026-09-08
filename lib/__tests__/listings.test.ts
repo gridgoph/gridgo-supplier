@@ -8,10 +8,13 @@ import {
   fromPriceMinor,
   measurementKind,
   multiplierLabel,
+  needsPrinterCap,
   normalizeListing,
   normalizeListings,
   normalizeStarters,
   priceLine,
+  printerCapLine,
+  printerMaxWidthFeetForPayload,
   readyInLine,
   toMultiplierBps,
   unitLine,
@@ -33,6 +36,7 @@ const READY: Listing = {
   minimumWidthMilli: null,
   minimumHeightMilli: null,
   minimumLengthMilli: null,
+  printerMaxWidthFeet: 5,
   minimumOrderQuantity: null,
   priceTiers: [],
   speedTiers: [],
@@ -79,12 +83,31 @@ describe("reading what GRIDGO sends", () => {
     });
 
     expect(snake?.serviceLineId).toBe("svc_9");
+    expect(snake?.printerMaxWidthFeet).toBeNull();
     expect(snake?.pricingUnit).toBe("per_package");
     expect(snake?.packageQty).toBe(100);
     expect(snake?.onTheBoard).toBe(false);
     // Photos arrive in the order the shop set, whatever order they were sent.
     expect(snake?.photos.map((photo) => photo.fileId)).toEqual(["f1", "f2"]);
     expect(snake?.groups[0].options[0].priceModifierMinor).toBe(5000);
+  });
+
+  it("reads printerMaxWidthFeet under both spellings", () => {
+    expect(
+      normalizeListing({
+        id: "item_t",
+        name: "Tarp",
+        subcategoryCode: "tarpaulins_outdoor_banners",
+        printerMaxWidthFeet: 5,
+      })?.printerMaxWidthFeet,
+    ).toBe(5);
+    expect(
+      normalizeListing({
+        id: "item_t2",
+        name: "Tarp",
+        printer_max_width_feet: 7,
+      })?.printerMaxWidthFeet,
+    ).toBe(7);
   });
 
   it("reads photos sent as bare file ids", () => {
@@ -206,6 +229,32 @@ describe("what a listing costs", () => {
 describe("what stops a listing going on the board", () => {
   it("says nothing when a listing is finished", () => {
     expect(boardBlockers(READY, NOTHING_INHERITED)).toEqual([]);
+  });
+
+  it("asks a tarpaulin listing for its max printer width in feet", () => {
+    const unset = { ...READY, printerMaxWidthFeet: null };
+    expect(boardBlockers(unset, NOTHING_INHERITED)).toEqual([
+      "Set your max printer width in feet before it can go on the board.",
+    ]);
+    expect(boardBlockers({ ...READY, printerMaxWidthFeet: 5 }, NOTHING_INHERITED)).toEqual([]);
+  });
+
+  it("does not ask any other family for a printer cap", () => {
+    const flyers: Listing = {
+      ...READY,
+      subcategoryCode: "flyers",
+      printerMaxWidthFeet: null,
+    };
+    expect(needsPrinterCap("flyers")).toBe(false);
+    expect(boardBlockers(flyers, NOTHING_INHERITED)).toEqual([]);
+    expect(printerMaxWidthFeetForPayload("flyers", 7)).toBeNull();
+    expect(printerMaxWidthFeetForPayload("tarpaulins_outdoor_banners", 7)).toBe(7);
+    expect(printerMaxWidthFeetForPayload("tarpaulins_outdoor_banners", null)).toBeNull();
+  });
+
+  it("says the cap the way a client would read it", () => {
+    expect(printerCapLine({ printerMaxWidthFeet: 5 })).toBe("Prints up to 5 ft");
+    expect(printerCapLine({ printerMaxWidthFeet: null })).toBeNull();
   });
 
   it("leads with the photo, because that is what a client picks with", () => {

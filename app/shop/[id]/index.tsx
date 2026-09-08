@@ -21,6 +21,7 @@ import { FormatPlusField } from "@/components/FormatPlusField";
 import { MoneyField } from "@/components/controls/MoneyField";
 import { NoteField } from "@/components/controls/NoteField";
 import { OptionList } from "@/components/controls/OptionList";
+import { PrinterCapField } from "@/components/listing/PrinterCapField";
 import { PriceTierEditor, SpeedTierEditor } from "@/components/listing/TierEditor";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import { Stepper } from "@/components/controls/Stepper";
@@ -37,8 +38,10 @@ import {
   MEASURE_UNITS,
   unitLine,
   measurementKind,
+  needsPrinterCap,
   PRICING_UNITS,
   priceLine,
+  printerMaxWidthFeetForPayload,
   unitChoiceLabel,
   readyInLine,
   specs,
@@ -192,6 +195,10 @@ export default function ListingScreen() {
             measurementKind(working.pricingUnit) === "area" ? toMilli(working.minimumHeight) : null,
           minimumLengthMilli:
             measurementKind(working.pricingUnit) === "length" ? toMilli(working.minimumLength) : null,
+          printerMaxWidthFeet: printerMaxWidthFeetForPayload(
+            working.subcategoryCode,
+            working.printerMaxWidthFeet,
+          ),
           minimumOrderQuantity:
             asksQuantity(working.pricingUnit) ? working.minimumOrderQuantity : null,
           priceTiers: asksQuantity(working.pricingUnit) ? working.priceTiers : [],
@@ -450,7 +457,15 @@ export default function ListingScreen() {
                   detail: cover.examples,
                 }))}
                 value={working.subcategoryCode}
-                onChange={(value) => setDraft({ ...working, subcategoryCode: value })}
+                onChange={(value) =>
+                  setDraft({
+                    ...working,
+                    subcategoryCode: value,
+                    printerMaxWidthFeet: needsPrinterCap(value)
+                      ? working.printerMaxWidthFeet
+                      : null,
+                  })
+                }
                 accessibilityLabel="What kind of work this listing is"
               />
             </View>
@@ -459,6 +474,12 @@ export default function ListingScreen() {
               {subcategoryName(catalog, merged.subcategoryCode)}
             </Text>
           )}
+          {needsPrinterCap(working.subcategoryCode) ? (
+            <PrinterCapField
+              value={working.printerMaxWidthFeet}
+              onChange={(value) => setDraft({ ...working, printerMaxWidthFeet: value })}
+            />
+          ) : null}
         </Section>
 
         {/* 3. Price */}
@@ -1038,6 +1059,7 @@ type Draft = {
   minimumWidth: number | null;
   minimumHeight: number | null;
   minimumLength: number | null;
+  printerMaxWidthFeet: number | null;
   minimumOrderQuantity: number | null;
   priceTiers: Listing["priceTiers"];
   speedTiers: Listing["speedTiers"];
@@ -1059,6 +1081,7 @@ function draftFrom(listing: Listing): Draft {
     minimumWidth: fromMilli(listing.minimumWidthMilli),
     minimumHeight: fromMilli(listing.minimumHeightMilli),
     minimumLength: fromMilli(listing.minimumLengthMilli),
+    printerMaxWidthFeet: listing.printerMaxWidthFeet,
     minimumOrderQuantity: listing.minimumOrderQuantity,
     priceTiers: listing.priceTiers,
     speedTiers: listing.speedTiers,
@@ -1082,6 +1105,7 @@ export function sameDraft(left: Draft, right: Draft): boolean {
     left.minimumWidth === right.minimumWidth &&
     left.minimumHeight === right.minimumHeight &&
     left.minimumLength === right.minimumLength &&
+    left.printerMaxWidthFeet === right.printerMaxWidthFeet &&
     left.minimumOrderQuantity === right.minimumOrderQuantity &&
     tierKey(left.priceTiers) === tierKey(right.priceTiers) &&
     speedKey(left.speedTiers) === speedKey(right.speedTiers) &&
@@ -1116,6 +1140,10 @@ function applyDraft(listing: Listing, draft: Draft): Listing {
     minimumWidthMilli: measurementKind(draft.pricingUnit) === "area" ? toMilli(draft.minimumWidth) : null,
     minimumHeightMilli: measurementKind(draft.pricingUnit) === "area" ? toMilli(draft.minimumHeight) : null,
     minimumLengthMilli: measurementKind(draft.pricingUnit) === "length" ? toMilli(draft.minimumLength) : null,
+    printerMaxWidthFeet: printerMaxWidthFeetForPayload(
+      draft.subcategoryCode,
+      draft.printerMaxWidthFeet,
+    ),
     minimumOrderQuantity: asksQuantity(draft.pricingUnit) ? draft.minimumOrderQuantity : null,
     priceTiers: asksQuantity(draft.pricingUnit) ? draft.priceTiers : [],
     speedTiers: draft.speedTiers,

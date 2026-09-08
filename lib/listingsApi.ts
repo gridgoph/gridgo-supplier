@@ -8,6 +8,7 @@ import {
   normalizeBoardPage,
   normalizePrepSteps,
   normalizeStarters,
+  printerMaxWidthFeetForPayload,
   type BoardPage,
   type Listing,
   type ListingStarter,
@@ -148,6 +149,11 @@ export type NewListingInput = {
   name: string;
   /** Clones a GRIDGO starter's steps and add-ons at create time. */
   starterId?: string | null;
+  /**
+   * Whole feet. Sent only for tarpaulin, and only when the shop set it.
+   * Other families omit the key so a leftover number cannot hitch a ride.
+   */
+  printerMaxWidthFeet?: number | null;
 };
 
 export async function createListing(
@@ -162,6 +168,11 @@ export async function createListing(
       active: false,
     };
     if (input.starterId) body.starterId = input.starterId;
+    const printerCap = printerMaxWidthFeetForPayload(
+      input.subcategoryCode,
+      input.printerMaxWidthFeet,
+    );
+    if (printerCap != null) body.printerMaxWidthFeet = printerCap;
     const listing = normalizeListing(await api.createCatalogItem(body));
     if (!listing) throw new api.ApiError(502, { error: "unreadable" });
     return listing;
@@ -180,6 +191,8 @@ export type ListingPatch = {
   minimumWidthMilli?: number | null;
   minimumHeightMilli?: number | null;
   minimumLengthMilli?: number | null;
+  /** Whole feet. Null on every family that is not tarpaulin. */
+  printerMaxWidthFeet?: number | null;
   minimumOrderQuantity?: number | null;
   /** Replaced as a set: removing a break removes it. */
   priceTiers?: Listing["priceTiers"];
@@ -197,8 +210,18 @@ export async function saveListing(
   patch: ListingPatch,
 ): Promise<BoardOutcome<Listing>> {
   return attempt("save this listing", async () => {
+    const subcategoryCode = patch.subcategoryCode ?? listing.subcategoryCode;
+    const body: ListingPatch = { ...patch };
+    if (Object.hasOwn(patch, "printerMaxWidthFeet") || Object.hasOwn(patch, "subcategoryCode")) {
+      body.printerMaxWidthFeet = printerMaxWidthFeetForPayload(
+        subcategoryCode,
+        Object.hasOwn(patch, "printerMaxWidthFeet")
+          ? patch.printerMaxWidthFeet
+          : listing.printerMaxWidthFeet,
+      );
+    }
     const saved = normalizeListing(
-      await api.updateCatalogItem(listing.id, listing.version, patch),
+      await api.updateCatalogItem(listing.id, listing.version, body),
     );
     if (!saved) throw new api.ApiError(502, { error: "unreadable" });
     return saved;
