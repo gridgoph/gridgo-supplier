@@ -1,3 +1,5 @@
+import { useReadVersion } from "@/hooks/useReadVersion";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useEffect, useState } from "react";
 
 import * as api from "@/lib/api";
@@ -22,7 +24,9 @@ export function useJob(id: string | undefined): JobState {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const nextRead = useReadVersion();
   const reload = useCallback(async () => {
+    const current = nextRead();
     if (!id) {
       setLoading(false);
       setError("This job link is incomplete. Open the job from Jobs or Schedule.");
@@ -30,14 +34,21 @@ export function useJob(id: string | undefined): JobState {
     }
     setLoading(true);
     try {
-      setJob(await api.getOrder(id));
+      const job = await api.getOrder(id);
+      if (!current()) return;
+      setJob(job);
       setError(null);
     } catch (e) {
+      if (!current()) return;
+      if (e instanceof api.ApiError && (e.status === 403 || e.status === 404)) setJob(null);
       setError(humanizeApiError(e, offlineMessage("open this job")));
     } finally {
+      if (current())
       setLoading(false);
     }
-  }, [id]);
+  }, [id, nextRead]);
+
+  useLiveRefresh(["orders", "jobs", "dispatch", "escalations", "claims", "payouts"], reload);
 
   useEffect(() => {
     void reload();

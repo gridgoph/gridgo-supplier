@@ -1,3 +1,5 @@
+import { useReadVersion } from "@/hooks/useReadVersion";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect, useNavigation } from "expo-router";
@@ -70,7 +72,9 @@ export default function NotificationsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  const nextRead = useReadVersion();
   const reload = useCallback(async () => {
+    const current = nextRead();
     setLoading(true);
     try {
       // The jobs are what place each alert on a stage. A failure there costs
@@ -79,6 +83,7 @@ export default function NotificationsScreen() {
         api.listNotifications(),
         api.listJobs().catch(() => [] as api.Order[]),
       ]);
+      if (!current()) return;
       const state = useAlertsStore.getState();
       const live = visibleAlerts(list, state.deleted);
       setItems(list);
@@ -88,11 +93,15 @@ export default function NotificationsScreen() {
       setError(null);
       setLoaded(true);
     } catch (e) {
+      if (!current()) return;
       setError(humanizeApiError(e, offlineMessage("load your alerts")));
     } finally {
+      if (current())
       setLoading(false);
     }
-  }, [syncFrom]);
+  }, [nextRead, syncFrom]);
+
+  useLiveRefresh(["notifications", "orders", "jobs"], reload);
 
   useFocusEffect(
     useCallback(() => {

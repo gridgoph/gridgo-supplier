@@ -1,3 +1,4 @@
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
@@ -72,6 +73,9 @@ export default function CapacityScreen() {
   const changed = services.filter((s) => {
     const draft = drafts[s.id];
     return draft ? capacityDraftChanged(s, draft) : false;
+  });
+  useLiveRefresh(["availability", "services", "jobs", "settings"], () => {
+    if (!saving && changed.length === 0) return reload();
   });
   const firstProblem = changed
     .map((s) => ({ id: s.id, problem: validateCapacity(drafts[s.id]) }))

@@ -1,3 +1,4 @@
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
@@ -34,6 +35,8 @@ export function useServiceCatalog() {
       setLoading(false);
     }
   }, []);
+
+  useLiveRefresh(["catalog", "services"], reload);
 
   useFocusEffect(
     useCallback(() => {

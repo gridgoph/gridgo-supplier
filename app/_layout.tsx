@@ -163,7 +163,7 @@ function RootStack() {
   usePushNotifications();
 
   return (
-    <Stack screenOptions={stackScreenOptions(scheme)}>
+    <Stack key={`${user?.id ?? "signed-out"}:${user?.verificationStatus ?? "none"}`} screenOptions={stackScreenOptions(scheme)}>
       {/* Launch redirect stays public so cold start always has an anchor. */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
       {/* Clerk's default browser-SSO return must stay reachable before activation. */}

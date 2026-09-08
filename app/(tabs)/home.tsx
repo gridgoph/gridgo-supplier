@@ -1,3 +1,4 @@
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useUser } from "@clerk/expo";
 import { useCallback, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
@@ -88,6 +89,8 @@ export default function HomeScreen() {
       setLoading(false);
     }
   }, [loadBoardQuietly, refresh, syncAlerts, waitingOnOps]);
+
+  useLiveRefresh(["jobs", "orders", "payouts", "identity", "approvals", "catalog", "services", "availability"], reload);
 
   useFocusEffect(
     useCallback(() => {

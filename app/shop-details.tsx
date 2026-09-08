@@ -1,3 +1,4 @@
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useUser } from "@clerk/expo";
 import { ChevronRight } from "lucide-react-native";
 import { useCallback, useState } from "react";
@@ -109,6 +110,8 @@ export default function ShopDetailsScreen() {
           },
     );
   }, []);
+
+  useLiveRefresh(["identity", "availability"], () => load(false));
 
   useFocusEffect(
     useCallback(() => {

@@ -179,7 +179,7 @@ export async function uploadFile(
         // routinely wrong here.
         mimeType: item.mimeType ?? undefined,
         parameters: { purpose },
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        headers: { "X-GRIDGO-Role": "supplier", Authorization: `Bearer ${token}`, Accept: "application/json" },
       },
       (data) => {
         if (!data.totalBytesExpectedToSend) return;

@@ -1,10 +1,13 @@
+import { useAlertsStore } from "@/store/alerts";
+import { useToasts } from "@/store/toasts";
+import { setLiveOwner } from "@/lib/live";
 import { create } from "zustand";
 
 import type { User } from "@/lib/api";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { sessionWaitHold } from "@/lib/sessionWait";
-import { usePush } from "@/store/push";
+import { serializeDeviceMutation, usePush } from "@/store/push";
 
 /** Expected role for this binary — mismatched login is rejected. */
 export const APP_ROLE = "supplier" as const;
@@ -157,8 +160,11 @@ export const useSession = create<SessionState>((set, get) => ({
   refresh: async () => {
     if (!get().user) return;
     try {
-      set({ user: await api.me() });
-    } catch {
+      const user = await api.me();
+      if (user.role !== APP_ROLE) get().adoptClerkUser(user);
+      else set({ user });
+    } catch (error) {
+      if (error instanceof api.ApiError && error.status === 403) get().setClerkIdentity({kind:"error",message:"This account no longer has supplier access."});
       // A 401 already clears the session through the unauthorized handler, and
       // anything else leaves the account as last known rather than signing a
       // shop out because one request did not land.
@@ -245,7 +251,7 @@ export const useSession = create<SessionState>((set, get) => ({
     try {
       // Unassigned and mismatched Clerk identities never opened or claimed a
       // GRIDGO domain session, so there is nothing server-side to release.
-      if (hadDomainSession) await api.logout(deviceToken);
+      if (hadDomainSession) await serializeDeviceMutation(() => api.logout(usePush.getState().token ?? deviceToken));
     } finally {
       if (clerkOwned && clerkSignOutHandler) {
         await clerkSignOutHandler();
@@ -292,4 +298,13 @@ api.setUnauthorizedHandler(() => {
           identity: { kind: "signed_out" },
         },
   );
+});
+
+useSession.subscribe((state, previous) => {
+  const next = state.user?.id ?? null;
+  const status = state.user?.verificationStatus;
+  if (next === (previous.user?.id ?? null) && status === previous.user?.verificationStatus) return;
+  setLiveOwner(next ? `${next}:${status ?? "approved"}` : null);
+  useAlertsStore.getState().bindOwner(next);
+  useToasts.getState().clear();
 });

@@ -1,3 +1,4 @@
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
@@ -77,6 +78,8 @@ export default function PayoutScreen() {
       setLoading(false);
     }
   }, []);
+
+  useLiveRefresh(["payouts", "jobs", "orders", "claims"], reload);
 
   useFocusEffect(
     useCallback(() => {
