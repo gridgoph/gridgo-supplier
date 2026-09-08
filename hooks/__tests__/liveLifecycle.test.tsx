@@ -50,3 +50,10 @@ describe("authenticated app stream lifecycle", () => {
     unsubscribe();
   });
 });
+
+it("clears the role session when the authoritative projection revokes membership",async()=>{
+  useSession.setState({user});
+  (api.me as jest.Mock).mockResolvedValue({...user,role:"client"});
+  await useSession.getState().refresh();
+  expect(useSession.getState().user).toBeNull();
+});

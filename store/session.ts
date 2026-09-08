@@ -160,8 +160,11 @@ export const useSession = create<SessionState>((set, get) => ({
   refresh: async () => {
     if (!get().user) return;
     try {
-      set({ user: await api.me() });
-    } catch {
+      const user = await api.me();
+      if (user.role !== APP_ROLE) get().adoptClerkUser(user);
+      else set({ user });
+    } catch (error) {
+      if (error instanceof api.ApiError && error.status === 403) get().setClerkIdentity({kind:"error",message:"This account no longer has supplier access."});
       // A 401 already clears the session through the unauthorized handler, and
       // anything else leaves the account as last known rather than signing a
       // shop out because one request did not land.
