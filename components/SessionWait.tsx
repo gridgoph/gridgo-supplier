@@ -86,7 +86,7 @@ export function SessionWait({ tone, role, cover = false, size = 120 }: Props) {
       <View className="items-center gap-8">
         <GridPulse tone={tone} size={size} reducedMotion={reducedMotion} />
         <View className="items-center gap-2">
-          <Text className="text-center text-h2 font-semibold text-text-primary">{title}</Text>
+          <Text className="text-center text-h2 font-bold text-text-primary">{title}</Text>
           <Text className="text-center text-body-lg text-text-secondary">{line}</Text>
         </View>
       </View>
