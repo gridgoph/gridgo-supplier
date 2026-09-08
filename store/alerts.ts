@@ -21,6 +21,8 @@ import { createPersistStorage } from "@/lib/persistStorage";
  */
 
 type AlertsState = {
+  ownerId: string | null;
+  bindOwner: (id: string | null) => void;
   unreadCount: number;
   /** Alert ids this device has marked read because GRIDGO could not. */
   dismissed: string[];
@@ -60,6 +62,8 @@ export function visibleAlerts(alerts: Notification[], deleted: string[]): Notifi
 export const useAlertsStore = create<AlertsState>()(
   persist(
     (set, get) => ({
+      ownerId: null,
+      bindOwner: (ownerId) => { if (get().ownerId !== ownerId) set({ownerId, unreadCount:0, dismissed:[], deleted:[], streamCursor:null, localOnly:false}); },
       unreadCount: 0,
       dismissed: [],
       deleted: [],
@@ -132,14 +136,18 @@ export const useAlertsStore = create<AlertsState>()(
       },
     }),
     {
-      name: "gridgo-supplier-alerts",
+      name: "gridgo-supplier-alerts-v2",
+      merge: (persisted, current) => {
+        const saved = persisted as Partial<AlertsState> | undefined;
+        return saved?.ownerId === current.ownerId ? { ...current, ...saved } : current;
+      },
       storage: createPersistStorage<
-        Pick<AlertsState, "dismissed" | "deleted" | "streamCursor">
+        Pick<AlertsState, "ownerId" | "dismissed" | "deleted">
       >(),
       partialize: (state) => ({
         dismissed: state.dismissed,
         deleted: state.deleted,
-        streamCursor: state.streamCursor,
+        ownerId: state.ownerId,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) state.hydrated = true;

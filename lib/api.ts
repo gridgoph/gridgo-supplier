@@ -1,3 +1,4 @@
+import { assertLiveGeneration, liveGeneration } from "@/lib/live";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
@@ -444,7 +445,9 @@ export function setTokenProvider(provider: TokenProvider | null): void {
 /** Fresh for every request; Clerk session JWTs rotate while the app is open. */
 export async function getAuthToken(): Promise<string | null> {
   if (!tokenProvider) return tokenMemory;
-  const token = await tokenProvider();
+  const provider = tokenProvider;
+  const token = await provider();
+  if (provider !== tokenProvider) return null;
   tokenMemory = token;
   return token;
 }
@@ -490,6 +493,7 @@ type RequestOptions = RequestInit & {
 export const API_REQUEST_MS = 20_000;
 
 async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
+  const generation = liveGeneration();
   const { ignoreUnauthorized, ...fetchInit } = init;
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -508,14 +512,17 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     else controller.signal.addEventListener("abort", fail, { once: true });
   });
   let res: Response;
+  let text: string;
   try {
     const token = await Promise.race([getAuthToken(), aborted]);
-    if (token) headers.Authorization = `Bearer ${token}`;
-    res = await fetch(`${getApiBase()}${path}`, {
+    assertLiveGeneration(generation);
+    if (token) { headers.Authorization = `Bearer ${token}`; headers["X-GRIDGO-Role"] = "supplier"; }
+    res = await Promise.race([fetch(`${getApiBase()}${path}`, {
       ...fetchInit,
       headers,
       signal: controller.signal,
-    });
+    }), aborted]);
+    text = await Promise.race([res.text(), aborted]);
   } catch (error) {
     const timedOut =
       (error instanceof Error && error.name === "AbortError") ||
@@ -527,7 +534,7 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   } finally {
     clearTimeout(timer);
   }
-  const text = await res.text();
+  assertLiveGeneration(generation);
   let data: unknown = null;
   if (text) {
     try {
@@ -614,12 +621,8 @@ export async function enrollSupplier(
  * The record has carried a `read` flag since v2; nothing could set it. These
  * three are the routes that close that gap.
  */
-export async function markNotificationRead(id: string): Promise<Notification> {
-  const result = await request<{ notification: Notification }>(
-    `/notifications/${id}/read`,
-    { method: "POST", body: "{}" },
-  );
-  return result.notification;
+export async function markNotificationRead(id: string): Promise<void> {
+  await request(`/notifications/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ read: true }) });
 }
 
 /**
@@ -629,12 +632,10 @@ export async function markNotificationRead(id: string): Promise<Notification> {
  * mark alerts that arrived while the shop was reading the screen — things it
  * has never seen — and a read flag that lies is worse than no read flag.
  */
-export async function markNotificationsRead(ids: string[]): Promise<Notification[]> {
-  const result = await request<{ notifications: Notification[] }>("/notifications/read", {
-    method: "POST",
-    body: JSON.stringify({ ids }),
-  });
-  return result.notifications;
+export async function markNotificationsRead(ids: string[]): Promise<void> {
+  await Promise.all(ids.map((id) => request(`/notifications/${encodeURIComponent(id)}`, {
+    method: "PATCH", body: JSON.stringify({ read: true }),
+  })));
 }
 
 /** Provisional. Delete one of the caller's own notifications. */
@@ -712,7 +713,7 @@ export async function registerDevice(
 ): Promise<{ device: Device; created: boolean; reassigned: boolean }> {
   return request<{ device: Device; created: boolean; reassigned: boolean }>("/devices", {
     method: "POST",
-    body: JSON.stringify({ token, platform }),
+    body: JSON.stringify({ token, platform, appRole: "supplier", tokenProvider: platform === "ios" ? "apns" : "fcm" }),
   });
 }
 
@@ -748,7 +749,7 @@ export async function registerDeviceUnclaimed(
   const res = await fetch(`${getApiBase()}/devices`, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ token, platform }),
+    body: JSON.stringify({ token, platform, appRole: "supplier", tokenProvider: platform === "ios" ? "apns" : "fcm" }),
   });
   if (!res.ok) {
     const text = await res.text();
@@ -928,7 +929,7 @@ export async function listNotificationInbox(): Promise<NotificationInbox> {
   const result = await request<{
     notifications?: Notification[];
     snapshot?: string | null;
-  }>("/notifications");
+  }>("/notifications?role=supplier");
   return {
     notifications: Array.isArray(result.notifications) ? result.notifications : [],
     snapshot: result.snapshot ?? null,

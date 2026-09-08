@@ -153,6 +153,14 @@ async function fetchToken(): Promise<string | null> {
   return typeof data === "string" && data ? data : null;
 }
 
+let registrationQueue: Promise<void> = Promise.resolve();
+
+/** Claims and authenticated release must reach the server in this order. */
+export function serializeDeviceMutation(action: () => Promise<void>): Promise<void> {
+  registrationQueue = registrationQueue.catch(() => {}).then(action);
+  return registrationQueue;
+}
+
 export const usePush = create<PushState>((set, get) => ({
   supported: pushSupported(),
   permission: "unknown",
@@ -209,7 +217,8 @@ export const usePush = create<PushState>((set, get) => ({
     return get().permission === "granted";
   },
 
-  registerIfGranted: async () => {
+  registerIfGranted: () => {
+    const run = async () => {
     const state = get();
     if (!state.supported) return;
 
@@ -223,7 +232,7 @@ export const usePush = create<PushState>((set, get) => ({
     // A bearer means the shop is signed in and this registration names it.
     // Without one the phone is registered unclaimed, so an announcement can
     // still reach a handset nobody has signed in on.
-    const signedIn = Boolean(api.getToken());
+    const signedIn = Boolean(await api.getAuthToken());
 
     set({ busy: true, error: null });
     try {
@@ -234,6 +243,7 @@ export const usePush = create<PushState>((set, get) => ({
       }
       // Idempotent by contract, so no comparison against the stored token is
       // worth the risk of skipping a call the server never actually received.
+      if (signedIn) set({ token }); // Retain even if sign-out supersedes the claim response.
       if (signedIn) await api.registerDevice(token, platform);
       else await api.registerDeviceUnclaimed(token, platform);
       set({ token, claimed: signedIn, busy: false, error: null });
@@ -248,6 +258,9 @@ export const usePush = create<PushState>((set, get) => ({
       // interrupt the sign-in or the screen that triggered it.
       set({ busy: false, error: errorText(e) });
     }
+    };
+    registrationQueue = registrationQueue.catch(() => {}).then(run);
+    return registrationQueue;
   },
 
   adoptToken: async (token) => {

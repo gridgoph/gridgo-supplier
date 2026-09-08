@@ -1,3 +1,4 @@
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
@@ -62,6 +63,8 @@ export default function CapacityScreen() {
       setLoading(false);
     }
   }, []);
+
+  useLiveRefresh(["availability", "services", "jobs", "settings"], reload);
 
   useFocusEffect(
     useCallback(() => {

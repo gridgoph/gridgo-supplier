@@ -1,10 +1,13 @@
+import { useAlertsStore } from "@/store/alerts";
+import { useToasts } from "@/store/toasts";
+import { setLiveOwner } from "@/lib/live";
 import { create } from "zustand";
 
 import type { User } from "@/lib/api";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { sessionWaitHold } from "@/lib/sessionWait";
-import { usePush } from "@/store/push";
+import { serializeDeviceMutation, usePush } from "@/store/push";
 
 /** Expected role for this binary — mismatched login is rejected. */
 export const APP_ROLE = "supplier" as const;
@@ -245,7 +248,7 @@ export const useSession = create<SessionState>((set, get) => ({
     try {
       // Unassigned and mismatched Clerk identities never opened or claimed a
       // GRIDGO domain session, so there is nothing server-side to release.
-      if (hadDomainSession) await api.logout(deviceToken);
+      if (hadDomainSession) await serializeDeviceMutation(() => api.logout(usePush.getState().token ?? deviceToken));
     } finally {
       if (clerkOwned && clerkSignOutHandler) {
         await clerkSignOutHandler();
@@ -292,4 +295,13 @@ api.setUnauthorizedHandler(() => {
           identity: { kind: "signed_out" },
         },
   );
+});
+
+useSession.subscribe((state, previous) => {
+  const next = state.user?.id ?? null;
+  const status = state.user?.verificationStatus;
+  if (next === (previous.user?.id ?? null) && status === previous.user?.verificationStatus) return;
+  setLiveOwner(next ? `${next}:${status ?? "approved"}` : null);
+  useAlertsStore.getState().bindOwner(next);
+  useToasts.getState().clear();
 });

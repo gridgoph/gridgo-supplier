@@ -161,3 +161,25 @@ describe("stream authentication", () => {
     stream.close();
   });
 });
+
+
+describe("resource updates and recovery", () => {
+  const OriginalXHR = global.XMLHttpRequest;
+  afterEach(() => { global.XMLHttpRequest = OriginalXHR; api.setTokenProvider(null); api.setToken(null); });
+  it("dispatches silent invalidation separately from inbox notifications", async () => {
+    const xhr = { readyState: 1, status: 0, responseText: "", onreadystatechange: null as (() => void) | null,
+      open: jest.fn(), setRequestHeader: jest.fn(), send: jest.fn(), abort: jest.fn() };
+    global.XMLHttpRequest = jest.fn(() => xhr) as never;
+    api.setToken("tok");
+    const invalidated = jest.fn();
+    const notification = jest.fn();
+    const stream = openAlertStream({ onNotification: notification, onInvalidate: invalidated });
+    await Promise.resolve(); await Promise.resolve();
+    xhr.readyState = 3; xhr.status = 200;
+    xhr.responseText = 'event: invalidate\ndata: {"resource":"jobs","id":"ord_one"}\n\n';
+    xhr.onreadystatechange?.();
+    expect(invalidated).toHaveBeenCalledWith({resource: "jobs", id: "ord_one"});
+    expect(notification).not.toHaveBeenCalled();
+    stream.close();
+  });
+});

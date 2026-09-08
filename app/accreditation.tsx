@@ -1,3 +1,4 @@
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react-native";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
@@ -53,6 +54,8 @@ export default function AccreditationScreen() {
 
   // An approval that lands while the shop has the app open should be picked up
   // without a sign-out, so returning to this screen re-reads the account.
+  useLiveRefresh(["identity", "approvals"], reload);
+
   useFocusEffect(
     useCallback(() => {
       void reload();

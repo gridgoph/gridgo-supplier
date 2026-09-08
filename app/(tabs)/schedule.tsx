@@ -1,3 +1,4 @@
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
@@ -66,6 +67,8 @@ export default function ScheduleScreen() {
       setLoading(false);
     }
   }, []);
+
+  useLiveRefresh(["jobs", "orders", "availability", "services", "settings"], reload);
 
   useFocusEffect(
     useCallback(() => {

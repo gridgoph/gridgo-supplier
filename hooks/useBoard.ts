@@ -1,3 +1,4 @@
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
@@ -166,6 +167,8 @@ export function useBoard(
     setTotal((current) => Math.max(0, current - 1));
   }, []);
 
+  useLiveRefresh(["catalog", "services", "availability"], reload);
+
   useFocusEffect(
     useCallback(() => {
       void reload();
@@ -271,6 +274,8 @@ export function useListing(
       setLoading(false);
     }
   }, [itemId]);
+
+  useLiveRefresh(["catalog", "services"], () => { if (!hold.current?.()) return reload(); });
 
   useFocusEffect(
     useCallback(() => {
