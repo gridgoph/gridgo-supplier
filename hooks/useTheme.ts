@@ -31,7 +31,7 @@ function applyPreference(next: ThemePreference) {
   // actually switches the theme there; on iOS and Android this is what makes
   // native chrome follow the choice too.
   if (typeof Appearance.setColorScheme === "function") {
-    Appearance.setColorScheme(next === "system" ? null : next);
+    Appearance.setColorScheme(next === "system" ? "unspecified" : next);
   }
 
   // react-native-css keeps its own colour-scheme observable, seeded from
@@ -44,7 +44,9 @@ function applyPreference(next: ThemePreference) {
   // follows the system's own colour scheme — but an unhandled throw here would
   // take the Settings screen down with it.
   try {
-    cssColorScheme.set(next === "system" ? Appearance.getColorScheme() : next);
+    cssColorScheme.set(
+      next === "system" ? (Appearance.getColorScheme() ?? "unspecified") : next,
+    );
   } catch {
     // No override on this platform; `prefers-color-scheme` still drives it.
   }

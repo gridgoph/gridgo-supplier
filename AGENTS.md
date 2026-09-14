@@ -346,6 +346,7 @@ Do not import image assets directly inside screens or components.
 - Strict mode.
 - No `any`.
 - Keep types simple and readable.
+- TypeScript 6 does not auto-include `@types/*`. `tsconfig.json` lists `jest` and `node`.
 
 ---
 
