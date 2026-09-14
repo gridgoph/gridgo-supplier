@@ -4,15 +4,14 @@ import { router, useLocalSearchParams } from "expo-router";
 
 import { FlowScreen } from "@/components/FlowScreen";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { SamplePhoto } from "@/components/SamplePhoto";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { StatusChip } from "@/components/StatusChip";
 import { UploadList } from "@/components/UploadList";
 import { FieldShell } from "@/components/controls/FieldShell";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
-import { isProofImage, probeStorage, storedUploads, type StorageAvailability } from "@/lib/files";
-import { findMilestoneView, milestoneDefinition, nextShopProof } from "@/lib/milestones";
+import { probeStorage, storedUploads, type UploadItem, type StorageAvailability } from "@/lib/files";
+import { findMilestoneView, milestoneDefinition, nextShopProof, type MilestoneView } from "@/lib/milestones";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { useJob } from "@/hooks/useJob";
 import { askConfirm } from "@/store/sheets";
@@ -40,7 +39,7 @@ export default function FulfilmentProofScreen() {
   const [filing, setFiling] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [showErrors, setShowErrors] = useState(false);
-  const [filed, setFiled] = useState(false);
+  const [filed, setFiled] = useState<{ target: MilestoneView; file: UploadItem; title: string } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -79,7 +78,7 @@ export default function FulfilmentProofScreen() {
     try {
       await api.attachFulfilmentProof(latest.fileId, job.id, target.code);
       upload.markAttached(latest.key);
-      setFiled(true);
+      setFiled({ target, file: { ...latest }, title: job.title });
     } catch (e) {
       setFileError(humanizeApiError(e, offlineMessage("file this evidence")));
     } finally {
@@ -87,14 +86,15 @@ export default function FulfilmentProofScreen() {
     }
   }
 
-  if (filed && target) {
+  if (filed) {
+    const { target, file: latest } = filed;
     return (
       <FlowScreen
         loading={false}
         error={null}
         onRetry={() => void reload()}
         title="Evidence filed"
-        subject={job?.title}
+        subject={filed.title}
         lede={`GRIDGO has your ${target.label.toLowerCase()} evidence. Operations reviews it and releases ${api.formatPhp(target.amountMinor)} to your shop.`}
         footer={<PrimaryButton label="Back to job" onPress={() => router.back()} />}
       >
@@ -102,16 +102,12 @@ export default function FulfilmentProofScreen() {
           <View className="flex-row">
             <StatusChip tone="info" label="With GRIDGO" icon="clock" />
           </View>
-          {latest && isProofImage(latest) && latest.uri ? (
-            <SamplePhoto
-              localUri={latest.uri}
-              fileId={latest.fileId}
-              altText={latest.fileName}
-              gutter="tight"
-            />
-          ) : latest ? (
-            <Text className="text-body text-text-secondary">{latest.fileName}</Text>
-          ) : null}
+          <UploadList
+            items={[{ ...latest, stage: "attached" }]}
+            onRetry={(key) => void upload.retry(key)}
+            onRemove={upload.remove}
+            emptyHint=""
+          />
           <Text className="text-body text-text-secondary">
             Release is Operations&apos; step, not yours. You will see this part change to
             Released on the job and on your Earnings screen.

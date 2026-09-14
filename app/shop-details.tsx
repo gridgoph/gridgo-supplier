@@ -1,3 +1,4 @@
+import { useReadVersion } from "@/hooks/useReadVersion";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useUser } from "@clerk/expo";
 import { ChevronRight } from "lucide-react-native";
@@ -61,8 +62,10 @@ export default function ShopDetailsScreen() {
   const [portraitBusy, setPortraitBusy] = useState(false);
   const [portraitError, setPortraitError] = useState<string | null>(null);
 
-  const [profile, setProfile] = useState<SupplierProfile | null>(null);
-  const [draft, setDraft] = useState<ShopDetailDraft | null>(null);
+  const [details, setDetails] = useState<{ profile: SupplierProfile; draft: ShopDetailDraft } | null>(null);
+  const profile = details?.profile ?? null;
+  const draft = details?.draft ?? null;
+  const beginRead = useReadVersion();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showProblems, setShowProblems] = useState(false);
@@ -83,14 +86,17 @@ export default function ShopDetailsScreen() {
    * conflict is the one case where GRIDGO's values should replace it.
    */
   const load = useCallback(async (adoptDraft: boolean) => {
+    const current = beginRead();
     setLoading(true);
     const outcome = await loadShopDetails();
+    if (!current()) return;
     setLoading(false);
 
     if (outcome.status === "ok") {
-      setProfile(outcome.value);
-      setDraft((current) =>
-        adoptDraft || !current ? draftFromProfile(outcome.value) : current,
+      setDetails((previous) =>
+        adoptDraft || !previous
+          ? { profile: outcome.value, draft: draftFromProfile(outcome.value) }
+          : previous,
       );
       setLoadProblem(null);
       if (adoptDraft) {
@@ -109,7 +115,7 @@ export default function ShopDetailsScreen() {
             message: outcome.status === "failed" ? outcome.message : SHOP_DETAILS_STALE,
           },
     );
-  }, []);
+  }, [beginRead]);
 
   useLiveRefresh(["identity", "availability"], () => load(false));
 
@@ -128,7 +134,7 @@ export default function ShopDetailsScreen() {
   }
 
   function edit(patch: Partial<ShopDetailDraft>) {
-    setDraft((current) => (current ? { ...current, ...patch } : current));
+    setDetails((current) => current ? { ...current, draft: { ...current.draft, ...patch } } : current);
     // A refusal was about what was on screen a moment ago. The stale notice
     // stays, because editing does not resolve a change somebody else made.
     setRefusals({});
@@ -145,6 +151,8 @@ export default function ShopDetailsScreen() {
     const patch = shopDetailPatch(profile, draft);
     if (!Object.keys(patch).length) return;
 
+    beginRead();
+    setLoading(false);
     setSaving(true);
     setSaveNotice(null);
     setRefusals({});
@@ -154,8 +162,7 @@ export default function ShopDetailsScreen() {
     if (outcome.status === "ok") {
       // Adopt the version GRIDGO answered with, so a second save from this
       // screen builds on the record it just wrote rather than the one before.
-      setProfile(outcome.value);
-      setDraft(draftFromProfile(outcome.value));
+      setDetails({ profile: outcome.value, draft: draftFromProfile(outcome.value) });
       // Account reads the shop's name from the session, so it has to be
       // re-read before this screen closes over it.
       await refresh();

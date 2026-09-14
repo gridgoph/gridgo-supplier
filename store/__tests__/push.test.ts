@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 
 import * as api from "@/lib/api";
 import { PUSH_CHANNEL_ID } from "@/lib/push";
-import { usePush, pushSupported } from "@/store/push";
+import { usePush, pushSupported, serializeDeviceMutation } from "@/store/push";
 import { useSession } from "@/store/session";
 
 /**
@@ -295,5 +295,56 @@ describe("signing out", () => {
     expect(unclaimed).toHaveBeenCalledWith("fcm-token-a7c8d3f1", "android");
     expect(usePush.getState().claimed).toBe(false);
     unclaimed.mockRestore();
+  });
+});
+
+describe("registration deadlines", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+    api.setTokenProvider(null);
+  });
+
+  it.each(["channel", "permission", "identity", "device token"])("unblocks release after a stalled %s prerequisite", async (stage) => {
+    jest.useFakeTimers();
+    usePush.setState({ permission: "unknown" });
+    mocked.getPermissionsAsync.mockResolvedValue(granted as never);
+    let complete!: (value: never) => void;
+    const pending = new Promise<never>((resolve) => { complete = resolve; });
+    if (stage === "channel") mocked.setNotificationChannelAsync.mockReturnValueOnce(pending);
+    if (stage === "permission") mocked.getPermissionsAsync.mockReturnValueOnce(pending);
+    if (stage === "identity") api.setTokenProvider(() => pending);
+    if (stage === "device token") mocked.getDevicePushTokenAsync.mockReturnValueOnce(pending);
+    const register = jest.spyOn(api, "registerDevice").mockResolvedValue({} as never);
+    const registration = usePush.getState().registerIfGranted();
+    const release = jest.fn(async () => undefined);
+    const released = serializeDeviceMutation(release);
+    await jest.advanceTimersByTimeAsync(api.API_REQUEST_MS + 1);
+    await Promise.all([registration, released]);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(register).not.toHaveBeenCalled();
+    complete({ data: "late-token", ...granted } as never);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(register).not.toHaveBeenCalled();
+  });
+
+  it.each(["fetch", "body"])("aborts an unclaimed %s stall before the next device mutation", async (stage) => {
+    jest.useFakeTimers();
+    api.setToken(null);
+    usePush.setState({ permission: "granted" });
+    let signal: AbortSignal | null | undefined;
+    const fetch = jest.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      signal = init?.signal;
+      if (stage === "fetch") return new Promise<Response>(() => {});
+      return { ok: false, status: 401, text: () => new Promise<string>(() => {}) } as Response;
+    });
+    const registration = usePush.getState().registerIfGranted();
+    const release = jest.fn(async () => { expect(signal?.aborted).toBe(true); });
+    const released = serializeDeviceMutation(release);
+    await jest.advanceTimersByTimeAsync(api.API_REQUEST_MS + 1);
+    await Promise.all([registration, released]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(usePush.getState().busy).toBe(false);
   });
 });

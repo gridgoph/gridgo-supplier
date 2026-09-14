@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), back: jest.fn() },
@@ -261,4 +261,23 @@ describe("the shop's own details", () => {
     expect(mockRouter.back).not.toHaveBeenCalled();
     await view.unmount();
   });
+});
+
+it("keeps the draft baseline when a live read completes during an edit", async () => {
+  jest.clearAllMocks();
+  useSession.setState({ refresh });
+  load();
+  let receive!: (value: SupplierProfile) => void;
+  const view = await render(<ShopDetailsScreen />);
+  await screen.findByLabelText("Shop name");
+  (getSupplierProfile as jest.Mock).mockReturnValueOnce(new Promise<SupplierProfile>((resolve) => { receive = resolve; }));
+  const { invalidate } = jest.requireActual("@/lib/live");
+  await act(async () => { invalidate("identity"); });
+  await waitFor(() => expect(getSupplierProfile).toHaveBeenCalledTimes(2));
+  await fireEvent.changeText(screen.getByLabelText("Shop name"), "New shop name");
+  await act(async () => { receive({ ...PROFILE, phone: "+639179999999", version: 4 }); });
+  (updateSupplierProfile as jest.Mock).mockResolvedValue({ ...PROFILE, shopName: "New shop name", version: 5 });
+  await fireEvent.press(screen.getByLabelText("Save changes"));
+  expect(updateSupplierProfile).toHaveBeenCalledWith(3, { shopName: "New shop name" });
+  await view.unmount();
 });

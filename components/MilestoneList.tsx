@@ -1,8 +1,12 @@
+import { useEffect, useState } from "react";
+import { FileCheck } from "lucide-react-native";
 import { Text, View } from "react-native";
 
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { StatusChip } from "@/components/StatusChip";
-import { formatPhp } from "@/lib/api";
+import { formatPhp, getFile, type StoredFile } from "@/lib/api";
+import { isProofImage, proofDocumentKind } from "@/lib/files";
+import { useThemeColors } from "@/hooks/useTheme";
 import { isShopProof, type MilestoneView } from "@/lib/milestones";
 
 type Props = {
@@ -61,17 +65,52 @@ export function MilestoneList({ milestones, showDetail = false }: Props) {
             ) : null}
             {showDetail && isShopProof(milestone.code) && milestone.pofFileIds.length
               ? milestone.pofFileIds.map((fileId) => (
-                  <SamplePhoto
+                  <FiledProof
                     key={fileId}
                     fileId={fileId}
                     altText={`${milestone.label} evidence`}
-                    gutter="tight"
                   />
                 ))
               : null}
           </View>
         </View>
       ))}
+    </View>
+  );
+}
+
+function FiledProof({ fileId, altText }: { fileId: string; altText: string }) {
+  const colors = useThemeColors();
+  const [file, setFile] = useState<StoredFile | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setFile(null);
+    setFailed(false);
+    void getFile(fileId).then(
+      (value) => { if (active) setFile(value); },
+      () => { if (active) setFailed(true); },
+    );
+    return () => { active = false; };
+  }, [fileId]);
+
+  if (!file) {
+    return <Text className="text-caption text-text-muted">{failed ? "This evidence will not load" : "Loading evidence…"}</Text>;
+  }
+  const document = {
+    fileName: file.originalFilename,
+    mimeType: file.detectedContentType || file.declaredContentType,
+  };
+  if (isProofImage(document)) {
+    return <SamplePhoto fileId={fileId} altText={altText} gutter="tight" />;
+  }
+  return (
+    <View className="flex-row items-center gap-3 rounded-field border border-outline bg-surface p-3">
+      <FileCheck size={20} color={colors.success} strokeWidth={2} />
+      <View className="min-w-0 flex-1">
+        <Text className="text-body text-text-primary">{file.originalFilename}</Text>
+        <Text className="text-caption text-text-muted">{proofDocumentKind(document)}</Text>
+      </View>
     </View>
   );
 }

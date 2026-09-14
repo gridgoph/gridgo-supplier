@@ -13,6 +13,12 @@ jest.mock("expo-router", () => ({
 jest.mock("@/lib/api", () => ({
   ...jest.requireActual("@/lib/api"),
   getOrder: jest.fn(),
+  getFile: jest.fn(async (fileId: string) => ({
+    fileId,
+    originalFilename: `${fileId}.jpg`,
+    detectedContentType: fileId === "file_pdf" ? "application/pdf" : "image/jpeg",
+    declaredContentType: "image/jpeg",
+  })),
   getDownloadUrl: jest.fn(async (fileId: string) => ({
     fileId,
     url: `https://example.test/${fileId}.jpg`,

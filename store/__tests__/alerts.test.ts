@@ -208,3 +208,47 @@ describe("when GRIDGO refuses", () => {
     expect(useAlertsStore.getState().unreadCount).toBe(1);
   });
 });
+
+describe("persisted alert ownership", () => {
+  it.each([true, false])("retains local decisions with hydration first: %s", async (hydrateFirst) => {
+    useAlertsStore.setState({ ownerId: null, ownerBound: false, dismissed: [], deleted: [] });
+    const original = useAlertsStore.persist.getOptions().storage;
+    let receive!: (value: { state: { ownerId: string; dismissed: string[]; deleted: string[] } }) => void;
+    useAlertsStore.persist.setOptions({ storage: {
+      getItem: () => new Promise((resolve) => { receive = resolve; }),
+      setItem: jest.fn(),
+      removeItem: jest.fn(),
+    } });
+    try {
+      const hydration = useAlertsStore.persist.rehydrate();
+      if (!hydrateFirst) useAlertsStore.getState().bindOwner("shop_a");
+      receive({ state: { ownerId: "shop_a", dismissed: ["read"], deleted: ["gone"] } });
+      await hydration;
+      if (hydrateFirst) useAlertsStore.getState().bindOwner("shop_a");
+      expect(useAlertsStore.getState().dismissed).toEqual(["read"]);
+      expect(useAlertsStore.getState().deleted).toEqual(["gone"]);
+      useAlertsStore.getState().bindOwner("shop_b");
+      expect(useAlertsStore.getState().dismissed).toEqual([]);
+      expect(useAlertsStore.getState().deleted).toEqual([]);
+    } finally {
+      useAlertsStore.persist.setOptions({ storage: original });
+    }
+  });
+
+  it("rejects late hydration for a different restored owner", async () => {
+    useAlertsStore.setState({ ownerId: null, ownerBound: false, dismissed: [], deleted: [] });
+    useAlertsStore.getState().bindOwner("shop_b");
+    const original = useAlertsStore.persist.getOptions().storage;
+    useAlertsStore.persist.setOptions({ storage: {
+      getItem: async () => ({ state: { ownerId: "shop_a", dismissed: ["read"], deleted: ["gone"] } }),
+      setItem: jest.fn(), removeItem: jest.fn(),
+    } });
+    try {
+      await useAlertsStore.persist.rehydrate();
+      expect(useAlertsStore.getState().ownerId).toBe("shop_b");
+      expect(useAlertsStore.getState().dismissed).toEqual([]);
+    } finally {
+      useAlertsStore.persist.setOptions({ storage: original });
+    }
+  });
+});

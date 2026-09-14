@@ -1,3 +1,4 @@
+import { useReadVersion } from "@/hooks/useReadVersion";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
@@ -66,18 +67,23 @@ export default function PayoutScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const beginRead = useReadVersion();
   const reload = useCallback(async () => {
+    const current = beginRead();
     setLoading(true);
     try {
-      setJobs(await api.listJobs());
+      const list = await api.listJobs();
+      if (!current()) return;
+      setJobs(list);
       setError(null);
       setLoaded(true);
     } catch (e) {
+      if (!current()) return;
       setError(humanizeApiError(e, offlineMessage("load your earnings")));
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, []);
+  }, [beginRead]);
 
   useLiveRefresh(["payouts", "jobs", "orders", "claims"], reload);
 

@@ -1,3 +1,4 @@
+import { withDeadline } from "@/lib/withDeadline";
 import { assertLiveGeneration, liveGeneration } from "@/lib/live";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
@@ -746,23 +747,27 @@ export async function registerDeviceUnclaimed(
   token: string,
   platform: DevicePlatform,
 ): Promise<void> {
-  const res = await fetch(`${getApiBase()}/devices`, {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ token, platform, appRole: "supplier", tokenProvider: platform === "ios" ? "apns" : "fcm" }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    let data: unknown = null;
-    if (text) {
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = text;
+  const controller = new AbortController();
+  await withDeadline((async () => {
+    const res = await fetch(`${getApiBase()}/devices`, {
+      signal: controller.signal,
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ token, platform, appRole: "supplier", tokenProvider: platform === "ios" ? "apns" : "fcm" }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      let data: unknown = null;
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = text;
+        }
       }
+      throw new ApiError(res.status, data);
     }
-    throw new ApiError(res.status, data);
-  }
+  })(), API_REQUEST_MS, () => controller.abort());
 }
 
 /** The caller's own registrations, always — there is no route to anyone else's. */

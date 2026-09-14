@@ -2,6 +2,12 @@ import { render, screen, waitFor } from "@testing-library/react-native";
 
 jest.mock("@/lib/api", () => ({
   ...jest.requireActual("@/lib/api"),
+  getFile: jest.fn(async (fileId: string) => ({
+    fileId,
+    originalFilename: `${fileId}.jpg`,
+    detectedContentType: fileId === "file_pdf" ? "application/pdf" : "image/jpeg",
+    declaredContentType: "image/jpeg",
+  })),
   getDownloadUrl: jest.fn(async (fileId: string) => ({
     fileId,
     url: `https://example.test/${fileId}.jpg`,
@@ -64,4 +70,11 @@ describe("MilestoneList", () => {
 
     expect(screen.queryByLabelText("Delivered evidence")).toBeNull();
   });
+});
+
+it("renders a stored PDF as a document even when its name suggests an image", async () => {
+  await render(<MilestoneList milestones={[view({ pofFileIds: ["file_pdf"] })]} showDetail />);
+  expect(await screen.findByText("PDF")).toBeTruthy();
+  expect(screen.getByText("file_pdf.jpg")).toBeTruthy();
+  expect(screen.queryByLabelText("Printing evidence")).toBeNull();
 });

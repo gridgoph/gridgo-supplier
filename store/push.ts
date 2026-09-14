@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { create } from "zustand";
 
+import { withDeadline } from "@/lib/withDeadline";
 import * as api from "@/lib/api";
 import { humanizeApiError } from "@/lib/apiErrors";
 import {
@@ -135,21 +136,21 @@ async function ensureChannel(): Promise<void> {
   if (Platform.OS !== "android") return;
   const Notifications = notifications();
   if (!Notifications) return;
-  await Notifications.setNotificationChannelAsync(PUSH_CHANNEL_ID, {
+  await withDeadline(Notifications.setNotificationChannelAsync(PUSH_CHANNEL_ID, {
     name: PUSH_CHANNEL.name,
     description: PUSH_CHANNEL.description,
     // These are expiring job offers and money waiting on a photograph: worth a
     // sound and a heads-up banner, which is also what the server's
     // `priority: high` asks for.
     importance: Notifications.AndroidImportance.HIGH,
-  });
+  }), api.API_REQUEST_MS);
 }
 
 /** The raw FCM token for this installation, or null if it cannot be had. */
 async function fetchToken(): Promise<string | null> {
   const Notifications = notifications();
   if (!Notifications) return null;
-  const { data } = await Notifications.getDevicePushTokenAsync();
+  const { data } = await withDeadline(Notifications.getDevicePushTokenAsync(), api.API_REQUEST_MS);
   return typeof data === "string" && data ? data : null;
 }
 
@@ -178,7 +179,7 @@ export const usePush = create<PushState>((set, get) => ({
         set({ permission: "unknown" });
         return "unknown";
       }
-      const permission = readPushPermission(await Notifications.getPermissionsAsync());
+      const permission = readPushPermission(await withDeadline(Notifications.getPermissionsAsync(), api.API_REQUEST_MS));
       set({ permission });
       return permission;
     } catch {
@@ -232,10 +233,10 @@ export const usePush = create<PushState>((set, get) => ({
     // A bearer means the shop is signed in and this registration names it.
     // Without one the phone is registered unclaimed, so an announcement can
     // still reach a handset nobody has signed in on.
-    const signedIn = Boolean(await api.getAuthToken());
-
+    let signedIn = false;
     set({ busy: true, error: null });
     try {
+      signedIn = Boolean(await withDeadline(api.getAuthToken(), api.API_REQUEST_MS));
       const token = await fetchToken();
       if (!token) {
         set({ busy: false, error: "This phone did not return a notification token." });

@@ -22,6 +22,7 @@ import { createPersistStorage } from "@/lib/persistStorage";
 
 type AlertsState = {
   ownerId: string | null;
+  ownerBound: boolean;
   bindOwner: (id: string | null) => void;
   unreadCount: number;
   /** Alert ids this device has marked read because GRIDGO could not. */
@@ -63,7 +64,14 @@ export const useAlertsStore = create<AlertsState>()(
   persist(
     (set, get) => ({
       ownerId: null,
-      bindOwner: (ownerId) => { if (get().ownerId !== ownerId) set({ownerId, unreadCount:0, dismissed:[], deleted:[], streamCursor:null, localOnly:false}); },
+      ownerBound: false,
+      bindOwner: (ownerId) => {
+        if (get().ownerId !== ownerId) {
+          set({ ownerId, ownerBound: true, unreadCount: 0, dismissed: [], deleted: [], streamCursor: null, localOnly: false });
+        } else {
+          set({ ownerBound: true });
+        }
+      },
       unreadCount: 0,
       dismissed: [],
       deleted: [],
@@ -139,7 +147,14 @@ export const useAlertsStore = create<AlertsState>()(
       name: "gridgo-supplier-alerts-v2",
       merge: (persisted, current) => {
         const saved = persisted as Partial<AlertsState> | undefined;
-        return saved?.ownerId === current.ownerId ? { ...current, ...saved } : current;
+        if (!saved || (current.ownerBound && saved.ownerId !== current.ownerId)) return current;
+        return {
+          ...current,
+          ownerId: saved.ownerId ?? null,
+          dismissed: saved.dismissed ?? [],
+          deleted: saved.deleted ?? [],
+          localOnly: Boolean(saved.dismissed?.length || saved.deleted?.length),
+        };
       },
       storage: createPersistStorage<
         Pick<AlertsState, "ownerId" | "dismissed" | "deleted">
