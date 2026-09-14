@@ -82,6 +82,17 @@ describe("isProofImage", () => {
     expect(isProofImage(item({ mimeType: "application/pdf", fileName: "spec.pdf" }))).toBe(false);
   });
 
+  it.each(["application/octet-stream", " APPLICATION/OCTET-STREAM; charset=binary "])("uses the filename for generic MIME %s", (mimeType) => {
+    expect(isProofImage(item({ mimeType, fileName: "evidence.jpg" }))).toBe(true);
+    expect(isProofImage(item({ mimeType, fileName: "evidence.PNG" }))).toBe(true);
+    expect(isProofImage(item({ mimeType, fileName: "evidence.webp" }))).toBe(true);
+    expect(isProofImage(item({ mimeType, fileName: "evidence.pdf" }))).toBe(false);
+  });
+
+  it("honours explicit PDF metadata over an image extension", () => {
+    expect(isProofImage(item({ mimeType: "application/pdf", fileName: "evidence.jpg" }))).toBe(false);
+  });
+
   it("falls back to the filename when the phone reported no type", () => {
     expect(isProofImage(item({ mimeType: null, fileName: "evidence-1.jpg" }))).toBe(true);
     expect(isProofImage(item({ mimeType: null, fileName: "spec.pdf" }))).toBe(false);

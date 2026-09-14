@@ -89,3 +89,8 @@ describe("UploadList", () => {
     expect(onRemove).toHaveBeenCalledWith("up_1");
   });
 });
+
+it.each(["stored", "attached"] as const)("shows a generic-MIME image as pixels when %s", async (stage) => {
+  await render(<UploadList items={[item({ mimeType: "application/octet-stream", stage, fileId: "proof" })]} onRetry={jest.fn()} onRemove={jest.fn()} emptyHint="" />);
+  expect(screen.getByLabelText("run.jpg").props.source).toEqual({ uri: "file:///run.jpg" });
+});

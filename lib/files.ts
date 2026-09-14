@@ -83,7 +83,7 @@ const PROOF_IMAGE_EXT = /\.(jpe?g|png|webp)$/i;
 export function isProofImage(item: { mimeType: string | null; fileName: string }): boolean {
   const mime = (item.mimeType ?? "").toLowerCase().split(";")[0].trim();
   if (mime === "application/pdf") return false;
-  if (mime) return PROOF_IMAGE_TYPES.has(mime);
+  if (mime && mime !== "application/octet-stream") return PROOF_IMAGE_TYPES.has(mime);
   return PROOF_IMAGE_EXT.test(item.fileName);
 }
 

@@ -27,6 +27,7 @@ type AlertsState = {
   ownerBound: boolean;
   bindOwner: (id: string | null) => void;
   unreadCount: number;
+  unreadIds: string[];
   /** Alert ids this device has marked read because GRIDGO could not. */
   dismissed: string[];
   /** Alert ids this device has deleted because GRIDGO could not. */
@@ -72,12 +73,13 @@ export const useAlertsStore = create<AlertsState>()(
       ownerBound: false,
       bindOwner: (ownerId) => {
         if (get().ownerId !== ownerId) {
-          set({ ownerId, ownerBound: true, unreadCount: 0, dismissed: [], deleted: [], streamCursor: null, localOnly: false });
+          set({ ownerId, ownerBound: true, unreadCount: 0, unreadIds: [], dismissed: [], deleted: [], streamCursor: null, localOnly: false });
         } else {
           set({ ownerBound: true });
         }
       },
       unreadCount: 0,
+      unreadIds: [],
       dismissed: [],
       deleted: [],
       localOnly: false,
@@ -85,41 +87,53 @@ export const useAlertsStore = create<AlertsState>()(
       streamCursor: null,
       rememberStreamCursor: (id) => set({ streamCursor: id }),
       markRead: async (id) => {
+        const generation = liveGeneration();
+        const ownerId = get().ownerId;
         const outcome = await alertsApi.markRead(id);
-        if (outcome.status === "failed") return outcome;
+        if (outcome.status === "failed" || generation !== liveGeneration() || ownerId !== get().ownerId) return outcome;
 
-        const { dismissed, unreadCount } = get();
+        const { dismissed } = get();
         if (!dismissed.includes(id)) {
+          const unreadIds = get().unreadIds.filter((unreadId) => unreadId !== id);
           set({
             dismissed: [...dismissed, id],
-            unreadCount: Math.max(0, unreadCount - 1),
+            unreadIds,
+            unreadCount: unreadIds.length,
           });
         }
         if (outcome.status === "not_open_yet") set({ localOnly: true });
         return outcome;
       },
       markManyRead: async (ids) => {
+        const generation = liveGeneration();
+        const ownerId = get().ownerId;
         const outcome = await alertsApi.markAllRead(ids);
-        if (outcome.status === "failed") return outcome;
+        if (outcome.status === "failed" || generation !== liveGeneration() || ownerId !== get().ownerId) return outcome;
 
         const { dismissed } = get();
         const merged = [...new Set([...dismissed, ...ids])];
+        const unreadIds = get().unreadIds.filter((id) => !ids.includes(id));
         set({
           dismissed: merged,
-          unreadCount: Math.max(0, get().unreadCount - ids.filter((id) => !dismissed.includes(id)).length),
+          unreadIds,
+          unreadCount: unreadIds.length,
         });
         if (outcome.status === "not_open_yet") set({ localOnly: true });
         return outcome;
       },
       remove: async (id) => {
+        const generation = liveGeneration();
+        const ownerId = get().ownerId;
         const outcome = await alertsApi.remove(id);
-        if (outcome.status === "failed") return outcome;
+        if (outcome.status === "failed" || generation !== liveGeneration() || ownerId !== get().ownerId) return outcome;
 
-        const { deleted, dismissed, unreadCount } = get();
+        const { deleted } = get();
+        const unreadIds = get().unreadIds.filter((unreadId) => unreadId !== id);
         set({
           deleted: deleted.includes(id) ? deleted : [...deleted, id],
           // A deleted alert cannot still be counted as unread.
-          unreadCount: dismissed.includes(id) ? unreadCount : Math.max(0, unreadCount - 1),
+          unreadIds,
+          unreadCount: unreadIds.length,
         });
         if (outcome.status === "not_open_yet") set({ localOnly: true });
         return outcome;
@@ -146,12 +160,14 @@ export const useAlertsStore = create<AlertsState>()(
         const live = alerts.map((alert) => alert.id);
         const stillDismissed = dismissed.filter((id) => live.includes(id));
         const stillDeleted = deleted.filter((id) => live.includes(id));
+        const unreadIds = [...new Set(visibleAlerts(alerts, stillDeleted)
+          .filter((alert) => isAlertUnread(alert, stillDismissed))
+          .map((alert) => alert.id))];
         set({
           dismissed: stillDismissed,
           deleted: stillDeleted,
-          unreadCount: visibleAlerts(alerts, stillDeleted).filter((alert) =>
-            isAlertUnread(alert, stillDismissed),
-          ).length,
+          unreadIds,
+          unreadCount: unreadIds.length,
         });
       },
     }),
