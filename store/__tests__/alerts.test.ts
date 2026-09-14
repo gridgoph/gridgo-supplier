@@ -1,3 +1,5 @@
+import * as api from "@/lib/api";
+import { setLiveOwner } from "@/lib/live";
 import type { Notification } from "@/lib/api";
 import * as alertsApi from "@/lib/alertsApi";
 import { isAlertUnread, useAlertsStore, visibleAlerts } from "@/store/alerts";
@@ -250,5 +252,35 @@ describe("persisted alert ownership", () => {
     } finally {
       useAlertsStore.persist.setOptions({ storage: original });
     }
+  });
+});
+
+describe("shared alert refresh ordering", () => {
+  afterEach(() => { jest.restoreAllMocks(); setLiveOwner(null); });
+
+  it("does not let an older reader lower a newer unread count", async () => {
+    useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0 });
+    let receive!: (items: Notification[]) => void;
+    jest.spyOn(api, "listNotifications")
+      .mockReturnValueOnce(new Promise((resolve) => { receive = resolve; }))
+      .mockResolvedValue([alert("one"), alert("two")]);
+    const earlier = useAlertsStore.getState().refresh();
+    await useAlertsStore.getState().refresh();
+    expect(useAlertsStore.getState().unreadCount).toBe(2);
+    receive([alert("one")]);
+    await earlier;
+    expect(useAlertsStore.getState().unreadCount).toBe(2);
+  });
+
+  it("rejects a badge response from the previous account", async () => {
+    setLiveOwner("first");
+    useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0 });
+    let receive!: (items: Notification[]) => void;
+    jest.spyOn(api, "listNotifications").mockReturnValueOnce(new Promise((resolve) => { receive = resolve; }));
+    const earlier = useAlertsStore.getState().refresh();
+    setLiveOwner("second");
+    receive([alert("private")]);
+    await earlier;
+    expect(useAlertsStore.getState().unreadCount).toBe(0);
   });
 });

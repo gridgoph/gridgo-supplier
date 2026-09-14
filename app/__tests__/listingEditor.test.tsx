@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), back: jest.fn() },
@@ -346,4 +346,33 @@ describe("the listing editor", () => {
     await fireEvent.press(screen.getByLabelText("Use Any other https link"));
     expect(screen.getByLabelText("Accept a Any other https link link on this listing")).toBeTruthy();
   });
+  it("adopts a remote price while clean without saving the previous price", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ basePriceMinor: 10000 }) });
+    view = await render(<ListingScreen />);
+    await screen.findByLabelText("Your price");
+    (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ basePriceMinor: 20000, version: 8 }) });
+    const { invalidate } = jest.requireActual("@/lib/live");
+    await act(async () => { invalidate("catalog"); });
+    await waitFor(() => expect(screen.getByLabelText("Your price").props.value).toBe("200.00"));
+    await fireEvent.press(screen.getByLabelText("See what clients see"));
+    expect(saveListing).not.toHaveBeenCalled();
+    expect(router.push).toHaveBeenCalled();
+  });
+
+  it("keeps an edit and its original version when a live request finishes", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ basePriceMinor: 10000 }) });
+    view = await render(<ListingScreen />);
+    await screen.findByLabelText("Your price");
+    let receive!: (value: { status: "ok"; value: Listing }) => void;
+    (loadListing as jest.Mock).mockReturnValueOnce(new Promise((resolve) => { receive = resolve; }));
+    const { invalidate } = jest.requireActual("@/lib/live");
+    await act(async () => { invalidate("catalog"); });
+    await waitFor(() => expect(loadListing).toHaveBeenCalledTimes(2));
+    await fireEvent.changeText(screen.getByLabelText("Your price"), "150");
+    await act(async () => { receive({ status: "ok", value: listingWith({ basePriceMinor: 20000, version: 8 }) }); });
+    expect(screen.getByLabelText("Your price").props.value).toBe("150");
+    await fireEvent.press(screen.getByLabelText("See what clients see"));
+    expect(saveListing).toHaveBeenCalledWith(expect.objectContaining({ version: 7 }), expect.objectContaining({ basePriceMinor: 15000 }));
+  });
+
 });

@@ -1,3 +1,4 @@
+import { useAlertsStore } from "@/store/alerts";
 import {act,renderHook} from "@testing-library/react-native";
 import {usePushNotifications} from "@/hooks/usePushNotifications";
 import {useSession} from "@/store/session";
@@ -55,4 +56,21 @@ it("waits for session hydration to finish after the navigator is ready",async()=
   await act(async()=>{useSession.setState({loading:false});});
   await act(async()=>{jest.advanceTimersByTime(100);});
   expect(mockPush).toHaveBeenCalledTimes(1);
+});
+
+it("keeps a newer screen reconciliation when an older foreground push read returns", async () => {
+  mockLast.mockResolvedValue(null);
+  useAlertsStore.setState({ unreadCount: 0, dismissed: [], deleted: [] });
+  let receive!: (items: api.Notification[]) => void;
+  (api.listNotifications as jest.Mock)
+    .mockReturnValueOnce(new Promise((resolve) => { receive = resolve; }))
+    .mockResolvedValue([{ id: "one", read: false }, { id: "two", read: false }]);
+  await renderHook(() => usePushNotifications());
+  const notifications = jest.requireMock("expo-notifications");
+  const onPush = notifications.addNotificationReceivedListener.mock.calls.at(-1)[0] as () => void;
+  await act(async () => { onPush(); });
+  await act(async () => { await useAlertsStore.getState().refresh(); });
+  expect(useAlertsStore.getState().unreadCount).toBe(2);
+  await act(async () => { receive([{ id: "one", read: false } as api.Notification]); });
+  expect(useAlertsStore.getState().unreadCount).toBe(2);
 });

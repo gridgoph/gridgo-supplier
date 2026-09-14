@@ -263,11 +263,18 @@ export function capabilityChanged(
   line: SupplierService | null,
   draft: CapabilityDraft,
 ): boolean {
+  return Object.keys(capabilityPatch(line, draft)).length > 0;
+}
+
+export function capabilityPatch(
+  line: SupplierService | null,
+  draft: CapabilityDraft,
+): Partial<CapabilityDraft> {
   const saved = capabilityDraftFor(line);
-  return (
-    !sameCodes(saved.materialCodes, draft.materialCodes) ||
-    !sameCodes(saved.finishCodes, draft.finishCodes)
-  );
+  return {
+    ...(!sameCodes(saved.materialCodes, draft.materialCodes) ? { materialCodes: draft.materialCodes } : {}),
+    ...(!sameCodes(saved.finishCodes, draft.finishCodes) ? { finishCodes: draft.finishCodes } : {}),
+  };
 }
 
 /**

@@ -1,3 +1,4 @@
+import { useReadVersion } from "@/hooks/useReadVersion";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
@@ -213,7 +214,7 @@ export type ListingData = {
   loading: boolean;
   notOpenYet: boolean;
   error: string | null;
-  reload: () => Promise<void>;
+  reload: (preserveDraft?: boolean) => Promise<void>;
 };
 
 /**
@@ -243,7 +244,9 @@ export function useListing(
   const hold = useRef(holdRefresh);
   hold.current = holdRefresh;
 
-  const reload = useCallback(async () => {
+  const nextRead = useReadVersion();
+  const reload = useCallback(async (preserveDraft = false) => {
+    const current = nextRead();
     if (!itemId) return;
     setLoading(true);
     try {
@@ -254,6 +257,7 @@ export function useListing(
         loadPrepSteps(itemId),
       ]);
 
+      if (!current() || (preserveDraft && hold.current?.())) return;
       if (taxonomy) setCatalog(buildCatalog(taxonomy));
       setServices(lines);
       setPrepSteps(steps.status === "ok" ? steps.value : []);
@@ -271,16 +275,16 @@ export function useListing(
         setError(result.message);
       }
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, [itemId]);
+  }, [itemId, nextRead]);
 
-  useLiveRefresh(["catalog", "services"], () => { if (!hold.current?.()) return reload(); });
+  useLiveRefresh(["catalog", "services"], () => { if (!hold.current?.()) return reload(true); });
 
   useFocusEffect(
     useCallback(() => {
       if (hold.current?.()) return;
-      void reload();
+      void reload(true);
     }, [reload]),
   );
 

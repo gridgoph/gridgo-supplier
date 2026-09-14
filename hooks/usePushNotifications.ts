@@ -83,9 +83,7 @@ withoutNativeModule(() => {
  */
 async function refreshUnread(): Promise<void> {
   try {
-    const generation = liveGeneration();
-    const items = await api.listNotifications();
-    if (generation === liveGeneration()) useAlertsStore.getState().syncFrom(items);
+    await useAlertsStore.getState().refresh();
   } catch {
     // Offline, or the session just ended. The next focused list catches up.
   }

@@ -128,3 +128,16 @@ describe("one listing, while the shop is working on it", () => {
     await waitFor(() => expect(loadListing).not.toHaveBeenCalled());
   });
 });
+
+it("keeps the newest listing when an older read completes later", async () => {
+  let receive!: (value: { status: "ok"; value: Listing }) => void;
+  (loadListing as jest.Mock)
+    .mockReturnValueOnce(new Promise((resolve) => { receive = resolve; }))
+    .mockResolvedValue({ status: "ok", value: { ...listingWith(["new"]), version: 9 } });
+  const { result } = await renderHook(() => useListing("sci_1"));
+  await act(async () => { await result.current.reload(); });
+  expect(result.current.listing?.version).toBe(9);
+  await act(async () => { receive({ status: "ok", value: listingWith([]) }); });
+  expect(result.current.listing?.version).toBe(9);
+  expect(result.current.listing?.photos).toHaveLength(1);
+});

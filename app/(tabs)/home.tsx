@@ -42,7 +42,7 @@ export default function HomeScreen() {
   const { user, refresh } = useSession();
   const { user: clerkUser } = useUser();
   const colors = useThemeColors();
-  const syncAlerts = useAlertsStore((s) => s.syncFrom);
+  const refreshAlerts = useAlertsStore((s) => s.refresh);
   const [jobs, setJobs] = useState<api.Order[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [services, setServices] = useState<ServiceLine[]>([]);
@@ -78,14 +78,13 @@ export default function HomeScreen() {
     }
     setLoading(true);
     try {
-      const [list, notifications] = await Promise.all([
+      const [list] = await Promise.all([
         api.listJobs(),
-        api.listNotifications().catch(() => [] as api.Notification[]),
+        refreshAlerts().catch(() => []),
         loadBoardQuietly(current),
       ]);
       if (!current()) return;
       setJobs(list);
-      syncAlerts(notifications);
       setError(null);
       setLoaded(true);
     } catch (e) {
@@ -94,7 +93,7 @@ export default function HomeScreen() {
     } finally {
       if (current()) setLoading(false);
     }
-  }, [beginRead, loadBoardQuietly, refresh, syncAlerts, waitingOnOps]);
+  }, [beginRead, loadBoardQuietly, refresh, refreshAlerts, waitingOnOps]);
 
   useLiveRefresh(["jobs", "orders", "payouts", "identity", "approvals", "catalog", "services", "availability"], reload);
 

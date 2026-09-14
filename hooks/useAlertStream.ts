@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { AppState } from "react-native";
-import * as api from "@/lib/api";
 import { openAlertStream, type AlertStreamHandle } from "@/lib/alertStream";
 import { invalidate, liveGeneration, subscribeLive } from "@/lib/live";
 import { useSession } from "@/store/session";
@@ -36,8 +35,7 @@ export function useAlertStream(enabled = true): void {
         if (!current()) return;
 
         if (resources.has("*") || resources.has("notifications")) {
-          try { const items = await api.listNotifications();
-            if (current()) useAlertsStore.getState().syncFrom(items); } catch { /* Next live event/resume or fallback catches up. */ }
+          try { await useAlertsStore.getState().refresh(); } catch { /* Next live event/resume or fallback catches up. */ }
         }
       } finally {
         refreshing = false;

@@ -17,6 +17,7 @@ import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import {
   capabilityChanged,
   capabilityDraftFor,
+  capabilityPatch,
   declarationFor,
   expandsCapability,
   presentLifecycle,
@@ -43,7 +44,7 @@ import { askConfirm } from "@/store/sheets";
 export default function ServiceCategoryScreen() {
   const { category: categoryCode } = useLocalSearchParams<{ category: string }>();
   const navigation = useNavigation();
-  const { catalog, services, setServices, loading, error, reload } = useServiceCatalog();
+  const { catalog, services, loading, error, reload } = useServiceCatalog();
 
   const category = useMemo(
     () => (catalog ? findCategory(catalog, categoryCode) : null),
@@ -55,7 +56,7 @@ export default function ServiceCategoryScreen() {
   );
   const line = declaration?.line ?? null;
 
-  const [draft, setDraft] = useState<CapabilityDraft | null>(null);
+  const [draft, setDraft] = useState<Partial<CapabilityDraft>>({});
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -63,25 +64,13 @@ export default function ServiceCategoryScreen() {
     if (category) navigation.setOptions({ title: category.name });
   }, [category, navigation]);
 
-  // Seed the refinement from the saved line, once it arrives.
-  useEffect(() => {
-    if (!declaration || draft != null) return;
-    setDraft(capabilityDraftFor(declaration.line));
-  }, [declaration, draft]);
-
-  const capability = draft ?? capabilityDraftFor(line);
+  const capability = { ...capabilityDraftFor(line), ...draft };
   const dirty = declaration?.offered === true && capabilityChanged(line, capability);
   const widening =
     dirty && declaration?.lifecycle === "verified" && expandsCapability(line, capability);
   const status = declaration?.offered && declaration.lifecycle
     ? presentLifecycle(declaration.lifecycle)
     : null;
-
-  async function refresh() {
-    const fresh = await api.listSupplierServices();
-    setServices(fresh);
-    return fresh;
-  }
 
   async function offerCategory() {
     if (!category) return;
@@ -90,8 +79,8 @@ export default function ServiceCategoryScreen() {
     try {
       if (line) await api.submitSupplierService(line.id);
       else await api.createSupplierService(category.code);
-      setDraft(null);
-      await refresh();
+      setDraft({});
+      await reload();
     } catch (e) {
       setSaveError(humanizeApiError(e, offlineMessage("offer this category")));
     } finally {
@@ -115,8 +104,8 @@ export default function ServiceCategoryScreen() {
     setSaveError(null);
     try {
       await api.withdrawSupplierService(line.id);
-      setDraft(null);
-      await refresh();
+      setDraft({});
+      await reload();
     } catch (e) {
       setSaveError(humanizeApiError(e, offlineMessage("stop offering this category")));
     } finally {
@@ -140,12 +129,9 @@ export default function ServiceCategoryScreen() {
     setBusy(true);
     setSaveError(null);
     try {
-      await api.updateSupplierService(line.id, {
-        materialCodes: capability.materialCodes,
-        finishCodes: capability.finishCodes,
-      });
-      setDraft(null);
-      await refresh();
+      await api.updateSupplierService(line.id, capabilityPatch(line, capability));
+      setDraft({});
+      await reload();
     } catch (e) {
       setSaveError(humanizeApiError(e, offlineMessage("save what you can produce")));
     } finally {
@@ -273,10 +259,10 @@ export default function ServiceCategoryScreen() {
                       }))}
                       selected={capability.materialCodes}
                       onToggle={(code) =>
-                        setDraft({
+                        setDraft(capabilityPatch(line, {
                           ...capability,
                           materialCodes: toggleCode(capability.materialCodes, code),
-                        })
+                        }))
                       }
                       accessibilityLabel="Materials you can run"
                       disabled={busy}
@@ -293,10 +279,10 @@ export default function ServiceCategoryScreen() {
                       }))}
                       selected={capability.finishCodes}
                       onToggle={(code) =>
-                        setDraft({
+                        setDraft(capabilityPatch(line, {
                           ...capability,
                           finishCodes: toggleCode(capability.finishCodes, code),
-                        })
+                        }))
                       }
                       accessibilityLabel="Finishing you can do"
                       disabled={busy}

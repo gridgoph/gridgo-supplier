@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import * as api from "@/lib/api";
+import { liveGeneration } from "@/lib/live";
 import type { Notification } from "@/lib/api";
 import * as alertsApi from "@/lib/alertsApi";
 import { createPersistStorage } from "@/lib/persistStorage";
@@ -49,6 +51,7 @@ type AlertsState = {
   removeMany: (ids: string[]) => Promise<alertsApi.AlertWriteOutcome>;
   /** Recount from a freshly loaded list, honouring local decisions. */
   syncFrom: (alerts: Notification[]) => void;
+  refresh: () => Promise<Notification[]>;
 };
 
 export function isAlertUnread(alert: Notification, dismissed: string[]): boolean {
@@ -59,6 +62,8 @@ export function isAlertUnread(alert: Notification, dismissed: string[]): boolean
 export function visibleAlerts(alerts: Notification[], deleted: string[]): Notification[] {
   return alerts.filter((alert) => !deleted.includes(alert.id));
 }
+
+let readVersion = 0;
 
 export const useAlertsStore = create<AlertsState>()(
   persist(
@@ -126,6 +131,13 @@ export const useAlertsStore = create<AlertsState>()(
           if (last.status === "failed") return last;
         }
         return last;
+      },
+      refresh: async () => {
+        const version = ++readVersion;
+        const generation = liveGeneration();
+        const items = await api.listNotifications();
+        if (version === readVersion && generation === liveGeneration()) get().syncFrom(items);
+        return items;
       },
       syncFrom: (alerts) => {
         const { dismissed, deleted } = get();
