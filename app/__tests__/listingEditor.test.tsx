@@ -346,6 +346,35 @@ describe("the listing editor", () => {
     await fireEvent.press(screen.getByLabelText("Use Any other https link"));
     expect(screen.getByLabelText("Accept a Any other https link link on this listing")).toBeTruthy();
   });
+  it("saves an edited price using the version advanced by adding a prep step", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({
+      status: "ok", value: listingWith({ basePriceMinor: 10000 }),
+    });
+    view = await render(<ListingScreen />);
+    await fireEvent.changeText(await screen.findByLabelText("Your price"), "150");
+    await fireEvent.press(screen.getByLabelText("Add a step to Before they order"));
+    await fireEvent.changeText(screen.getByLabelText("Step title"), "Flatten your artwork");
+    (loadListing as jest.Mock).mockResolvedValue({
+      status: "ok", value: listingWith({ basePriceMinor: 10000, version: 8 }),
+    });
+    await fireEvent.press(screen.getByRole("button", { name: "Add step" }));
+    await waitFor(() => expect(screen.queryByLabelText("Step title")).toBeNull());
+    expect(addPrepStep).toHaveBeenCalledWith(
+      expect.objectContaining({ version: 7 }),
+      [],
+      expect.objectContaining({ title: "Flatten your artwork" }),
+    );
+    expect(screen.getByLabelText("Your price").props.value).toBe("150");
+    await fireEvent.press(screen.getByLabelText("See what clients see"));
+    expect(saveListing).toHaveBeenCalledWith(
+      expect.objectContaining({ version: 8 }),
+      expect.objectContaining({ basePriceMinor: 15000 }),
+    );
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: "/shop/[id]/preview", params: { id: "sci_1" },
+    });
+  });
+
   it("adopts a remote price while clean without saving the previous price", async () => {
     (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ basePriceMinor: 10000 }) });
     view = await render(<ListingScreen />);

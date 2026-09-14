@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react-native";
+import { act, render, screen, waitFor } from "@testing-library/react-native";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), navigate: jest.fn() },
@@ -29,7 +29,7 @@ jest.mock("@/lib/api", () => ({
 
 import JobWorkspaceScreen from "@/app/job/[id]/index";
 import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
-import { getOrder } from "@/lib/api";
+import { getFile, getOrder } from "@/lib/api";
 
 const SHARES: Record<MilestoneCode, number> = {
   printing: 50,
@@ -86,6 +86,30 @@ function job(partial: Partial<Order> = {}): Order {
 describe("job workspace proof photos", () => {
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  it.each(["file_print", "file_pdf"])("retries failed metadata for %s on pull-to-refresh", async (fileId) => {
+    (getOrder as jest.Mock).mockResolvedValue(job({
+      payoutMilestones: milestones({ printing: "pof_attached" }, { printing: [fileId] }),
+    }));
+    (getFile as jest.Mock).mockRejectedValueOnce(new Error("Offline"));
+    await render(<JobWorkspaceScreen />);
+    expect(await screen.findByText("This evidence will not load")).toBeTruthy();
+
+    const [scroll] = screen.container.queryAll((node) => node.props.refreshControl != null);
+    await act(async () => { scroll.props.refreshControl.props.onRefresh(); });
+
+    if (fileId === "file_pdf") {
+      expect(await screen.findByText("PDF")).toBeTruthy();
+      expect(screen.queryByLabelText("Printing evidence")).toBeNull();
+    } else {
+      await waitFor(() => expect(screen.getByLabelText("Printing evidence").props.source).toEqual({
+        uri: `https://example.test/${fileId}.jpg`,
+      }));
+    }
+    expect(screen.queryByText("This evidence will not load")).toBeNull();
+    expect(getFile).toHaveBeenCalledTimes(2);
+    expect(getOrder).toHaveBeenCalledTimes(3);
   });
 
   it("shows filed shop proof photographs after the job reloads", async () => {

@@ -11,6 +11,7 @@ import { isShopProof, type MilestoneView } from "@/lib/milestones";
 
 type Props = {
   milestones: MilestoneView[];
+  proofReloadVersion?: number;
   /**
    * Whether each row explains whose move it is. The job workspace wants it —
    * the shop is deciding what to do next. A payout list of several jobs does
@@ -31,7 +32,7 @@ type Props = {
  * photographs. A payout list of several jobs does not — the picture belongs
  * next to the part it released.
  */
-export function MilestoneList({ milestones, showDetail = false }: Props) {
+export function MilestoneList({ milestones, showDetail = false, proofReloadVersion = 0 }: Props) {
   if (!milestones.length) return null;
 
   return (
@@ -68,6 +69,7 @@ export function MilestoneList({ milestones, showDetail = false }: Props) {
                   <FiledProof
                     key={fileId}
                     fileId={fileId}
+                    reloadVersion={proofReloadVersion}
                     altText={`${milestone.label} evidence`}
                   />
                 ))
@@ -79,7 +81,7 @@ export function MilestoneList({ milestones, showDetail = false }: Props) {
   );
 }
 
-function FiledProof({ fileId, altText }: { fileId: string; altText: string }) {
+function FiledProof({ fileId, altText, reloadVersion }: { fileId: string; altText: string; reloadVersion: number }) {
   const colors = useThemeColors();
   const [file, setFile] = useState<StoredFile | null>(null);
   const [failed, setFailed] = useState(false);
@@ -92,7 +94,7 @@ function FiledProof({ fileId, altText }: { fileId: string; altText: string }) {
       () => { if (active) setFailed(true); },
     );
     return () => { active = false; };
-  }, [fileId]);
+  }, [fileId, reloadVersion]);
 
   if (!file) {
     return <Text className="text-caption text-text-muted">{failed ? "This evidence will not load" : "Loading evidence…"}</Text>;

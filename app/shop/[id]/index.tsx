@@ -96,7 +96,7 @@ export default function ListingScreen() {
   const approved = isMatchable(useSession((s) => s.user));
   const formats = useAcceptedFileFormats();
 
-  const [edit, setEdit] = useState<{ baseline: Listing; value: Draft } | null>(null);
+  const [draft, storeDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -122,8 +122,8 @@ export default function ListingScreen() {
   // Never null while a listing is loaded. Deriving it here rather than waiting
   // for an effect is what stops the screen rendering its "not reachable" state
   // for the frame between the listing arriving and the draft being seeded.
-  const baseline = edit?.baseline ?? listing;
-  const working = edit?.value ?? (listing ? draftFrom(listing) : null);
+  const baseline = listing;
+  const working = draft ?? (listing ? draftFrom(listing) : null);
 
   const dirty = Boolean(baseline && working && !sameDraft(working, draftFrom(baseline)));
   dirtyRef.current = dirty;
@@ -131,7 +131,7 @@ export default function ListingScreen() {
   function setDraft(value: Draft | null) {
     const changed = Boolean(value && baseline && !sameDraft(value, draftFrom(baseline)));
     dirtyRef.current = changed;
-    setEdit(changed && value && baseline ? { baseline, value } : null);
+    storeDraft(changed ? value : null);
   }
 
   const merged = useMemo(
@@ -217,7 +217,7 @@ export default function ListingScreen() {
           return false;
         }
         dirtyRef.current = false;
-        setEdit(null);
+        storeDraft(null);
 
         const formatsMoved =
           working.fileFormatMode !== baseline.fileFormatMode ||

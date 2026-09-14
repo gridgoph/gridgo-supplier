@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 
@@ -34,7 +34,11 @@ export default function JobWorkspaceScreen() {
   const navigation = useNavigation();
   const colors = useThemeColors();
   const { job, loading, error, reload } = useJob(id);
-  const { refreshing, onRefresh } = usePullToRefresh(reload);
+  const [proofReloadVersion, setProofReloadVersion] = useState(0);
+  const { refreshing, onRefresh } = usePullToRefresh(useCallback(async () => {
+    await reload();
+    setProofReloadVersion((version) => version + 1);
+  }, [reload]));
 
   // Coming back from a flow screen must show the state the flow produced.
   useFocusEffect(
@@ -198,7 +202,7 @@ export default function JobWorkspaceScreen() {
                 </Text>
               </View>
               <View className="gg-divider" />
-              <MilestoneList milestones={milestones} showDetail />
+              <MilestoneList milestones={milestones} showDetail proofReloadVersion={proofReloadVersion} />
             </View>
           </View>
         ) : null}
