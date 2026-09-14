@@ -4,13 +4,14 @@ import { router, useLocalSearchParams } from "expo-router";
 
 import { FlowScreen } from "@/components/FlowScreen";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { SamplePhoto } from "@/components/SamplePhoto";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { StatusChip } from "@/components/StatusChip";
 import { UploadList } from "@/components/UploadList";
 import { FieldShell } from "@/components/controls/FieldShell";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
-import { probeStorage, storedUploads, type StorageAvailability } from "@/lib/files";
+import { isProofImage, probeStorage, storedUploads, type StorageAvailability } from "@/lib/files";
 import { findMilestoneView, milestoneDefinition, nextShopProof } from "@/lib/milestones";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { useJob } from "@/hooks/useJob";
@@ -101,6 +102,16 @@ export default function FulfilmentProofScreen() {
           <View className="flex-row">
             <StatusChip tone="info" label="With GRIDGO" icon="clock" />
           </View>
+          {latest && isProofImage(latest) && latest.uri ? (
+            <SamplePhoto
+              localUri={latest.uri}
+              fileId={latest.fileId}
+              altText={latest.fileName}
+              gutter="tight"
+            />
+          ) : latest ? (
+            <Text className="text-body text-text-secondary">{latest.fileName}</Text>
+          ) : null}
           <Text className="text-body text-text-secondary">
             Release is Operations&apos; step, not yours. You will see this part change to
             Released on the job and on your Earnings screen.

@@ -107,6 +107,8 @@ export type MilestoneView = {
   /** One sentence naming whose move it is. */
   detail: string;
   proofCount: number;
+  /** Proof of Fulfilment files GRIDGO holds for this part. */
+  pofFileIds: string[];
   /** True when this shop can file the evidence right now. */
   canAddProof: boolean;
 };
@@ -134,7 +136,8 @@ function reachedForProof(code: MilestoneCode, state: string): boolean {
 export function viewMilestone(order: Order, milestone: PayoutMilestone): MilestoneView {
   const definition = milestoneDefinition(milestone.code);
   const held = order.payoutHold === true;
-  const proofCount = milestone.pofFileIds?.length ?? 0;
+  const pofFileIds = milestone.pofFileIds ?? [];
+  const proofCount = pofFileIds.length;
   const shopProof = isShopProof(milestone.code);
 
   const base = {
@@ -143,6 +146,7 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
     sharePercent: milestone.sharePercent,
     amountMinor: milestone.amountMinor,
     proofCount,
+    pofFileIds,
   };
 
   if (milestone.status === "released") {

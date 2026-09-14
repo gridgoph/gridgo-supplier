@@ -1,8 +1,9 @@
 import { Text, View } from "react-native";
 
+import { SamplePhoto } from "@/components/SamplePhoto";
 import { StatusChip } from "@/components/StatusChip";
 import { formatPhp } from "@/lib/api";
-import type { MilestoneView } from "@/lib/milestones";
+import { isShopProof, type MilestoneView } from "@/lib/milestones";
 
 type Props = {
   milestones: MilestoneView[];
@@ -21,6 +22,10 @@ type Props = {
  * shown — they are what the shop is owed, not decoration. The list stays
  * monochrome apart from the status chips: money the shop cannot act on must
  * never look like the screen's action.
+ *
+ * On the job, a shop-owned part that already has evidence also shows those
+ * photographs. A payout list of several jobs does not — the picture belongs
+ * next to the part it released.
  */
 export function MilestoneList({ milestones, showDetail = false }: Props) {
   if (!milestones.length) return null;
@@ -54,6 +59,16 @@ export function MilestoneList({ milestones, showDetail = false }: Props) {
             {showDetail ? (
               <Text className="text-caption text-text-secondary">{milestone.detail}</Text>
             ) : null}
+            {showDetail && isShopProof(milestone.code) && milestone.pofFileIds.length
+              ? milestone.pofFileIds.map((fileId) => (
+                  <SamplePhoto
+                    key={fileId}
+                    fileId={fileId}
+                    altText={`${milestone.label} evidence`}
+                    gutter="tight"
+                  />
+                ))
+              : null}
           </View>
         </View>
       ))}

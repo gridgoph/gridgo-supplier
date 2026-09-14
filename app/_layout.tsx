@@ -5,7 +5,7 @@ import {
   DefaultTheme,
   ThemeProvider,
   type Theme,
-} from "@react-navigation/native";
+} from "expo-router/react-navigation";
 import { ClerkProvider } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
 import Constants from "expo-constants";

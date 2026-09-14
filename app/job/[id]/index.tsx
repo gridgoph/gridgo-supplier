@@ -135,6 +135,7 @@ export default function JobWorkspaceScreen() {
             <StatusChip tone={status.tone} label={status.label} icon={status.icon} />
           </View>
           <Text className="text-h1 text-text-primary">{job.title}</Text>
+          <Text className="text-caption text-text-muted">Order {job.id}</Text>
           <Text className="text-body-lg text-text-secondary">
             {job.promisedDate ? "Promised" : "Client needs it by"}{" "}
             {formatDeadlineFull(job.promisedDate || job.deadline)}

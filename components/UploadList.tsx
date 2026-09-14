@@ -1,7 +1,8 @@
 import { FileCheck, FileWarning, Paperclip, RotateCcw, Trash2 } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
-import { uploadStageLabel, type UploadItem } from "@/lib/files";
+import { SamplePhoto } from "@/components/SamplePhoto";
+import { isProofImage, proofDocumentKind, uploadStageLabel, type UploadItem } from "@/lib/files";
 import { useThemeColors } from "@/hooks/useTheme";
 
 type Props = {
@@ -19,6 +20,10 @@ type Props = {
  * shows a real percentage while it sends, then says it is still being saved,
  * and only claims to be saved once GRIDGO has returned an id for it. A failure
  * keeps the file on the list with its own reason and a retry.
+ *
+ * A photograph is shown as soon as the phone has one — the local URI first,
+ * inside the same crop-mark frame as a listing sample. A PDF is a document
+ * tile (name and type), never a broken image.
  */
 export function UploadList({ items, onRetry, onRemove, emptyHint }: Props) {
   const colors = useThemeColors();
@@ -31,13 +36,22 @@ export function UploadList({ items, onRetry, onRemove, emptyHint }: Props) {
     <View className="gap-2">
       {items.map((item) => {
         const settled = item.stage === "stored" || item.stage === "attached";
+        const photograph = isProofImage(item) && Boolean(item.uri);
         return (
           <View
             key={item.key}
             className="gap-2 rounded-field border border-outline bg-surface p-3"
           >
+            {photograph ? (
+              <SamplePhoto
+                localUri={item.uri}
+                fileId={item.fileId}
+                altText={item.fileName}
+                gutter="tight"
+              />
+            ) : null}
             <View className="flex-row items-center gap-3">
-              {settled ? (
+              {photograph ? null : settled ? (
                 <FileCheck size={20} color={colors.success} strokeWidth={2} />
               ) : item.stage === "failed" ? (
                 <FileWarning size={20} color={colors.error} strokeWidth={2} />
@@ -49,6 +63,9 @@ export function UploadList({ items, onRetry, onRemove, emptyHint }: Props) {
                 <Text className="text-body font-medium text-text-primary" numberOfLines={1}>
                   {item.fileName}
                 </Text>
+                {photograph ? null : (
+                  <Text className="text-caption text-text-muted">{proofDocumentKind(item)}</Text>
+                )}
                 <Text
                   className={
                     item.stage === "failed"

@@ -7,6 +7,7 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import * as api from "@/lib/api";
 import {
+  isProofImage,
   isUploadBusy,
   messageFor,
   newUploadItem,
@@ -67,6 +68,23 @@ describe("isUploadBusy", () => {
         item({ key: "b", stage: "failed", error: "nope" }),
       ]),
     ).toBe(false);
+  });
+});
+
+describe("isProofImage", () => {
+  it("treats JPEG, PNG and WebP as photographs", () => {
+    expect(isProofImage(item({ mimeType: "image/jpeg", fileName: "run.jpg" }))).toBe(true);
+    expect(isProofImage(item({ mimeType: "image/png", fileName: "run.png" }))).toBe(true);
+    expect(isProofImage(item({ mimeType: "image/webp", fileName: "run.webp" }))).toBe(true);
+  });
+
+  it("does not treat a PDF as a photograph", () => {
+    expect(isProofImage(item({ mimeType: "application/pdf", fileName: "spec.pdf" }))).toBe(false);
+  });
+
+  it("falls back to the filename when the phone reported no type", () => {
+    expect(isProofImage(item({ mimeType: null, fileName: "evidence-1.jpg" }))).toBe(true);
+    expect(isProofImage(item({ mimeType: null, fileName: "spec.pdf" }))).toBe(false);
   });
 });
 

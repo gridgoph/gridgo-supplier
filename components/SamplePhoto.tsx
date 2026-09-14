@@ -94,7 +94,18 @@ export function SamplePhoto({
               accessibilityLabel={altText || "Sample photo"}
               resizeMode="cover"
               style={{ width: "100%", height: "100%" }}
-              onError={() => setFailed(true)}
+              onError={() => {
+                // Local URI first; once GRIDGO has stored the file, a refused
+                // local preview can still show the signed link.
+                if (fileId && localUri && uri === localUri) {
+                  void signedLink(fileId).then((link) => {
+                    if (link) setUri(link);
+                    else setFailed(true);
+                  });
+                  return;
+                }
+                setFailed(true);
+              }}
             />
           </View>
         ) : !fileId && !localUri ? (

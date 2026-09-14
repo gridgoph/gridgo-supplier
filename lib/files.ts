@@ -70,6 +70,30 @@ export function storedUploads(items: UploadItem[]): UploadItem[] {
   return items.filter((i) => (i.stage === "stored" || i.stage === "attached") && i.fileId);
 }
 
+const PROOF_IMAGE_TYPES = new Set(["image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/webp"]);
+const PROOF_IMAGE_EXT = /\.(jpe?g|png|webp)$/i;
+
+/**
+ * Whether this upload is a photograph the shop should see as pixels.
+ *
+ * GRIDGO stores JPEG, PNG, WebP and PDF as evidence. A PDF is a document, not a
+ * broken image — the type the phone reported wins, and the filename is only
+ * consulted when it reported nothing.
+ */
+export function isProofImage(item: { mimeType: string | null; fileName: string }): boolean {
+  const mime = (item.mimeType ?? "").toLowerCase().split(";")[0].trim();
+  if (mime === "application/pdf") return false;
+  if (mime) return PROOF_IMAGE_TYPES.has(mime);
+  return PROOF_IMAGE_EXT.test(item.fileName);
+}
+
+/** The type a non-photo proof shows, so a PDF is never a blank plate. */
+export function proofDocumentKind(item: { mimeType: string | null; fileName: string }): string {
+  const mime = (item.mimeType ?? "").toLowerCase().split(";")[0].trim();
+  if (mime === "application/pdf" || item.fileName.toLowerCase().endsWith(".pdf")) return "PDF";
+  return "File";
+}
+
 /** One line saying where an upload has actually got to. */
 export function uploadStageLabel(item: UploadItem): string {
   switch (item.stage) {
@@ -179,7 +203,7 @@ export async function uploadFile(
         // routinely wrong here.
         mimeType: item.mimeType ?? undefined,
         parameters: { purpose },
-        headers: { "X-GRIDGO-Role": "supplier", Authorization: `Bearer ${token}`, Accept: "application/json" },
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       },
       (data) => {
         if (!data.totalBytesExpectedToSend) return;

@@ -1,0 +1,67 @@
+import { render, screen, waitFor } from "@testing-library/react-native";
+
+jest.mock("@/lib/api", () => ({
+  ...jest.requireActual("@/lib/api"),
+  getDownloadUrl: jest.fn(async (fileId: string) => ({
+    fileId,
+    url: `https://example.test/${fileId}.jpg`,
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    expiresInSeconds: 300,
+  })),
+}));
+
+import { MilestoneList } from "@/components/MilestoneList";
+import type { MilestoneView } from "@/lib/milestones";
+
+function view(partial: Partial<MilestoneView> = {}): MilestoneView {
+  return {
+    code: "printing",
+    label: "Printing",
+    sharePercent: 50,
+    amountMinor: 50000,
+    stage: "awaiting_release",
+    statusLabel: "With GRIDGO",
+    tone: "info",
+    icon: "clock",
+    detail: "Your evidence is filed. GRIDGO reviews it and releases this part.",
+    proofCount: 1,
+    canAddProof: false,
+    pofFileIds: ["file_print"],
+    ...partial,
+  };
+}
+
+describe("MilestoneList", () => {
+  it("shows filed shop proof photographs on the job", async () => {
+    await render(<MilestoneList milestones={[view()]} showDetail />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Printing evidence").props.source).toEqual({
+        uri: "https://example.test/file_print.jpg",
+      });
+    });
+  });
+
+  it("does not show proof photographs on a payout list of several jobs", async () => {
+    await render(<MilestoneList milestones={[view()]} />);
+
+    expect(screen.queryByLabelText("Printing evidence")).toBeNull();
+  });
+
+  it("does not show the rider's delivery evidence as a shop proof photo", async () => {
+    await render(
+      <MilestoneList
+        milestones={[
+          view({
+            code: "delivered",
+            label: "Delivered",
+            pofFileIds: ["file_rider"],
+          }),
+        ]}
+        showDetail
+      />,
+    );
+
+    expect(screen.queryByLabelText("Delivered evidence")).toBeNull();
+  });
+});

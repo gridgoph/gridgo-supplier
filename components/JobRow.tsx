@@ -34,7 +34,7 @@ export function JobRow({ job, now = new Date(), onPress }: Props) {
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${job.title}, ${status.label}${late ? ", late" : ""}`}
+      accessibilityLabel={`${job.title}, order ${job.id}, ${status.label}${late ? ", late" : ""}`}
       className="gg-touch flex-row items-start gap-3 rounded-field border border-outline bg-surface px-3 py-3"
       style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
     >
@@ -51,6 +51,9 @@ export function JobRow({ job, now = new Date(), onPress }: Props) {
       <View className="min-w-0 flex-1 gap-1.5">
         <Text className="text-body font-medium text-text-primary" numberOfLines={1}>
           {job.title}
+        </Text>
+        <Text className="text-caption text-text-muted" numberOfLines={1}>
+          Order {job.id}
         </Text>
         <View className="flex-row flex-wrap items-center gap-2">
           {late ? (
