@@ -1,9 +1,5 @@
-import {
-  allHandoffChecksDone,
-  custodyForOrder,
-  HANDOFF_CHECKS,
-  handoffChecksRemaining,
-} from "@/lib/handoff";
+import * as handoff from "@/lib/handoff";
+import { custodyForOrder, HANDOFF_SEQUENCE } from "@/lib/handoff";
 
 describe("custodyForOrder", () => {
   it("keeps the job with the shop until it is marked ready", () => {
@@ -42,21 +38,20 @@ describe("custodyForOrder", () => {
   });
 });
 
-describe("handoff checks", () => {
-  it("is not done until every check is confirmed", () => {
-    const partial = Object.fromEntries(HANDOFF_CHECKS.slice(1).map((c) => [c.id, true]));
-    expect(allHandoffChecksDone(partial)).toBe(false);
-    expect(handoffChecksRemaining(partial)).toBe(1);
+describe("handoff sequence", () => {
+  it("exports no shop-side checklist: readiness is one signal", () => {
+    expect(Object.keys(handoff).some((name) => /check/i.test(name))).toBe(false);
   });
 
-  it("is done when all of them are", () => {
-    const all = Object.fromEntries(HANDOFF_CHECKS.map((c) => [c.id, true]));
-    expect(allHandoffChecksDone(all)).toBe(true);
-    expect(handoffChecksRemaining(all)).toBe(0);
-  });
-
-  it("does not count a check that was ticked then unticked", () => {
-    const all = Object.fromEntries(HANDOFF_CHECKS.map((c) => [c.id, true]));
-    expect(allHandoffChecksDone({ ...all, packed: false })).toBe(false);
+  it("tells the shop the rider comes to the counter and the checks are done together", () => {
+    expect(custodyForOrder({ state: "production", riderId: null }).detail).toMatch(/counter/);
+    expect(custodyForOrder({ state: "production", riderId: null }).detail).toMatch(/together/);
+    expect(HANDOFF_SEQUENCE.map((step) => step.title)).toEqual([
+      "Riders are notified",
+      "The rider comes to your counter",
+      "You check it together",
+      "It leaves when every check passes",
+    ]);
+    expect(HANDOFF_SEQUENCE[2].detail).toMatch(/six pickup checks/);
   });
 });

@@ -10,7 +10,7 @@
 
 ## Job to be done
 
-Join GRIDGO’s B2B marketplace and receive orders from businesses/schools/networks without needing your own sales app — accept work, produce, self-QC, hand off to rider, see payout status.
+Join GRIDGO’s B2B marketplace and receive orders from businesses/schools/networks without needing your own sales app — accept work, produce, mark the package ready, check it together with the rider at pickup, see payout status.
 
 ## Presentation benefits → product features
 
@@ -35,7 +35,7 @@ Public application creates a pending supplier account; invitation acceptance rem
 |---|---|
 | Login | Clerk identity with a server-authorized supplier projection |
 | Home | Work ranked by urgency and the shop’s money awaiting action; accreditation wait for pending shops |
-| Jobs | Accept/decline, production, self-QC, milestone evidence, pickup readiness; order IDs on cards and the workspace |
+| Jobs | Accept/decline, production, milestone evidence, pickup readiness (quality checked jointly with the rider at pickup); order IDs on cards and the workspace |
 | Schedule | Promised dates agenda (Today / next 7 days) |
 | Alerts | Assignment notifications |
 | Account | Shop identity, settings, and sign out |

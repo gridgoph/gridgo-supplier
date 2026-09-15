@@ -83,8 +83,7 @@ describe("job board find and stamps", () => {
     ];
     const counts = jobStageCounts(jobs, NOW);
     expect(counts.all).toBe(4);
-    expect(counts.on_press).toBe(1);
-    expect(counts.self_qc).toBe(1);
+    expect(counts.on_press).toBe(2);
     expect(counts.with_rider).toBe(1);
     expect(counts.packed).toBe(1);
   });

@@ -3,7 +3,7 @@ import Svg, { Circle, Ellipse, G, Path, Polygon, Polyline, Rect } from "react-na
 import type { IllustrationPalette } from "./palette";
 
 /**
- * Produce and check — accept work, print, and self-QC.
+ * Produce and check — accept work, print, and pack for the joint pickup checks.
  *
  * Generated from `assets/illustrations/working.svg` — do not hand-edit. Every source fill is
  * ranked by luminance and collapsed onto the five-step GRIDGO ramp, so the

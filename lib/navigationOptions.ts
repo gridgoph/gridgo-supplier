@@ -1,5 +1,8 @@
 import type { Stack } from "expo-router";
 import type { ComponentProps } from "react";
+import { Platform } from "react-native";
+
+import { nativeHeaderInsetOptions } from "@/lib/nativeHeaderInsets";
 
 import { colors, radius, typography, type ThemeName } from "@/constants/theme";
 
@@ -13,9 +16,10 @@ type SingleScreenOptions = NonNullable<ScreenProps["options"]>;
  * The root stack and the nested job stack must look identical, so the options
  * are written once here rather than copied into each `_layout`.
  */
-export function stackScreenOptions(scheme: ThemeName): ScreenOptions {
+export function stackScreenOptions(scheme: ThemeName, topInset: number): ScreenOptions {
   const token = colors[scheme];
   return {
+    ...nativeHeaderInsetOptions(Platform.OS, topInset),
     headerStyle: { backgroundColor: token.surface },
     headerTintColor: token.textPrimary,
     headerTitleStyle: {

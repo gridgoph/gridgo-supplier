@@ -5,7 +5,7 @@
  * produces and self-checks, then the job is handed off and paid.
  *
  * The copy names things a Davao print supplier already does — accept/decline
- * under SLA, self-QC evidence, rider pickup, protected payment — rather than
+ * under SLA, packaging evidence, rider pickup, protected payment — rather than
  * describing features.
  */
 
@@ -37,7 +37,7 @@ export const onboardingSlides: readonly OnboardingSlide[] = [
     id: "produce",
     step: "02 / 03",
     title: "Produce and check it",
-    body: "Work the approved spec and artwork. Upload self-QC evidence before you mark the job ready for pickup.",
+    body: "Produce the approved spec, then pack and mark the job ready. When a rider arrives, run the six pickup checks together before handoff.",
     cta: "Next",
     art: "checklist",
   },

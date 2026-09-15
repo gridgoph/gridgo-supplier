@@ -83,6 +83,23 @@ export type PayoutMilestone = {
   /** Proof of Fulfilment files backing this part. */
   pofFileIds: string[];
   releasedAt: string | null;
+  /** The wallet receipt Operations kept when this part was sent. Only after release. */
+  receiptFileId?: string | null;
+  /** The wallet's reference number for that transfer. Only after release. */
+  reference?: string | null;
+};
+
+export type ProductionItem = {
+  id: string;
+  itemName: string;
+  quantity: number;
+  pricingUnit: string | null;
+  packageQty: number | null;
+  measurement: { pages?: number; widthMilli?: number; heightMilli?: number; lengthMilli?: number; unit?: string | null } | null;
+  structuredSpec: Record<string, unknown>;
+  options: { groupName: string; label: string }[];
+  artworkFileId: string | null;
+  mockupFileId: string | null;
 };
 
 export type Order = {
@@ -133,6 +150,8 @@ export type Order = {
   issueWindowExpiresAt?: string | null;
   promisedDate: string | null;
   artworkName: string | null;
+  mockupFileIds?: string[];
+  productionItems?: ProductionItem[];
   createdAt: string;
   updatedAt: string;
   /** Client artwork approved by QA. Read-only for this app. */
@@ -175,12 +194,15 @@ export type StoredFile = {
   /** `verification_document` is provisional — see the note above `logout`. */
   purpose:
     | "artwork"
+    | "mockup"
     | "fulfilment_proof"
     | "delivery_photo"
     | "service_image"
     | "verification_document"
     /** A sample photo on one of the shop's own listings. Provisional. */
-    | "catalog_item_photo";
+    | "catalog_item_photo"
+    /** The shop's own receiving QR, bound through `updatePayoutAccount`. */
+    | "supplier_payout_qr";
   originalFilename: string;
   declaredContentType: string;
   detectedContentType: string;
@@ -1388,6 +1410,83 @@ export async function updateSupplierProfile(
     body: JSON.stringify({ ...patch, expectedVersion: version }),
   });
   return result.profile;
+}
+
+/* --------------------------------------------------------------------------
+   Where the shop gets paid
+
+   The contract is "Supplier payout account" in `docs/OPERATIONAL_MODEL_V2_API.md`
+   in gridgo-api. Operations releases a payout by scanning the shop's own
+   receiving QR, so this record is that picture plus the words a person needs
+   to check they are paying the right shop.
+   -------------------------------------------------------------------------- */
+
+export type PayoutProvider = "gcash" | "maya" | "bank" | "other";
+
+export type PayoutAccount = {
+  supplierId: string;
+  provider: PayoutProvider;
+  /** The name the wallet or bank shows back after a scan. */
+  accountName: string;
+  /** Canonical `+639XXXXXXXXX` for a wallet; free text for a bank. Null when never given. */
+  accountNumber: string | null;
+  /** The bank or wallet, when `provider` is `bank` or `other`. */
+  institution: string | null;
+  /** The bound plate, or null until one is saved. Bytes come from `getDownloadUrl`. */
+  qr: {
+    fileId: string;
+    originalFilename: string | null;
+    detectedContentType: string | null;
+    size: number | null;
+    readyAt: string | null;
+  } | null;
+  /** Round-tripped on every write. A stale one is a 409, not a silent write. */
+  version: number;
+  updatedAt: string;
+};
+
+/**
+ * What one save may change. `qrFileId` binds a stored `supplier_payout_qr`
+ * upload; `null` removes the picture and keeps the words.
+ */
+export type PayoutAccountPatch = {
+  provider?: PayoutProvider;
+  accountName?: string;
+  accountNumber?: string;
+  institution?: string;
+  qrFileId?: string | null;
+};
+
+export async function getPayoutAccount(): Promise<PayoutAccount | null> {
+  const result = await request<{ payoutAccount: PayoutAccount | null }>("/me/payout-account");
+  return result.payoutAccount;
+}
+
+/**
+ * Create or change where the shop gets paid.
+ *
+ * `version` is the one the account was read at, or null when the shop has no
+ * account yet and this save creates it. GRIDGO refuses a write built on an
+ * account that has since moved, so the caller offers the latest rather than
+ * overwriting what it cannot see.
+ */
+export async function updatePayoutAccount(
+  version: number | null,
+  patch: PayoutAccountPatch,
+): Promise<PayoutAccount> {
+  const result = await request<{ payoutAccount: PayoutAccount }>("/me/payout-account", {
+    method: "PATCH",
+    ...versioned(version, patch),
+  });
+  return result.payoutAccount;
+}
+
+/** Remove the account and its plate. Nothing is left for Operations to scan. */
+export async function removePayoutAccount(version: number): Promise<void> {
+  await request<{ payoutAccount: null }>("/me/payout-account", {
+    method: "DELETE",
+    headers: { "If-Match": String(version) },
+  });
 }
 
 /** Format PHP minor units (centavos) for display. */

@@ -184,6 +184,11 @@ export default function AccountScreen() {
               detail="What each job pays you, and what each part is waiting on"
               onPress={() => router.push("/payout")}
             />
+            <DestinationRow
+              title="Where you get paid"
+              detail="The QR and account Operations pays your jobs to"
+              onPress={() => router.push("/payout-account" as Href)}
+            />
           </View>
         ) : null}
 

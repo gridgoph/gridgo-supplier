@@ -319,8 +319,14 @@ function NextCard({ obligation, onPress }: { obligation: Obligation; onPress: ()
   return (
     <View className="gg-card gap-5">
       <View className="gap-3">
-        <View className="flex-row items-center justify-between gap-3">
-          <Text className="text-overline text-text-muted">
+        {/*
+          The overline and the state chip share a row only while both fit. A
+          long state ("Client can still report") beside the long overline was
+          pushed clean off the card, so the row wraps and the chip drops under
+          the overline instead of being clipped.
+        */}
+        <View className="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <Text className="shrink text-overline text-text-muted">
             {obligation.kind === "proof" ? "MONEY WAITING ON YOU" : "NEEDS YOU NEXT"}
           </Text>
           <StatusChip

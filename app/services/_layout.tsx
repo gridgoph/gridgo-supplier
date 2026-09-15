@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack } from "expo-router";
 
 import { stackScreenOptions } from "@/lib/navigationOptions";
@@ -11,9 +12,10 @@ import { useThemeName } from "@/hooks/useTheme";
  */
 export default function ServicesLayout() {
   const scheme = useThemeName();
+  const { top } = useSafeAreaInsets();
 
   return (
-    <Stack screenOptions={stackScreenOptions(scheme)}>
+    <Stack screenOptions={stackScreenOptions(scheme, top)}>
       <Stack.Screen name="index" options={{ title: "Services" }} />
       <Stack.Screen name="[category]" options={{ title: "Category" }} />
     </Stack>

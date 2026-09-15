@@ -1,6 +1,5 @@
-import { useCallback, useState } from "react";
-import { Pressable, Text, View } from "react-native";
-import { Circle, CircleCheck } from "lucide-react-native";
+import { useCallback, useRef, useState } from "react";
+import { Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { FlowScreen } from "@/components/FlowScreen";
@@ -8,38 +7,32 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SpecRow } from "@/components/SpecRow";
 import { StatusChip } from "@/components/StatusChip";
-import { FieldShell } from "@/components/controls/FieldShell";
-import {
-  allHandoffChecksDone,
-  custodyForOrder,
-  HANDOFF_CHECKS,
-  handoffChecksRemaining,
-} from "@/lib/handoff";
+import { custodyForOrder, HANDOFF_SEQUENCE } from "@/lib/handoff";
 import { findAction } from "@/lib/jobState";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
-import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
+import { useJobDrafts } from "@/store/jobDrafts";
 import { askConfirm } from "@/store/sheets";
-import { useThemeColors } from "@/hooks/useTheme";
 
 /**
  * The custody moment.
  *
  * This is where a physical job is actually lost, so the screen never leaves the
  * state ambiguous: it says who is holding the job right now, who moves next,
- * and what the rider will do. The shop can only take it as far as ready for
- * pickup — the rider's own confirmation is what transfers custody.
+ * and what the rider will do. Marking the package ready is one signal, not a
+ * checklist: it tells riders the job can be collected, and quality and count
+ * are checked together with the rider at the counter. The rider's own
+ * confirmation is what transfers custody.
  */
 export default function HandoffScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { job, loading, error, reload } = useJob(id);
   const action = useJobAction();
-  const draft = useJobDraft(id);
-  const toggleHandoffCheck = useJobDrafts((s) => s.toggleHandoffCheck);
   const clearDraft = useJobDrafts((s) => s.clearDraft);
-  const colors = useThemeColors();
 
-  const [showErrors, setShowErrors] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const pending = useRef(false);
+  const busy = confirming || action.busy;
 
   useFocusEffect(
     useCallback(() => {
@@ -49,32 +42,38 @@ export default function HandoffScreen() {
 
   const custody = job ? custodyForOrder(job) : null;
   const step = job ? findAction(job, "ready_for_pickup") : null;
-  const ready = allHandoffChecksDone(draft.handoffChecks);
-  const remaining = handoffChecksRemaining(draft.handoffChecks);
 
   async function markReady() {
-    if (!ready) {
-      setShowErrors(true);
-      return;
-    }
+    if (pending.current) return;
     if (!job || !step?.targetState) return;
 
-    const confirmed = await askConfirm({
-      question: `Call a rider for ${job.title}?`,
-      consequence:
-        "GRIDGO starts assigning a rider now, so the job must already be packed and staged at your counter.",
-      confirmLabel: "Mark ready for pickup",
-      cancelLabel: "Not packed yet",
-    });
-    if (!confirmed) return;
+    pending.current = true;
+    setConfirming(true);
+    let saved = false;
+    try {
+      const confirmed = await askConfirm({
+        question: `Mark the package ready for ${job.title}?`,
+        consequence:
+          "Riders will be notified to accept this pickup. Keep the package at the counter and check it together when the rider arrives; all six checks must pass before transport.",
+        confirmLabel: "Mark package ready",
+        cancelLabel: "Not yet",
+      });
+      if (!confirmed) return;
 
-    const updated = await action.run({
-      jobId: job.id,
-      targetState: step.targetState,
-      note: "Packed, labelled and staged at the counter for rider pickup",
-    });
-    if (!updated) return;
-    clearDraft(job.id);
+      const updated = await action.run({
+        jobId: job.id,
+        targetState: step.targetState,
+        note: "Packaging ready — packed and staged for the joint pickup checks with the rider",
+      });
+      if (!updated) return;
+      saved = true;
+      clearDraft(job.id);
+      router.replace({ pathname: "/job/[id]", params: { id: job.id } });
+    } finally {
+      // A successful dispatch stays locked until navigation unmounts this form.
+      if (!saved) pending.current = false;
+      setConfirming(false);
+    }
   }
 
   return (
@@ -82,7 +81,7 @@ export default function HandoffScreen() {
       loading={loading && !job}
       error={job ? null : error}
       onRetry={() => void reload()}
-      title="Pickup handoff"
+      title="Package for pickup"
       subject={job?.title}
       lede={custody?.detail ?? "Getting a job ready for the rider who collects it."}
       actionError={action.error}
@@ -90,15 +89,11 @@ export default function HandoffScreen() {
         step ? (
           <>
             <PrimaryButton
-              label={action.busy ? "Saving…" : "Mark ready for pickup"}
-              disabled={action.busy}
+              label={action.busy ? "Notifying riders…" : "Mark package ready"}
+              disabled={busy}
               onPress={() => void markReady()}
             />
-            <SecondaryButton
-              label="Not packed yet"
-              disabled={action.busy}
-              onPress={() => router.back()}
-            />
+            <SecondaryButton label="Back to job" disabled={busy} onPress={() => router.back()} />
           </>
         ) : (
           <SecondaryButton label="Back to job" onPress={() => router.back()} />
@@ -123,62 +118,39 @@ export default function HandoffScreen() {
         </View>
       ) : null}
 
-      {step ? (
-        <FieldShell
-          label="Before you call a rider"
-          hint="These stay ticked if you leave and come back."
-          error={
-            showErrors && !ready
-              ? `${remaining} thing${remaining === 1 ? "" : "s"} still to do before a rider is called.`
-              : null
-          }
-        >
-          <View className="gap-2">
-            {HANDOFF_CHECKS.map((check) => {
-              const on = draft.handoffChecks[check.id] === true;
-              return (
-                <Pressable
-                  key={check.id}
-                  onPress={() => {
-                    if (job) toggleHandoffCheck(job.id, check.id);
-                    setShowErrors(false);
-                  }}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: on }}
-                  accessibilityLabel={check.label}
-                  className="gg-touch flex-row items-center gap-3 rounded-field border border-outline bg-surface px-3 py-3"
-                >
-                  {on ? (
-                    <CircleCheck size={22} color={colors.success} strokeWidth={2} />
-                  ) : (
-                    <Circle size={22} color={colors.textMuted} strokeWidth={2} />
-                  )}
-                  <Text
-                    className={
-                      on
-                        ? "flex-1 text-body text-text-primary"
-                        : "flex-1 text-body text-text-secondary"
-                    }
-                  >
-                    {check.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </FieldShell>
-      ) : null}
-
-      <View className="gg-panel gap-1">
-        <Text className="text-body font-medium text-text-primary">
-          How custody actually transfers
-        </Text>
-        <Text className="text-body text-text-secondary">
-          The rider confirms the pickup in their own GRIDGO app while they are at your counter. Until
-          that confirmation appears on the job timeline, the job is still your responsibility — do
-          not let it leave without it.
-        </Text>
-      </View>
+      <HandoffSequence />
     </FlowScreen>
+  );
+}
+
+/**
+ * What marking the package ready sets in motion, in the order it happens.
+ * Numbered because it is a sequence, and monochrome because the one yellow on
+ * this screen is the button that starts it.
+ */
+function HandoffSequence() {
+  return (
+    <View className="gg-panel gap-4" accessibilityRole="list">
+      <Text className="text-overline text-text-muted">WHAT HAPPENS NEXT</Text>
+      {HANDOFF_SEQUENCE.map((step, index) => {
+        const last = index === HANDOFF_SEQUENCE.length - 1;
+        return (
+          <View key={step.id} className="flex-row gap-3">
+            <View className="items-center">
+              <View className="h-6 w-6 items-center justify-center rounded-pill bg-accent">
+                <Text maxFontSizeMultiplier={1.2} className="text-caption font-medium text-accent-on">
+                  {index + 1}
+                </Text>
+              </View>
+              {last ? null : <View className="mt-1 w-px flex-1 bg-outline" />}
+            </View>
+            <View className={last ? "flex-1 gap-1" : "flex-1 gap-1 pb-3"}>
+              <Text className="text-body font-medium text-text-primary">{step.title}</Text>
+              <Text className="text-body text-text-secondary">{step.detail}</Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
   );
 }

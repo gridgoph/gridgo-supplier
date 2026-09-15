@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack } from "expo-router";
 
 import { radius } from "@/constants/theme";
@@ -10,7 +11,7 @@ import { useThemeName } from "@/hooks/useTheme";
  * Every state-changing step is its own screen with one clear action, so nothing
  * that commits the shop to work can happen from a row tap.
  *
- * Accept, decline, proof of fulfilment, self-QC and handoff are pushed as full
+ * Accept, decline, proof of fulfilment and packaging readiness are pushed as full
  * screens: each is a commitment with fields to fill and consequences to read,
  * and a sheet would crop them and invite a half-filled form to be swiped away.
  * A production update is the opposite — one short, reversible step over a job
@@ -19,9 +20,10 @@ import { useThemeName } from "@/hooks/useTheme";
  */
 export default function JobLayout() {
   const scheme = useThemeName();
+  const { top } = useSafeAreaInsets();
 
   return (
-    <Stack screenOptions={stackScreenOptions(scheme)}>
+    <Stack screenOptions={stackScreenOptions(scheme, top)}>
       <Stack.Screen name="index" options={{ title: "Job" }} />
       <Stack.Screen name="accept" options={{ title: "Accept job" }} />
       <Stack.Screen name="decline" options={{ title: "Decline job" }} />
@@ -40,8 +42,8 @@ export default function JobLayout() {
           headerBackButtonDisplayMode: "minimal",
         }}
       />
-      <Stack.Screen name="self-qc" options={{ title: "Self-QC" }} />
-      <Stack.Screen name="handoff" options={{ title: "Pickup handoff" }} />
+      <Stack.Screen name="self-qc" options={{ title: "Packaging" }} />
+      <Stack.Screen name="handoff" options={{ title: "Packaging ready" }} />
     </Stack>
   );
 }

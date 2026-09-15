@@ -34,11 +34,11 @@ export const ALERT_STAGES: readonly AlertStage[] = [
       "downpayment_review",
     ],
   },
-  { id: "printing", label: "Printing", states: ["payment_authorized", "production"] },
+  { id: "printing", label: "Printing", states: ["payment_authorized", "production", "supplier_self_qc"] },
   {
     id: "pickup",
     label: "Pickup",
-    states: ["supplier_self_qc", "ready_for_dispatch", "rider_assigned"],
+    states: ["ready_for_dispatch", "rider_assigned"],
   },
   {
     id: "delivered",

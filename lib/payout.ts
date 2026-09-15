@@ -115,6 +115,10 @@ export type StatementLine = {
   amountMinor: number;
   /** ISO instant the money was released. Never null: unreleased parts are not statement lines. */
   releasedAt: string;
+  /** The wallet's reference for the transfer, when Operations typed one. */
+  reference: string | null;
+  /** The wallet receipt screenshot Operations kept, when one was attached. */
+  receiptFileId: string | null;
 };
 
 export function statementLines(jobs: Order[]): StatementLine[] {
@@ -129,6 +133,8 @@ export function statementLines(jobs: Order[]): StatementLine[] {
         label: milestoneDefinition(milestone.code).label,
         amountMinor: milestone.amountMinor,
         releasedAt: milestone.releasedAt,
+        reference: milestone.reference ?? null,
+        receiptFileId: milestone.receiptFileId ?? null,
       });
     }
   }

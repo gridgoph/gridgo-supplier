@@ -3,6 +3,7 @@ import { useRouter, useRootNavigationState, type Href } from "expo-router";
 import { useEffect, useLayoutEffect, useRef } from "react";
 
 import * as api from "@/lib/api";
+import { getNotificationsNative as notifications } from "@/lib/expoNotifications";
 import { parsePushData, PUSH_FOREGROUND_BEHAVIOR, pushTargetRoute } from "@/lib/push";
 import { useAlertsStore } from "@/store/alerts";
 import { usePush } from "@/store/push";
@@ -40,18 +41,6 @@ function noop(): void {}
 function withoutNativeModule<T>(call: () => T): T | null {
   try {
     return call();
-  } catch {
-    return null;
-  }
-}
-
-type NotificationsModule = typeof import("expo-notifications");
-
-/** Deferred: a static import crashes Expo Go Android at launch. */
-function notifications(): NotificationsModule | null {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require("expo-notifications") as NotificationsModule;
   } catch {
     return null;
   }

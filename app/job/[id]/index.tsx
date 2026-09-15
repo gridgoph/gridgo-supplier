@@ -2,23 +2,24 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 
-import { ArtworkPanel } from "@/components/ArtworkPanel";
 import { EmptyState } from "@/components/EmptyState";
-import { JobTimeline } from "@/components/JobTimeline";
+import { JobActionBar } from "@/components/JobActionBar";
+import { JobBrief } from "@/components/JobBrief";
 import { JourneyTrack } from "@/components/JourneyTrack";
-import { MilestoneList } from "@/components/MilestoneList";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { PushEnableCard } from "@/components/PushEnableCard";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { SecondaryButton } from "@/components/SecondaryButton";
-import { SpecRow } from "@/components/SpecRow";
 import { StatusChip } from "@/components/StatusChip";
 import { formatDeadlineFull } from "@/lib/dates";
-import * as api from "@/lib/api";
-import { custodyForOrder } from "@/lib/handoff";
-import { actionsForJob, presentOrderState, routeForAction, waitingOn } from "@/lib/jobState";
-import { earningsSplit, milestoneViews } from "@/lib/milestones";
-import { unreleasedMinor } from "@/lib/payout";
+import { defaultBriefSection, hasHandoff, workspaceBriefSections } from "@/lib/jobBrief";
+import {
+  actionsForJob,
+  presentOrderState,
+  routeForAction,
+  waitingOn,
+  type SupplierAction,
+} from "@/lib/jobState";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useViewing } from "@/store/toasts";
 import { useJob } from "@/hooks/useJob";
@@ -107,17 +108,26 @@ export default function JobWorkspaceScreen() {
   const primary = actions.find((a) => a.primary) ?? null;
   const secondary = actions.filter((a) => !a.primary);
   const urgency = deadlineUrgency(job.promisedDate || job.deadline);
-  const milestones = milestoneViews(job);
-  const split = earningsSplit(job);
-  const custody = custodyForOrder(job);
-  const showCustody = ["ready", "rider_assigned", "with_rider"].includes(custody.state);
   const waiting = waitingOn(job.state);
+  const handoff = hasHandoff(job);
+  const hasSteps = Boolean(primary) || secondary.length > 0 || handoff;
+
+  function openStep(action: SupplierAction) {
+    router.push({
+      pathname: routeForAction(action.kind),
+      params: {
+        id: job!.id,
+        action: action.kind,
+        ...(action.milestoneCode ? { milestone: action.milestoneCode } : {}),
+      },
+    });
+  }
 
   return (
     <View className="gg-screen">
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gg-page pb-16 pt-4"
+        contentContainerClassName="gg-page pb-8 pt-4"
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -163,132 +173,61 @@ export default function JobWorkspaceScreen() {
           <JourneyTrack state={job.state} />
         </View>
 
-        <View className="gg-card mt-6">
-          <Text className="mb-2 text-overline text-text-muted">APPROVED SPEC</Text>
-          <SpecRow label="Size" value={job.size || "—"} />
-          <SpecRow label="Material" value={job.material || "—"} />
-          <SpecRow label="Quantity" value={`${job.quantity}`} />
-          {job.supplierPriceMinor != null ? (
-            <SpecRow label="Your price" value={api.formatPhp(job.supplierPriceMinor)} />
-          ) : null}
-          <SpecRow label="Deliver to" value={job.address || "—"} />
+        {/*
+          Whose move it is, said before the detail. A screen that only says
+          "nothing to do" leaves a supplier guessing; this one names the
+          person or the clock the job is waiting on, in two lines, where the
+          eye lands after the track.
+        */}
+        {!primary ? (
+          <View className="gg-panel mt-6 gap-1">
+            <Text className="text-body font-medium text-text-primary">{waiting.title}</Text>
+            <Text className="text-body text-text-secondary">{waiting.body}</Text>
+          </View>
+        ) : null}
+
+        {/*
+          The whole job as one docket. The specification, the files, the
+          date, the money and the history each stated on their own closed row,
+          with the row the next step is about already open. Stacked flat these
+          put the shop's one action a fourth screen down; folded, the job reads
+          in one, and the action never moves.
+        */}
+        <View className="mt-6 gap-3">
+          <Text className="text-overline text-text-muted">THE JOB</Text>
+          <JobBrief
+            key={job.state}
+            order={job}
+            sections={workspaceBriefSections(job)}
+            defaultOpen={defaultBriefSection(job)}
+            proofReloadVersion={proofReloadVersion}
+          />
         </View>
 
         {/*
-          What this job is worth to the shop, and what each part is waiting on.
-          The amounts are the shop's own earnings — the client's total, the
-          delivery fee and GRIDGO's commission are somebody else's money and
-          none of them belong on a supplier's screen.
+          The moment the ask earns itself: a job with nothing for the shop to
+          do, waiting on a client's payment or a rider at the door. "We will
+          tell your phone" is the answer to the question the panel above has
+          just raised. When there *is* an action the screen belongs to it, so
+          nothing is offered.
         */}
-        {milestones.length ? (
-          <View className="mt-6 gap-3">
-            <Text className="text-overline text-text-muted">YOUR EARNINGS</Text>
-            <View className="gg-card gap-4">
-              <View className="flex-row items-end justify-between gap-3">
-                <View className="min-w-0 flex-1 gap-0.5">
-                  <Text className="text-caption text-text-muted">
-                    {split.releasedMinor > 0 ? "Released so far" : "Still to come"}
-                  </Text>
-                  <Text className="text-h2 text-text-primary">
-                    {api.formatPhp(
-                      split.releasedMinor > 0
-                        ? split.releasedMinor
-                        : unreleasedMinor(split),
-                    )}
-                  </Text>
-                </View>
-                <Text className="text-caption text-text-muted">
-                  of {api.formatPhp(split.totalMinor)}
-                </Text>
-              </View>
-              <View className="gg-divider" />
-              <MilestoneList milestones={milestones} showDetail proofReloadVersion={proofReloadVersion} />
-            </View>
-          </View>
-        ) : null}
+        {!primary ? <PushEnableCard spacing="above" /> : null}
+      </ScrollView>
 
-        <View className="mt-6 gap-3">
-          <Text className="text-overline text-text-muted">APPROVED ARTWORK</Text>
-          <ArtworkPanel order={job} />
-        </View>
-
-        {showCustody ? (
-          <View className="gg-panel mt-6 gap-2">
-            <View className="flex-row">
-              <StatusChip tone={custody.tone} label={custody.label} icon={custody.icon} />
-            </View>
-            <Text className="text-body text-text-secondary">{custody.detail}</Text>
+      {hasSteps ? (
+        <JobActionBar consequence={primary?.consequence}>
+          {primary ? <PrimaryButton label={primary.label} onPress={() => openStep(primary)} /> : null}
+          {secondary.map((action) => (
+            <SecondaryButton key={action.kind} label={action.label} onPress={() => openStep(action)} />
+          ))}
+          {handoff ? (
             <SecondaryButton
               label="Open pickup handoff"
-              onPress={() =>
-                router.push({ pathname: "/job/[id]/handoff", params: { id: job.id } })
-              }
+              onPress={() => router.push({ pathname: "/job/[id]/handoff", params: { id: job.id } })}
             />
-          </View>
-        ) : null}
-
-        <View className="mt-6 gap-3">
-          <Text className="text-overline text-text-muted">TIMELINE</Text>
-          <View className="gg-card">
-            <JobTimeline timeline={job.timeline} />
-          </View>
-        </View>
-
-        {primary || secondary.length ? (
-          <View className="mt-8 gap-3">
-            {primary ? (
-              <>
-                <Text className="text-body text-text-secondary">{primary.consequence}</Text>
-                <PrimaryButton
-                  label={primary.label}
-                  onPress={() =>
-                    router.push({
-                      pathname: routeForAction(primary.kind),
-                      params: {
-                        id: job.id,
-                        action: primary.kind,
-                        ...(primary.milestoneCode ? { milestone: primary.milestoneCode } : {}),
-                      },
-                    })
-                  }
-                />
-              </>
-            ) : null}
-            {secondary.map((action) => (
-              <SecondaryButton
-                key={action.kind}
-                label={action.label}
-                onPress={() =>
-                  router.push({
-                    pathname: routeForAction(action.kind),
-                    params: {
-                      id: job.id,
-                      action: action.kind,
-                      ...(action.milestoneCode ? { milestone: action.milestoneCode } : {}),
-                    },
-                  })
-                }
-              />
-            ))}
-          </View>
-        ) : (
-          <>
-            <View className="gg-panel mt-8 gap-1">
-              <Text className="text-body font-medium text-text-primary">{waiting.title}</Text>
-              <Text className="text-body text-text-secondary">{waiting.body}</Text>
-            </View>
-            {/*
-              The other moment the ask earns itself. This branch is the job with
-              nothing for the shop to do — it has accepted, or printed, or filed
-              its evidence, and is now waiting on a client's payment or a rider
-              at the door. "We will tell your phone" is the answer to the
-              question the panel above has just raised. When there *is* an
-              action the screen belongs to it, so nothing is offered.
-            */}
-            <PushEnableCard spacing="above" />
-          </>
-        )}
-      </ScrollView>
+          ) : null}
+        </JobActionBar>
+      ) : null}
     </View>
   );
 }

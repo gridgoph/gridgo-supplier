@@ -12,7 +12,7 @@ Think like a senior mobile developer.
 
 ## Project Overview
 
-This repo is **GRIDGO Supplier** — the supplier mobile app for a Davao City managed-printing marketplace. It covers time-sensitive job alerts, accept/decline, production updates, self-QC evidence, pickup handoff, and payout notifications.
+This repo is **GRIDGO Supplier** — the supplier mobile app for a Davao City managed-printing marketplace. It covers time-sensitive job alerts, accept/decline, production updates, packaging readiness (a single signal; the six quality checks are done together with the rider at the counter), pickup handoff, and payout notifications.
 
 GRIDGO ships one app per role. Client, Rider, Operations, and Super Admin surfaces live in separate codebases. Do not put client request flows, rider dispatch, or Operations QA into this binary.
 
@@ -21,7 +21,7 @@ The app includes:
 - Supplier application and accreditation as defined in [PRD.md](PRD.md)
 - Assignment inbox with accept / decline inside SLA, where accepting names the shop's own price
 - Approved specification and artwork review (read-only of QA-approved files)
-- Production progress, self-QC, and Proof of Fulfilment against each payout milestone
+- Production progress, packaging readiness, and Proof of Fulfilment against each payout milestone
 - Pickup handoff readiness
 - Earnings: four milestones per job, each gated on evidence
 
@@ -135,7 +135,7 @@ A sheet is a **route**, never an overlay a screen draws. `lib/navigationOptions.
 What gets which presentation:
 
 - **Sheet** — a short question or a small step over something already on screen (a confirmation, the calendar, a production update).
-- **Pushed screen** — a commitment with fields to read and fill (accept, decline, proof of fulfilment, self-QC, handoff), every destination, and the shop-closure form. That form used to be `presentation: "modal"` and drew its own "Cancel", because a modal is dismissed rather than navigated back from; the captain wants the chevron every other screen has, so it stopped being a modal instead of wearing a control it should not have. Nothing depended on the presentation — both entry points push it, there is no dismiss guard, and its date picker is its own sheet route either way. `app/__tests__/navigationChrome.test.ts` pins that.
+- **Pushed screen** — a commitment with fields to read and fill (accept, decline, proof of fulfilment, handoff), every destination, and the shop-closure form. That form used to be `presentation: "modal"` and drew its own "Cancel", because a modal is dismissed rather than navigated back from; the captain wants the chevron every other screen has, so it stopped being a modal instead of wearing a control it should not have. Nothing depended on the presentation — both entry points push it, there is no dismiss guard, and its date picker is its own sheet route either way. `app/__tests__/navigationChrome.test.ts` pins that.
 
 Android keeps its own imperative system dialogs for date and time (`DateTimeField`); the sheet route is what every other platform gets.
 

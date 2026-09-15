@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HeaderBackButton } from "expo-router/react-navigation";
 import { Stack, router } from "expo-router";
 
@@ -21,9 +22,10 @@ import { stackScreenOptions } from "@/lib/navigationOptions";
  */
 export default function SignupLayout() {
   const scheme = useThemeName();
+  const { top } = useSafeAreaInsets();
 
   return (
-    <Stack screenOptions={stackScreenOptions(scheme)}>
+    <Stack screenOptions={stackScreenOptions(scheme, top)}>
       <Stack.Screen
         name="index"
         options={{
