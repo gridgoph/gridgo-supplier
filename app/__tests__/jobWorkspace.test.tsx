@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react-native";
+import { act, render, screen, waitFor, within } from "@testing-library/react-native";
 
 import JobWorkspaceScreen from "@/app/job/[id]/index";
 import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
@@ -132,5 +132,85 @@ describe("job workspace proof photos", () => {
       });
     });
     expect(getOrder).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("job workspace docket and pinned step", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("folds the offer into one docket and pins the decision under the page", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        state: "supplier_assigned",
+        readyBy: "2026-09-20T17:00:00+08:00",
+        artworkFileIds: ["file_print"],
+        mockupFileIds: ["file_mock"],
+        timeline: [{ at: "2026-09-15T01:00:00.000Z", state: "supplier_assigned", by: "system", note: "Offered" }],
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByTestId("job-brief")).toBeTruthy();
+    expect(screen.getByTestId("job-brief-make")).toBeTruthy();
+    expect(screen.getByText("1 print file")).toBeTruthy();
+    expect(screen.getByText("1 reference picture")).toBeTruthy();
+    expect(screen.getByText("1 update")).toBeTruthy();
+
+    const bar = screen.getByTestId("job-action-bar");
+    expect(within(bar).getByLabelText("Accept job")).toBeTruthy();
+    expect(within(bar).getByText("Decline job")).toBeTruthy();
+    expect(screen.queryByText("Open pickup handoff")).toBeNull();
+  });
+
+  it("opens the money row once the shop owes evidence, and pins the proof step", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({ state: "production", payoutMilestones: milestones({ printing: "pof_attached" }) }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByTestId("job-brief-earnings")).toBeTruthy();
+    expect(screen.queryByTestId("job-brief-make")).toBeNull();
+    expect(screen.getByText("₱150.00 waiting on your proof")).toBeTruthy();
+    const bar = screen.getByTestId("job-action-bar");
+    expect(within(bar).getByLabelText("Add packaging proof")).toBeTruthy();
+    expect(within(bar).getByText("Package for pickup")).toBeTruthy();
+  });
+
+  it("adds the pickup row while a package waits at the counter and offers the handoff", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        state: "ready_for_dispatch",
+        payoutMilestones: milestones({ printing: "pof_attached", packaging_qc: "pof_attached" }),
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByTestId("job-brief-handoff")).toBeTruthy();
+    expect(screen.getByText("Waiting on a rider")).toBeTruthy();
+    expect(within(screen.getByTestId("job-action-bar")).getByText("Open pickup handoff")).toBeTruthy();
+  });
+
+  it("draws no bar and says whose move it is when the shop has nothing to do", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        state: "delivered",
+        payoutMilestones: milestones({
+          printing: "released",
+          packaging_qc: "released",
+          delivered: "pof_attached",
+        }),
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    expect((await screen.findAllByText(/window to report a problem/)).length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("job-action-bar")).toBeNull();
+    expect(screen.getByText("₱650.00 released of ₱1,000.00")).toBeTruthy();
   });
 });

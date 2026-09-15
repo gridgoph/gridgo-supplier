@@ -46,7 +46,7 @@ export const MILESTONES: readonly MilestoneDefinition[] = [
   },
   {
     code: "packaging_qc",
-    label: "Packing & quality check",
+    label: "Packaging",
     proofLabel: "Photo of the packed job",
     proofOwner: "shop",
     proofHint:
@@ -111,6 +111,10 @@ export type MilestoneView = {
   pofFileIds: string[];
   /** True when this shop can file the evidence right now. */
   canAddProof: boolean;
+  /** The wallet receipt Operations kept when this part was sent. Null until released with one. */
+  receiptFileId: string | null;
+  /** The wallet's reference for that transfer. Null until released with one. */
+  reference: string | null;
 };
 
 /** Milestone codes the job's own state has not reached yet. */
@@ -147,6 +151,8 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
     amountMinor: milestone.amountMinor,
     proofCount,
     pofFileIds,
+    receiptFileId: milestone.status === "released" ? (milestone.receiptFileId ?? null) : null,
+    reference: milestone.status === "released" ? (milestone.reference ?? null) : null,
   };
 
   if (milestone.status === "released") {

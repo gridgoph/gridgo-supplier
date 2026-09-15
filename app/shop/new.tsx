@@ -44,12 +44,16 @@ export default function NewListingScreen() {
   const { catalog, services, loading, notOpenYet, error, reload } = useBoard();
 
   const targets = useMemo(() => boardTargets(catalog, services), [catalog, services]);
-  const [categoryCode, setCategoryCode] = useState<string | null>(null);
+  const [chosenCategoryCode, setCategoryCode] = useState<string | null>(null);
   const [subcategoryCode, setSubcategoryCode] = useState<string | null>(null);
   const [starterId, setStarterId] = useState<string>(BLANK);
   const [starters, setStarters] = useState<ListingStarter[]>([]);
   const [startersLoading, setStartersLoading] = useState(false);
   const [starterError, setStarterError] = useState<string | null>(null);
+  // Which subcategory the starter state above belongs to. When the shop picks
+  // another one, the old starters are reset during this render rather than a
+  // step later, so a stale starter never shows against the new subcategory.
+  const [startersFor, setStartersFor] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [printerMaxWidthFeet, setPrinterMaxWidthFeet] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -57,22 +61,22 @@ export default function NewListingScreen() {
 
   // One accredited category is the common case, so it is chosen rather than
   // asked about — a list of one is a question with no answer.
-  useEffect(() => {
-    if (!categoryCode && targets.length === 1) setCategoryCode(targets[0].category.code);
-  }, [categoryCode, targets]);
+  const categoryCode =
+    chosenCategoryCode ?? (targets.length === 1 ? targets[0].category.code : null);
 
   const target = targets.find((entry) => entry.category.code === categoryCode) ?? null;
 
-  useEffect(() => {
+  if (startersFor !== subcategoryCode) {
+    setStartersFor(subcategoryCode);
     setStarters([]);
     setStarterId(BLANK);
     setStarterError(null);
-    if (!subcategoryCode) {
-      setStartersLoading(false);
-      return;
-    }
+    setStartersLoading(Boolean(subcategoryCode));
+  }
+
+  useEffect(() => {
+    if (!subcategoryCode) return;
     let cancelled = false;
-    setStartersLoading(true);
     void (async () => {
       const result = await loadStarters(subcategoryCode);
       if (cancelled) return;

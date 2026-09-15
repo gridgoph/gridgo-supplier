@@ -17,7 +17,6 @@ export type SupplierActionKind =
   | "accept"
   | "decline"
   | "start_production"
-  | "self_qc"
   | "ready_for_pickup"
   | "add_proof";
 
@@ -64,7 +63,7 @@ export function presentOrderState(state: string): StatePresentation {
     case "production":
       return { label: "In production", tone: "info", icon: "square-pen" };
     case "supplier_self_qc":
-      return { label: "Self-QC done", tone: "success", icon: "circle-check" };
+      return { label: "Packaging", tone: "success", icon: "circle-check" };
     case "ready_for_dispatch":
       return { label: "Ready for pickup", tone: "success", icon: "circle-check" };
     case "rider_assigned":
@@ -156,23 +155,15 @@ export function actionsForJob(order: Pick<Order, "state" | "payoutMilestones" | 
         },
       ];
     case "production":
-      return demote(proofStep, {
-        kind: "self_qc",
-        label: "Complete self-QC",
-        targetState: "supplier_self_qc",
-        primary: true,
-        consequence:
-          "Your checks become the quality record Operations and the client rely on.",
-        resultLabel: "Self-QC done",
-      });
+    // Older clients may still leave a job at this state.
     case "supplier_self_qc":
       return demote(proofStep, {
         kind: "ready_for_pickup",
-        label: "Mark ready for pickup",
+        label: "Package for pickup",
         targetState: "ready_for_dispatch",
         primary: true,
         consequence:
-          "GRIDGO assigns a rider to collect from your shop. The job must be packed and staged before you confirm.",
+          "GRIDGO notifies riders that the package is ready. Check it together at the counter after a rider accepts, before it leaves your shop.",
         resultLabel: "Ready for pickup",
       });
     default:
@@ -197,7 +188,6 @@ export type SupplierActionRoute =
   | "/job/[id]/decline"
   | "/job/[id]/fulfilment"
   | "/job/[id]/advance"
-  | "/job/[id]/self-qc"
   | "/job/[id]/handoff";
 
 /** The flow screen an action opens. Nothing state-changing is a bare row tap. */
@@ -209,8 +199,6 @@ export function routeForAction(kind: SupplierActionKind): SupplierActionRoute {
       return "/job/[id]/decline";
     case "add_proof":
       return "/job/[id]/fulfilment";
-    case "self_qc":
-      return "/job/[id]/self-qc";
     case "ready_for_pickup":
       return "/job/[id]/handoff";
     default:
@@ -236,8 +224,7 @@ export const JOB_JOURNEY = [
     label: "Downpayment",
     states: ["supplier_accepted", "awaiting_downpayment", "downpayment_review"],
   },
-  { id: "production", label: "Production", states: ["payment_authorized", "production"] },
-  { id: "self_qc", label: "Self-QC", states: ["supplier_self_qc"] },
+  { id: "production", label: "Production & packing", states: ["payment_authorized", "production", "supplier_self_qc"] },
   { id: "pickup", label: "Pickup", states: ["ready_for_dispatch", "rider_assigned"] },
   {
     id: "delivery",
@@ -267,7 +254,7 @@ export function isAwaitingDecision(order: Pick<Order, "state">): boolean {
   return order.state === "supplier_assigned";
 }
 
-/** Jobs the shop is actively producing (downpayment in, through self-QC). */
+/** Jobs the shop is actively producing (downpayment in, through packing). */
 export function isInProductionPipeline(order: Pick<Order, "state">): boolean {
   return (
     order.state === "payment_authorized" ||
@@ -303,12 +290,12 @@ export function waitingOn(state: string): { title: string; body: string } {
     case "ready_for_dispatch":
       return {
         title: "Waiting on a rider",
-        body: "GRIDGO is assigning someone to collect. Keep the packed job at your counter.",
+        body: "Riders have been notified that the package is ready. Keep it at your counter until a rider accepts and arrives for the joint pickup checks.",
       };
     case "rider_assigned":
       return {
         title: "Rider on the way",
-        body: "Hand the job over and let the rider work through their six pickup checks before they leave.",
+        body: "When the rider arrives, run the six pickup checks together at the counter. The rider records them in their app; the package leaves only after all six pass.",
       };
     case "picked_up":
     case "out_for_delivery":
@@ -386,17 +373,4 @@ export function presentTimelineNote(note: string): string {
     out = out.replaceAll(code, label);
   }
   return out;
-}
-
-/** Self-QC checklist items implied by production handoff. */
-export const SELF_QC_CHECKS = [
-  { id: "artwork", label: "Print matches approved artwork" },
-  { id: "size", label: "Size and material match the spec" },
-  { id: "quantity", label: "Quantity complete" },
-  { id: "finish", label: "Finish and cut quality checked" },
-  { id: "pack", label: "Packed and labelled for pickup" },
-] as const;
-
-export function allSelfQcComplete(checked: Record<string, boolean>): boolean {
-  return SELF_QC_CHECKS.every((item) => checked[item.id] === true);
 }

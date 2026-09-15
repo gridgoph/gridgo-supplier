@@ -7,7 +7,7 @@ each piece can be traced or swapped.
 | File in this app | Source file | Storyset style | Beat |
 |---|---|---|---|
 | `invoices.png` | `Printing invoices-cuate.png` | Cuate | Jobs — work lands on the shop |
-| `checklist.png` | `Checklist-cuate.png` | Cuate | Produce — self-QC the job |
+| `checklist.png` | `Checklist-cuate.png` | Cuate | Produce — pack the job for the joint pickup checks |
 | `payment.png` | `Payment Information-bro.png` | Bro | Payout — protected payment |
 
 Stored at ~1024×1024 with a transparent field, trimmed of empty padding so

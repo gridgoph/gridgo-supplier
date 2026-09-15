@@ -7,6 +7,7 @@ import { router, useFocusEffect } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";
 import { MilestoneList } from "@/components/MilestoneList";
+import { PayoutReceipt } from "@/components/PayoutReceipt";
 import { SkeletonList } from "@/components/Skeleton";
 import { StatusChip } from "@/components/StatusChip";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
@@ -219,12 +220,29 @@ export default function PayoutScreen() {
                       </Text>
                       <Text className="text-caption text-text-muted">
                         {line.label} · {formatReleasedOn(line.releasedAt)}
+                        {line.reference && !line.receiptFileId
+                          ? ` · ref ${line.reference}`
+                          : ""}
                       </Text>
                     </View>
                     <Text className="text-body font-medium text-text-primary">
                       {api.formatPhp(line.amountMinor)}
                     </Text>
                   </View>
+                  {/*
+                    The wallet's own confirmation, when Operations kept it.
+                    This is what a shop holds up against its GCash history
+                    when a figure does not match.
+                  */}
+                  {line.receiptFileId ? (
+                    <View className="mt-2">
+                      <PayoutReceipt
+                        fileId={line.receiptFileId}
+                        reference={line.reference}
+                        label={`${line.label} on ${line.title}`}
+                      />
+                    </View>
+                  ) : null}
                 </View>
               ))}
             </View>

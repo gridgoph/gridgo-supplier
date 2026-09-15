@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 
+import { OrderReference } from "@/components/OrderReference";
+import { orderReferenceSpoken } from "@/lib/orderReference";
 import { StatusChip } from "@/components/StatusChip";
 import { formatDeadlineFull } from "@/lib/dates";
 import { formatPhp, type Order } from "@/lib/api";
@@ -50,9 +52,9 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
         <StatusChip tone={status.tone} label={status.label} icon={status.icon} />
       </View>
 
-      <Text className="text-caption text-text-muted" numberOfLines={1}>
-        Order {job.id}
-      </Text>
+      <View className="flex-row">
+        <OrderReference id={job.id} />
+      </View>
 
       <View className="gap-0.5">
         <Text
@@ -84,7 +86,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${job.title}, order ${job.id}, ${status.label}${
+      accessibilityLabel={`${job.title}, ${orderReferenceSpoken(job.id) ?? `order ${job.id}`}, ${status.label}${
         urgency.level === "overdue" ? ", late" : ""
       }`}
       className="gg-touch"

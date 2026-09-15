@@ -24,7 +24,7 @@ describe("supplier onboarding slides", () => {
   it("names supplier outcomes, not client request language", () => {
     const blob = onboardingSlides.map((s) => `${s.title} ${s.body}`).join(" ").toLowerCase();
     expect(blob).toMatch(/job/);
-    expect(blob).toMatch(/shop|produce|hand off|paid|pickup|self-qc|settlement/);
+    expect(blob).toMatch(/shop|produce|hand off|paid|pickup|settlement/);
     expect(blob).not.toMatch(/messenger back-and-forth/);
     expect(blob).not.toMatch(/watch it come to you/);
   });

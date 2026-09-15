@@ -7,7 +7,7 @@ Scaffolded from `gridgo-client` with shared design tokens and logo assets, using
 ## Role scope
 
 - Time-sensitive job alerts, accept/decline
-- Production status updates and self-QC evidence
+- Production status updates and packaging readiness (quality is checked together with the rider at pickup)
 - Pickup handoff
 - Payout notifications
 

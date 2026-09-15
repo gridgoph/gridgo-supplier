@@ -163,10 +163,4 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(restoring).not.toContain('setClerkIdentity({ kind: "loading" })');
     expect(access).toContain("Supplier work stays closed here");
   });
-
-  it("does not statically import expo-notifications in the push store", () => {
-    const push = source("store/push.ts");
-    expect(push).not.toMatch(/^import \* as Notifications from "expo-notifications";/m);
-    expect(push).toContain('require("expo-notifications")');
-  });
 });

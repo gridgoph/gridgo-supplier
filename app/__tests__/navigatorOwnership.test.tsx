@@ -23,7 +23,11 @@ jest.mock("expo-system-ui", () => ({ setBackgroundColorAsync: jest.fn() }));
 jest.mock("expo-status-bar", () => ({ StatusBar: () => null }));
 jest.mock("react-native-gesture-handler", () => ({ GestureHandlerRootView: ({ children }: { children: ReactNode }) => children }));
 jest.mock("react-native-keyboard-controller", () => ({ KeyboardProvider: ({ children }: { children: ReactNode }) => children }));
-jest.mock("react-native-safe-area-context", () => ({ SafeAreaProvider: ({ children }: { children: ReactNode }) => children, initialWindowMetrics: null }));
+jest.mock("react-native-safe-area-context", () => ({
+  SafeAreaProvider: ({ children }: { children: ReactNode }) => children,
+  initialWindowMetrics: null,
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
 jest.mock("expo-router/react-navigation", () => ({
   DarkTheme: { colors: {} }, DefaultTheme: { colors: {} },
   ThemeProvider: ({ children }: { children: ReactNode }) => children,

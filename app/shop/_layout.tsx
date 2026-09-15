@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack } from "expo-router";
 
 import { stackScreenOptions } from "@/lib/navigationOptions";
@@ -17,9 +18,10 @@ import { useThemeName } from "@/hooks/useTheme";
  */
 export default function ShopLayout() {
   const scheme = useThemeName();
+  const { top } = useSafeAreaInsets();
 
   return (
-    <Stack screenOptions={stackScreenOptions(scheme)}>
+    <Stack screenOptions={stackScreenOptions(scheme, top)}>
       <Stack.Screen name="new" options={{ title: "Add a listing" }} />
       <Stack.Screen name="[id]/index" options={{ title: "Listing" }} />
       <Stack.Screen name="[id]/photos" options={{ title: "Sample photos" }} />

@@ -3,9 +3,9 @@ import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { FlowScreen } from "@/components/FlowScreen";
+import { JobBrief } from "@/components/JobBrief";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
-import { SpecRow } from "@/components/SpecRow";
 import * as api from "@/lib/api";
 import { blackoutOnDay, blackoutReasonLabel } from "@/lib/blackouts";
 import { toDayKey } from "@/lib/day";
@@ -104,16 +104,21 @@ export default function AcceptJobScreen() {
     >
       {job ? (
         <>
-          <View className="gg-card">
-            <Text className="mb-2 text-overline text-text-muted">WHAT WAS ORDERED</Text>
-            <SpecRow label="Size" value={job.size || "—"} />
-            <SpecRow label="Material" value={job.material || "—"} />
-            <SpecRow label="Quantity" value={`${job.quantity}`} />
-            {/*
-              The shop's own finish date, which is what it is held to. The
-              client was given a later one; this app is not told it.
-            */}
-            <SpecRow label="Have it ready by" value={formatDeadlineFull(job.readyBy)} />
+          {/*
+            The same docket the workspace showed, folded: the shop has just read
+            it, and this screen is for the commitment, not a second read. Every
+            row still states its facts closed, so a last check of the file
+            count or the date costs one glance and no scrolling. The shop's own
+            finish date is the one in the delivery row — the client was given a
+            later one; this app is not told it.
+          */}
+          <View className="gap-3">
+            <Text className="text-overline text-text-muted">WHAT YOU ARE AGREEING TO</Text>
+            <JobBrief
+              order={job}
+              sections={["make", "artwork", "mockup", "delivery"]}
+              defaultOpen={null}
+            />
           </View>
 
           {/*
@@ -134,7 +139,7 @@ export default function AcceptJobScreen() {
           <View className="gg-panel gap-2">
             <Text className="text-body font-medium text-text-primary">How it reaches you</Text>
             <Text className="text-body text-text-secondary">
-              In four parts as the job moves — printing, packing and quality check, delivery,
+              In four parts as the job moves — printing, packaging, delivery,
               and a retention part that lands once the client&apos;s window to report a problem
               closes. Each needs evidence before it is released, and you file the first two
               here. You will see what each is worth as soon as you accept.

@@ -337,6 +337,21 @@ describe("the statement", () => {
     expect(lines[0].label).toBe("Printing");
   });
 
+  it("carries the wallet receipt and reference Operations kept, and nothing when they did not", () => {
+    const lines = statementLines([
+      job("ord_a", "Staff polos", [
+        {
+          ...part("printing", 55_000, "2026-08-02T03:00:00.000Z"),
+          receiptFileId: "file_receipt",
+          reference: "GCASH-777",
+        },
+        part("packaging_qc", 16_500, "2026-08-03T03:00:00.000Z"),
+      ]),
+    ]);
+    expect(lines[1]).toMatchObject({ code: "printing", receiptFileId: "file_receipt", reference: "GCASH-777" });
+    expect(lines[0]).toMatchObject({ code: "packaging_qc", receiptFileId: null, reference: null });
+  });
+
   it("groups by the Davao month, not the phone's own", () => {
     // A release at 09:00 on 1 September in Manila is 01:00 UTC that day, but a
     // release at 07:00 on 1 September Manila is 23:00 on 31 August UTC — and it

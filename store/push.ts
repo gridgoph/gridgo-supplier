@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import { create } from "zustand";
 
 import { withDeadline } from "@/lib/withDeadline";
+import { getNotificationsNative as notifications, pushSupported } from "@/lib/expoNotifications";
 import * as api from "@/lib/api";
 import { humanizeApiError } from "@/lib/apiErrors";
 import {
@@ -52,9 +53,7 @@ import {
  * the `web` value so a later build can turn this on without touching the
  * contract.
  */
-export function pushSupported(os: string = Platform.OS): boolean {
-  return os === "android" || os === "ios";
-}
+export { pushSupported } from "@/lib/expoNotifications";
 
 type PushState = {
   supported: boolean;
@@ -96,27 +95,6 @@ type PushState = {
  * a shop did, or can do anything about, so none reaches a screen: the phone
  * simply registers for real the moment somebody signs in.
  */
-type NotificationsModule = typeof import("expo-notifications");
-
-/**
- * Load the native module only when a push call actually runs.
- *
- * A static `import` evaluates `ExpoPushTokenManager` as this file is first
- * required — which is launch, via the root layout. Expo Go on Android SDK 53
- * has no remote push and **throws** at that moment, taking the app down before
- * any try/catch in this store can run. `require` inside a function is what
- * lets the catch below turn a missing module into "push is unavailable".
- */
-function notifications(): NotificationsModule | null {
-  try {
-    // Metro still bundles the module; evaluation is deferred until a call.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require("expo-notifications") as NotificationsModule;
-  } catch {
-    return null;
-  }
-}
-
 function isUnclaimedRouteAbsent(error: unknown): boolean {
   return (
     error instanceof api.ApiError &&

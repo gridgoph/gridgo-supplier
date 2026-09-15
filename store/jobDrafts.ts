@@ -7,8 +7,9 @@ import { createPersistStorage } from "@/lib/persistStorage";
  * Half-finished work on a job survives the app closing.
  *
  * A shop fills the accept form, gets called to the press, and comes back — or
- * the phone dies mid self-QC. Losing ticked checks and a typed promise time
- * means doing the work twice, so all of it is persisted per job id.
+ * the phone dies mid-note. Losing a typed promise time or a half-written note
+ * means doing the work twice, so all of it is persisted per job id. Older
+ * persisted drafts may still carry retired checklist keys; they are ignored.
  */
 
 export type AcceptDraft = {
@@ -20,21 +21,12 @@ export type AcceptDraft = {
 
 export type JobDraft = {
   accept: AcceptDraft;
-  /** Self-QC checklist ticks, keyed by check id. */
-  qcChecks: Record<string, boolean>;
-  /** Attachment ids the server has confirmed for this job's self-QC. */
-  qcEvidenceIds: string[];
-  /** Pickup handoff checklist ticks, keyed by check id. */
-  handoffChecks: Record<string, boolean>;
   /** Note the shop is writing for the client's timeline. */
   note: string;
 };
 
 export const EMPTY_JOB_DRAFT: JobDraft = {
   accept: { promisedAt: null, finalTotal: "" },
-  qcChecks: {},
-  qcEvidenceIds: [],
-  handoffChecks: {},
   note: "",
 };
 
@@ -42,10 +34,6 @@ type JobDraftsState = {
   drafts: Record<string, JobDraft>;
   hydrated: boolean;
   setAccept: (jobId: string, patch: Partial<AcceptDraft>) => void;
-  toggleQcCheck: (jobId: string, checkId: string) => void;
-  toggleHandoffCheck: (jobId: string, checkId: string) => void;
-  addQcEvidence: (jobId: string, attachmentId: string) => void;
-  removeQcEvidence: (jobId: string, attachmentId: string) => void;
   setNote: (jobId: string, note: string) => void;
   /** Called once a job leaves the step the draft belonged to. */
   clearDraft: (jobId: string) => void;
@@ -72,35 +60,6 @@ export const useJobDrafts = create<JobDraftsState>()(
           drafts: withDraft(s.drafts, jobId, (d) => ({
             ...d,
             accept: { ...d.accept, ...patch },
-          })),
-        })),
-      toggleQcCheck: (jobId, checkId) =>
-        set((s) => ({
-          drafts: withDraft(s.drafts, jobId, (d) => ({
-            ...d,
-            qcChecks: { ...d.qcChecks, [checkId]: !d.qcChecks[checkId] },
-          })),
-        })),
-      toggleHandoffCheck: (jobId, checkId) =>
-        set((s) => ({
-          drafts: withDraft(s.drafts, jobId, (d) => ({
-            ...d,
-            handoffChecks: { ...d.handoffChecks, [checkId]: !d.handoffChecks[checkId] },
-          })),
-        })),
-      addQcEvidence: (jobId, attachmentId) =>
-        set((s) => ({
-          drafts: withDraft(s.drafts, jobId, (d) =>
-            d.qcEvidenceIds.includes(attachmentId)
-              ? d
-              : { ...d, qcEvidenceIds: [...d.qcEvidenceIds, attachmentId] },
-          ),
-        })),
-      removeQcEvidence: (jobId, attachmentId) =>
-        set((s) => ({
-          drafts: withDraft(s.drafts, jobId, (d) => ({
-            ...d,
-            qcEvidenceIds: d.qcEvidenceIds.filter((id) => id !== attachmentId),
           })),
         })),
       setNote: (jobId, note) =>

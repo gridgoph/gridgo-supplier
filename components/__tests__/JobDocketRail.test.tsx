@@ -12,7 +12,6 @@ const COUNTS = {
   all: 3,
   late: 1,
   on_press: 1,
-  self_qc: 0,
   packed: 0,
   with_rider: 0,
   waiting_on_client: 1,

@@ -1,6 +1,5 @@
 import {
   actionsForJob,
-  allSelfQcComplete,
   findAction,
   isAwaitingDecision,
   isInProductionPipeline,
@@ -12,7 +11,6 @@ import {
   presentTimelineNote,
   primaryAction,
   routeForAction,
-  SELF_QC_CHECKS,
   waitingOn,
 } from "@/lib/jobState";
 import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
@@ -141,7 +139,7 @@ describe("actionsForJob", () => {
    */
   it("puts an owed proof ahead of the forward step, and keeps both", () => {
     const actions = actionsForJob(job({ id: "e", state: "production" }));
-    expect(actions.map((a) => a.kind)).toEqual(["add_proof", "self_qc"]);
+    expect(actions.map((a) => a.kind)).toEqual(["add_proof", "ready_for_pickup"]);
     expect(actions[0].primary).toBe(true);
     expect(actions[0].milestoneCode).toBe("printing");
     // Filing a proof is not a transition — it moves money, not state.
@@ -158,9 +156,9 @@ describe("actionsForJob", () => {
     expect(actions[0].milestoneCode).toBe("packaging_qc");
   });
 
-  it("walks production → self-QC → ready for pickup once evidence is filed", () => {
+  it("moves production directly to rider pickup once evidence is filed", () => {
     expect(primaryAction(filed({ id: "g", state: "production" }))?.targetState).toBe(
-      "supplier_self_qc",
+      "ready_for_dispatch",
     );
     expect(primaryAction(filed({ id: "h", state: "supplier_self_qc" }))?.targetState).toBe(
       "ready_for_dispatch",
@@ -180,7 +178,7 @@ describe("actionsForJob", () => {
   /** A claim freezes the payout; filing more evidence would change nothing. */
   it("stops asking for evidence while a claim holds the payout", () => {
     expect(actionsForJob(job({ id: "l", state: "production", payoutHold: true }))).toEqual([
-      expect.objectContaining({ kind: "self_qc", primary: true }),
+      expect.objectContaining({ kind: "ready_for_pickup", primary: true }),
     ]);
   });
 
@@ -211,15 +209,6 @@ describe("job urgency helpers", () => {
   it("knows when nothing needs supplier action", () => {
     expect(needsSupplierAction(filed({ id: "x", state: "ready_for_dispatch" }))).toBe(false);
     expect(needsSupplierAction(job({ id: "y", state: "awaiting_downpayment" }))).toBe(false);
-  });
-});
-
-describe("self-QC checklist", () => {
-  it("requires every item before complete", () => {
-    expect(allSelfQcComplete({})).toBe(false);
-    const checked: Record<string, boolean> = {};
-    for (const item of SELF_QC_CHECKS) checked[item.id] = true;
-    expect(allSelfQcComplete(checked)).toBe(true);
   });
 });
 
@@ -286,7 +275,6 @@ describe("routeForAction", () => {
     expect(routeForAction("accept")).toBe("/job/[id]/accept");
     expect(routeForAction("decline")).toBe("/job/[id]/decline");
     expect(routeForAction("add_proof")).toBe("/job/[id]/fulfilment");
-    expect(routeForAction("self_qc")).toBe("/job/[id]/self-qc");
     expect(routeForAction("ready_for_pickup")).toBe("/job/[id]/handoff");
   });
 
@@ -318,7 +306,7 @@ describe("journeyIndex", () => {
       "delivered",
       "completed",
     ];
-    expect(order.map(journeyIndex)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(order.map(journeyIndex)).toEqual([0, 1, 2, 2, 3, 4, 5]);
   });
 
   it("keeps the payment round trip on one step rather than going backwards", () => {
@@ -327,7 +315,7 @@ describe("journeyIndex", () => {
   });
 
   it("covers every step so the track never has a gap", () => {
-    expect(JOB_JOURNEY).toHaveLength(7);
+    expect(JOB_JOURNEY).toHaveLength(6);
     expect(journeyIndex("approved_for_matching")).toBe(-1);
   });
 

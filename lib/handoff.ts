@@ -7,7 +7,7 @@ import type { StatusIconName, StatusTone } from "@/components/StatusChip";
  * This is the moment a printed order can actually be lost, so the state is
  * always stated in full — who has it, what happens next, and who acts. The
  * supplier can only move the job as far as "ready for pickup"; the rider's
- * scan is what transfers custody, and this module never pretends otherwise.
+ * six-check confirmation is what transfers custody, and this module never pretends otherwise.
  */
 
 export type CustodyState =
@@ -38,8 +38,8 @@ export function custodyForOrder(order: Pick<Order, "state" | "riderId">): Custod
         tone: "info",
         icon: "clock",
         detail:
-          "GRIDGO is assigning a rider. Keep the packed job at the counter — the rider confirms pickup on their own app.",
-        nextActor: "Operations",
+          "Riders have been notified. Keep the package at the counter for the joint checks when a rider accepts and arrives.",
+        nextActor: "Rider",
       };
     case "rider_assigned":
       return {
@@ -48,7 +48,7 @@ export function custodyForOrder(order: Pick<Order, "state" | "riderId">): Custod
         tone: "info",
         icon: "clock",
         detail:
-          "A rider is assigned and travelling to your shop. Hand the job over and let them confirm pickup before they leave.",
+          "A rider has accepted and is travelling to your shop. Run the six pickup checks together at the counter. The rider records the result before the package leaves.",
         nextActor: "Rider",
       };
     case "picked_up":
@@ -84,26 +84,38 @@ export function custodyForOrder(order: Pick<Order, "state" | "riderId">): Custod
         tone: "neutral",
         icon: "clock",
         detail:
-          "No rider can be assigned until you mark the job ready for pickup.",
+          "Mark the job ready for pickup when it is packed. A rider will come to your counter and you check it together before it leaves.",
         nextActor: "You",
       };
   }
 }
 
-/** Physical checks the shop confirms before a rider is called. */
-export const HANDOFF_CHECKS = [
-  { id: "packed", label: "Packed and protected for transport" },
-  { id: "labelled", label: "Labelled with the client name and job title" },
-  { id: "counted", label: "Piece count matches the order quantity" },
-  { id: "counter", label: "Staged at the counter for collection" },
+/**
+ * What marking the package ready sets in motion, in order. There is no shop-side
+ * checklist: readiness is one signal, and quality and count are checked with
+ * the rider at the counter.
+ */
+export const HANDOFF_SEQUENCE = [
+  {
+    id: "notified",
+    title: "Riders are notified",
+    detail: "Approved riders see this job in their Offers, and one of them accepts it.",
+  },
+  {
+    id: "arrives",
+    title: "The rider comes to your counter",
+    detail: "Keep the package at the counter. Do not hand it over before the checks.",
+  },
+  {
+    id: "checks",
+    title: "You check it together",
+    detail:
+      "The six pickup checks, done with the rider: the count against the order, the item against the spec, visible defects, the packing, the paperwork, and your sign-off.",
+  },
+  {
+    id: "leaves",
+    title: "It leaves when every check passes",
+    detail:
+      "The rider records the result in their GRIDGO app. A failed check keeps the package with you until Operations resolves it.",
+  },
 ] as const;
-
-export type HandoffCheckId = (typeof HANDOFF_CHECKS)[number]["id"];
-
-export function allHandoffChecksDone(checked: Record<string, boolean>): boolean {
-  return HANDOFF_CHECKS.every((check) => checked[check.id] === true);
-}
-
-export function handoffChecksRemaining(checked: Record<string, boolean>): number {
-  return HANDOFF_CHECKS.filter((check) => checked[check.id] !== true).length;
-}

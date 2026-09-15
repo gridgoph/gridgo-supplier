@@ -14,7 +14,6 @@ export type JobStageFilter =
   | "all"
   | "late"
   | "on_press"
-  | "self_qc"
   | "packed"
   | "with_rider"
   | "waiting_on_client";
@@ -38,7 +37,6 @@ export const JOB_STAGE_TICKETS: readonly { value: JobStageFilter; label: string 
   { value: "all", label: "All jobs" },
   { value: "late", label: "Late" },
   { value: "on_press", label: "On press" },
-  { value: "self_qc", label: "Self-QC" },
   { value: "packed", label: "Packed" },
   { value: "with_rider", label: "With rider" },
   { value: "waiting_on_client", label: "Waiting on client" },
@@ -90,9 +88,8 @@ export function jobMatchesStage(
   if (stage === "all") return true;
   if (stage === "late") return deadlineUrgency(jobDueAt(job), now).level === "overdue";
   if (stage === "on_press") {
-    return job.state === "payment_authorized" || job.state === "production";
+    return job.state === "payment_authorized" || job.state === "production" || job.state === "supplier_self_qc";
   }
-  if (stage === "self_qc") return job.state === "supplier_self_qc";
   if (stage === "packed") return job.state === "ready_for_dispatch";
   if (stage === "with_rider") {
     return (
@@ -154,7 +151,6 @@ export function jobStageCounts(
     all: jobs.length,
     late: 0,
     on_press: 0,
-    self_qc: 0,
     packed: 0,
     with_rider: 0,
     waiting_on_client: 0,

@@ -1,5 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 
+import { OrderReference } from "@/components/OrderReference";
+import { orderReferenceSpoken } from "@/lib/orderReference";
 import { StatusChip } from "@/components/StatusChip";
 import type { Order } from "@/lib/api";
 import { formatDeadlineTime } from "@/lib/dates";
@@ -34,7 +36,7 @@ export function JobRow({ job, now = new Date(), onPress }: Props) {
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${job.title}, order ${job.id}, ${status.label}${late ? ", late" : ""}`}
+      accessibilityLabel={`${job.title}, ${orderReferenceSpoken(job.id) ?? `order ${job.id}`}, ${status.label}${late ? ", late" : ""}`}
       className="gg-touch flex-row items-start gap-3 rounded-field border border-outline bg-surface px-3 py-3"
       style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
     >
@@ -52,9 +54,9 @@ export function JobRow({ job, now = new Date(), onPress }: Props) {
         <Text className="text-body font-medium text-text-primary" numberOfLines={1}>
           {job.title}
         </Text>
-        <Text className="text-caption text-text-muted" numberOfLines={1}>
-          Order {job.id}
-        </Text>
+        <View className="flex-row">
+          <OrderReference id={job.id} />
+        </View>
         <View className="flex-row flex-wrap items-center gap-2">
           {late ? (
             <StatusChip tone="error" label="Late" icon="triangle-alert" />

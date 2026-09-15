@@ -16,7 +16,11 @@ import * as SystemUI from "expo-system-ui";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
-import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
+import {
+  SafeAreaProvider,
+  initialWindowMetrics,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 import { BrandIntro } from "@/components/BrandIntro";
 import { ToastHost } from "@/components/ToastHost";
@@ -144,6 +148,7 @@ export default function RootLayout() {
  * from both so a waiting shop is not locked out of its own theme and sign-out.
  */
 function RootStack() {
+  const { top } = useSafeAreaInsets();
   const user = useSession((s) => s.user);
   const identity = useSession((s) => s.identity);
   const scheme = useThemeName();
@@ -163,7 +168,7 @@ function RootStack() {
   usePushNotifications();
 
   return (
-    <Stack key={user?.id ?? "signed-out"} screenOptions={stackScreenOptions(scheme)}>
+    <Stack key={user?.id ?? "signed-out"} screenOptions={stackScreenOptions(scheme, top)}>
       {/* Launch redirect stays public so cold start always has an anchor. */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
       {/* Clerk's default browser-SSO return must stay reachable before activation. */}
@@ -242,6 +247,18 @@ function RootStack() {
           name="shop-details"
           options={{
             title: "Your shop details",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
+          Where the shop gets paid sits behind the same guard: a shop still
+          waiting on accreditation has a counter plate already, and setting it
+          up now means the first payout is not held on a missing picture.
+        */}
+        <Stack.Screen
+          name="payout-account"
+          options={{
+            title: "Where you get paid",
             headerBackButtonDisplayMode: "minimal",
           }}
         />

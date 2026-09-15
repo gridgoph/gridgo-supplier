@@ -18,7 +18,7 @@ describe("templatesForAction", () => {
   });
 
   it("offers nothing for steps that have their own screen", () => {
-    expect(templatesForAction("self_qc")).toEqual([]);
+    expect(templatesForAction("ready_for_pickup")).toEqual([]);
     expect(templatesForAction("decline")).toEqual([]);
     expect(templatesForAction("add_proof")).toEqual([]);
     expect(templatesForAction(undefined)).toEqual([]);

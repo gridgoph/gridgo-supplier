@@ -62,8 +62,8 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "GRIDGO uses the camera so you can attach self-QC photos of finished work to a job.",
-          "photosPermission": "GRIDGO needs your photo library so you can attach self-QC photos of finished work to a job."
+          "cameraPermission": "GRIDGO uses the camera so you can attach proof photos of finished work to a job.",
+          "photosPermission": "GRIDGO needs your photo library so you can attach proof photos of finished work to a job."
         }
       ]
     ],

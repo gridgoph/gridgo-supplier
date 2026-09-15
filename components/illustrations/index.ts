@@ -25,7 +25,7 @@ type Illustration = {
 export const illustrations = {
   /** Jobs find you — the shop open on GRIDGO. */
   storefront: { Component: StorefrontIllustration, aspect: 776.69 / 657.16 },
-  /** Produce and check — accept work, print, and self-QC. */
+  /** Produce and check — accept work, print, and pack for the joint pickup checks. */
   working: { Component: WorkingIllustration, aspect: 905.13 / 707.5 },
   /** Hand off and get paid — pack for pickup and track settlement. */
   packages: { Component: PackagesIllustration, aspect: 533.57 / 345.77 },

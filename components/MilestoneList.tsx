@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FileCheck } from "lucide-react-native";
 import { Text, View } from "react-native";
 
+import { PayoutReceipt } from "@/components/PayoutReceipt";
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { StatusChip } from "@/components/StatusChip";
 import { formatPhp, getFile, type StoredFile } from "@/lib/api";
@@ -73,6 +74,22 @@ export function MilestoneList({ milestones, showDetail = false, proofReloadVersi
                   />
                 ))
               : null}
+            {/*
+              What GRIDGO sent, once this part is released: the wallet's own
+              confirmation and its reference, so a shop matching its GCash
+              history against this job never has to ask Operations for it.
+            */}
+            {showDetail && milestone.stage === "released" && milestone.receiptFileId ? (
+              <PayoutReceipt
+                fileId={milestone.receiptFileId}
+                reference={milestone.reference}
+                label={milestone.label}
+              />
+            ) : showDetail && milestone.stage === "released" && milestone.reference ? (
+              <Text className="text-caption text-text-muted">
+                Reference {milestone.reference}
+              </Text>
+            ) : null}
           </View>
         </View>
       ))}

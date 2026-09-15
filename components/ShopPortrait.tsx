@@ -1,5 +1,5 @@
 import { Store } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Image, View } from "react-native";
 
 import { useThemeColors } from "@/hooks/useTheme";
@@ -30,11 +30,11 @@ type Props = {
  */
 export function ShopPortrait({ imageUrl, shopName, size }: Props) {
   const colors = useThemeColors();
-  const [failed, setFailed] = useState(false);
-
-  // A new portrait in the same frame: the last one's failure goes with it, or
-  // one bad load sticks to every picture the shop sets afterwards.
-  useEffect(() => setFailed(false), [imageUrl]);
+  // The failure is remembered against the picture that failed, so a new
+  // portrait in the same frame starts clean and one bad load never sticks to
+  // every picture the shop sets afterwards.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const failed = failedUrl !== null && failedUrl === imageUrl;
 
   const showing = imageUrl && !failed;
 
@@ -50,7 +50,7 @@ export function ShopPortrait({ imageUrl, shopName, size }: Props) {
           source={{ uri: imageUrl }}
           resizeMode="cover"
           style={{ width: "100%", height: "100%" }}
-          onError={() => setFailed(true)}
+          onError={() => setFailedUrl(imageUrl ?? null)}
           accessibilityElementsHidden
         />
       ) : (

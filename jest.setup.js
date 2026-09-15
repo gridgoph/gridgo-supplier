@@ -10,6 +10,29 @@ jest.mock("@react-native-async-storage/async-storage", () =>
   require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
 );
 
+// Tests model an installed build, not Expo Go. jest-expo reports Expo Go by
+// default, which would make pushSupported() false everywhere and skip the
+// native module entirely; hooks/__tests__/pushRuntime.test.ts overrides this
+// per case to prove the Expo Go guard itself.
+jest.mock("expo", () => ({
+  ...jest.requireActual("expo"),
+  isRunningInExpoGo: () => false,
+}));
+
+// Screens read the top inset to pad native headers. Outside a real provider
+// the hook has no context, so it answers zero insets instead of throwing.
+jest.mock("react-native-safe-area-context", () => {
+  const React = require("react");
+  const actual = jest.requireActual("react-native-safe-area-context");
+  return {
+    ...actual,
+    useSafeAreaInsets: () => {
+      const insets = React.useContext(actual.SafeAreaInsetsContext);
+      return insets ?? { top: 0, right: 0, bottom: 0, left: 0 };
+    },
+  };
+});
+
 // Push is FCM through a native module, so there is nothing to exercise in Jest:
 // the module's own surface is mocked to inert, and every rule the app applies to
 // it lives in lib/push.ts and is unit-tested there directly. Permission is
