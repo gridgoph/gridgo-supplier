@@ -249,15 +249,10 @@ jobs:
             echo "| API base | deployed URL verified inside the bundle |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.config.outputs.stem }}
-          path: ${{ runner.temp }}/out/*.apk
-          if-no-files-found: error
-          retention-days: 90
-
       # Only the default branch names a release. A build from anywhere else is
-      # downloadable as a run artifact and nothing more.
+      # downloadable as a run artifact and nothing more. Publish from the APK
+      # on disk *before* upload-artifact: GitHub storage quota must not leave
+      # the landing site serving a stale file after a successful signed build.
       - name: Publish the GitHub Release
         if: github.ref == 'refs/heads/main' || github.event.inputs.publish_release == 'true'
         env:
@@ -336,6 +331,17 @@ jobs:
           fi
 
           echo "| Published | \`gridgo-supplier.apk\` on the captain's server |" >> "$GITHUB_STEP_SUMMARY"
+
+      # After the landing site (and GitHub Release) have the APK. Quota on
+      # Actions artifacts is not allowed to fail this job once the signed
+      # build has already been published.
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: ${{ steps.config.outputs.stem }}
+          path: ${{ runner.temp }}/out/*.apk
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Remove the signing key and deploy credentials
         if: always()
