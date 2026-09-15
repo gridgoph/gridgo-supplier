@@ -1,5 +1,8 @@
 import { render, screen, waitFor } from "@testing-library/react-native";
 
+import { MilestoneList } from "@/components/MilestoneList";
+import type { MilestoneView } from "@/lib/milestones";
+
 jest.mock("@/lib/api", () => ({
   ...jest.requireActual("@/lib/api"),
   getFile: jest.fn(async (fileId: string) => ({
@@ -15,9 +18,6 @@ jest.mock("@/lib/api", () => ({
     expiresInSeconds: 300,
   })),
 }));
-
-import { MilestoneList } from "@/components/MilestoneList";
-import type { MilestoneView } from "@/lib/milestones";
 
 function view(partial: Partial<MilestoneView> = {}): MilestoneView {
   return {

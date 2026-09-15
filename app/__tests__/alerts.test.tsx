@@ -1,4 +1,10 @@
+import { invalidate } from "@/lib/live";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+
+import AlertsScreen from "@/app/alerts";
+import type { Notification } from "@/lib/api";
+import { askConfirm } from "@/store/sheets";
+import { useAlertsStore } from "@/store/alerts";
 
 const mockSetOptions = jest.fn();
 
@@ -6,7 +12,7 @@ jest.mock("expo-router", () => ({
   router: { push: jest.fn() },
   useNavigation: () => ({ setOptions: mockSetOptions }),
   useFocusEffect: (callback: () => void) => {
-    const { useEffect } = require("react");
+    const { useEffect } = jest.requireActual<typeof import("react")>("react");
     useEffect(callback, [callback]);
   },
 }));
@@ -25,11 +31,6 @@ jest.mock("@/lib/api", () => ({
   listJobs: jest.fn(),
   deleteNotification: jest.fn(),
 }));
-
-import AlertsScreen from "@/app/alerts";
-import type { Notification } from "@/lib/api";
-import { askConfirm } from "@/store/sheets";
-import { useAlertsStore } from "@/store/alerts";
 
 const api = jest.requireMock("@/lib/api") as {
   listNotifications: jest.Mock;
@@ -117,7 +118,6 @@ describe("Alerts screen — Clear notifications", () => {
 
 
 it("updates the visible inbox from a silent notification event without navigation", async () => {
-  const { invalidate } = require("@/lib/live");
   api.listNotifications.mockResolvedValue([]);
   api.listJobs.mockResolvedValue([]);
   await render(<AlertsScreen />);

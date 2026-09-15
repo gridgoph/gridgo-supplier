@@ -1,12 +1,12 @@
 import { AppState } from "react-native";
-import { useCallback, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import { useFocusEffect } from "expo-router";
 import { liveGeneration, subscribeLive, type LiveResource } from "@/lib/live";
 
 /** Focus owns the subscription; callback changes cannot cancel queued work. */
 export function useLiveRefresh(resources: readonly LiveResource[], refresh: () => void | Promise<unknown>): void {
   const latest = useRef(refresh);
-  latest.current = refresh;
+  useLayoutEffect(() => { latest.current = refresh; }, [refresh]);
   const key = resources.join(",");
   const ownerGeneration = liveGeneration();
   useFocusEffect(useCallback(() => {

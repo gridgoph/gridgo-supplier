@@ -1,5 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
+import { useListing } from "@/hooks/useBoard";
+import { loadListing } from "@/lib/listingsApi";
+import type { Listing } from "@/lib/listings";
+
 /**
  * Expo Router runs a screen's focus effect every time it comes back into view.
  * On a bench there is one mount, so the callback is kept here and fired again
@@ -8,7 +12,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 const focusCallbacks: (() => void)[] = [];
 jest.mock("expo-router", () => ({
   useFocusEffect: (callback: () => void) => {
-    const { useEffect } = require("react");
+    const { useEffect } = jest.requireActual<typeof import("react")>("react");
     useEffect(() => {
       focusCallbacks.push(callback);
       callback();
@@ -29,10 +33,6 @@ jest.mock("@/lib/listingsApi", () => ({
   loadListing: jest.fn(),
   loadPrepSteps: jest.fn(async () => ({ status: "ok", value: [] })),
 }));
-
-import { useListing } from "@/hooks/useBoard";
-import { loadListing } from "@/lib/listingsApi";
-import type { Listing } from "@/lib/listings";
 
 function listingWith(photos: string[]): Listing {
   return {

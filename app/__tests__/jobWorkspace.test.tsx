@@ -1,11 +1,15 @@
 import { act, render, screen, waitFor } from "@testing-library/react-native";
 
+import JobWorkspaceScreen from "@/app/job/[id]/index";
+import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
+import { getFile, getOrder } from "@/lib/api";
+
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), navigate: jest.fn() },
   useLocalSearchParams: () => ({ id: "ord_1" }),
   useNavigation: () => ({ setOptions: jest.fn() }),
   useFocusEffect: (callback: () => void) => {
-    const { useEffect } = require("react");
+    const { useEffect } = jest.requireActual<typeof import("react")>("react");
     useEffect(callback, [callback]);
   },
 }));
@@ -26,10 +30,6 @@ jest.mock("@/lib/api", () => ({
     expiresInSeconds: 300,
   })),
 }));
-
-import JobWorkspaceScreen from "@/app/job/[id]/index";
-import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
-import { getFile, getOrder } from "@/lib/api";
 
 const SHARES: Record<MilestoneCode, number> = {
   printing: 50,

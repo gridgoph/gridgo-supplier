@@ -23,14 +23,19 @@ jest.mock("@/hooks/useFileUpload", () => ({
 }));
 
 it("keeps the filed milestone and photo when no shop proof remains", async () => {
-  const job = {
+  const job: api.Order = {
     id: "ord_1", title: "Print job", state: "ready_for_dispatch", timeline: [],
+    clientId: "client_1", supplierId: "shop", riderId: null, productId: "product_1",
+    quantity: 1, size: "3x5", material: "Vinyl", deadline: null,
+    address: "Davao City", zone: "Davao", totalMinor: 100000, deliveryFeeMinor: 0,
+    paymentMethod: null, paymentStatus: "paid", promisedDate: null, artworkName: null,
+    createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-01T00:00:00Z",
     supplierPriceMinor: 100000,
     payoutMilestones: [
       { code: "printing", sharePercent: 50, amountMinor: 50000, status: "pof_attached", pofFileIds: ["print"], releasedAt: null },
       { code: "packaging_qc", sharePercent: 15, amountMinor: 15000, status: "pending_pof", pofFileIds: [], releasedAt: null },
     ],
-  } as api.Order;
+  };
   (api.getOrder as jest.Mock).mockResolvedValue(job);
   const view = await render(<FulfilmentProofScreen />);
   await fireEvent.press(await screen.findByLabelText("File this evidence"));

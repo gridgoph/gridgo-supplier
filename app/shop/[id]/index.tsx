@@ -1,5 +1,5 @@
 import { ChevronRight, Link2 } from "lucide-react-native";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -126,7 +126,7 @@ export default function ListingScreen() {
   const working = draft ?? (listing ? draftFrom(listing) : null);
 
   const dirty = Boolean(baseline && working && !sameDraft(working, draftFrom(baseline)));
-  dirtyRef.current = dirty;
+  useLayoutEffect(() => { dirtyRef.current = dirty; });
 
   function setDraft(value: Draft | null) {
     const changed = Boolean(value && baseline && !sameDraft(value, draftFrom(baseline)));

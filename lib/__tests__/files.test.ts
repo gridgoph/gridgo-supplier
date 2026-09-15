@@ -1,8 +1,3 @@
-jest.mock("expo-file-system/legacy", () => ({
-  createUploadTask: jest.fn(),
-  FileSystemUploadType: { MULTIPART: 1 },
-}));
-
 import * as FileSystem from "expo-file-system/legacy";
 
 import * as api from "@/lib/api";
@@ -17,6 +12,11 @@ import {
   uploadFile,
   type UploadItem,
 } from "@/lib/files";
+
+jest.mock("expo-file-system/legacy", () => ({
+  createUploadTask: jest.fn(),
+  FileSystemUploadType: { MULTIPART: 1 },
+}));
 
 function item(partial: Partial<UploadItem> = {}): UploadItem {
   return {

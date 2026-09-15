@@ -34,7 +34,12 @@ type Props = {
  * A photo that will not load says so in words. An empty grey square on a board
  * of samples reads as a listing with nothing on it.
  */
-export function SamplePhoto({
+export function SamplePhoto(props: Props) {
+  // A replacement source owns fresh loading/error state before it is painted.
+  return <PhotoFrame key={JSON.stringify([props.fileId, props.localUri])} {...props} />;
+}
+
+function PhotoFrame({
   fileId,
   localUri,
   altText,
@@ -43,29 +48,11 @@ export function SamplePhoto({
   emptyLabel,
 }: Props) {
   const colors = useThemeColors();
-  const [uri, setUri] = useState<string | null>(localUri ?? heldLink(fileId));
+  const [uri, setUri] = useState<string | null>(() => localUri ?? heldLink(fileId));
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (localUri) {
-      setUri(localUri);
-      setFailed(false);
-      return;
-    }
-    if (!fileId) {
-      setUri(null);
-      setFailed(false);
-      return;
-    }
-
-    // A different sample in the same frame — replacing one, or reordering the
-    // strip. Last sample's link and last sample's failure both go with it, or
-    // the frame keeps showing the photo that has just been taken down, and one
-    // refusal sticks to every photo that lands in that position afterwards.
-    const held = heldLink(fileId);
-    setUri(held);
-    setFailed(false);
-    if (held) return;
+    if (localUri || !fileId) return;
 
     let cancelled = false;
     void (async () => {

@@ -67,9 +67,8 @@ export function MilestoneList({ milestones, showDetail = false, proofReloadVersi
             {showDetail && isShopProof(milestone.code) && milestone.pofFileIds.length
               ? milestone.pofFileIds.map((fileId) => (
                   <FiledProof
-                    key={fileId}
+                    key={`${fileId}:${proofReloadVersion}`}
                     fileId={fileId}
-                    reloadVersion={proofReloadVersion}
                     altText={`${milestone.label} evidence`}
                   />
                 ))
@@ -81,20 +80,18 @@ export function MilestoneList({ milestones, showDetail = false, proofReloadVersi
   );
 }
 
-function FiledProof({ fileId, altText, reloadVersion }: { fileId: string; altText: string; reloadVersion: number }) {
+function FiledProof({ fileId, altText }: { fileId: string; altText: string }) {
   const colors = useThemeColors();
   const [file, setFile] = useState<StoredFile | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let active = true;
-    setFile(null);
-    setFailed(false);
     void getFile(fileId).then(
       (value) => { if (active) setFile(value); },
       () => { if (active) setFailed(true); },
     );
     return () => { active = false; };
-  }, [fileId, reloadVersion]);
+  }, [fileId]);
 
   if (!file) {
     return <Text className="text-caption text-text-muted">{failed ? "This evidence will not load" : "Loading evidence…"}</Text>;

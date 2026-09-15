@@ -1,6 +1,6 @@
 import { useReadVersion } from "@/hooks/useReadVersion";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
 import * as api from "@/lib/api";
@@ -242,7 +242,7 @@ export function useListing(
   const [error, setError] = useState<string | null>(null);
 
   const hold = useRef(holdRefresh);
-  hold.current = holdRefresh;
+  useLayoutEffect(() => { hold.current = holdRefresh; }, [holdRefresh]);
 
   const nextRead = useReadVersion();
   const reload = useCallback(async (preserveDraft = false) => {
@@ -288,19 +288,14 @@ export function useListing(
     }, [reload]),
   );
 
-  // A screen opened with no usable id has nothing to wait for, and saying so is
-  // better than a skeleton that never resolves.
-  useEffect(() => {
-    if (!itemId) setLoading(false);
-  }, [itemId]);
-
   return {
     listing,
     catalog,
     services,
     prepSteps,
     prepStepsOpen,
-    loading,
+    // An incomplete link has no request to wait for.
+    loading: Boolean(itemId) && loading,
     notOpenYet,
     error,
     reload,

@@ -25,12 +25,16 @@ jest.mock("@/lib/listingsApi", () => ({ loadBoard: jest.fn(async () => ({ status
 jest.mock("@/hooks/useBoard", () => ({ loadServiceLines: jest.fn(async () => []) }));
 
 const service = { id: "svc_1", categoryCode: "tarpaulin", state: "live", capacityDaily: 10, capacityWeekly: 100, turnaroundHours: 24 } as api.SupplierService;
-const job = {
+const job: api.Order = {
   id: "ord_1", title: "Current print job", state: "production", timeline: [],
+  clientId: "client_1", supplierId: "shop", riderId: null, productId: "product_1",
+  address: "Davao City", zone: "Davao", totalMinor: 100000, deliveryFeeMinor: 0,
+  paymentMethod: null, paymentStatus: "paid", promisedDate: null, artworkName: null,
+  updatedAt: "2026-09-01T00:00:00Z",
   quantity: 1, size: "3x5", material: "Vinyl", deadline: null,
   supplierPriceMinor: 100000, createdAt: "2026-09-01T00:00:00Z",
   payoutMilestones: [{ code: "printing", sharePercent: 50, amountMinor: 50000, status: "pending_pof", pofFileIds: [], releasedAt: null }],
-} as api.Order;
+};
 
 beforeEach(() => {
   jest.clearAllMocks();

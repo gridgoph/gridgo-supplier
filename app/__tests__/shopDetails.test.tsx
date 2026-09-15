@@ -1,10 +1,14 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
+import ShopDetailsScreen from "@/app/shop-details";
+import { ApiError, getSupplierProfile, updateSupplierProfile, type SupplierProfile } from "@/lib/api";
+import { useSession } from "@/store/session";
+
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), back: jest.fn() },
   // The screen reloads whenever it regains focus; on a bench there is one focus.
   useFocusEffect: (callback: () => void) => {
-    const { useEffect } = require("react");
+    const { useEffect } = jest.requireActual<typeof import("react")>("react");
     useEffect(callback, [callback]);
   },
 }));
@@ -22,7 +26,7 @@ jest.mock("@clerk/expo", () => ({
 }));
 
 jest.mock("react-native-safe-area-context", () => {
-  const { View } = require("react-native");
+  const { View } = jest.requireActual<typeof import("react-native")>("react-native");
   return {
     useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
     SafeAreaView: ({ children }: { children: React.ReactNode }) => <View>{children}</View>,
@@ -36,10 +40,6 @@ jest.mock("@/lib/api", () => ({
   getSupplierProfile: jest.fn(),
   updateSupplierProfile: jest.fn(),
 }));
-
-import ShopDetailsScreen from "@/app/shop-details";
-import { ApiError, getSupplierProfile, updateSupplierProfile, type SupplierProfile } from "@/lib/api";
-import { useSession } from "@/store/session";
 
 const mockRouter = jest.requireMock("expo-router").router as { back: jest.Mock; push: jest.Mock };
 

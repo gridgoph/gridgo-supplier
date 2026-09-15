@@ -1,5 +1,18 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
+import ListingScreen from "@/app/shop/[id]/index";
+import { router } from "expo-router";
+import type { Listing } from "@/lib/listings";
+import {
+  addGroup,
+  addPrepStep,
+  loadListing,
+  loadPrepSteps,
+  reorderPrepSteps,
+  saveListing,
+} from "@/lib/listingsApi";
+import { useSession } from "@/store/session";
+
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), back: jest.fn() },
   // The listing's own name goes in the platform's header, which has none here.
@@ -7,7 +20,7 @@ jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: "sci_1" }),
   // One focus on a bench, which is the mount.
   useFocusEffect: (callback: () => void) => {
-    const { useEffect } = require("react");
+    const { useEffect } = jest.requireActual<typeof import("react")>("react");
     useEffect(callback, [callback]);
   },
 }));
@@ -33,19 +46,6 @@ jest.mock("@/lib/listingsApi", () => ({
   addPrepStep: jest.fn(),
   reorderPrepSteps: jest.fn(),
 }));
-
-import ListingScreen from "@/app/shop/[id]/index";
-import { router } from "expo-router";
-import type { Listing } from "@/lib/listings";
-import {
-  addGroup,
-  addPrepStep,
-  loadListing,
-  loadPrepSteps,
-  reorderPrepSteps,
-  saveListing,
-} from "@/lib/listingsApi";
-import { useSession } from "@/store/session";
 
 function listingWith(overrides: Partial<Listing> = {}): Listing {
   return {
