@@ -1,5 +1,5 @@
 import { ChevronRight, Link2 } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -96,7 +96,7 @@ export default function ListingScreen() {
   const approved = isMatchable(useSession((s) => s.user));
   const formats = useAcceptedFileFormats();
 
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draft, storeDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -122,14 +122,17 @@ export default function ListingScreen() {
   // Never null while a listing is loaded. Deriving it here rather than waiting
   // for an effect is what stops the screen rendering its "not reachable" state
   // for the frame between the listing arriving and the draft being seeded.
+  const baseline = listing;
   const working = draft ?? (listing ? draftFrom(listing) : null);
 
-  useEffect(() => {
-    if (listing && !dirtyRef.current) setDraft(draftFrom(listing));
-  }, [listing]);
+  const dirty = Boolean(baseline && working && !sameDraft(working, draftFrom(baseline)));
+  useLayoutEffect(() => { dirtyRef.current = dirty; });
 
-  const dirty = Boolean(listing && working && !sameDraft(working, draftFrom(listing)));
-  dirtyRef.current = dirty;
+  function setDraft(value: Draft | null) {
+    const changed = Boolean(value && baseline && !sameDraft(value, draftFrom(baseline)));
+    dirtyRef.current = changed;
+    storeDraft(changed ? value : null);
+  }
 
   const merged = useMemo(
     () => (listing && working ? applyDraft(listing, working) : listing),
@@ -168,7 +171,7 @@ export default function ListingScreen() {
    */
   const persist = useCallback(
     async (onTheBoard?: boolean): Promise<boolean> => {
-      if (!listing || !working) return false;
+      if (!baseline || !working) return false;
       const money = parseMoney(working.price);
       if (!money.ok) {
         setActionError(money.error);
@@ -179,7 +182,7 @@ export default function ListingScreen() {
       setBusy(true);
       setActionError(null);
       try {
-        const saved = await saveListing(listing, {
+        const saved = await saveListing(baseline, {
           name: working.name.trim(),
           description: working.description.trim(),
           basePriceMinor: money.minor ?? 0,
@@ -214,11 +217,11 @@ export default function ListingScreen() {
           return false;
         }
         dirtyRef.current = false;
-        setDraft(null);
+        storeDraft(null);
 
         const formatsMoved =
-          working.fileFormatMode !== listing.fileFormatMode ||
-          working.formatCodes.join(",") !== listing.formatCodes.join(",");
+          working.fileFormatMode !== baseline.fileFormatMode ||
+          working.formatCodes.join(",") !== baseline.formatCodes.join(",");
         if (formatsMoved) {
           const formatsSaved = await setFileFormats(
             saved.value,
@@ -240,7 +243,7 @@ export default function ListingScreen() {
         setBusy(false);
       }
     },
-    [listing, reload, working],
+    [baseline, reload, working],
   );
 
   /**

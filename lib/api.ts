@@ -1,3 +1,5 @@
+import { withDeadline } from "@/lib/withDeadline";
+import { assertLiveGeneration, liveGeneration } from "@/lib/live";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
@@ -310,7 +312,7 @@ export type ResolveApiBaseInput = {
    * Dev-server host strings from expo-constants (`host:port`, URLs, etc.).
    * First parseable hostname wins.
    */
-  hostCandidates?: Array<string | null | undefined>;
+  hostCandidates?: (string | null | undefined)[];
   /** `Platform.OS` value used for the Android emulator loopback remap. */
   platformOS?: string;
   /**
@@ -344,7 +346,7 @@ export function hostnameFromHostUri(value: string | null | undefined): string | 
 }
 
 /** Collect populated host fields across Expo Go, dev builds, and legacy manifests. */
-function collectExpoHostCandidates(): Array<string | null | undefined> {
+function collectExpoHostCandidates(): (string | null | undefined)[] {
   const manifest = Constants.manifest as { debuggerHost?: string; hostUri?: string } | null;
   const manifest2 = Constants.manifest2 as {
     extra?: { expoClient?: { hostUri?: string; debuggerHost?: string } };
@@ -444,7 +446,9 @@ export function setTokenProvider(provider: TokenProvider | null): void {
 /** Fresh for every request; Clerk session JWTs rotate while the app is open. */
 export async function getAuthToken(): Promise<string | null> {
   if (!tokenProvider) return tokenMemory;
-  const token = await tokenProvider();
+  const provider = tokenProvider;
+  const token = await provider();
+  if (provider !== tokenProvider) return null;
   tokenMemory = token;
   return token;
 }
@@ -490,6 +494,7 @@ type RequestOptions = RequestInit & {
 export const API_REQUEST_MS = 20_000;
 
 async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
+  const generation = liveGeneration();
   const { ignoreUnauthorized, ...fetchInit } = init;
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -508,14 +513,17 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     else controller.signal.addEventListener("abort", fail, { once: true });
   });
   let res: Response;
+  let text: string;
   try {
     const token = await Promise.race([getAuthToken(), aborted]);
-    if (token) headers.Authorization = `Bearer ${token}`;
-    res = await fetch(`${getApiBase()}${path}`, {
+    assertLiveGeneration(generation);
+    if (token) { headers.Authorization = `Bearer ${token}`; headers["X-GRIDGO-Role"] = "supplier"; }
+    res = await Promise.race([fetch(`${getApiBase()}${path}`, {
       ...fetchInit,
       headers,
       signal: controller.signal,
-    });
+    }), aborted]);
+    text = await Promise.race([res.text(), aborted]);
   } catch (error) {
     const timedOut =
       (error instanceof Error && error.name === "AbortError") ||
@@ -527,7 +535,7 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   } finally {
     clearTimeout(timer);
   }
-  const text = await res.text();
+  assertLiveGeneration(generation);
   let data: unknown = null;
   if (text) {
     try {
@@ -608,33 +616,16 @@ export async function enrollSupplier(
    these, this block is what changes.
    -------------------------------------------------------------------------- */
 
-/**
- * Provisional. Mark one of the caller's own notifications read.
- *
- * The record has carried a `read` flag since v2; nothing could set it. These
- * three are the routes that close that gap.
- */
-export async function markNotificationRead(id: string): Promise<Notification> {
-  const result = await request<{ notification: Notification }>(
-    `/notifications/${id}/read`,
-    { method: "POST", body: "{}" },
-  );
-  return result.notification;
+/** Mark one owned notification read; lib/alertsApi owns deployment fallback. */
+export async function markNotificationRead(id: string): Promise<void> {
+  await request(`/notifications/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ read: true }) });
 }
 
-/**
- * Provisional. Mark a named set read.
- *
- * The ids are explicit on purpose. A bodyless "mark everything" would also
- * mark alerts that arrived while the shop was reading the screen — things it
- * has never seen — and a read flag that lies is worse than no read flag.
- */
-export async function markNotificationsRead(ids: string[]): Promise<Notification[]> {
-  const result = await request<{ notifications: Notification[] }>("/notifications/read", {
-    method: "POST",
-    body: JSON.stringify({ ids }),
-  });
-  return result.notifications;
+/** Mark a named set read; lib/alertsApi.markAllRead owns the visible-id invariant. */
+export async function markNotificationsRead(ids: string[]): Promise<void> {
+  await Promise.all(ids.map((id) => request(`/notifications/${encodeURIComponent(id)}`, {
+    method: "PATCH", body: JSON.stringify({ read: true }),
+  })));
 }
 
 /** Provisional. Delete one of the caller's own notifications. */
@@ -712,7 +703,7 @@ export async function registerDevice(
 ): Promise<{ device: Device; created: boolean; reassigned: boolean }> {
   return request<{ device: Device; created: boolean; reassigned: boolean }>("/devices", {
     method: "POST",
-    body: JSON.stringify({ token, platform }),
+    body: JSON.stringify({ token, platform, appRole: "supplier", tokenProvider: platform === "ios" ? "apns" : "fcm" }),
   });
 }
 
@@ -745,23 +736,27 @@ export async function registerDeviceUnclaimed(
   token: string,
   platform: DevicePlatform,
 ): Promise<void> {
-  const res = await fetch(`${getApiBase()}/devices`, {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ token, platform }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    let data: unknown = null;
-    if (text) {
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = text;
+  const controller = new AbortController();
+  await withDeadline((async () => {
+    const res = await fetch(`${getApiBase()}/devices`, {
+      signal: controller.signal,
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ token, platform, appRole: "supplier", tokenProvider: platform === "ios" ? "apns" : "fcm" }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      let data: unknown = null;
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = text;
+        }
       }
+      throw new ApiError(res.status, data);
     }
-    throw new ApiError(res.status, data);
-  }
+  })(), API_REQUEST_MS, () => controller.abort());
 }
 
 /** The caller's own registrations, always — there is no route to anyone else's. */
@@ -920,7 +915,7 @@ export async function withdrawSupplierService(
 
 export type NotificationInbox = {
   notifications: Notification[];
-  /** Last append for this shop. Open the live stream from here, or it will replay the inbox. */
+  /** Optional inbox resume hint; the current live hook reconciles instead of seeding from it. */
   snapshot: string | null;
 };
 
@@ -928,7 +923,7 @@ export async function listNotificationInbox(): Promise<NotificationInbox> {
   const result = await request<{
     notifications?: Notification[];
     snapshot?: string | null;
-  }>("/notifications");
+  }>("/notifications?role=supplier");
   return {
     notifications: Array.isArray(result.notifications) ? result.notifications : [],
     snapshot: result.snapshot ?? null,
@@ -1402,4 +1397,3 @@ export function formatPhp(minor: number): string {
     maximumFractionDigits: 2,
   })}`;
 }
-

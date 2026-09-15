@@ -1,3 +1,5 @@
+import { useReadVersion } from "@/hooks/useReadVersion";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect, useNavigation } from "expo-router";
@@ -50,9 +52,7 @@ export default function NotificationsScreen() {
   const markManyRead = useAlertsStore((s) => s.markManyRead);
   const removeAlert = useAlertsStore((s) => s.remove);
   const removeMany = useAlertsStore((s) => s.removeMany);
-  const syncFrom = useAlertsStore((s) => s.syncFrom);
-  const [items, setItems] = useState<api.Notification[]>([]);
-  const [jobs, setJobs] = useState<api.Order[]>([]);
+  const refreshAlerts = useAlertsStore((s) => s.refresh);
   /**
    * Which alerts were new when this list last loaded.
    *
@@ -62,37 +62,54 @@ export default function NotificationsScreen() {
    * looking at. And moving it between sections changes its parent, which
    * unmounts it mid-swipe: the same class of hang as wrapping only the unread
    * ones in a gesture handler. The card restyles in place and moves on the
-   * next load, which is when a person expects a list to reorganise.
+   * next focus or pull-to-refresh load. Silent live refreshes preserve existing
+   * section membership so they cannot interrupt another swipe.
    */
-  const [newAtLoad, setNewAtLoad] = useState<string[]>([]);
+  const [{ items, newAtLoad }, setInbox] = useState<{ items: api.Notification[]; newAtLoad: string[] }>({ items: [], newAtLoad: [] });
+  const [jobs, setJobs] = useState<api.Order[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const reload = useCallback(async () => {
+  const nextRead = useReadVersion();
+  const reload = useCallback(async (silent = false) => {
+    const current = nextRead();
     setLoading(true);
     try {
       // The jobs are what place each alert on a stage. A failure there costs
       // the track, not the list, so the alerts still arrive without it.
       const [list, jobList] = await Promise.all([
-        api.listNotifications(),
+        refreshAlerts(),
         api.listJobs().catch(() => [] as api.Order[]),
       ]);
+      if (!current()) return;
       const state = useAlertsStore.getState();
       const live = visibleAlerts(list, state.deleted);
-      setItems(list);
       setJobs(jobList);
-      setNewAtLoad(live.filter((a) => isAlertUnread(a, state.dismissed)).map((a) => a.id));
-      syncFrom(list);
+      setInbox((previous) => {
+        const existing = new Set(previous.items.map((item) => item.id));
+        return {
+          items: list,
+          newAtLoad: live.filter((alert) =>
+            silent && existing.has(alert.id)
+              ? previous.newAtLoad.includes(alert.id)
+              : isAlertUnread(alert, state.dismissed),
+          ).map((alert) => alert.id),
+        };
+      });
       setError(null);
       setLoaded(true);
     } catch (e) {
+      if (!current()) return;
       setError(humanizeApiError(e, offlineMessage("load your alerts")));
     } finally {
+      if (current())
       setLoading(false);
     }
-  }, [syncFrom]);
+  }, [nextRead, refreshAlerts]);
+
+  useLiveRefresh(["notifications", "orders", "jobs"], () => reload(true));
 
   useFocusEffect(
     useCallback(() => {

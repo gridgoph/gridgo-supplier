@@ -127,6 +127,7 @@ describe("milestone stages", () => {
     expect(view?.stage).toBe("awaiting_release");
     expect(view?.statusLabel).toBe("With GRIDGO");
     expect(view?.canAddProof).toBe(false);
+    expect(view?.pofFileIds).toEqual(["file_1"]);
   });
 
   it("says a claim is holding the money, and stops asking for evidence", () => {

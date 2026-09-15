@@ -1,5 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
+import { useListing } from "@/hooks/useBoard";
+import { loadListing } from "@/lib/listingsApi";
+import type { Listing } from "@/lib/listings";
+
 /**
  * Expo Router runs a screen's focus effect every time it comes back into view.
  * On a bench there is one mount, so the callback is kept here and fired again
@@ -8,7 +12,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 const focusCallbacks: (() => void)[] = [];
 jest.mock("expo-router", () => ({
   useFocusEffect: (callback: () => void) => {
-    const { useEffect } = require("react");
+    const { useEffect } = jest.requireActual<typeof import("react")>("react");
     useEffect(() => {
       focusCallbacks.push(callback);
       callback();
@@ -29,10 +33,6 @@ jest.mock("@/lib/listingsApi", () => ({
   loadListing: jest.fn(),
   loadPrepSteps: jest.fn(async () => ({ status: "ok", value: [] })),
 }));
-
-import { useListing } from "@/hooks/useBoard";
-import { loadListing } from "@/lib/listingsApi";
-import type { Listing } from "@/lib/listings";
 
 function listingWith(photos: string[]): Listing {
   return {
@@ -127,4 +127,17 @@ describe("one listing, while the shop is working on it", () => {
 
     await waitFor(() => expect(loadListing).not.toHaveBeenCalled());
   });
+});
+
+it("keeps the newest listing when an older read completes later", async () => {
+  let receive!: (value: { status: "ok"; value: Listing }) => void;
+  (loadListing as jest.Mock)
+    .mockReturnValueOnce(new Promise((resolve) => { receive = resolve; }))
+    .mockResolvedValue({ status: "ok", value: { ...listingWith(["new"]), version: 9 } });
+  const { result } = await renderHook(() => useListing("sci_1"));
+  await act(async () => { await result.current.reload(); });
+  expect(result.current.listing?.version).toBe(9);
+  await act(async () => { receive({ status: "ok", value: listingWith([]) }); });
+  expect(result.current.listing?.version).toBe(9);
+  expect(result.current.listing?.photos).toHaveLength(1);
 });

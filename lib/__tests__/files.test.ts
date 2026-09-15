@@ -1,12 +1,8 @@
-jest.mock("expo-file-system/legacy", () => ({
-  createUploadTask: jest.fn(),
-  FileSystemUploadType: { MULTIPART: 1 },
-}));
-
 import * as FileSystem from "expo-file-system/legacy";
 
 import * as api from "@/lib/api";
 import {
+  isProofImage,
   isUploadBusy,
   messageFor,
   newUploadItem,
@@ -16,6 +12,11 @@ import {
   uploadFile,
   type UploadItem,
 } from "@/lib/files";
+
+jest.mock("expo-file-system/legacy", () => ({
+  createUploadTask: jest.fn(),
+  FileSystemUploadType: { MULTIPART: 1 },
+}));
 
 function item(partial: Partial<UploadItem> = {}): UploadItem {
   return {
@@ -67,6 +68,34 @@ describe("isUploadBusy", () => {
         item({ key: "b", stage: "failed", error: "nope" }),
       ]),
     ).toBe(false);
+  });
+});
+
+describe("isProofImage", () => {
+  it("treats JPEG, PNG and WebP as photographs", () => {
+    expect(isProofImage(item({ mimeType: "image/jpeg", fileName: "run.jpg" }))).toBe(true);
+    expect(isProofImage(item({ mimeType: "image/png", fileName: "run.png" }))).toBe(true);
+    expect(isProofImage(item({ mimeType: "image/webp", fileName: "run.webp" }))).toBe(true);
+  });
+
+  it("does not treat a PDF as a photograph", () => {
+    expect(isProofImage(item({ mimeType: "application/pdf", fileName: "spec.pdf" }))).toBe(false);
+  });
+
+  it.each(["application/octet-stream", " APPLICATION/OCTET-STREAM; charset=binary "])("uses the filename for generic MIME %s", (mimeType) => {
+    expect(isProofImage(item({ mimeType, fileName: "evidence.jpg" }))).toBe(true);
+    expect(isProofImage(item({ mimeType, fileName: "evidence.PNG" }))).toBe(true);
+    expect(isProofImage(item({ mimeType, fileName: "evidence.webp" }))).toBe(true);
+    expect(isProofImage(item({ mimeType, fileName: "evidence.pdf" }))).toBe(false);
+  });
+
+  it("honours explicit PDF metadata over an image extension", () => {
+    expect(isProofImage(item({ mimeType: "application/pdf", fileName: "evidence.jpg" }))).toBe(false);
+  });
+
+  it("falls back to the filename when the phone reported no type", () => {
+    expect(isProofImage(item({ mimeType: null, fileName: "evidence-1.jpg" }))).toBe(true);
+    expect(isProofImage(item({ mimeType: null, fileName: "spec.pdf" }))).toBe(false);
   });
 });
 

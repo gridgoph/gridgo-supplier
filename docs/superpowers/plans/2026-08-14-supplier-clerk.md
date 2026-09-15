@@ -2,19 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add invitation-first Clerk authentication to GRIDGO Supplier without creating supplier roles client-side or removing the development-only legacy demo path.
+**Goal:** Add Clerk authentication to GRIDGO Supplier without writing role metadata client-side or removing the development-only legacy demo path. Current access rules are owned by [Supplier Clerk Design](../specs/2026-08-14-supplier-clerk-design.md#access-model).
 
 **Architecture:** Clerk owns identity and session issuance; `gridgo-api` continues to project the supplier user and authorize every domain operation. A root bridge classifies Clerk metadata, provides fresh Clerk Bearer tokens to the existing API module, and hydrates the existing Zustand session only after `/auth/me` returns a supplier.
 
-**Tech Stack:** Expo SDK 54, Expo Router 6, React Native 0.81, TypeScript, `@clerk/expo` v4, Clerk custom flows, SecureStore token cache, Zustand, Jest.
+**Tech Stack:** See [package.json](../../../package.json) for the current dependencies and [package-lock.json](../../../package-lock.json) for resolved versions.
 
 ## Global Constraints
 
-- Read Expo SDK 54 versioned documentation before code changes.
+- Follow the versioned Expo documentation requirement in [AGENTS.md](../../../AGENTS.md).
 - Use `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`; release runtime requires a `pk_live_` key.
 - Never expose, print, bundle, or commit `CLERK_SECRET_KEY`.
-- Only server-written `publicMetadata.gridgoRole === "supplier"` opens supplier routes.
-- No public UI or payload may create or request the supplier role.
+- Follow the [membership-based access model](../specs/2026-08-14-supplier-clerk-design.md#access-model) before opening supplier routes.
+- Follow the public-enrollment and invitation boundaries linked from the access design; never write Clerk role metadata client-side.
 - Keep the local API demo login behind `__DEV__`.
 - Reuse existing GRIDGO tokens, Satoshi, form controls, keyboard surface, and route guards.
 - Do not add unrelated libraries or production SaaS.
@@ -31,7 +31,7 @@
 - Produces `clerkPublishableKey(value, development)`, `clerkAccessFor(metadata)`, and `appForGridgoRole(role)`.
 - `clerkAccessFor` returns `supplier`, `unassigned`, or `mismatch` plus a human app label; it never manufactures metadata.
 
-- [ ] Write tests proving missing metadata is unassigned, only `supplier` is accepted, known other roles map to human app names, malformed metadata fails closed, and a release rejects non-`pk_live_` keys.
+- [ ] Test metadata classification and publishable-key enforcement independently of the API membership decision; follow the [access model](../specs/2026-08-14-supplier-clerk-design.md#access-model) for bridge acceptance.
 - [ ] Run `npx jest lib/__tests__/clerk.test.ts --runInBand` and confirm failure because `lib/clerk.ts` does not exist.
 - [ ] Install `@clerk/expo`, `expo-secure-store`, and `expo-auth-session` with `npx expo install`; add the Clerk/SecureStore plugins.
 - [ ] Implement the minimal pure helpers and rerun the focused test to green.
@@ -79,10 +79,10 @@
 - Sign-in uses current `signIn.password()` and `signIn.finalize()`; Google alone uses `useSSO()` and its required `setActive()` result.
 - Invitation acceptance consumes only `__clerk_ticket` through `signUp.create({ strategy: "ticket", ... })` and never sends role metadata. The one-shot call is required because this Clerk instance requires a password and the v4 factor-specific `ticket()` method does not accept one.
 
-- [ ] Write screen tests proving the mockup hierarchy, Google button, recovery link, no public sign-up, ticket-required invitation behavior, and the development-only legacy action.
+- [ ] Write screen tests proving the mockup hierarchy, Google button, recovery link, public application entry, ticket-required invitation behavior, and the development-only legacy action.
 - [ ] Run focused screen tests and confirm expected failures.
 - [ ] Copy the supplied SVG and update attribution; implement welcome, sign-in, recovery, invitation, Google, and access surfaces with existing primitives.
-- [ ] Redirect every legacy public signup route to the invitation entry and rerun focused tests to green.
+- [ ] Keep signup routes aligned with the [public application flow](../../../PRD.md#onboarding-path-deck); invitation acceptance is a separate entry.
 
 ### Task 5: Release safety, documentation, and full verification
 

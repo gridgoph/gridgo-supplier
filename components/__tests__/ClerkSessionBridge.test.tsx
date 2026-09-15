@@ -6,6 +6,7 @@ import { ClerkSessionBridge } from "@/components/ClerkSessionBridge";
 import * as api from "@/lib/api";
 import { setClerkSignOutHandler, useSession } from "@/store/session";
 
+let mockRole = "supplier";
 const mockGetToken = jest.fn(async () => "clerk-token");
 const mockSignOut = jest.fn(async () => undefined);
 
@@ -19,13 +20,14 @@ jest.mock("@clerk/expo", () => ({
   useUser: () => ({
     user: {
       primaryEmailAddress: { emailAddress: "shop@example.com" },
-      publicMetadata: { gridgoRole: "supplier" },
+      publicMetadata: { gridgoRole: mockRole },
     },
   }),
 }));
 
 describe("ClerkSessionBridge supplier projection", () => {
   beforeEach(() => {
+    mockRole = "supplier";
     useSession.setState({
       user: null,
       loading: false,
@@ -73,4 +75,14 @@ describe("ClerkSessionBridge supplier projection", () => {
       view.unmount();
     },
   );
+});
+
+it("probes supplier membership when Clerk's primary role is client",async()=>{
+  mockRole="client";
+  const member={id:"dual",role:"supplier" as const,name:"Dual",email:"dual@test",verificationStatus:"approved" as const};
+  jest.spyOn(api,"me").mockResolvedValue(member);
+  const view=await render(<ClerkSessionBridge><Text>Shell</Text></ClerkSessionBridge>);
+  await waitFor(()=>expect(useSession.getState().user?.id).toBe("dual"));
+  expect(mockSignOut).not.toHaveBeenCalled();
+  await view.unmount();jest.restoreAllMocks();api.setTokenProvider(null);
 });

@@ -1,3 +1,5 @@
+import { useReadVersion } from "@/hooks/useReadVersion";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
@@ -18,22 +20,28 @@ export function useServiceCatalog() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const nextRead = useReadVersion();
   const reload = useCallback(async () => {
+    const current = nextRead();
     setLoading(true);
     try {
       const [taxonomy, lines] = await Promise.all([
         api.getTaxonomy(),
         api.listSupplierServices(),
       ]);
+      if (!current()) return;
       setCatalog(buildCatalog(taxonomy));
       setServices(lines);
       setError(null);
     } catch (e) {
+      if (!current()) return;
       setError(humanizeApiError(e, offlineMessage("load the GRIDGO catalogue")));
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, []);
+  }, [nextRead]);
+
+  useLiveRefresh(["catalog", "services"], reload);
 
   useFocusEffect(
     useCallback(() => {

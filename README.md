@@ -2,7 +2,7 @@
 
 The **supplier** mobile app for GRIDGO (Davao City managed-printing marketplace).
 
-Scaffolded from `gridgo-client` with the same design system, starter template, logo assets, Expo SDK 54, Expo Router, and NativeWind tokens.
+Scaffolded from `gridgo-client` with shared design tokens and logo assets, using Expo, Expo Router, and NativeWind. [package.json](package.json) owns the current dependency versions; [package-lock.json](package-lock.json) locks the installed graph.
 
 ## Role scope
 
@@ -11,11 +11,13 @@ Scaffolded from `gridgo-client` with the same design system, starter template, l
 - Pickup handoff
 - Payout notifications
 
-The full supplier portal (capacity, detailed work) is a separate Next.js surface — not this binary.
+The mobile app also includes schedule, capacity, accreditation, and the shop’s listing board. See [PRD.md](PRD.md) for product scope and job-evidence behavior.
 
-## Shared demo backend
+## Local development
 
-All GRIDGO mobile apps talk to the local **gridgo-api** demo server (not Clerk / Supabase / PayMongo).
+Use Node.js 22.13 or newer, the minimum for [Expo SDK 57](https://docs.expo.dev/versions/v57.0.0/).
+
+Clerk provides identity; **gridgo-api** provides supplier data and authorization. Set `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` for your Clerk instance before starting Metro. The local supplier fixture is available only in development builds. Supabase and PayMongo are not app dependencies.
 
 ```bash
 # terminal 1
@@ -32,12 +34,15 @@ On a physical device, use your machine's LAN IP instead of `127.0.0.1`.
 
 | Command | Does |
 |---|---|
-| `npm start` | Metro for Expo Go (`expo start --go --port 8082`) |
-| `npm run android` / `npm run ios` | Platform-targeted |
+| `npm start` | Metro for Expo Go |
+| `npm run start:usb` | Set up Android USB port forwarding and start Metro for the development client |
+| `npm run android` / `npm run ios` | Build and run a native development app |
 | `npm run lint` | ESLint |
 | `npm test` | Jest |
 
-Typecheck: `npx tsc --noEmit`.
+Typecheck: `npx tsc --noEmit`. Script definitions and the Metro port live in [package.json](package.json).
+
+For native push, use an installed development build. Connect an authorized Android device over USB, build with `npm run android`, then use `npm run start:usb` for later Metro sessions. Supply `GOOGLE_SERVICES_JSON` when building with Firebase; see [Push notifications](AGENTS.md#push-notifications) for configuration and Expo Go limitations.
 
 ## Android emulator API URL
 
@@ -47,4 +52,4 @@ From the **Android emulator**, `127.0.0.1` is the emulator itself. Use:
 EXPO_PUBLIC_API_URL=http://10.0.2.2:8787 npm start
 ```
 
-Physical device / Expo Go on phone: use the host LAN IP (e.g. `http://192.168.1.55:8787`).
+For a physical device over Wi-Fi, use the host machine’s reachable LAN address. API URL precedence and build-time configuration are documented in [AGENTS.md](AGENTS.md#mvp-stack-current-phase).

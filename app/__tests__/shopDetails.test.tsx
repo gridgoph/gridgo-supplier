@@ -1,10 +1,14 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+
+import ShopDetailsScreen from "@/app/shop-details";
+import { ApiError, getSupplierProfile, updateSupplierProfile, type SupplierProfile } from "@/lib/api";
+import { useSession } from "@/store/session";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), back: jest.fn() },
   // The screen reloads whenever it regains focus; on a bench there is one focus.
   useFocusEffect: (callback: () => void) => {
-    const { useEffect } = require("react");
+    const { useEffect } = jest.requireActual<typeof import("react")>("react");
     useEffect(callback, [callback]);
   },
 }));
@@ -22,7 +26,7 @@ jest.mock("@clerk/expo", () => ({
 }));
 
 jest.mock("react-native-safe-area-context", () => {
-  const { View } = require("react-native");
+  const { View } = jest.requireActual<typeof import("react-native")>("react-native");
   return {
     useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
     SafeAreaView: ({ children }: { children: React.ReactNode }) => <View>{children}</View>,
@@ -36,10 +40,6 @@ jest.mock("@/lib/api", () => ({
   getSupplierProfile: jest.fn(),
   updateSupplierProfile: jest.fn(),
 }));
-
-import ShopDetailsScreen from "@/app/shop-details";
-import { ApiError, getSupplierProfile, updateSupplierProfile, type SupplierProfile } from "@/lib/api";
-import { useSession } from "@/store/session";
 
 const mockRouter = jest.requireMock("expo-router").router as { back: jest.Mock; push: jest.Mock };
 
@@ -261,4 +261,23 @@ describe("the shop's own details", () => {
     expect(mockRouter.back).not.toHaveBeenCalled();
     await view.unmount();
   });
+});
+
+it("keeps the draft baseline when a live read completes during an edit", async () => {
+  jest.clearAllMocks();
+  useSession.setState({ refresh });
+  load();
+  let receive!: (value: SupplierProfile) => void;
+  const view = await render(<ShopDetailsScreen />);
+  await screen.findByLabelText("Shop name");
+  (getSupplierProfile as jest.Mock).mockReturnValueOnce(new Promise<SupplierProfile>((resolve) => { receive = resolve; }));
+  const { invalidate } = jest.requireActual("@/lib/live");
+  await act(async () => { invalidate("identity"); });
+  await waitFor(() => expect(getSupplierProfile).toHaveBeenCalledTimes(2));
+  await fireEvent.changeText(screen.getByLabelText("Shop name"), "New shop name");
+  await act(async () => { receive({ ...PROFILE, phone: "+639179999999", version: 4 }); });
+  (updateSupplierProfile as jest.Mock).mockResolvedValue({ ...PROFILE, shopName: "New shop name", version: 5 });
+  await fireEvent.press(screen.getByLabelText("Save changes"));
+  expect(updateSupplierProfile).toHaveBeenCalledWith(3, { shopName: "New shop name" });
+  await view.unmount();
 });

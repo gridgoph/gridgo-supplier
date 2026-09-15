@@ -1,3 +1,5 @@
+import { useReadVersion } from "@/hooks/useReadVersion";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useMemo, useState } from "react";
 import { RefreshControl, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
@@ -39,18 +41,26 @@ export default function JobsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const nextRead = useReadVersion();
   const reload = useCallback(async () => {
+    const current = nextRead();
     setLoading(true);
     try {
-      setJobs(await api.listJobs());
+      const list = await api.listJobs();
+      if (!current()) return;
+      setJobs(list);
       setError(null);
       setLoaded(true);
     } catch (e) {
+      if (!current()) return;
       setError(humanizeApiError(e, offlineMessage("load your jobs")));
     } finally {
+      if (current())
       setLoading(false);
     }
-  }, []);
+  }, [nextRead]);
+
+  useLiveRefresh(["jobs", "orders", "dispatch", "escalations", "claims"], reload);
 
   useFocusEffect(
     useCallback(() => {

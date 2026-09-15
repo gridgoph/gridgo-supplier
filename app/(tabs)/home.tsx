@@ -1,3 +1,5 @@
+import { useReadVersion } from "@/hooks/useReadVersion";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useUser } from "@clerk/expo";
 import { useCallback, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
@@ -40,7 +42,7 @@ export default function HomeScreen() {
   const { user, refresh } = useSession();
   const { user: clerkUser } = useUser();
   const colors = useThemeColors();
-  const syncAlerts = useAlertsStore((s) => s.syncFrom);
+  const refreshAlerts = useAlertsStore((s) => s.refresh);
   const [jobs, setJobs] = useState<api.Order[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [services, setServices] = useState<ServiceLine[]>([]);
@@ -59,35 +61,41 @@ export default function HomeScreen() {
    * beside the jobs and its failures are simply an absent card rather than an
    * error on a screen about work.
    */
-  const loadBoardQuietly = useCallback(async () => {
+  const loadBoardQuietly = useCallback(async (current: () => boolean) => {
     const [board, lines] = await Promise.all([loadBoard(), loadServiceLines()]);
+    if (!current()) return;
     setServices(lines);
     setListings(board.status === "ok" ? board.value.listings : []);
     setBoardOpen(board.status === "ok");
   }, []);
 
+  const beginRead = useReadVersion();
   const reload = useCallback(async () => {
+    const current = beginRead();
     if (waitingOnOps) {
-      await Promise.all([refresh(), loadBoardQuietly()]);
+      await Promise.all([refresh(), loadBoardQuietly(current)]);
       return;
     }
     setLoading(true);
     try {
-      const [list, notifications] = await Promise.all([
+      const [list] = await Promise.all([
         api.listJobs(),
-        api.listNotifications().catch(() => [] as api.Notification[]),
-        loadBoardQuietly(),
+        refreshAlerts().catch(() => []),
+        loadBoardQuietly(current),
       ]);
+      if (!current()) return;
       setJobs(list);
-      syncAlerts(notifications);
       setError(null);
       setLoaded(true);
     } catch (e) {
+      if (!current()) return;
       setError(humanizeApiError(e, offlineMessage("load your floor")));
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, [loadBoardQuietly, refresh, syncAlerts, waitingOnOps]);
+  }, [beginRead, loadBoardQuietly, refresh, refreshAlerts, waitingOnOps]);
+
+  useLiveRefresh(["jobs", "orders", "payouts", "identity", "approvals", "catalog", "services", "availability"], reload);
 
   useFocusEffect(
     useCallback(() => {

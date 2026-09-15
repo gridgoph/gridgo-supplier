@@ -1,11 +1,17 @@
+import { useEffect, useState } from "react";
+import { FileCheck } from "lucide-react-native";
 import { Text, View } from "react-native";
 
+import { SamplePhoto } from "@/components/SamplePhoto";
 import { StatusChip } from "@/components/StatusChip";
-import { formatPhp } from "@/lib/api";
-import type { MilestoneView } from "@/lib/milestones";
+import { formatPhp, getFile, type StoredFile } from "@/lib/api";
+import { isProofImage, proofDocumentKind } from "@/lib/files";
+import { useThemeColors } from "@/hooks/useTheme";
+import { isShopProof, type MilestoneView } from "@/lib/milestones";
 
 type Props = {
   milestones: MilestoneView[];
+  proofReloadVersion?: number;
   /**
    * Whether each row explains whose move it is. The job workspace wants it —
    * the shop is deciding what to do next. A payout list of several jobs does
@@ -21,8 +27,12 @@ type Props = {
  * shown — they are what the shop is owed, not decoration. The list stays
  * monochrome apart from the status chips: money the shop cannot act on must
  * never look like the screen's action.
+ *
+ * Evidence belongs beside its shop-owned milestone in the workspace, where
+ * the shop can distinguish evidence filed from money released. Earnings lists
+ * omit previews; file classification is shared with UploadList via lib/files.
  */
-export function MilestoneList({ milestones, showDetail = false }: Props) {
+export function MilestoneList({ milestones, showDetail = false, proofReloadVersion = 0 }: Props) {
   if (!milestones.length) return null;
 
   return (
@@ -54,9 +64,52 @@ export function MilestoneList({ milestones, showDetail = false }: Props) {
             {showDetail ? (
               <Text className="text-caption text-text-secondary">{milestone.detail}</Text>
             ) : null}
+            {showDetail && isShopProof(milestone.code) && milestone.pofFileIds.length
+              ? milestone.pofFileIds.map((fileId) => (
+                  <FiledProof
+                    key={`${fileId}:${proofReloadVersion}`}
+                    fileId={fileId}
+                    altText={`${milestone.label} evidence`}
+                  />
+                ))
+              : null}
           </View>
         </View>
       ))}
+    </View>
+  );
+}
+
+function FiledProof({ fileId, altText }: { fileId: string; altText: string }) {
+  const colors = useThemeColors();
+  const [file, setFile] = useState<StoredFile | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void getFile(fileId).then(
+      (value) => { if (active) setFile(value); },
+      () => { if (active) setFailed(true); },
+    );
+    return () => { active = false; };
+  }, [fileId]);
+
+  if (!file) {
+    return <Text className="text-caption text-text-muted">{failed ? "This evidence will not load" : "Loading evidence…"}</Text>;
+  }
+  const document = {
+    fileName: file.originalFilename,
+    mimeType: file.detectedContentType || file.declaredContentType,
+  };
+  if (isProofImage(document)) {
+    return <SamplePhoto fileId={fileId} altText={altText} gutter="tight" />;
+  }
+  return (
+    <View className="flex-row items-center gap-3 rounded-field border border-outline bg-surface p-3">
+      <FileCheck size={20} color={colors.success} strokeWidth={2} />
+      <View className="min-w-0 flex-1">
+        <Text className="text-body text-text-primary">{file.originalFilename}</Text>
+        <Text className="text-caption text-text-muted">{proofDocumentKind(document)}</Text>
+      </View>
     </View>
   );
 }

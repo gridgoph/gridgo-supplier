@@ -1,3 +1,5 @@
+import { useReadVersion } from "@/hooks/useReadVersion";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
@@ -34,9 +36,12 @@ export default function CapacityScreen() {
   const colors = useThemeColors();
   const blackouts = useShopPlan((s) => s.blackouts);
 
-  const [services, setServices] = useState<api.SupplierService[]>([]);
+  const [{ services, drafts }, setCapacity] = useState<{
+    services: api.SupplierService[];
+    drafts: Record<string, CapacityDraft>;
+  }>({ services: [], drafts: {} });
+  const beginRead = useReadVersion();
   const [catalog, setCatalog] = useState<ServiceCatalog | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, CapacityDraft>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,24 +49,32 @@ export default function CapacityScreen() {
   const [saved, setSaved] = useState(false);
 
   const reload = useCallback(async () => {
+    const current = beginRead();
     setLoading(true);
     try {
       const [serviceList, taxonomy] = await Promise.all([
         api.listSupplierServices(),
         api.getTaxonomy().catch(() => null),
       ]);
-      setServices(serviceList);
+      if (!current()) return;
+      setCapacity((previous) => {
+        if (previous.services.some((service) =>
+          previous.drafts[service.id] && capacityDraftChanged(service, previous.drafts[service.id]),
+        )) return previous;
+        return {
+          services: serviceList,
+          drafts: Object.fromEntries(serviceList.map((s) => [s.id, capacityDraftFor(s)])),
+        };
+      });
       setCatalog(buildCatalog(taxonomy));
-      setDrafts(
-        Object.fromEntries(serviceList.map((s) => [s.id, capacityDraftFor(s)])),
-      );
       setError(null);
     } catch (e) {
+      if (!current()) return;
       setError(humanizeApiError(e, offlineMessage("load your capacity")));
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, []);
+  }, [beginRead]);
 
   useFocusEffect(
     useCallback(() => {
@@ -73,6 +86,9 @@ export default function CapacityScreen() {
     const draft = drafts[s.id];
     return draft ? capacityDraftChanged(s, draft) : false;
   });
+  useLiveRefresh(["availability", "services", "jobs", "settings"], () => {
+    if (!saving && changed.length === 0) return reload();
+  });
   const firstProblem = changed
     .map((s) => ({ id: s.id, problem: validateCapacity(drafts[s.id]) }))
     .find((entry) => entry.problem);
@@ -82,6 +98,8 @@ export default function CapacityScreen() {
       setSaveError(firstProblem.problem);
       return;
     }
+    beginRead();
+    setLoading(false);
     setSaving(true);
     setSaveError(null);
     setSaved(false);
@@ -89,12 +107,12 @@ export default function CapacityScreen() {
       const updated = await Promise.all(
         changed.map((service) => api.updateSupplierService(service.id, drafts[service.id])),
       );
-      setServices((current) =>
-        current.map((s) => updated.find((u) => u.id === s.id) ?? s),
-      );
-      setDrafts((current) => ({
-        ...current,
-        ...Object.fromEntries(updated.map((s) => [s.id, capacityDraftFor(s)])),
+      setCapacity((current) => ({
+        services: current.services.map((s) => updated.find((u) => u.id === s.id) ?? s),
+        drafts: {
+          ...current.drafts,
+          ...Object.fromEntries(updated.map((s) => [s.id, capacityDraftFor(s)])),
+        },
       }));
       setSaved(true);
     } catch (e) {
@@ -165,11 +183,14 @@ export default function CapacityScreen() {
               onChange={(patch) => {
                 setSaved(false);
                 setSaveError(null);
-                setDrafts((current) => ({
+                setCapacity((current) => ({
                   ...current,
-                  [service.id]: {
-                    ...(current[service.id] ?? capacityDraftFor(service)),
-                    ...patch,
+                  drafts: {
+                    ...current.drafts,
+                    [service.id]: {
+                      ...(current.drafts[service.id] ?? capacityDraftFor(service)),
+                      ...patch,
+                    },
                   },
                 }));
               }}

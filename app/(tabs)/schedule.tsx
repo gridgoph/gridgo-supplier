@@ -1,3 +1,5 @@
+import { useReadVersion } from "@/hooks/useReadVersion";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
@@ -46,7 +48,9 @@ export default function ScheduleScreen() {
   // quietly claiming yesterday's jobs are still due today.
   const [now, setNow] = useState(() => new Date());
 
+  const beginRead = useReadVersion();
   const reload = useCallback(async () => {
+    const current = beginRead();
     setLoading(true);
     setNow(new Date());
     try {
@@ -56,16 +60,20 @@ export default function ScheduleScreen() {
         // lines still gets its agenda.
         api.listSupplierServices().catch(() => [] as api.SupplierService[]),
       ]);
+      if (!current()) return;
       setJobs(jobList);
       setServices(serviceList);
       setError(null);
       setLoaded(true);
     } catch (e) {
+      if (!current()) return;
       setError(humanizeApiError(e, offlineMessage("load your schedule")));
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, []);
+  }, [beginRead]);
+
+  useLiveRefresh(["jobs", "orders", "availability", "services", "settings"], reload);
 
   useFocusEffect(
     useCallback(() => {

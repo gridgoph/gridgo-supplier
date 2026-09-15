@@ -1,4 +1,4 @@
-import { HeaderBackButton } from "@react-navigation/elements";
+import { HeaderBackButton } from "expo-router/react-navigation";
 import { Stack, router } from "expo-router";
 
 import { useThemeName } from "@/hooks/useTheme";

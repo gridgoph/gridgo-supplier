@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { invalidate } from "@/lib/live";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+
+import AlertsScreen from "@/app/alerts";
+import type { Notification } from "@/lib/api";
+import { askConfirm } from "@/store/sheets";
+import { useAlertsStore } from "@/store/alerts";
 
 const mockSetOptions = jest.fn();
 
@@ -6,7 +12,7 @@ jest.mock("expo-router", () => ({
   router: { push: jest.fn() },
   useNavigation: () => ({ setOptions: mockSetOptions }),
   useFocusEffect: (callback: () => void) => {
-    const { useEffect } = require("react");
+    const { useEffect } = jest.requireActual<typeof import("react")>("react");
     useEffect(callback, [callback]);
   },
 }));
@@ -25,11 +31,6 @@ jest.mock("@/lib/api", () => ({
   listJobs: jest.fn(),
   deleteNotification: jest.fn(),
 }));
-
-import AlertsScreen from "@/app/alerts";
-import type { Notification } from "@/lib/api";
-import { askConfirm } from "@/store/sheets";
-import { useAlertsStore } from "@/store/alerts";
 
 const api = jest.requireMock("@/lib/api") as {
   listNotifications: jest.Mock;
@@ -113,4 +114,16 @@ describe("Alerts screen — Clear notifications", () => {
     expect(screen.queryByText("Clear notifications")).toBeNull();
     expect(screen.queryByText(offer.title)).toBeNull();
   });
+});
+
+
+it("updates the visible inbox from a silent notification event without navigation", async () => {
+  api.listNotifications.mockResolvedValue([]);
+  api.listJobs.mockResolvedValue([]);
+  await render(<AlertsScreen />);
+  await waitFor(() => expect(api.listNotifications).toHaveBeenCalled());
+  const incoming = { id:"ntf_live", userId:"owner", title:"Live decision arrived", body:"Open your account", read:false, at:"2026-09-08T00:00:00Z" };
+  api.listNotifications.mockResolvedValue([incoming]);
+  await act(async () => { invalidate("notifications"); });
+  expect(await screen.findByText("Live decision arrived")).toBeTruthy();
 });

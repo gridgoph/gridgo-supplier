@@ -5,7 +5,7 @@ import {
   DefaultTheme,
   ThemeProvider,
   type Theme,
-} from "@react-navigation/native";
+} from "expo-router/react-navigation";
 import { ClerkProvider } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
 import Constants from "expo-constants";
@@ -163,7 +163,7 @@ function RootStack() {
   usePushNotifications();
 
   return (
-    <Stack screenOptions={stackScreenOptions(scheme)}>
+    <Stack key={user?.id ?? "signed-out"} screenOptions={stackScreenOptions(scheme)}>
       {/* Launch redirect stays public so cold start always has an anchor. */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
       {/* Clerk's default browser-SSO return must stay reachable before activation. */}

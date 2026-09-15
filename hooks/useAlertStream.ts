@@ -1,108 +1,93 @@
-import { useEffect, useRef } from "react";
-import { AppState, type AppStateStatus } from "react-native";
-
-import { listNotificationInbox } from "@/lib/api";
+import { useEffect } from "react";
+import { AppState } from "react-native";
 import { openAlertStream, type AlertStreamHandle } from "@/lib/alertStream";
+import { invalidate, liveGeneration, subscribeLive } from "@/lib/live";
+import { useSession } from "@/store/session";
 import { useAlertsStore } from "@/store/alerts";
 import { shouldToast, useToasts, useViewing } from "@/store/toasts";
 
 /**
- * Keep the live alert stream open while the shop is signed in.
- *
- * Three things happen when an alert arrives: the badge moves immediately, a
- * toast appears if the shop is not already looking at the thing it is about,
- * and that is all — the alert itself is fetched with everything else the next
- * time a list loads, so nothing here has to keep a second copy of the list.
- *
- * Opening with no cursor makes the server replay the whole inbox. Refresh then
- * looks like two brand-new banners for alerts the shop already saw. The list
- * snapshot (or the last id this phone persisted) is sent as `Last-Event-ID`
- * so only alerts appended after that interrupt.
- *
- * When the app has been in the background the socket is usually dead and the
- * OS has not told anyone, so coming back to the foreground reconnects. The
- * stream resumes from the last id it saw, which is what stops a shop missing
- * the job it was offered while the phone was in a pocket.
- *
- * If the stream cannot open, nothing is shown. Every screen already reloads on
- * focus, so the app is merely back to what it did before — and "cannot reach
- * the event stream" is not something a shop can do anything about.
+ * Foreground reconciliation for one signed-in supplier. Resource hints trigger
+ * fresh reads; they never carry domain state or grant access. Reconnect/resume
+ * reconciles all resources, and an unavailable stream falls back to a read
+ * every 30 seconds while foregrounded. Backgrounding closes the connection.
+ * Only newly dated, unseen notifications may toast; replay still refreshes data.
  */
-export function useAlertStream(enabled: boolean): void {
-  const handle = useRef<AlertStreamHandle | null>(null);
-
+export function useAlertStream(enabled = true): void {
+  const userId = useSession((s) => s.user?.id ?? null);
+  const verification = useSession((s) => s.user?.verificationStatus);
   useEffect(() => {
-    if (!enabled) {
-      handle.current?.close();
-      handle.current = null;
-      return;
-    }
-
-    let cancelled = false;
-
-    async function start() {
-      let resume = useAlertsStore.getState().streamCursor;
-      if (!resume) {
-        let inbox: { snapshot: string | null };
-        try {
-          inbox = await listNotificationInbox();
-        } catch {
-          // Opening with no cursor makes the server replay the inbox as live
-          // toasts. Wait until a list can give us a snapshot.
-          return;
+    if (!enabled || !userId) return;
+    const generation = liveGeneration();
+    const startedAt = Date.now();
+    let stopped = false;
+    let foreground = AppState.currentState !== "background" && AppState.currentState !== "inactive";
+    let live = false;
+    let handle: AlertStreamHandle | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let refreshing = false;
+    const pending = new Set<string>();
+    const seen = new Set<string>();
+    const current = () => !stopped && generation === liveGeneration();
+    async function flush() {
+      timer = null;
+      if (!current() || !foreground || refreshing) return;
+      refreshing = true;
+      const resources = new Set(pending); pending.clear();
+      try {
+        if (resources.has("*") || resources.has("identity") || resources.has("approvals")) {
+          await useSession.getState().refresh();
         }
-        if (cancelled) return;
-        resume = inbox.snapshot;
-        if (resume) useAlertsStore.getState().rememberStreamCursor(resume);
+        if (!current()) return;
+
+        if (resources.has("*") || resources.has("notifications")) {
+          try { await useAlertsStore.getState().refresh(); } catch { /* Next live event/resume or fallback catches up. */ }
+        }
+      } finally {
+        refreshing = false;
+        if (pending.size && current() && foreground) timer = setTimeout(() => void flush(), 80);
       }
-      if (cancelled) return;
-
-      handle.current = openAlertStream({
-        getResumeFrom: () => useAlertsStore.getState().streamCursor,
-        onResumeUnavailable: async () => {
-          useAlertsStore.getState().rememberStreamCursor(null);
-          const inbox = await listNotificationInbox().catch(() => ({
-            snapshot: null as string | null,
-          }));
-          if (inbox.snapshot) useAlertsStore.getState().rememberStreamCursor(inbox.snapshot);
+    }
+    const unsubscribe = subscribeLive((resource) => {
+      pending.add(resource);
+      if (!timer && !refreshing) timer = setTimeout(() => void flush(), 80);
+    });
+    function start() {
+      if (!current()) return;
+      handle?.close();
+      // Even offline startup must load data and retry; no inbox preflight can block the transport.
+      invalidate("*");
+      handle = openAlertStream({
+        onStatus: (connected) => {
+          if (!current()) return;
+          live = connected;
+          if (connected) invalidate("*");
         },
+        onResumeUnavailable: () => { if (current()) invalidate("*"); },
+        onInvalidate: (event) => { if (current()) invalidate(event.resource); },
         onNotification: (notification) => {
-          useAlertsStore.getState().rememberStreamCursor(notification.id);
-
-          // The badge is the part that must be right immediately: it is what a
-          // shop glances at, and it is wrong the moment an alert lands unseen.
-          useAlertsStore.setState((state) =>
-            notification.read || state.dismissed.includes(notification.id)
-              ? state
-              : { unreadCount: state.unreadCount + 1 },
-          );
-
-          if (
-            !shouldToast(notification, useViewing.getState(), useAlertsStore.getState().dismissed)
-          ) {
-            return;
+          if (!current() || (notification.userId && notification.userId !== userId)) return;
+          invalidate("*");
+          if (seen.has(notification.id)) return;
+          seen.add(notification.id);
+          if (seen.size > 500) seen.delete(seen.values().next().value as string);
+          if (Date.parse(notification.at) >= startedAt && shouldToast(notification, useViewing.getState(), useAlertsStore.getState().dismissed)) {
+            useToasts.getState().show({id:notification.id,title:notification.title,body:notification.body,orderId:notification.orderId});
           }
-          useToasts.getState().show({
-            id: notification.id,
-            title: notification.title,
-            body: notification.body,
-            orderId: notification.orderId,
-          });
         },
       });
     }
-
-    void start();
-
-    const subscription = AppState.addEventListener("change", (next: AppStateStatus) => {
-      if (next === "active") handle.current?.wake();
+    if (foreground) start();
+    const appState = AppState.addEventListener("change", (next) => {
+      foreground = next === "active";
+      if (!foreground) { live = false; handle?.close(); handle = null; }
+      else start();
     });
-
+    // Resilience for unsupported streams, network errors and unavailable native push.
+    const fallback = setInterval(() => { if (foreground && !live && current()) invalidate("*"); }, 30_000);
     return () => {
-      cancelled = true;
-      subscription.remove();
-      handle.current?.close();
-      handle.current = null;
+      stopped = true; handle?.close(); appState.remove(); unsubscribe(); clearInterval(fallback);
+      if (timer) clearTimeout(timer);
     };
-  }, [enabled]);
+  }, [enabled, userId, verification]);
 }

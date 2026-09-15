@@ -138,7 +138,7 @@ function digitsOf(value: string): string {
 
 const styles = StyleSheet.create({
   hiddenInput: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     opacity: 0.02,
     fontSize: 16,
   },

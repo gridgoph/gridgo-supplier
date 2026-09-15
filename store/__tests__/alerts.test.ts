@@ -1,3 +1,5 @@
+import * as api from "@/lib/api";
+import { setLiveOwner } from "@/lib/live";
 import type { Notification } from "@/lib/api";
 import * as alertsApi from "@/lib/alertsApi";
 import { isAlertUnread, useAlertsStore, visibleAlerts } from "@/store/alerts";
@@ -205,6 +207,145 @@ describe("when GRIDGO refuses", () => {
     const outcome = await useAlertsStore.getState().remove("a");
     expect(outcome.status).toBe("failed");
     expect(useAlertsStore.getState().deleted).toEqual([]);
+    expect(useAlertsStore.getState().unreadCount).toBe(1);
+  });
+});
+
+describe("persisted alert ownership", () => {
+  it.each([true, false])("retains local decisions with hydration first: %s", async (hydrateFirst) => {
+    useAlertsStore.setState({ ownerId: null, ownerBound: false, dismissed: [], deleted: [] });
+    const original = useAlertsStore.persist.getOptions().storage;
+    let receive!: (value: { state: { ownerId: string; dismissed: string[]; deleted: string[] } }) => void;
+    useAlertsStore.persist.setOptions({ storage: {
+      getItem: () => new Promise((resolve) => { receive = resolve; }),
+      setItem: jest.fn(),
+      removeItem: jest.fn(),
+    } });
+    try {
+      const hydration = useAlertsStore.persist.rehydrate();
+      if (!hydrateFirst) useAlertsStore.getState().bindOwner("shop_a");
+      receive({ state: { ownerId: "shop_a", dismissed: ["read"], deleted: ["gone"] } });
+      await hydration;
+      if (hydrateFirst) useAlertsStore.getState().bindOwner("shop_a");
+      expect(useAlertsStore.getState().dismissed).toEqual(["read"]);
+      expect(useAlertsStore.getState().deleted).toEqual(["gone"]);
+      useAlertsStore.getState().bindOwner("shop_b");
+      expect(useAlertsStore.getState().dismissed).toEqual([]);
+      expect(useAlertsStore.getState().deleted).toEqual([]);
+    } finally {
+      useAlertsStore.persist.setOptions({ storage: original });
+    }
+  });
+
+  it("rejects late hydration for a different restored owner", async () => {
+    useAlertsStore.setState({ ownerId: null, ownerBound: false, dismissed: [], deleted: [] });
+    useAlertsStore.getState().bindOwner("shop_b");
+    const original = useAlertsStore.persist.getOptions().storage;
+    useAlertsStore.persist.setOptions({ storage: {
+      getItem: async () => ({ state: { ownerId: "shop_a", dismissed: ["read"], deleted: ["gone"] } }),
+      setItem: jest.fn(), removeItem: jest.fn(),
+    } });
+    try {
+      await useAlertsStore.persist.rehydrate();
+      expect(useAlertsStore.getState().ownerId).toBe("shop_b");
+      expect(useAlertsStore.getState().dismissed).toEqual([]);
+    } finally {
+      useAlertsStore.persist.setOptions({ storage: original });
+    }
+  });
+});
+
+describe("shared alert refresh ordering", () => {
+  afterEach(() => { jest.restoreAllMocks(); setLiveOwner(null); });
+
+  it("does not let an older reader lower a newer unread count", async () => {
+    useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0 });
+    let receive!: (items: Notification[]) => void;
+    jest.spyOn(api, "listNotifications")
+      .mockReturnValueOnce(new Promise((resolve) => { receive = resolve; }))
+      .mockResolvedValue([alert("one"), alert("two")]);
+    const earlier = useAlertsStore.getState().refresh();
+    await useAlertsStore.getState().refresh();
+    expect(useAlertsStore.getState().unreadCount).toBe(2);
+    receive([alert("one")]);
+    await earlier;
+    expect(useAlertsStore.getState().unreadCount).toBe(2);
+  });
+
+  it("rejects a badge response from the previous account", async () => {
+    setLiveOwner("first");
+    useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0 });
+    let receive!: (items: Notification[]) => void;
+    jest.spyOn(api, "listNotifications").mockReturnValueOnce(new Promise((resolve) => { receive = resolve; }));
+    const earlier = useAlertsStore.getState().refresh();
+    setLiveOwner("second");
+    receive([alert("private")]);
+    await earlier;
+    expect(useAlertsStore.getState().unreadCount).toBe(0);
+  });
+});
+
+describe("alert writes racing with snapshots", () => {
+  beforeEach(() => {
+    useAlertsStore.setState({ dismissed: [], deleted: [], unreadIds: [], unreadCount: 0 });
+  });
+  afterEach(() => { jest.restoreAllMocks(); setLiveOwner(null); });
+
+  it.each(["markRead", "markManyRead", "remove"] as const)("does not recount %s already reflected by a refresh", async (operation) => {
+    useAlertsStore.getState().syncFrom([alert("a"), alert("b")]);
+    let complete!: (outcome: alertsApi.AlertWriteOutcome) => void;
+    const pending = new Promise<alertsApi.AlertWriteOutcome>((resolve) => { complete = resolve; });
+    jest.spyOn(alertsApi, operation === "markManyRead" ? "markAllRead" : operation).mockReturnValueOnce(pending);
+    const write = operation === "markManyRead"
+      ? useAlertsStore.getState().markManyRead(["a"])
+      : useAlertsStore.getState()[operation]("a");
+    jest.spyOn(api, "listNotifications").mockResolvedValue(operation === "remove" ? [alert("b")] : [alert("a", true), alert("b")]);
+    await useAlertsStore.getState().refresh();
+    expect(useAlertsStore.getState().unreadCount).toBe(1);
+    complete({ status: "saved" });
+    await write;
+    expect(useAlertsStore.getState().unreadCount).toBe(1);
+  });
+
+  it("counts a stale snapshot using writes completed during the read", async () => {
+    useAlertsStore.getState().syncFrom([alert("a"), alert("b")]);
+    let receive!: (items: Notification[]) => void;
+    jest.spyOn(api, "listNotifications").mockReturnValueOnce(new Promise((resolve) => { receive = resolve; }));
+    const read = useAlertsStore.getState().refresh();
+    jest.spyOn(alertsApi, "markRead").mockResolvedValue({ status: "saved" });
+    await useAlertsStore.getState().markRead("a");
+    receive([alert("a"), alert("b")]);
+    await read;
+    expect(useAlertsStore.getState().unreadCount).toBe(1);
+  });
+
+  it("does not recount concurrent read and delete completions for one alert", async () => {
+    useAlertsStore.getState().syncFrom([alert("a"), alert("b")]);
+    jest.spyOn(alertsApi, "markRead").mockResolvedValue({ status: "saved" });
+    jest.spyOn(alertsApi, "remove").mockResolvedValue({ status: "saved" });
+    await Promise.all([useAlertsStore.getState().markRead("a"), useAlertsStore.getState().remove("a")]);
+    expect(useAlertsStore.getState().unreadCount).toBe(1);
+  });
+
+  it("does not decrement for an alert the server already marked read", async () => {
+    useAlertsStore.getState().syncFrom([alert("a", true), alert("b")]);
+    jest.spyOn(alertsApi, "remove").mockResolvedValue({ status: "saved" });
+    await useAlertsStore.getState().remove("a");
+    expect(useAlertsStore.getState().unreadCount).toBe(1);
+  });
+
+  it("discards a write completion after the account changes", async () => {
+    setLiveOwner("before-write");
+    useAlertsStore.getState().syncFrom([alert("a"), alert("b")]);
+    let complete!: (outcome: alertsApi.AlertWriteOutcome) => void;
+    jest.spyOn(alertsApi, "markRead").mockReturnValueOnce(new Promise((resolve) => { complete = resolve; }));
+    const write = useAlertsStore.getState().markRead("a");
+    setLiveOwner("after-write");
+    useAlertsStore.getState().bindOwner("after-write");
+    useAlertsStore.getState().syncFrom([alert("other")]);
+    complete({ status: "saved" });
+    await write;
+    expect(useAlertsStore.getState().dismissed).toEqual([]);
     expect(useAlertsStore.getState().unreadCount).toBe(1);
   });
 });

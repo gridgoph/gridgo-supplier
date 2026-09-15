@@ -44,7 +44,7 @@ export function ToastHost() {
       // Never intercepts a touch outside a card, so the screen underneath keeps
       // working while a toast is up.
       pointerEvents="box-none"
-      style={[StyleSheet.absoluteFillObject, { paddingTop: insets.top + spacing.sm }]}
+      style={[StyleSheet.absoluteFill, { paddingTop: insets.top + spacing.sm }]}
       className="gg-page"
     >
       {toasts.map((toast) => (

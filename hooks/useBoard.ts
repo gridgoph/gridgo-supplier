@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useReadVersion } from "@/hooks/useReadVersion";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
 import * as api from "@/lib/api";
@@ -166,6 +168,8 @@ export function useBoard(
     setTotal((current) => Math.max(0, current - 1));
   }, []);
 
+  useLiveRefresh(["catalog", "services", "availability"], reload);
+
   useFocusEffect(
     useCallback(() => {
       void reload();
@@ -210,7 +214,7 @@ export type ListingData = {
   loading: boolean;
   notOpenYet: boolean;
   error: string | null;
-  reload: () => Promise<void>;
+  reload: (preserveDraft?: boolean) => Promise<void>;
 };
 
 /**
@@ -221,8 +225,8 @@ export type ListingData = {
  * from a sheet would throw them away — but coming back from the photo screen
  * with a stale zero-photo listing is exactly the bug that made a shop think its
  * samples had not saved. So `holdRefresh` is the screen's own answer to "am I
- * holding unsaved words?", checked on every focus, and every write calls
- * `reload` outright.
+ * holding unsaved words?", checked on focus/live refresh and again when that
+ * response arrives. Explicit reloads after local writes advance the baseline.
  */
 export function useListing(
   itemId: string | null,
@@ -238,9 +242,11 @@ export function useListing(
   const [error, setError] = useState<string | null>(null);
 
   const hold = useRef(holdRefresh);
-  hold.current = holdRefresh;
+  useLayoutEffect(() => { hold.current = holdRefresh; }, [holdRefresh]);
 
-  const reload = useCallback(async () => {
+  const nextRead = useReadVersion();
+  const reload = useCallback(async (preserveDraft = false) => {
+    const current = nextRead();
     if (!itemId) return;
     setLoading(true);
     try {
@@ -251,6 +257,7 @@ export function useListing(
         loadPrepSteps(itemId),
       ]);
 
+      if (!current() || (preserveDraft && hold.current?.())) return;
       if (taxonomy) setCatalog(buildCatalog(taxonomy));
       setServices(lines);
       setPrepSteps(steps.status === "ok" ? steps.value : []);
@@ -268,22 +275,18 @@ export function useListing(
         setError(result.message);
       }
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, [itemId]);
+  }, [itemId, nextRead]);
+
+  useLiveRefresh(["catalog", "services"], () => { if (!hold.current?.()) return reload(true); });
 
   useFocusEffect(
     useCallback(() => {
       if (hold.current?.()) return;
-      void reload();
+      void reload(true);
     }, [reload]),
   );
-
-  // A screen opened with no usable id has nothing to wait for, and saying so is
-  // better than a skeleton that never resolves.
-  useEffect(() => {
-    if (!itemId) setLoading(false);
-  }, [itemId]);
 
   return {
     listing,
@@ -291,7 +294,8 @@ export function useListing(
     services,
     prepSteps,
     prepStepsOpen,
-    loading,
+    // An incomplete link has no request to wait for.
+    loading: Boolean(itemId) && loading,
     notOpenYet,
     error,
     reload,

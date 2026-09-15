@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import * as api from "@/lib/api";
+import { liveGeneration } from "@/lib/live";
 import type { Notification } from "@/lib/api";
 import * as alertsApi from "@/lib/alertsApi";
 import { createPersistStorage } from "@/lib/persistStorage";
@@ -8,28 +10,26 @@ import { createPersistStorage } from "@/lib/persistStorage";
 /**
  * Which alerts the shop has dealt with, and the badge that follows.
  *
- * Every change here goes to GRIDGO first (`lib/alertsApi`). Two of the three
- * routes are new and may not be deployed yet, so when one answers "not there",
- * the decision is remembered on this device instead — which is what this app
- * did for everything before those routes existed.
- *
- * **The device-local half is temporary.** When mark-read and delete are live,
- * `dismissed` and `deleted` should be deleted outright along with the caveat
- * lines that describe them; `lib/alertsApi` names the rest of the cleanup. A
- * dismissal this phone remembers does not follow a shop to another phone, and
- * nothing in the app claims otherwise.
+ * lib/alertsApi owns the temporary device-local fallback and its removal plan.
+ * Keep persisted decisions scoped to their owner, including while identity is
+ * restoring. Reconcile reads through refresh; writes remove unread ids rather
+ * than subtracting counts, because a read may already reflect the write.
  */
 
 type AlertsState = {
+  ownerId: string | null;
+  ownerBound: boolean;
+  bindOwner: (id: string | null) => void;
   unreadCount: number;
+  unreadIds: string[];
   /** Alert ids this device has marked read because GRIDGO could not. */
   dismissed: string[];
   /** Alert ids this device has deleted because GRIDGO could not. */
   deleted: string[];
   hydrated: boolean;
   /**
-   * Last stream event this phone has already seen. The live socket must resume
-   * from here; opening with no cursor replays the whole inbox as if it were new.
+   * Legacy cursor slot, no longer persisted or used by useAlertStream.
+   * The transport owns its cursor for the lifetime of one connection handle.
    */
   streamCursor: string | null;
   rememberStreamCursor: (id: string | null) => void;
@@ -46,6 +46,7 @@ type AlertsState = {
   removeMany: (ids: string[]) => Promise<alertsApi.AlertWriteOutcome>;
   /** Recount from a freshly loaded list, honouring local decisions. */
   syncFrom: (alerts: Notification[]) => void;
+  refresh: () => Promise<Notification[]>;
 };
 
 export function isAlertUnread(alert: Notification, dismissed: string[]): boolean {
@@ -57,10 +58,22 @@ export function visibleAlerts(alerts: Notification[], deleted: string[]): Notifi
   return alerts.filter((alert) => !deleted.includes(alert.id));
 }
 
+let readVersion = 0;
+
 export const useAlertsStore = create<AlertsState>()(
   persist(
     (set, get) => ({
+      ownerId: null,
+      ownerBound: false,
+      bindOwner: (ownerId) => {
+        if (get().ownerId !== ownerId) {
+          set({ ownerId, ownerBound: true, unreadCount: 0, unreadIds: [], dismissed: [], deleted: [], streamCursor: null, localOnly: false });
+        } else {
+          set({ ownerBound: true });
+        }
+      },
       unreadCount: 0,
+      unreadIds: [],
       dismissed: [],
       deleted: [],
       localOnly: false,
@@ -68,41 +81,53 @@ export const useAlertsStore = create<AlertsState>()(
       streamCursor: null,
       rememberStreamCursor: (id) => set({ streamCursor: id }),
       markRead: async (id) => {
+        const generation = liveGeneration();
+        const ownerId = get().ownerId;
         const outcome = await alertsApi.markRead(id);
-        if (outcome.status === "failed") return outcome;
+        if (outcome.status === "failed" || generation !== liveGeneration() || ownerId !== get().ownerId) return outcome;
 
-        const { dismissed, unreadCount } = get();
+        const { dismissed } = get();
         if (!dismissed.includes(id)) {
+          const unreadIds = get().unreadIds.filter((unreadId) => unreadId !== id);
           set({
             dismissed: [...dismissed, id],
-            unreadCount: Math.max(0, unreadCount - 1),
+            unreadIds,
+            unreadCount: unreadIds.length,
           });
         }
         if (outcome.status === "not_open_yet") set({ localOnly: true });
         return outcome;
       },
       markManyRead: async (ids) => {
+        const generation = liveGeneration();
+        const ownerId = get().ownerId;
         const outcome = await alertsApi.markAllRead(ids);
-        if (outcome.status === "failed") return outcome;
+        if (outcome.status === "failed" || generation !== liveGeneration() || ownerId !== get().ownerId) return outcome;
 
         const { dismissed } = get();
         const merged = [...new Set([...dismissed, ...ids])];
+        const unreadIds = get().unreadIds.filter((id) => !ids.includes(id));
         set({
           dismissed: merged,
-          unreadCount: Math.max(0, get().unreadCount - ids.filter((id) => !dismissed.includes(id)).length),
+          unreadIds,
+          unreadCount: unreadIds.length,
         });
         if (outcome.status === "not_open_yet") set({ localOnly: true });
         return outcome;
       },
       remove: async (id) => {
+        const generation = liveGeneration();
+        const ownerId = get().ownerId;
         const outcome = await alertsApi.remove(id);
-        if (outcome.status === "failed") return outcome;
+        if (outcome.status === "failed" || generation !== liveGeneration() || ownerId !== get().ownerId) return outcome;
 
-        const { deleted, dismissed, unreadCount } = get();
+        const { deleted } = get();
+        const unreadIds = get().unreadIds.filter((unreadId) => unreadId !== id);
         set({
           deleted: deleted.includes(id) ? deleted : [...deleted, id],
           // A deleted alert cannot still be counted as unread.
-          unreadCount: dismissed.includes(id) ? unreadCount : Math.max(0, unreadCount - 1),
+          unreadIds,
+          unreadCount: unreadIds.length,
         });
         if (outcome.status === "not_open_yet") set({ localOnly: true });
         return outcome;
@@ -115,6 +140,13 @@ export const useAlertsStore = create<AlertsState>()(
         }
         return last;
       },
+      refresh: async () => {
+        const version = ++readVersion;
+        const generation = liveGeneration();
+        const items = await api.listNotifications();
+        if (version === readVersion && generation === liveGeneration()) get().syncFrom(items);
+        return items;
+      },
       syncFrom: (alerts) => {
         const { dismissed, deleted } = get();
         // Drop ids the platform no longer serves so neither list can grow
@@ -122,24 +154,37 @@ export const useAlertsStore = create<AlertsState>()(
         const live = alerts.map((alert) => alert.id);
         const stillDismissed = dismissed.filter((id) => live.includes(id));
         const stillDeleted = deleted.filter((id) => live.includes(id));
+        const unreadIds = [...new Set(visibleAlerts(alerts, stillDeleted)
+          .filter((alert) => isAlertUnread(alert, stillDismissed))
+          .map((alert) => alert.id))];
         set({
           dismissed: stillDismissed,
           deleted: stillDeleted,
-          unreadCount: visibleAlerts(alerts, stillDeleted).filter((alert) =>
-            isAlertUnread(alert, stillDismissed),
-          ).length,
+          unreadIds,
+          unreadCount: unreadIds.length,
         });
       },
     }),
     {
-      name: "gridgo-supplier-alerts",
+      name: "gridgo-supplier-alerts-v2",
+      merge: (persisted, current) => {
+        const saved = persisted as Partial<AlertsState> | undefined;
+        if (!saved || (current.ownerBound && saved.ownerId !== current.ownerId)) return current;
+        return {
+          ...current,
+          ownerId: saved.ownerId ?? null,
+          dismissed: saved.dismissed ?? [],
+          deleted: saved.deleted ?? [],
+          localOnly: Boolean(saved.dismissed?.length || saved.deleted?.length),
+        };
+      },
       storage: createPersistStorage<
-        Pick<AlertsState, "dismissed" | "deleted" | "streamCursor">
+        Pick<AlertsState, "ownerId" | "dismissed" | "deleted">
       >(),
       partialize: (state) => ({
         dismissed: state.dismissed,
         deleted: state.deleted,
-        streamCursor: state.streamCursor,
+        ownerId: state.ownerId,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) state.hydrated = true;

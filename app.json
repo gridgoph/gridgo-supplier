@@ -2,6 +2,7 @@
   "expo": {
     "name": "GRIDGO Supplier",
     "slug": "gridgo-supplier",
+    "owner": "felyciaaa",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -29,6 +30,12 @@
     },
     "plugins": [
       "expo-router",
+      "expo-asset",
+      "expo-audio",
+      "expo-font",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser",
       "@clerk/expo",
       "expo-secure-store",
       [

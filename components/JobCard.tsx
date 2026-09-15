@@ -50,6 +50,10 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
         <StatusChip tone={status.tone} label={status.label} icon={status.icon} />
       </View>
 
+      <Text className="text-caption text-text-muted" numberOfLines={1}>
+        Order {job.id}
+      </Text>
+
       <View className="gap-0.5">
         <Text
           className={
@@ -80,7 +84,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${job.title}, ${status.label}${
+      accessibilityLabel={`${job.title}, order ${job.id}, ${status.label}${
         urgency.level === "overdue" ? ", late" : ""
       }`}
       className="gg-touch"

@@ -1,4 +1,4 @@
-import { useHeaderHeight } from "@react-navigation/elements";
+import { useHeaderHeight } from "expo-router/react-navigation";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -35,6 +35,7 @@ export default function ShopLocationScreen() {
   const headerHeight = useHeaderHeight();
 
   const saved: ShopPin | null = user?.shop ?? null;
+  const [initialPin] = useState(saved);
   const [pin, setPin] = useState<ShopPin | null>(saved);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -46,7 +47,7 @@ export default function ShopLocationScreen() {
       .then((profile) => {
         if (cancelled || !profile.shop) return;
         setPin((current) => {
-          if (current && saved && !isSamePin(current, saved)) return current;
+          if (current && initialPin && !isSamePin(current, initialPin)) return current;
           return profile.shop;
         });
       })
@@ -54,7 +55,7 @@ export default function ShopLocationScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialPin]);
 
   const problem = pinProblem(pin, pin?.label ?? "");
   const unchanged = isSamePin(saved, pin);

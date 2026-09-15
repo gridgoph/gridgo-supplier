@@ -14,9 +14,8 @@ type Props = { children: ReactNode };
 /**
  * Joins Clerk identity to GRIDGO's supplier projection.
  *
- * Clerk decides who the person is. The server-written role decides whether
- * this binary may ask for a supplier projection, and `gridgo-api` remains the
- * final authority for that projection and every protected operation.
+ * Clerk decides who the person is. GRIDGO validates this app’s membership
+ * and remains the authority for the supplier projection and protected operations.
  */
 export function ClerkSessionBridge({ children }: Props) {
   const { isLoaded, isSignedIn, getToken } = useAuth();
@@ -49,14 +48,8 @@ export function ClerkSessionBridge({ children }: Props) {
 
     const email = user.primaryEmailAddress?.emailAddress ?? null;
     const access = clerkAccessFor(user.publicMetadata);
-    if (access.kind === "mismatch") {
-      api.setTokenProvider(null);
-      api.setToken(null);
-      session.setClerkIdentity({ ...access, email });
-      return () => {
-        cancelled = true;
-      };
-    }
+    // Primary-role metadata cannot reject a supplier membership. Ask the API
+    // with this app's role header before deciding whether the account belongs here.
 
     const alreadyAdopted =
       session.identity.kind === "supplier" && session.user != null;
