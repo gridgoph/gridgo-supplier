@@ -309,9 +309,8 @@ api.setUnauthorizedHandler(() => {
 
 useSession.subscribe((state, previous) => {
   const next = state.user?.id ?? null;
-  const status = state.user?.verificationStatus;
-  if (next === (previous.user?.id ?? null) && status === previous.user?.verificationStatus) return;
-  setLiveOwner(next ? `${next}:${status ?? "approved"}` : null);
+  if (next === (previous.user?.id ?? null)) return;
+  setLiveOwner(next);
   useAlertsStore.getState().bindOwner(next);
   useToasts.getState().clear();
 });

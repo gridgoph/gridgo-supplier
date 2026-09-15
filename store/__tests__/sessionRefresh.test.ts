@@ -1,5 +1,5 @@
 import * as api from "@/lib/api";
-import { useSession } from "@/store/session";
+import { isMatchable, useSession } from "@/store/session";
 
 const supplier: api.User = {
   id: "supplier-refresh",
@@ -52,4 +52,32 @@ it("does not restore a profile from a previous session", async () => {
   pending.resolve(supplier);
   await refresh;
   expect(useSession.getState().user).toEqual(other);
+});
+
+it.each(["approval", "account switch", "sign-out"])("handles a pending listing write across %s", async (change) => {
+  useSession.getState().adoptClerkUser({ ...supplier, verificationStatus: "pending" });
+  api.setTokenProvider(null);
+  const started = deferred<void>();
+  const body = deferred<string>();
+  jest.spyOn(global, "fetch").mockImplementation(async () => {
+    started.resolve();
+    return { ok: true, status: 200, text: () => body.promise } as Response;
+  });
+  const write = api.updateCatalogItem("listing-1", 7, { basePriceMinor: 15000 });
+  await started.promise;
+
+  if (change === "approval") {
+    jest.spyOn(api, "me").mockResolvedValue(supplier);
+    await useSession.getState().refresh();
+    expect(isMatchable(useSession.getState().user)).toBe(true);
+  } else if (change === "account switch") {
+    useSession.getState().adoptClerkUser({ ...supplier, id: "other-supplier" });
+  } else {
+    useSession.getState().clearClerkIdentity();
+  }
+
+  const saved = { id: "listing-1", version: 8, basePriceMinor: 15000 };
+  body.resolve(JSON.stringify(saved));
+  if (change === "approval") await expect(write).resolves.toEqual(saved);
+  else await expect(write).rejects.toThrow("account changed");
 });
