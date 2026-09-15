@@ -110,6 +110,11 @@ describe("the release workflow bakes the deployed API URL into the bundle", () =
     expect(upload).toBeGreaterThan(verify);
   });
 
+  it("lets artifact storage quota fail without failing the signed job", () => {
+    const upload = apkSteps.find((step) => step.includes("upload-artifact"));
+    expect(upload).toMatch(/continue-on-error:\s*true/);
+  });
+
   it("destroys every credential however the job ends", () => {
     const cleanup = apkSteps.find((step) => step.includes("rm -f") && step.includes("release.jks"));
     expect(cleanup).toBeDefined();
@@ -146,6 +151,17 @@ describe("the APK reaches the captain's server only from the default branch", ()
     const published = apkSteps.findIndex((step) => step.includes("upload-apk supplier"));
 
     expect(published).toBeGreaterThan(verify);
+  });
+
+  it("publishes to the captain's server before the run artifact", () => {
+    const published = apkSteps.findIndex((step) => step.includes("upload-apk supplier"));
+    const release = apkSteps.findIndex((step) => step.includes("gh release create"));
+    const upload = apkSteps.findIndex((step) => step.includes("upload-artifact"));
+
+    expect(published).toBeGreaterThanOrEqual(0);
+    expect(release).toBeGreaterThanOrEqual(0);
+    expect(upload).toBeGreaterThan(published);
+    expect(upload).toBeGreaterThan(release);
   });
 });
 
