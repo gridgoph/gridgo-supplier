@@ -28,9 +28,9 @@ type Props = {
  * monochrome apart from the status chips: money the shop cannot act on must
  * never look like the screen's action.
  *
- * On the job, a shop-owned part that already has evidence also shows those
- * photographs. A payout list of several jobs does not — the picture belongs
- * next to the part it released.
+ * Evidence belongs beside its shop-owned milestone in the workspace, where
+ * the shop can distinguish evidence filed from money released. Earnings lists
+ * omit previews; file classification is shared with UploadList via lib/files.
  */
 export function MilestoneList({ milestones, showDetail = false, proofReloadVersion = 0 }: Props) {
   if (!milestones.length) return null;

@@ -11,14 +11,15 @@ import * as api from "@/lib/api";
  * which is honest but wrong in two ways a shop can feel: it does not follow
  * them to another phone, and it cannot delete anything.
  *
- * The platform is adding mark-one-read, mark-many-read and delete. This module
- * calls them and treats a missing route as a fact rather than a failure, so the
- * app works either side of that release.
+ * Mark-read uses PATCH /notifications/:id; mark-many composes those same
+ * per-id writes. Delete uses DELETE /notifications/:id. This module treats a
+ * missing route as a fact rather than a failure across platform deployments.
  *
  * **When the routes land**: point this module at the shipped shapes, then
  * delete `store/alerts.ts`'s `dismissed` and `deleted` lists — the whole
  * device-local fallback — and the caveat lines on `app/alerts.tsx` that exist
- * to describe it. Nothing else reads them.
+ * to describe it. Update the unread reconciliation and toast filters that use
+ * those lists to honor the server's read/delete state.
  */
 
 export type AlertWriteOutcome =

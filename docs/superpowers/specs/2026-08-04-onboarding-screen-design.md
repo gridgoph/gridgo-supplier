@@ -16,14 +16,14 @@ Explicitly out of scope: role selection, sign-in, and once-only gating. Those wa
 
 ## 2. Dependencies
 
-Two new packages, both installed through Expo so versions match SDK 54:
+Install through Expo so versions match the SDK declared in [package.json](../../../package.json):
 
 | Package | Purpose | Command |
 |---|---|---|
 | `react-native-svg` | Peer dependency of Lucide. Also renders the grid mark and the hero illustration. | `npx expo install react-native-svg` |
 | `lucide-react-native` | The app's icon system. | `npx expo install lucide-react-native` |
 
-`react-native-reanimated` (4.1.1) and `react-native-safe-area-context` (5.6.0) are already installed and need no change.
+Existing animation and safe-area dependencies are declared in [package.json](../../../package.json).
 
 ### Icon library decision
 

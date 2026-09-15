@@ -62,7 +62,8 @@ export default function NotificationsScreen() {
    * looking at. And moving it between sections changes its parent, which
    * unmounts it mid-swipe: the same class of hang as wrapping only the unread
    * ones in a gesture handler. The card restyles in place and moves on the
-   * next load, which is when a person expects a list to reorganise.
+   * next focus or pull-to-refresh load. Silent live refreshes preserve existing
+   * section membership so they cannot interrupt another swipe.
    */
   const [{ items, newAtLoad }, setInbox] = useState<{ items: api.Notification[]; newAtLoad: string[] }>({ items: [], newAtLoad: [] });
   const [jobs, setJobs] = useState<api.Order[]>([]);

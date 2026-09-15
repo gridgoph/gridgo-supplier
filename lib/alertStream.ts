@@ -20,7 +20,12 @@ export function readNotificationEvent(event: SseEvent): api.Notification | null 
   } catch { return null; }
 }
 
-/** One authenticated XHR stream, bounded heartbeat timeout and fresh bearer on retry. */
+/**
+ * One authenticated XHR stream with a fresh bearer on every retry, including
+ * after 401 or a missing route. Resume with Last-Event-ID within this handle;
+ * 409 drops the cursor and asks the caller to reconcile before reconnecting.
+ * A watchdog bounds token/heartbeat waits, and reconnecting bounds responseText.
+ */
 export function openAlertStream(handlers: AlertStreamHandlers): AlertStreamHandle {
   let closed = false;
   let attempt = 0;

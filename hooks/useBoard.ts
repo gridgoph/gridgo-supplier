@@ -225,8 +225,8 @@ export type ListingData = {
  * from a sheet would throw them away — but coming back from the photo screen
  * with a stale zero-photo listing is exactly the bug that made a shop think its
  * samples had not saved. So `holdRefresh` is the screen's own answer to "am I
- * holding unsaved words?", checked on every focus, and every write calls
- * `reload` outright.
+ * holding unsaved words?", checked on focus/live refresh and again when that
+ * response arrives. Explicit reloads after local writes advance the baseline.
  */
 export function useListing(
   itemId: string | null,

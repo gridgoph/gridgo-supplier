@@ -27,9 +27,8 @@ const listeners = new Set<() => void>();
 
 function applyPreference(next: ThemePreference) {
   // react-native-web has no `setColorScheme`, so calling it unguarded throws
-  // and the in-app override dies on the web build. The CSS layer below is what
-  // actually switches the theme there; on iOS and Android this is what makes
-  // native chrome follow the choice too.
+  // and the in-app override dies on the web build. On iOS and Android this
+  // makes native chrome follow the choice too; web follows the system.
   if (typeof Appearance.setColorScheme === "function") {
     Appearance.setColorScheme(next === "system" ? "unspecified" : next);
   }

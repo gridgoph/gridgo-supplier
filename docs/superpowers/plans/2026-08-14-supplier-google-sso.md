@@ -6,7 +6,7 @@
 
 **Architecture:** Keep Clerk's browser SSO and the existing session bridge. Add the default callback as an unguarded Expo Router route, activate every returned Clerk session before navigating home, and translate supplier projection authorization failures into access-screen copy through the API error boundary.
 
-**Tech Stack:** Expo SDK 54, Expo Router 6.0.24, React Native, TypeScript, `@clerk/expo` 4.2.8, Zustand, Jest.
+**Tech Stack:** See [package.json](../../../package.json) for the current dependencies and [package-lock.json](../../../package-lock.json) for resolved versions.
 
 ## Global Constraints
 

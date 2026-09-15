@@ -10,16 +10,10 @@ import { createPersistStorage } from "@/lib/persistStorage";
 /**
  * Which alerts the shop has dealt with, and the badge that follows.
  *
- * Every change here goes to GRIDGO first (`lib/alertsApi`). Two of the three
- * routes are new and may not be deployed yet, so when one answers "not there",
- * the decision is remembered on this device instead — which is what this app
- * did for everything before those routes existed.
- *
- * **The device-local half is temporary.** When mark-read and delete are live,
- * `dismissed` and `deleted` should be deleted outright along with the caveat
- * lines that describe them; `lib/alertsApi` names the rest of the cleanup. A
- * dismissal this phone remembers does not follow a shop to another phone, and
- * nothing in the app claims otherwise.
+ * lib/alertsApi owns the temporary device-local fallback and its removal plan.
+ * Keep persisted decisions scoped to their owner, including while identity is
+ * restoring. Reconcile reads through refresh; writes remove unread ids rather
+ * than subtracting counts, because a read may already reflect the write.
  */
 
 type AlertsState = {
@@ -34,8 +28,8 @@ type AlertsState = {
   deleted: string[];
   hydrated: boolean;
   /**
-   * Last stream event this phone has already seen. The live socket must resume
-   * from here; opening with no cursor replays the whole inbox as if it were new.
+   * Legacy cursor slot, no longer persisted or used by useAlertStream.
+   * The transport owns its cursor for the lifetime of one connection handle.
    */
   streamCursor: string | null;
   rememberStreamCursor: (id: string | null) => void;

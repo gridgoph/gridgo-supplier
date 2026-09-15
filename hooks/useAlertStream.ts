@@ -6,7 +6,13 @@ import { useSession } from "@/store/session";
 import { useAlertsStore } from "@/store/alerts";
 import { shouldToast, useToasts, useViewing } from "@/store/toasts";
 
-/** One connection per signed-in app. Inbox replay never replaces resource reconciliation. */
+/**
+ * Foreground reconciliation for one signed-in supplier. Resource hints trigger
+ * fresh reads; they never carry domain state or grant access. Reconnect/resume
+ * reconciles all resources, and an unavailable stream falls back to a read
+ * every 30 seconds while foregrounded. Backgrounding closes the connection.
+ * Only newly dated, unseen notifications may toast; replay still refreshes data.
+ */
 export function useAlertStream(enabled = true): void {
   const userId = useSession((s) => s.user?.id ?? null);
   const verification = useSession((s) => s.user?.verificationStatus);

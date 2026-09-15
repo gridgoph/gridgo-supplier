@@ -12,10 +12,11 @@ import { isMatchable, isSignedIn, useSession } from "@/store/session";
  * Push, wired to the app: registration, token rotation, and opening the right
  * screen when a shop taps an alert.
  *
- * Mounted once, from the root layout. Everything it decides comes from
- * `lib/push.ts`; everything it stores goes through `store/push.ts`. Ported from
- * `gridgo-client`; two things are this app's, both because a shop's session has
- * a state a customer's does not — see `isMatchable` in `store/session.ts`.
+ * Mounted once in the root layout. Taps wait for session and navigation, then
+ * resolve ownership through the inbox or an authorized order read. Approved
+ * suppliers use lib/push's destination; pending suppliers open Alerts. Offline
+ * taps remain pending for reconciliation, and account changes discard them.
+ * Registration and token storage belong to store/push.
  */
 
 /**
@@ -75,11 +76,9 @@ withoutNativeModule(() => {
 /**
  * Make the unread badge agree with the platform.
  *
- * A foreground arrival is spent on this and nothing else. `useAlertStream`
- * already increments the badge and toasts a live alert on whatever screen the
- * shop is on, and a push is the same record — so this recomputes from the list
- * rather than adding to it, which is what makes the two legs safe to run at
- * once. A failure costs nothing: every list in this app reloads on focus.
+ * Foreground push also invalidates resources. Push, stream and screen reads
+ * share the store's ordered refresh boundary, so an older snapshot cannot
+ * replace a newer badge. A failed read catches up on a later refresh.
  */
 async function refreshUnread(): Promise<void> {
   try {
@@ -190,7 +189,7 @@ export function usePushNotifications(): void {
     );
 
     // A push landing in the foreground shows nothing (see the handler above);
-    // its whole effect is that the unread badge catches up.
+    // reconcile resources and the unread badge through their shared boundaries.
     const received = withoutNativeModule(() =>
       Notifications?.addNotificationReceivedListener(() => {
         invalidate("*");

@@ -312,7 +312,7 @@ export type ResolveApiBaseInput = {
    * Dev-server host strings from expo-constants (`host:port`, URLs, etc.).
    * First parseable hostname wins.
    */
-  hostCandidates?: Array<string | null | undefined>;
+  hostCandidates?: (string | null | undefined)[];
   /** `Platform.OS` value used for the Android emulator loopback remap. */
   platformOS?: string;
   /**
@@ -346,7 +346,7 @@ export function hostnameFromHostUri(value: string | null | undefined): string | 
 }
 
 /** Collect populated host fields across Expo Go, dev builds, and legacy manifests. */
-function collectExpoHostCandidates(): Array<string | null | undefined> {
+function collectExpoHostCandidates(): (string | null | undefined)[] {
   const manifest = Constants.manifest as { debuggerHost?: string; hostUri?: string } | null;
   const manifest2 = Constants.manifest2 as {
     extra?: { expoClient?: { hostUri?: string; debuggerHost?: string } };
@@ -616,23 +616,12 @@ export async function enrollSupplier(
    these, this block is what changes.
    -------------------------------------------------------------------------- */
 
-/**
- * Provisional. Mark one of the caller's own notifications read.
- *
- * The record has carried a `read` flag since v2; nothing could set it. These
- * three are the routes that close that gap.
- */
+/** Mark one owned notification read; lib/alertsApi owns deployment fallback. */
 export async function markNotificationRead(id: string): Promise<void> {
   await request(`/notifications/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ read: true }) });
 }
 
-/**
- * Provisional. Mark a named set read.
- *
- * The ids are explicit on purpose. A bodyless "mark everything" would also
- * mark alerts that arrived while the shop was reading the screen — things it
- * has never seen — and a read flag that lies is worse than no read flag.
- */
+/** Mark a named set read; lib/alertsApi.markAllRead owns the visible-id invariant. */
 export async function markNotificationsRead(ids: string[]): Promise<void> {
   await Promise.all(ids.map((id) => request(`/notifications/${encodeURIComponent(id)}`, {
     method: "PATCH", body: JSON.stringify({ read: true }),
@@ -926,7 +915,7 @@ export async function withdrawSupplierService(
 
 export type NotificationInbox = {
   notifications: Notification[];
-  /** Last append for this shop. Open the live stream from here, or it will replay the inbox. */
+  /** Optional inbox resume hint; the current live hook reconciles instead of seeding from it. */
   snapshot: string | null;
 };
 
@@ -1408,4 +1397,3 @@ export function formatPhp(minor: number): string {
     maximumFractionDigits: 2,
   })}`;
 }
-

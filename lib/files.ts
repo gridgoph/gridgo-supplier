@@ -77,8 +77,8 @@ const PROOF_IMAGE_EXT = /\.(jpe?g|png|webp)$/i;
  * Whether this upload is a photograph the shop should see as pixels.
  *
  * GRIDGO stores JPEG, PNG, WebP and PDF as evidence. A PDF is a document, not a
- * broken image — the type the phone reported wins, and the filename is only
- * consulted when it reported nothing.
+ * broken image — an explicit MIME type wins. A missing or generic
+ * application/octet-stream type falls back to the filename extension.
  */
 export function isProofImage(item: { mimeType: string | null; fileName: string }): boolean {
   const mime = (item.mimeType ?? "").toLowerCase().split(";")[0].trim();

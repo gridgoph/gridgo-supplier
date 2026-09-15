@@ -82,8 +82,8 @@ export default function ShopDetailsScreen() {
   /**
    * `adoptDraft` is the difference between the two reasons this runs. Coming
    * back to the screen must not swallow what the shop is halfway through
-   * typing, so a focus reload keeps the draft; asking for the latest after a
-   * conflict is the one case where GRIDGO's values should replace it.
+   * typing, so focus/live reloads keep the draft and its original profile
+   * version together. Explicit adoption after a conflict replaces both.
    */
   const load = useCallback(async (adoptDraft: boolean) => {
     const current = beginRead();
