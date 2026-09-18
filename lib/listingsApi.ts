@@ -1,6 +1,7 @@
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { fileFormatName } from "@/data/fileFormats";
+import { invalidate } from "@/lib/live";
 import {
   LISTING_CAPS,
   nextFreeSlot,
@@ -71,6 +72,20 @@ async function attempt<T>(
     if (isRouteAbsent(error)) return { status: "not_open_yet" };
     return { status: "failed", message: humanizeApiError(error, offlineMessage(subject)) };
   }
+}
+
+/**
+ * A write that must refresh the wall. Catalogues stays focused under the
+ * editor (`freezeOnBlur: false`), so `useFocusEffect` alone will not reload
+ * after `router.back()` — `useLiveRefresh` only hears this invalidate.
+ */
+async function attemptWrite<T>(
+  subject: string,
+  call: () => Promise<T>,
+): Promise<BoardOutcome<T>> {
+  const result = await attempt(subject, call);
+  if (result.status === "ok") invalidate("catalog");
+  return result;
 }
 
 /**
@@ -159,7 +174,7 @@ export type NewListingInput = {
 export async function createListing(
   input: NewListingInput,
 ): Promise<BoardOutcome<Listing>> {
-  return attempt("open this listing", async () => {
+  return attemptWrite("open this listing", async () => {
     const body: Record<string, unknown> = {
       supplierServiceId: input.serviceLineId,
       subcategoryCode: input.subcategoryCode,
@@ -209,7 +224,7 @@ export async function saveListing(
   listing: Listing,
   patch: ListingPatch,
 ): Promise<BoardOutcome<Listing>> {
-  return attempt("save this listing", async () => {
+  return attemptWrite("save this listing", async () => {
     const subcategoryCode = patch.subcategoryCode ?? listing.subcategoryCode;
     const body: ListingPatch = { ...patch };
     if (Object.hasOwn(patch, "printerMaxWidthFeet") || Object.hasOwn(patch, "subcategoryCode")) {
@@ -244,7 +259,7 @@ export const ARCHIVED_SENTENCE =
 export async function removeListing(
   listing: Listing,
 ): Promise<BoardOutcome<RemovalOutcome>> {
-  return attempt("remove this listing", async () => {
+  return attemptWrite("remove this listing", async () => {
     const body = await api.deleteCatalogItem(listing.id, listing.version);
     // An archived listing comes back as the item itself, still there and no
     // longer active. A deleted one comes back with nothing to return.
@@ -281,6 +296,7 @@ export async function setFileFormats(
       ),
     );
     if (!saved) return { status: "failed", message: UNREADABLE_LISTING };
+    invalidate("catalog");
     return { status: "ok", value: saved };
   } catch (error) {
     if (isRouteAbsent(error)) return { status: "not_open_yet" };
@@ -329,7 +345,7 @@ export async function addGroup(
     firstOption: { label: string; priceModifierMinor: number };
   },
 ): Promise<BoardOutcome<null>> {
-  return attempt(input.kind === "addon" ? "add this add-on" : "add this step", async () => {
+  return attemptWrite(input.kind === "addon" ? "add this add-on" : "add this step", async () => {
     await api.createCatalogOptionGroup(listing.id, listing.version, {
       name: input.name,
       kind: input.kind,
@@ -357,7 +373,7 @@ export async function saveGroup(
   group: SpecGroup,
   patch: { name?: string; required?: boolean; helpText?: string | null; sortOrder?: number },
 ): Promise<BoardOutcome<null>> {
-  return attempt("save this step", async () => {
+  return attemptWrite("save this step", async () => {
     await api.updateCatalogOptionGroup(listing.id, group.id, group.version, patch);
     return null;
   });
@@ -367,7 +383,7 @@ export async function removeGroup(
   listing: Listing,
   group: SpecGroup,
 ): Promise<BoardOutcome<null>> {
-  return attempt("remove this step", async () => {
+  return attemptWrite("remove this step", async () => {
     await api.deleteCatalogOptionGroup(listing.id, group.id, group.version);
     return null;
   });
@@ -384,7 +400,7 @@ export async function addOption(
   group: SpecGroup,
   input: { label: string; priceModifierMinor: number; priceMultiplierBps?: number | null },
 ): Promise<BoardOutcome<null>> {
-  return attempt("add this choice", async () => {
+  return attemptWrite("add this choice", async () => {
     await api.createCatalogOption(group.id, group.version, {
       label: input.label,
       priceModifierMinor: input.priceModifierMinor,
@@ -405,7 +421,7 @@ export async function saveOption(
   optionId: string,
   patch: { label?: string; priceModifierMinor?: number; active?: boolean; sortOrder?: number },
 ): Promise<BoardOutcome<null>> {
-  return attempt("save this choice", async () => {
+  return attemptWrite("save this choice", async () => {
     await api.updateCatalogOption(group.id, optionId, group.version, patch);
     return null;
   });
@@ -415,7 +431,7 @@ export async function removeOption(
   group: SpecGroup,
   optionId: string,
 ): Promise<BoardOutcome<null>> {
-  return attempt("remove this choice", async () => {
+  return attemptWrite("remove this choice", async () => {
     await api.deleteCatalogOption(group.id, optionId, group.version);
     return null;
   });
@@ -437,7 +453,7 @@ export async function setPhotoOrder(
   listing: Listing,
   fileIds: string[],
 ): Promise<BoardOutcome<null>> {
-  return attempt("reorder your sample photos", async () => {
+  return attemptWrite("reorder your sample photos", async () => {
     await api.reorderCatalogItemPhotos(listing.id, listing.version, fileIds);
     return null;
   });
@@ -454,7 +470,7 @@ export async function attachPhoto(
   itemId: string,
   sortOrder: number,
 ): Promise<BoardOutcome<null>> {
-  return attempt("file this photo with GRIDGO", async () => {
+  return attemptWrite("file this photo with GRIDGO", async () => {
     await api.attachCatalogItemPhoto(fileId, itemId, sortOrder);
     return null;
   });
@@ -482,7 +498,7 @@ export async function addPrepStep(
   steps: readonly PrepStep[],
   input: { title: string; body: string },
 ): Promise<BoardOutcome<null>> {
-  return attempt("add this step", async () => {
+  return attemptWrite("add this step", async () => {
     await api.createPrepStep(listing.id, listing.version, {
       ...input,
       sortOrder: nextFreeSlot(
@@ -505,7 +521,7 @@ export async function reorderPrepSteps(
   listing: Listing,
   steps: readonly PrepStep[],
 ): Promise<BoardOutcome<null>> {
-  return attempt("reorder these steps", async () => {
+  return attemptWrite("reorder these steps", async () => {
     await api.reorderPrepSteps(
       listing.id,
       listing.version,
@@ -519,7 +535,7 @@ export async function removePrepStep(
   listing: Listing,
   stepId: string,
 ): Promise<BoardOutcome<null>> {
-  return attempt("remove this step", async () => {
+  return attemptWrite("remove this step", async () => {
     await api.deletePrepStep(listing.id, stepId, listing.version);
     return null;
   });

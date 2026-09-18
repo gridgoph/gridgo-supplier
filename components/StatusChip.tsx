@@ -55,7 +55,7 @@ export function StatusChip({ tone, label, icon }: Props) {
   const Icon = ICONS[icon];
 
   return (
-    <View className={`gg-chip ${style.border}`} accessibilityRole="text">
+    <View className={`gg-chip max-w-full ${style.border}`} accessibilityRole="text">
       {/*
         lucide-react-native forwards `testID` as the web-only `data-testid`
         attribute rather than the native `testID` prop (see Icon.js), so it
@@ -66,7 +66,9 @@ export function StatusChip({ tone, label, icon }: Props) {
       <View testID="status-chip-icon">
         <Icon size={13} color={colors[style.token]} strokeWidth={2} />
       </View>
-      <Text className={`text-caption ${style.text}`}>{label}</Text>
+      <Text className={`shrink text-caption ${style.text}`} numberOfLines={1}>
+        {label}
+      </Text>
     </View>
   );
 }

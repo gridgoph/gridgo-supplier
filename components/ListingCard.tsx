@@ -35,9 +35,10 @@ type Props = {
  * board: what it is called, and what it costs. How fast it goes out lives on
  * the list and inside the listing.
  *
- * The chip is only drawn when something is wrong or hidden. A tile that is up
- * and finished says so by being plain — a wall of green ticks is a wall nobody
- * reads.
+ * Every tile carries its standing chip — Live, Hidden, Not ready yet, or
+ * Waiting for shop approval — so a wall of samples still says what GRIDGO
+ * decided. The chip sits under the price so a long label wraps the chip row,
+ * not the peso line.
  *
  * Removing one is a press and hold rather than a control on every tile. A wall
  * of samples with a bin drawn on each of them stops reading as a wall, and the
@@ -96,11 +97,9 @@ export function ListingCard({
           <Text className="text-body text-text-primary" numberOfLines={1}>
             {priceLine(listing)}
           </Text>
-          {standing.label === "On the board" ? null : (
-            <View className="mt-1 flex-row">
-              <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
-            </View>
-          )}
+          <View className="mt-1 flex-row flex-wrap">
+            <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
+          </View>
         </View>
       </Pressable>
     </View>

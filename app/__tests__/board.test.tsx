@@ -248,7 +248,7 @@ describe("the shop's board", () => {
     expect(await screen.findByText("Tarpaulin, 13oz")).toBeTruthy();
     expect(screen.getByText("Hidden cards")).toBeTruthy();
     (loadBoard as jest.Mock).mockResolvedValue(page([listing]));
-    await fireEvent.press(screen.getByRole("radio", { name: "On the board" }));
+    await fireEvent.press(screen.getByRole("radio", { name: "Live" }));
     await waitFor(() => expect(lastAsk().active).toBe(true));
     await waitFor(() => expect(screen.queryByText("Hidden cards")).toBeNull());
     expect(screen.getByText("Tarpaulin, 13oz")).toBeTruthy();
@@ -323,7 +323,7 @@ describe("the shop's board", () => {
 
     await screen.findByText("Tarpaulin, 13oz");
     await fireEvent(
-      screen.getByLabelText(/Tarpaulin, 13oz\..*On the board/),
+      screen.getByLabelText(/Tarpaulin, 13oz\..*Live/),
       "longPress",
     );
 
@@ -343,7 +343,7 @@ describe("the shop's board", () => {
 
     await screen.findByText("Tarpaulin, 13oz");
     await fireEvent(
-      screen.getByLabelText(/Tarpaulin, 13oz\..*On the board/),
+      screen.getByLabelText(/Tarpaulin, 13oz\..*Live/),
       "longPress",
     );
 
@@ -361,7 +361,7 @@ describe("the shop's board", () => {
 
     await screen.findByText("Tarpaulin, 13oz");
     await fireEvent(
-      screen.getByLabelText(/Tarpaulin, 13oz\..*On the board/),
+      screen.getByLabelText(/Tarpaulin, 13oz\..*Live/),
       "longPress",
     );
 

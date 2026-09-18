@@ -11,8 +11,8 @@ import { fileFormatName, isLinkFormat, PUBLISHED_FILE_FORMATS } from "@/data/fil
 import { formatPhp } from "@/lib/api";
 import {
   addOns,
-  boardBlockers,
   boardContextFor,
+  boardStanding,
   effectiveFormatCodes,
   effectiveTurnaroundHours,
   fromPriceMinor,
@@ -87,7 +87,7 @@ export default function ListingPreviewScreen() {
   }
 
   const context = boardContextFor(listing, services);
-  const blockers = boardBlockers(listing, context);
+  const standing = boardStanding(listing, context, approved);
   const hours = effectiveTurnaroundHours(listing, context.inheritedTurnaroundHours);
   const formats = effectiveFormatCodes(listing, context.inheritedFormatCodes);
   const uploads = formats.filter(
@@ -95,7 +95,7 @@ export default function ListingPreviewScreen() {
   );
   const links = formats.filter((code) => isLinkFormat(code));
   const unopened = formats.filter((code) => !uploads.includes(code) && !links.includes(code));
-  const visible = listing.onTheBoard && approved && !blockers.length;
+  const visible = standing.kind === "live";
 
   return (
     <View className="gg-screen">
@@ -111,9 +111,9 @@ export default function ListingPreviewScreen() {
           <Text className="min-w-0 flex-1 text-caption text-text-secondary">
             {visible
               ? "This is what a client sees today."
-              : blockers.length
-                ? `No client can see this yet. ${blockers[0]}`
-                : !listing.onTheBoard
+              : standing.kind === "not_ready"
+                ? `No client can see this yet. ${standing.note ?? standing.label}`
+                : standing.kind === "hidden"
                   ? "No client can see this yet — it is hidden. This is how it would read once it is up."
                   : "Operations has not approved your shop yet, so no client can see this. This is how it will read once they do."}
           </Text>
