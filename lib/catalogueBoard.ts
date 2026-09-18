@@ -1,7 +1,7 @@
 import type { CatalogListQuery } from "@/lib/api";
 import {
-  boardBlockers,
   boardContextFor,
+  gridgoNeeds,
   subcategoryName,
   type Listing,
   type ServiceLine,
@@ -33,7 +33,7 @@ export const PAGE_SIZE = 8;
 
 export const ON_BOARD_OPTIONS: readonly { value: OnBoardFilter; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "on_the_board", label: "On the board" },
+  { value: "on_the_board", label: "Live" },
   { value: "hidden", label: "Hidden" },
 ];
 
@@ -165,5 +165,5 @@ export const EMPTY_CUT_SENTENCE =
 export const HUNTING_LABEL = "Hunting your board";
 
 export function listingNeedsWork(listing: Listing, services: ServiceLine[]): boolean {
-  return boardBlockers(listing, boardContextFor(listing, services)).length > 0;
+  return gridgoNeeds(listing, boardContextFor(listing, services)).length > 0;
 }

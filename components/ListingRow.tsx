@@ -89,11 +89,9 @@ export function ListingRow({
           <Text className="text-caption text-text-muted" numberOfLines={1}>
             {readyInLine(hours)}
           </Text>
-          {standing.label === "On the board" ? null : (
-            <View className="mt-0.5 flex-row">
-              <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
-            </View>
-          )}
+          <View className="mt-0.5 flex-row flex-wrap">
+            <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
+          </View>
         </View>
         <View className="max-w-[42%] shrink-0 items-end gap-0.5 py-3">
           <Text className="text-body font-medium text-text-primary" numberOfLines={1}>

@@ -129,6 +129,14 @@ describe("reading what GRIDGO sends", () => {
     expect(normalizeListings({ items: [{ name: "No id" }, { id: "ok", name: "Ok" }] })).toHaveLength(1);
   });
 
+  it("reads GRIDGO's own blockers when the payload carries them", () => {
+    expect(
+      normalizeListing({ id: "item_b", name: "X", blockers: ["photo", "name"] })?.blockers,
+    ).toEqual(["photo", "name"]);
+    expect(normalizeListing({ id: "item_c", name: "X", blockers: [] })?.blockers).toEqual([]);
+    expect(normalizeListing({ id: "item_d", name: "X" })?.blockers).toBeNull();
+  });
+
   it("reads a starter's shape and counts what it brings", () => {
     const starters = normalizeStarters({
       starters: [
@@ -305,18 +313,59 @@ describe("what stops a listing going on the board", () => {
 describe("where a listing stands", () => {
   it("tells a waiting shop its finished listing is not visible yet", () => {
     const standing = boardStanding(READY, NOTHING_INHERITED, false);
-    expect(standing.label).toBe("On the board");
+    expect(standing.label).toBe("Waiting for shop approval");
+    expect(standing.tone).toBe("info");
+    expect(standing.icon).toBe("clock");
     expect(standing.note).toContain("Operations");
   });
 
   it("says nothing extra once the shop is approved and it is up", () => {
-    expect(boardStanding(READY, NOTHING_INHERITED, true).note).toBeNull();
+    const standing = boardStanding(READY, NOTHING_INHERITED, true);
+    expect(standing.label).toBe("Live");
+    expect(standing.note).toBeNull();
   });
 
   it("calls an unfinished listing unfinished, not hidden", () => {
     const standing = boardStanding({ ...READY, photos: [] }, NOTHING_INHERITED, true);
     expect(standing.label).toBe("Not ready yet");
     expect(standing.tone).toBe("warning");
+  });
+
+  /**
+   * Captain: a listing put on the board still said "Not ready yet".
+   *
+   * Trigger: the wall used the phone's editor checklist (`boardBlockers`),
+   * which also demands a description, a measure unit, hours and a pack count.
+   * GRIDGO's `catalogItemBlockers` does not. Masking condition: the shop left
+   * one of those extra fields blank — here, the description — and GRIDGO still
+   * accepted the listing onto the board (`blockers: []`, `active: true`).
+   * Symptom: the chip said "Not ready yet" after Put on the board.
+   *
+   * Earliest divergence: `boardStanding` read `boardBlockers` instead of the
+   * payload's own `blockers`.
+   */
+  it("follows GRIDGO's blockers, not the editor's extra checklist", () => {
+    const posted: Listing = {
+      ...READY,
+      description: "",
+      blockers: [],
+    };
+    expect(boardBlockers(posted, NOTHING_INHERITED)[0]).toContain("what this is");
+    const standing = boardStanding(posted, NOTHING_INHERITED, true);
+    expect(standing.label).toBe("Live");
+    expect(standing.tone).toBe("success");
+    expect(standing.icon).toBe("circle-check");
+    expect(standing.note).toBeNull();
+  });
+
+  it("believes GRIDGO when a sample is still pending, even if a file id is on the listing", () => {
+    const pending: Listing = {
+      ...READY,
+      blockers: ["photo"],
+    };
+    const standing = boardStanding(pending, NOTHING_INHERITED, true);
+    expect(standing.label).toBe("Not ready yet");
+    expect(standing.note).toContain("sample photo");
   });
 });
 
@@ -369,7 +418,11 @@ describe("where a shop may file a listing", () => {
 
   it("inherits the line's turnaround and formats", () => {
     const context = boardContextFor(READY, [line({ formatCodes: ["pdf"] })]);
-    expect(context).toEqual({ inheritedTurnaroundHours: 48, inheritedFormatCodes: ["pdf"] });
+    expect(context).toEqual({
+      inheritedTurnaroundHours: 48,
+      inheritedFormatCodes: ["pdf"],
+      serviceLive: false,
+    });
   });
 });
 

@@ -21,13 +21,17 @@ import {
  * groups or `kind=addon`; it has listings on a board, with steps a customer
  * walks and extras they can add. Two rules follow and both are load-bearing:
  *
- * - **A listing goes on the board or stays hidden.** Never "publish", "live" or
- *   "active" — those are the platform's words for a projection this app does
- *   not own. What a shop controls is whether its own sample is pinned up.
+ * - **A listing goes on the board or stays hidden.** The action is pinning it
+ *   up; the standing chip is Live / Hidden / Not ready yet / Waiting for shop
+ *   approval. "Publish" and "active" stay off the screen.
  * - **A blocker names the missing thing.** "Add at least one sample photo
  *   before it can go on the board", never a disabled button with no reason. A
  *   control that refuses without saying why is how a shop learns to stop
  *   pressing things.
+ * - **The wall's standing comes from GRIDGO's `blockers`.** `boardStanding`
+ *   reads that array (and `active`, service state, shop approval). The phone's
+ *   fuller checklist (`boardBlockers` / `editorGuidance`) is editor guidance
+ *   only — it must not decide the chip.
  *
  * The caps are the platform's (8 photos, 6 steps, 20 options each) and are
  * repeated here so a screen can stop a shop before GRIDGO has to.
@@ -239,6 +243,14 @@ export type Listing = {
   sortOrder: number;
   photos: SamplePhoto[];
   groups: SpecGroup[];
+  /**
+   * GRIDGO's own completeness codes from the list/read payload (`blockers`).
+   *
+   * Null when this listing was built locally or an older payload omitted them —
+   * standing then applies GRIDGO's rule to the fields we have. Never confuse
+   * this with `boardBlockers`, which is editor guidance and stricter.
+   */
+  blockers?: string[] | null;
   /** Sent back on every write so two sessions cannot overwrite each other. */
   version: number | null;
   updatedAt: string | null;
@@ -421,6 +433,12 @@ function readFormatCodes(value: unknown): string[] {
   return codes;
 }
 
+/** GRIDGO's completeness codes, or null when the payload did not send them. */
+function readBlockers(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+}
+
 export function normalizeListing(body: unknown, index = 0): Listing | null {
   const raw = single(body, "item", "catalogItem", "listing") ?? (isRecord(body) ? body : null);
   if (!raw) return null;
@@ -471,6 +489,7 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
       .map(readGroup)
       .filter((group): group is SpecGroup => group != null)
       .sort((a, b) => a.sortOrder - b.sortOrder),
+    blockers: readBlockers(pick(raw, "blockers")),
     version: num(pick(raw, "version", "expectedVersion")),
     updatedAt: str(pick(raw, "updatedAt", "updated_at")),
   };
@@ -713,30 +732,110 @@ export type BoardContext = {
   inheritedTurnaroundHours: number | null;
   /** The service line's own accepted formats, used when this listing inherits. */
   inheritedFormatCodes: string[];
+  /**
+   * Whether the accredited line is live. False demotes Live. Absent or null
+   * means we have not loaded the line yet — do not invent a wait.
+   */
+  serviceLive?: boolean | null;
 };
 
+const PHOTO_NEEDED = "Add at least one sample photo before it can go on the board.";
+const NAME_NEEDED = "Give this listing a name a client would recognise.";
+const PRICE_NEEDED = "Set your price before it can go on the board.";
+const KIND_NEEDED = "Choose the kind of work this listing is.";
+const PRINTER_CAP_NEEDED = "Set your max printer width in feet before it can go on the board.";
+const FORMATS_NEEDED = "Say which artwork files you accept for this listing.";
+const SERVICE_NEEDED = "This listing has no accredited category to sit under.";
+const SERVICE_NOT_LIVE = "This kind of work is not live yet.";
+
+/** GRIDGO's completeness codes → the sentence a shop reads. */
+const GRIDGO_BLOCKER_COPY: Record<string, string> = {
+  name: NAME_NEEDED,
+  base_price: PRICE_NEEDED,
+  subcategory: KIND_NEEDED,
+  printer_max_width_feet: PRINTER_CAP_NEEDED,
+  accepted_file_formats: FORMATS_NEEDED,
+  photo: PHOTO_NEEDED,
+  owning_service: SERVICE_NEEDED,
+};
+
+function emptyGroupSentence(group: SpecGroup): string {
+  return group.kind === "addon"
+    ? `Add at least one choice under the add-on “${group.name}”, or remove it.`
+    : `Add at least one option under “${group.name}”, or remove that step.`;
+}
+
+function presentGridgoCode(code: string, listing: Listing): string {
+  if (code.startsWith("option_group:")) {
+    const id = code.slice("option_group:".length);
+    const group = listing.groups.find((candidate) => candidate.id === id);
+    if (group) return emptyGroupSentence(group);
+    return "Add at least one option to every step, or remove the empty one.";
+  }
+  return GRIDGO_BLOCKER_COPY[code] ?? "GRIDGO still needs something on this listing.";
+}
+
 /**
- * Everything still missing, in the order it should be fixed.
+ * GRIDGO's own completeness rule, applied to the fields on the phone.
  *
- * Ordered by where a shop would go next: the photo it has to take, then the
- * words, then the money, then the detail. The first entry is the one the
- * disabled action shows, because a list of eight reasons is a wall, not a
- * next step.
+ * Matches `catalogItemBlockers` in gridgo-api: name, price, subcategory,
+ * printer cap for tarpaulins, accepted formats, at least one photo, an active
+ * option in every group. Description, measure unit, pack count and hours are
+ * not here — those are editor guidance.
+ *
+ * A photo still `pending_upload` is invisible to this local pass (we only have
+ * file ids). When the payload sent `blockers`, `gridgoNeeds` trusts that list.
  */
-export function boardBlockers(listing: Listing, context: BoardContext): string[] {
+function localGridgoNeeds(listing: Listing, context: BoardContext): string[] {
   const out: string[] = [];
 
-  if (!listing.photos.length) {
-    out.push("Add at least one sample photo before it can go on the board.");
+  if (!listing.photos.length) out.push(PHOTO_NEEDED);
+  if (!listing.name.trim()) out.push(NAME_NEEDED);
+  if (!Number.isSafeInteger(listing.basePriceMinor) || listing.basePriceMinor < 0) {
+    out.push(PRICE_NEEDED);
   }
-  if (!listing.name.trim()) {
-    out.push("Give this listing a name a client would recognise.");
+  if (!listing.subcategoryCode) out.push(KIND_NEEDED);
+  if (needsPrinterCap(listing.subcategoryCode) && !isPrinterCapSet(listing.printerMaxWidthFeet)) {
+    out.push(PRINTER_CAP_NEEDED);
   }
+  const emptyGroup = listing.groups.find(
+    (group) => !group.options.filter((option) => option.active).length,
+  );
+  if (emptyGroup) out.push(emptyGroupSentence(emptyGroup));
+  if (!effectiveFormatCodes(listing, context.inheritedFormatCodes).length) {
+    out.push(FORMATS_NEEDED);
+  }
+
+  return out;
+}
+
+/**
+ * What GRIDGO still needs, in shop-facing sentences.
+ *
+ * Prefers the payload's `blockers` when GRIDGO sent them, then unions any
+ * local misses so an unsaved draft that cleared the name still gates Put on
+ * the board. The wall's chip is this list, never `boardBlockers`.
+ */
+export function gridgoNeeds(listing: Listing, context: BoardContext): string[] {
+  const local = localGridgoNeeds(listing, context);
+  if (!Array.isArray(listing.blockers)) return local;
+  const fromApi = listing.blockers.map((code) => presentGridgoCode(code, listing));
+  const seen = new Set(fromApi);
+  return [...fromApi, ...local.filter((line) => !seen.has(line))];
+}
+
+/**
+ * Extra asks the editor makes that GRIDGO does not require to put a listing
+ * on the board. The wall must never consult this list.
+ */
+export function editorGuidance(listing: Listing, context: BoardContext): string[] {
+  const out: string[] = [];
+
   if (!listing.description.trim()) {
     out.push("Say what this is, so a client knows what they are ordering.");
   }
-  if (listing.basePriceMinor <= 0) {
-    out.push("Set your price before it can go on the board.");
+  if (listing.basePriceMinor === 0) {
+    out.push(PRICE_NEEDED);
   }
   if (listing.pricingUnit === "per_package" && (listing.packageQty ?? 0) < 2) {
     out.push("Say how many pieces are in a pack.");
@@ -746,13 +845,8 @@ export function boardBlockers(listing: Listing, context: BoardContext): string[]
       out.push("Say what you measure in — feet, inches, metres — so a client can be asked for a size.");
     }
   }
-  if (
-    (listing.minimumWidthMilli == null) !== (listing.minimumHeightMilli == null)
-  ) {
+  if ((listing.minimumWidthMilli == null) !== (listing.minimumHeightMilli == null)) {
     out.push("A smallest billable size needs both a width and a height.");
-  }
-  if (needsPrinterCap(listing.subcategoryCode) && !isPrinterCapSet(listing.printerMaxWidthFeet)) {
-    out.push("Set your max printer width in feet before it can go on the board.");
   }
   if (
     listing.turnaroundMode === "override" &&
@@ -763,74 +857,103 @@ export function boardBlockers(listing: Listing, context: BoardContext): string[]
     out.push("Your shop has no usual turnaround yet. Set the hours for this listing.");
   }
 
-  const emptyGroup = listing.groups.find(
-    (group) => !group.options.filter((option) => option.active).length,
-  );
-  if (emptyGroup) {
-    out.push(
-      emptyGroup.kind === "addon"
-        ? `Add at least one choice under the add-on “${emptyGroup.name}”, or remove it.`
-        : `Add at least one option under “${emptyGroup.name}”, or remove that step.`,
-    );
-  }
-
-  if (!effectiveFormatCodes(listing, context.inheritedFormatCodes).length) {
-    out.push("Say which artwork files you accept for this listing.");
-  }
-
   return out;
 }
 
-export function isComplete(listing: Listing, context: BoardContext): boolean {
-  return boardBlockers(listing, context).length === 0;
+/**
+ * The editor's full checklist: GRIDGO's rule plus the extra guidance.
+ *
+ * Ordered by where a shop would go next. The first GRIDGO miss is what
+ * disables Put on the board; the extras are shown, not enforced, on the wall.
+ */
+export function boardBlockers(listing: Listing, context: BoardContext): string[] {
+  const gridgo = localGridgoNeeds(listing, context);
+  const extras = editorGuidance(listing, context).filter((line) => !gridgo.includes(line));
+  return [...gridgo, ...extras];
 }
 
+export function isComplete(listing: Listing, context: BoardContext): boolean {
+  return gridgoNeeds(listing, context).length === 0;
+}
+
+export const BOARD_STANDING_LABEL = {
+  live: "Live",
+  hidden: "Hidden",
+  not_ready: "Not ready yet",
+  waiting_approval: "Waiting for shop approval",
+} as const;
+
+export type BoardStandingKind = keyof typeof BOARD_STANDING_LABEL;
+
 export type BoardStanding = {
-  /** "On the board" / "Hidden" / "Not ready yet". Icon and colour never alone. */
+  kind: BoardStandingKind;
+  /** Live / Hidden / Not ready yet / Waiting for shop approval. */
   label: string;
-  tone: "success" | "warning" | "neutral";
-  icon: "circle-check" | "triangle-alert" | "square-pen";
+  tone: "success" | "warning" | "neutral" | "info";
+  icon: "circle-check" | "triangle-alert" | "square-pen" | "clock";
   /** One line under it, or null when the label says everything. */
   note: string | null;
 };
 
+const WAITING_NOTE = "Clients will see it as soon as Operations approves your shop.";
+
 /**
- * Where this listing stands, said once.
+ * Where this listing stands, said once — wall, list, and editor header.
  *
- * A shop that is still with Operations may build and finish a listing; nothing
- * is shown to a client until GRIDGO approves the shop. Saying that here is the
- * difference between a wait a shop understands and a screen that looks broken.
+ * GRIDGO's decision, not the phone's editor checklist. A shop that is still
+ * with Operations may build and finish a listing; nothing is shown to a client
+ * until GRIDGO approves the shop. Saying that here is the difference between a
+ * wait a shop understands and a screen that looks broken.
  */
 export function boardStanding(
   listing: Listing,
   context: BoardContext,
   shopApproved: boolean,
 ): BoardStanding {
-  const blockers = boardBlockers(listing, context);
+  const needs = gridgoNeeds(listing, context);
 
-  if (blockers.length) {
+  if (needs.length) {
     return {
-      label: "Not ready yet",
+      kind: "not_ready",
+      label: BOARD_STANDING_LABEL.not_ready,
       tone: "warning",
       icon: "triangle-alert",
-      note: blockers[0],
+      note: needs[0],
     };
   }
   if (!listing.onTheBoard) {
     return {
-      label: "Hidden",
+      kind: "hidden",
+      label: BOARD_STANDING_LABEL.hidden,
       tone: "neutral",
       icon: "square-pen",
       note: "Ready to go up. Clients cannot see it while it is hidden.",
     };
   }
+  if (!shopApproved) {
+    return {
+      kind: "waiting_approval",
+      label: BOARD_STANDING_LABEL.waiting_approval,
+      tone: "info",
+      icon: "clock",
+      note: WAITING_NOTE,
+    };
+  }
+  if (context.serviceLive === false) {
+    return {
+      kind: "not_ready",
+      label: BOARD_STANDING_LABEL.not_ready,
+      tone: "warning",
+      icon: "triangle-alert",
+      note: SERVICE_NOT_LIVE,
+    };
+  }
   return {
-    label: "On the board",
+    kind: "live",
+    label: BOARD_STANDING_LABEL.live,
     tone: "success",
     icon: "circle-check",
-    note: shopApproved
-      ? null
-      : "Clients will see it as soon as Operations approves your shop.",
+    note: null,
   };
 }
 
@@ -902,6 +1025,7 @@ export function boardContextFor(
   return {
     inheritedTurnaroundHours: line?.turnaroundHours ?? null,
     inheritedFormatCodes: line?.formatCodes ?? [],
+    serviceLive: line ? line.state === "live" : null,
   };
 }
 
@@ -1010,7 +1134,7 @@ export function boardPrompt(
   }
 
   const unfinished = listings.filter(
-    (listing) => boardBlockers(listing, boardContextFor(listing, services)).length > 0,
+    (listing) => gridgoNeeds(listing, boardContextFor(listing, services)).length > 0,
   );
 
   if (unfinished.length) {
@@ -1021,7 +1145,7 @@ export function boardPrompt(
           ? "One listing is not finished"
           : `${unfinished.length} listings are not finished`,
       body: `${unfinished[0].name || "A listing"} still needs something before clients can see it. ${
-        boardBlockers(unfinished[0], boardContextFor(unfinished[0], services))[0]
+        gridgoNeeds(unfinished[0], boardContextFor(unfinished[0], services))[0]
       }`,
       actionLabel: "Finish your board",
     };

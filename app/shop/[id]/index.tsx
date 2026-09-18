@@ -31,9 +31,10 @@ import { spacing } from "@/constants/theme";
 import {
   addOns,
   asksQuantity,
-  boardBlockers,
   boardContextFor,
   boardStanding,
+  editorGuidance,
+  gridgoNeeds,
   LISTING_CAPS,
   MEASURE_UNITS,
   unitLine,
@@ -142,7 +143,8 @@ export default function ListingScreen() {
     () => (merged ? boardContextFor(merged, services) : null),
     [merged, services],
   );
-  const blockers = merged && context ? boardBlockers(merged, context) : [];
+  const blockers = merged && context ? gridgoNeeds(merged, context) : [];
+  const extras = merged && context ? editorGuidance(merged, context) : [];
   const standing = merged && context ? boardStanding(merged, context, approved) : null;
 
   /** Every write goes through here, so one failure sentence has one home. */
@@ -911,6 +913,18 @@ export default function ListingScreen() {
               {blockers.map((blocker) => (
                 <Text key={blocker} className="text-body text-text-secondary">
                   {blocker}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+          {extras.length ? (
+            <View className="gg-panel gap-2">
+              <Text className="text-body font-medium text-text-primary">
+                Worth filling in
+              </Text>
+              {extras.map((line) => (
+                <Text key={line} className="text-body text-text-secondary">
+                  {line}
                 </Text>
               ))}
             </View>

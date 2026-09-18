@@ -168,7 +168,7 @@ export function BoardRail({
           <View
             className="flex-row flex-wrap items-center gap-2"
             accessibilityRole="radiogroup"
-            accessibilityLabel="On the board or hidden"
+            accessibilityLabel="Live or hidden"
           >
             {ON_BOARD_OPTIONS.map((option) => {
               const selected = query.onBoard === option.value;
