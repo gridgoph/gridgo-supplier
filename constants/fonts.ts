@@ -15,8 +15,17 @@
  *   font-bold                ->  Satoshi-Bold
  *   font-black / font-brand  ->  Satoshi-Black
  *
- * Add a cut here and it must also get a `--font-*` entry in global.css, or
- * nothing can reach it.
+ * Naming rule: the expo-font config plugin (`app.json` `plugins` → `expo-font`
+ * `fonts` array) copies each file into `android/app/src/main/assets/fonts`
+ * at prebuild. On Android the family name is the filename without extension
+ * (`Satoshi-Bold.otf` → `Satoshi-Bold`). Expo Go is a prebuilt binary, so it
+ * never sees that copy — `useFonts` in `hooks/useAppFonts.ts` registers the
+ * same names from this map at runtime. Styles must use these names, never
+ * `Satoshi` plus a weight. A bare `"expo-font"` plugin string embeds nothing,
+ * and a release APK then falls back to the system UI font.
+ *
+ * Add a cut here and it must also get a `--font-*` entry in global.css and a
+ * path in the plugin `fonts` array, or nothing can reach it.
  *
  * Still outstanding from the type spec: Poppins ExtraBold (brand display) and
  * Instrument Serif (rare decorative text). `--font-brand` points at
