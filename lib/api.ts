@@ -1413,6 +1413,65 @@ export async function updateSupplierProfile(
 }
 
 /* --------------------------------------------------------------------------
+ * Reviews: what clients said about each finished job, read back.
+ * ------------------------------------------------------------------------ */
+
+/** Star averages over a set of reviews. Null until there is one. */
+export type ReviewStats = {
+  count: number;
+  quality: number | null;
+  speed: number | null;
+  value: number | null;
+  /** The plain mean of the three. What the shop is ranked by. */
+  overall: number | null;
+};
+
+export type CategoryStanding = ReviewStats & {
+  categoryCode: string;
+  categoryName: string;
+  /** Null when no review in this category has been left yet. */
+  position: number | null;
+  /** How many shops are ranked in this category. */
+  of: number;
+};
+
+/** One rated job. Never carries who left it. */
+export type ShopReview = {
+  id: string;
+  orderId: string;
+  createdAt: string;
+  qualityStars: number;
+  speedStars: number;
+  valueStars: number;
+  comment: string | null;
+  categoryCode: string | null;
+  categoryName: string | null;
+  subcategoryCode: string | null;
+  subcategoryName: string | null;
+  itemName: string | null;
+};
+
+export type MyReviews = {
+  summary: ReviewStats & {
+    /** Whether the shop hit the date its own board promised, across finished jobs. */
+    onTime: { count: number; rate: number } | null;
+    /** Reviews still needed before matching scores the shop on stars rather than its listing. */
+    reviewsUntilMatching: number;
+  };
+  ranking: {
+    position: number | null;
+    of: number;
+    byCategory: CategoryStanding[];
+  };
+  reviews: ShopReview[];
+};
+
+/** The shop's own reviews and standing. The API scopes this by bearer. */
+export async function getMyReviews(): Promise<MyReviews> {
+  return request<MyReviews>("/me/reviews");
+}
+
+/* --------------------------------------------------------------------------
    Where the shop gets paid
 
    The contract is "Supplier payout account" in `docs/OPERATIONAL_MODEL_V2_API.md`
