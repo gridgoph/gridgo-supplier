@@ -1,6 +1,6 @@
 import { useUser } from "@clerk/expo";
 import { ChevronRight } from "lucide-react-native";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect, type Href } from "expo-router";
 
@@ -9,7 +9,9 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { ShopPortrait } from "@/components/ShopPortrait";
 import { StatusChip } from "@/components/StatusChip";
+import * as api from "@/lib/api";
 import { clerkDisplayName } from "@/lib/clerk";
+import { standingLine } from "@/lib/reviews";
 import { useThemeColors } from "@/hooks/useTheme";
 import { askConfirm } from "@/store/sheets";
 import { isMatchable, useSession } from "@/store/session";
@@ -51,6 +53,30 @@ export default function AccountScreen() {
     useCallback(() => {
       void refresh();
     }, [refresh]),
+  );
+
+  /*
+   * The shop's standing, read fresh with the account. It is the one line on
+   * this screen that changes without the shop doing anything, and the row it
+   * sits on is the only place a shop learns a new review has landed. A failed
+   * read leaves the row's plain description; the number is a courtesy, not
+   * a gate.
+   */
+  const [standing, setStanding] = useState<string | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      if (!approved) return;
+      let cancelled = false;
+      api
+        .getMyReviews()
+        .then((mine) => {
+          if (!cancelled) setStanding(standingLine(mine.summary, mine.ranking));
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }, [approved]),
   );
 
   async function signOut() {
@@ -165,6 +191,13 @@ export default function AccountScreen() {
               title="Accreditation"
               detail="Papers and the wait — what Operations still needs from you"
               onPress={() => router.push("/accreditation")}
+            />
+          ) : null}
+          {approved ? (
+            <DestinationRow
+              title="Reviews & ranking"
+              detail={standing ?? "What clients said about each job, and where you rank"}
+              onPress={() => router.push("/reviews" as Href)}
             />
           ) : null}
           {approved ? (
