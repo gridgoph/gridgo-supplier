@@ -6,15 +6,16 @@ import { join } from "path";
  * neither shows up in a build log.
  *
  * `EXPO_PUBLIC_*` values are inlined by Babel while the JS bundle is built, so
- * `EXPO_PUBLIC_API_URL` and `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` have to be in
- * the environment of every command that evaluates app config or bundles JS —
- * `expo config`, `expo prebuild`, and gradle. Extra is written at prebuild;
- * a static `process.env` read is what Gradle can still inline if extra was
- * empty. Set only afterwards and the APK falls back to the loopback base in
- * `lib/api.ts` (or ships without the live Clerk key): green in CI, dead on
- * every phone in Davao. `scripts/verify-release-apk.sh` catches it against
- * the built artifact; this catches it against the workflow, before a
- * 20-minute build.
+ * `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`, and
+ * `EXPO_PUBLIC_CARTO_API_KEY` have to be in the environment of every command
+ * that evaluates app config or bundles JS — `expo config`, `expo prebuild`,
+ * and gradle. Extra is written at prebuild; a static `process.env` read is
+ * what Gradle can still inline if extra was empty. Set only afterwards and
+ * the APK falls back to the loopback base in `lib/api.ts` (or ships without
+ * the live Clerk key, or dark maps watermark): green in CI, dead on every
+ * phone in Davao. `scripts/verify-release-apk.sh` catches it against the
+ * built artifact; this catches it against the workflow, before a 20-minute
+ * build.
  *
  * And a pull request must never produce a signed release build, so the job
  * that touches the signing key is fenced off from that trigger.
@@ -70,6 +71,8 @@ const publicApiUrlEnv =
   /EXPO_PUBLIC_API_URL:\s*\$\{\{\s*secrets\.EXPO_PUBLIC_API_URL\s*\}\}/;
 const clerkPublishableEnv =
   /EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:\s*\$\{\{\s*secrets\.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY\s*\}\}/;
+const cartoApiKeyEnv =
+  /EXPO_PUBLIC_CARTO_API_KEY:\s*\$\{\{\s*secrets\.EXPO_PUBLIC_CARTO_API_KEY\s*\}\}/;
 
 function stepEnv(step: string): string {
   return /\n\s+env:\n([\s\S]*?)\n\s+run:/.exec(step)?.[1] ?? "";
@@ -77,7 +80,7 @@ function stepEnv(step: string): string {
 
 function hasReleasePublicEnv(step: string): boolean {
   const env = stepEnv(step);
-  return publicApiUrlEnv.test(env) && clerkPublishableEnv.test(env);
+  return publicApiUrlEnv.test(env) && clerkPublishableEnv.test(env) && cartoApiKeyEnv.test(env);
 }
 
 describe("the release workflow bakes the deployed API URL into the bundle", () => {
@@ -89,14 +92,18 @@ describe("the release workflow bakes the deployed API URL into the bundle", () =
     const config = apkSteps.find((step) => step.includes("expo config --type public"));
     const prebuild = apkSteps.find((step) => step.includes("expo prebuild"));
     const build = apkSteps.find((step) => step.includes("gradlew assembleRelease"));
+    const verify = apkSteps.find((step) => step.includes("scripts/verify-release-apk.sh"));
 
     expect(config).toBeDefined();
     expect(prebuild).toBeDefined();
     expect(build).toBeDefined();
+    expect(verify).toBeDefined();
     expect(hasReleasePublicEnv(config as string)).toBe(true);
     expect(hasReleasePublicEnv(prebuild as string)).toBe(true);
     expect(hasReleasePublicEnv(build as string)).toBe(true);
+    expect(hasReleasePublicEnv(verify as string)).toBe(true);
     expect(build).toContain("pk_live_*");
+    expect(build).toContain("EXPO_PUBLIC_CARTO_API_KEY is not set for the build step");
   });
 
   it("verifies the built APK rather than trusting the build", () => {
@@ -214,6 +221,12 @@ describe("the verify script requires baked values, not every env name", () => {
     expect(verifyScript).toMatch(/require_env EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY/);
     expect(verifyScript).toMatch(/pk_live_\*/);
     expect(verifyScript).toMatch(/grep -aqF -- "\$EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY"/);
+  });
+
+  it("requires the CARTO tile host and key in the bundle without printing the key", () => {
+    expect(verifyScript).toMatch(/require_env EXPO_PUBLIC_CARTO_API_KEY/);
+    expect(verifyScript).toMatch(/basemaps\.cartocdn\.com/);
+    expect(verifyScript).toMatch(/grep -aqF -- "\$EXPO_PUBLIC_CARTO_API_KEY"/);
   });
 
   it("only treats a surviving EXPO_PUBLIC_API_URL identifier as not inlined", () => {

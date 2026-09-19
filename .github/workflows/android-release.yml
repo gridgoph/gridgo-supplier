@@ -111,6 +111,7 @@ jobs:
         env:
           EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
           EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_CARTO_API_KEY: ${{ secrets.EXPO_PUBLIC_CARTO_API_KEY }}
         run: |
           set -euo pipefail
           npx expo config --type public --json > "$RUNNER_TEMP/app.config.json"
@@ -167,6 +168,7 @@ jobs:
         env:
           EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
           EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_CARTO_API_KEY: ${{ secrets.EXPO_PUBLIC_CARTO_API_KEY }}
         run: npx expo prebuild --platform android --clean --no-install
 
       - name: Stage the release signing key
@@ -205,10 +207,15 @@ jobs:
           # lib/api.ts: green in CI, dead on every real phone.
           EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
           EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_CARTO_API_KEY: ${{ secrets.EXPO_PUBLIC_CARTO_API_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${EXPO_PUBLIC_API_URL:-}" ]; then
             echo "::error::EXPO_PUBLIC_API_URL is not set for the build step"
+            exit 1
+          fi
+          if [ -z "${EXPO_PUBLIC_CARTO_API_KEY:-}" ]; then
+            echo "::error::EXPO_PUBLIC_CARTO_API_KEY is not set for the build step"
             exit 1
           fi
           case "${EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:-}" in
@@ -224,6 +231,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
           EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_CARTO_API_KEY: ${{ secrets.EXPO_PUBLIC_CARTO_API_KEY }}
         run: scripts/verify-release-apk.sh android/app/build/outputs/apk/release/app-release.apk
 
       - name: Name the build
