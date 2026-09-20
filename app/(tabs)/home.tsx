@@ -7,6 +7,7 @@ import { ChevronRight } from "lucide-react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { AlertsBell } from "@/components/AlertsBell";
+import { ChatButton } from "@/components/ChatButton";
 import { EmptyState } from "@/components/EmptyState";
 import { ObligationRow } from "@/components/ObligationRow";
 import { SamplePhoto } from "@/components/SamplePhoto";
@@ -150,7 +151,12 @@ export default function HomeScreen() {
         <ScreenHeader
           eyebrow={greeting(clerkDisplayName(clerkUser) || user?.name)}
           title={user?.supplierName || "Your shop"}
-          right={<AlertsBell />}
+          right={
+            <View className="flex-row items-center">
+              <ChatButton />
+              <AlertsBell />
+            </View>
+          }
         />
 
         {/*

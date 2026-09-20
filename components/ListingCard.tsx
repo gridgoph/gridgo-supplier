@@ -31,9 +31,10 @@ type Props = {
  *
  * The photo leads because that is what a client picks with, and it sits in its
  * crop-mark frame so the wall reads as print samples rather than a shelf of
- * products. Under it, the two facts a shop checks when it glances at its own
- * board: what it is called, and what it costs. How fast it goes out lives on
- * the list and inside the listing.
+ * products. Pressing the photo opens it full screen; the caption under it
+ * opens the listing. Under it, the two facts a shop checks when it glances at
+ * its own board: what it is called, and what it costs. How fast it goes out
+ * lives on the list and inside the listing.
  *
  * Every tile carries its standing chip — Live, Hidden, Not ready yet, or
  * Waiting for shop approval — so a wall of samples still says what GRIDGO
@@ -62,6 +63,11 @@ export function ListingCard({
 
   return (
     <View collapsable={false} className="rounded-card border border-outline bg-surface">
+      <SamplePhoto
+        fileId={first?.fileId}
+        altText={first?.altText ?? listing.name}
+        emptyLabel="No sample yet"
+      />
       <Pressable
         onPress={onPress}
         onLongPress={onRemove}
@@ -74,11 +80,6 @@ export function ListingCard({
         }}
         style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
       >
-        <SamplePhoto
-          fileId={first?.fileId}
-          altText={first?.altText ?? listing.name}
-          emptyLabel="No sample yet"
-        />
         <View className="gap-1 px-3 pb-3">
           <HuntedName
             name={listing.name || "Untitled listing"}

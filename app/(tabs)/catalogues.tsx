@@ -12,6 +12,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { FormScrollView } from "@/components/FormScrollView";
 import { ListingCard } from "@/components/ListingCard";
 import { ListingRow } from "@/components/ListingRow";
+import { ChatButton } from "@/components/ChatButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
@@ -214,7 +215,15 @@ export default function BoardScreen() {
           />
         }
       >
-        <ScreenHeader title="Catalogues" right={<AlertsBell />} />
+        <ScreenHeader
+          title="Catalogues"
+          right={
+            <View className="flex-row items-center">
+              <ChatButton />
+              <AlertsBell />
+            </View>
+          }
+        />
 
         {/*
           Demoted to a footnote on purpose. It is a real thing to know once —

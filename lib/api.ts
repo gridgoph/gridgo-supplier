@@ -343,6 +343,11 @@ export type ResolveApiBaseInput = {
    * `:8787` works on any Wi-Fi without baking a LAN address into the app.
    */
   isDevice?: boolean;
+  /**
+   * Expo-web page hostname. `supplier.localhost` must call the API on that
+   * same host — `127.0.0.1` is a different site and Chromium blocks the fetch.
+   */
+  pageHostname?: string | null;
 };
 
 /**
@@ -396,17 +401,24 @@ function collectExpoHostCandidates(): (string | null | undefined)[] {
  *
  * Precedence:
  * 1. Non-empty `envUrl` (trailing slash stripped)
- * 2. Hostname from Expo dev-server host candidates → `http://<host>:<port>`
- * 3. If that host is loopback and platform is Android:
+ * 2. On web, the page hostname + port (Clerk isolation hosts)
+ * 3. Hostname from Expo dev-server host candidates → `http://<host>:<port>`
+ * 4. If that host is loopback and platform is Android:
  *    emulator (`isDevice === false`) → `http://10.0.2.2:<port>`
  *    physical phone / unknown → `http://127.0.0.1:<port>` (USB reverse is IPv4)
- * 4. `http://127.0.0.1:<port>`
+ * 5. `http://127.0.0.1:<port>`
  */
 export function resolveApiBase(input: ResolveApiBaseInput = {}): string {
   const envUrl = input.envUrl?.trim().replace(/\/$/, "");
   if (envUrl) return envUrl;
 
   const port = input.envPort?.trim() || "8787";
+  const pageHost = input.pageHostname?.trim();
+  if (input.platformOS === "web" && pageHost) {
+    const host =
+      pageHost.startsWith("[") || !pageHost.includes(":") ? pageHost : `[${pageHost}]`;
+    return `http://${host}:${port}`;
+  }
   const candidates = input.hostCandidates ?? [];
   let host: string | null = null;
   for (const candidate of candidates) {
@@ -430,12 +442,17 @@ export function resolveApiBase(input: ResolveApiBaseInput = {}): string {
 }
 
 export function getApiBase(): string {
+  const pageHostname =
+    Platform.OS === "web" && typeof window !== "undefined"
+      ? window.location.hostname?.trim() || null
+      : null;
   return resolveApiBase({
     envUrl: process.env.EXPO_PUBLIC_API_URL,
     envPort: process.env.EXPO_PUBLIC_API_PORT,
     hostCandidates: collectExpoHostCandidates(),
     platformOS: Platform.OS,
     isDevice: Constants.isDevice,
+    pageHostname,
   });
 }
 
@@ -1495,4 +1512,53 @@ export function formatPhp(minor: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+export type SupportChatPartyRole = "client" | "supplier" | "rider";
+export type SupportChatSenderRole = SupportChatPartyRole | "ops_admin" | "super_admin";
+
+export type SupportChatThread = {
+  id: string;
+  partyUserId: string;
+  partyRole: SupportChatPartyRole;
+  partyName?: string | null;
+  partyEmail?: string | null;
+  lastMessageAt?: string | null;
+  lastMessagePreview?: string | null;
+  lastMessageSenderRole?: SupportChatSenderRole | null;
+  unreadCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SupportChatMessage = {
+  id: string;
+  threadId: string;
+  senderUserId: string;
+  senderRole: SupportChatSenderRole;
+  senderName?: string | null;
+  body: string;
+  createdAt: string;
+  mine: boolean;
+};
+
+export async function getSupportChatMe(): Promise<{
+  thread: SupportChatThread | null;
+  messages: SupportChatMessage[];
+}> {
+  return request("/support-chat/me");
+}
+
+export async function sendSupportChatMessage(body: string): Promise<{
+  thread: SupportChatThread;
+  message: SupportChatMessage;
+}> {
+  return request("/support-chat/me/messages", {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+export async function markSupportChatRead(): Promise<{ thread: SupportChatThread | null }> {
+  return request("/support-chat/me/read", { method: "PATCH", body: JSON.stringify({}) });
 }

@@ -160,6 +160,16 @@ describe("resolveApiBase", () => {
       }),
     ).toBe("http://10.20.30.40:8787");
   });
+
+  it("on web uses the page host so *.localhost isolation can reach the API", () => {
+    expect(
+      resolveApiBase({
+        hostCandidates: ["localhost:8082"],
+        platformOS: "web",
+        pageHostname: "supplier.localhost",
+      }),
+    ).toBe("http://supplier.localhost:8787");
+  });
 });
 
 describe("notificationImageUrl", () => {

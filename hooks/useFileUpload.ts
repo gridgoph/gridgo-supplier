@@ -11,6 +11,7 @@ import {
   uploadFile,
   type UploadItem,
 } from "@/lib/files";
+import { canPickOnWeb, pickFileOnWeb } from "@/lib/webFilePick";
 
 /**
  * Picking a file and getting it stored.
@@ -55,6 +56,7 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
       fileName: string;
       mimeType: string | null;
       sizeBytes: number | null;
+      file?: File;
     }) => {
       counter.current += 1;
       const item = newUploadItem({ key: `up_${counter.current}`, ...input });
@@ -92,6 +94,18 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
   }, []);
 
   const takePhoto = useCallback(async () => {
+    if (canPickOnWeb()) {
+      const picked = await pickFileOnWeb("image/*");
+      if (!picked) return;
+      await accept({
+        uri: picked.uri,
+        fileName: picked.name || `evidence-${counter.current + 1}.jpg`,
+        mimeType: picked.mimeType,
+        sizeBytes: picked.size,
+        file: picked.file,
+      });
+      return;
+    }
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       failWith(
@@ -112,6 +126,18 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
   }, [accept, failWith]);
 
   const pickImage = useCallback(async () => {
+    if (canPickOnWeb()) {
+      const picked = await pickFileOnWeb("image/*");
+      if (!picked) return;
+      await accept({
+        uri: picked.uri,
+        fileName: picked.name || `evidence-${counter.current + 1}.jpg`,
+        mimeType: picked.mimeType,
+        sizeBytes: picked.size,
+        file: picked.file,
+      });
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       quality: 0.8,
@@ -127,6 +153,18 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
   }, [accept]);
 
   const pickDocument = useCallback(async () => {
+    if (canPickOnWeb()) {
+      const picked = await pickFileOnWeb("application/pdf,image/*");
+      if (!picked) return;
+      await accept({
+        uri: picked.uri,
+        fileName: picked.name,
+        mimeType: picked.mimeType,
+        sizeBytes: picked.size,
+        file: picked.file,
+      });
+      return;
+    }
     const result = await DocumentPicker.getDocumentAsync({
       type: ["application/pdf", "image/*"],
       copyToCacheDirectory: true,

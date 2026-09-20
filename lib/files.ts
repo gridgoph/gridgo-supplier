@@ -2,6 +2,7 @@ import {
   createUploadTask,
   FileSystemUploadType,
 } from "expo-file-system/legacy";
+import { Platform } from "react-native";
 
 import * as api from "@/lib/api";
 
@@ -40,6 +41,8 @@ export type UploadItem = {
   fileId: string | null;
   /** Names what went wrong and how to fix it. */
   error: string | null;
+  /** Browser `File` from the web picker. Required for `FormData` on web. */
+  file?: File;
 };
 
 export function newUploadItem(input: {
@@ -48,6 +51,7 @@ export function newUploadItem(input: {
   fileName: string;
   mimeType: string | null;
   sizeBytes: number | null;
+  file?: File;
 }): UploadItem {
   return { ...input, stage: "idle", progress: 0, fileId: null, error: null };
 }
@@ -191,6 +195,10 @@ export async function uploadFile(
     return { ok: false, error: "Your session ended. Sign in again to send this file." };
   }
 
+  if (item.file || (Platform.OS === "web" && /^(blob:|data:)/.test(item.uri))) {
+    return uploadFileOnWeb(item, purpose, token, onProgress);
+  }
+
   try {
     const task = createUploadTask(
       `${api.getApiBase()}/files`,
@@ -233,6 +241,68 @@ export async function uploadFile(
       ok: false,
       error: messageFor(body, response.status),
       code: typeof body?.error === "string" ? body.error : undefined,
+    };
+  } catch {
+    return {
+      ok: false,
+      error: "The file could not be sent. Check this device's connection and try again.",
+    };
+  }
+}
+
+async function uploadFileOnWeb(
+  item: UploadItem,
+  purpose: api.StoredFile["purpose"],
+  token: string,
+  onProgress: (fraction: number) => void,
+): Promise<UploadResult> {
+  try {
+    const form = new FormData();
+    form.append("purpose", purpose);
+    if (item.file) {
+      form.append("file", item.file, item.fileName);
+    } else {
+      const response = await fetch(item.uri);
+      const blob = await response.blob();
+      form.append(
+        "file",
+        new File([blob], item.fileName, {
+          type: item.mimeType || blob.type || "application/octet-stream",
+        }),
+      );
+    }
+
+    const body = await new Promise<{ status: number; text: string }>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${api.getApiBase()}/files`);
+      xhr.responseType = "text";
+      xhr.setRequestHeader("Accept", "application/json");
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      if (xhr.upload) {
+        xhr.upload.onprogress = (event: ProgressEvent) => {
+          if (!event.lengthComputable || event.total <= 0) return;
+          onProgress(Math.min(1, event.loaded / event.total));
+        };
+      }
+      xhr.onload = () =>
+        resolve({ status: xhr.status, text: typeof xhr.response === "string" ? xhr.response : "" });
+      xhr.onerror = () => reject(new Error("Network request failed"));
+      xhr.ontimeout = () => reject(new Error("Upload timeout"));
+      xhr.send(form);
+    });
+
+    const parsed = parseJson(body.text);
+    if (body.status === 201) {
+      const fileId = readFileId(parsed);
+      if (!fileId) {
+        return { ok: false, error: "GRIDGO did not confirm it saved the file. Send it again." };
+      }
+      return { ok: true, fileId };
+    }
+    return {
+      ok: false,
+      error: messageFor(parsed, body.status),
+      code: typeof parsed?.error === "string" ? parsed.error : undefined,
     };
   } catch {
     return {
