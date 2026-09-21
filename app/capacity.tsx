@@ -258,7 +258,7 @@ export default function CapacityScreen() {
                       {blackout.note ? ` · ${blackout.note}` : ""}
                     </Text>
                   </View>
-                  <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+                  <ChevronRight size={20} color={colors.textMuted} aria-hidden />
                 </Pressable>
               ))}
             </View>

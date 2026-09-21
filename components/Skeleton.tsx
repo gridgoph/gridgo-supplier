@@ -114,7 +114,7 @@ export function SkeletonBlock({ className = "h-4 w-full" }: BlockProps) {
  */
 export function JobCardSkeleton({ compact = false }: { compact?: boolean }) {
   return (
-    <View className="gg-card gap-3" accessibilityElementsHidden>
+    <View className="gg-card gap-3" aria-hidden>
       <View className="flex-row items-start justify-between gap-3">
         <View className="min-w-0 flex-1 gap-2">
           <SkeletonBlock className="h-5 w-3/4" />
@@ -138,7 +138,7 @@ export function RowSkeleton() {
   return (
     <View
       className="flex-row items-center gap-3 rounded-field border border-outline bg-surface px-3 py-3"
-      accessibilityElementsHidden
+      aria-hidden
     >
       <SkeletonBlock className="h-3 w-12" />
       <View className="min-w-0 flex-1 gap-2">
@@ -156,7 +156,7 @@ export function RowSkeleton() {
  */
 export function SectionHeaderSkeleton() {
   return (
-    <View className="flex-row items-center gap-2 py-1" accessibilityElementsHidden>
+    <View className="flex-row items-center gap-2 py-1" aria-hidden>
       <SkeletonBlock className="h-3 w-24" />
     </View>
   );

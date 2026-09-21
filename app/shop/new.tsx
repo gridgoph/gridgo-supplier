@@ -19,6 +19,7 @@ import {
   needsPrinterCap,
   type ListingStarter,
 } from "@/lib/listings";
+import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { BOARD_NOT_OPEN_YET, createListing, loadStarters } from "@/lib/listingsApi";
 import { seedStarterSample } from "@/lib/starterSample";
 import { useBoard } from "@/hooks/useBoard";
@@ -120,31 +121,39 @@ export default function NewListingScreen() {
     setSaving(true);
     setSaveError(null);
     const chosenStarter = starterId === BLANK ? null : starterId;
-    const result = await createListing({
-      serviceLineId: target.service.id,
-      subcategoryCode,
-      name: name.trim(),
-      starterId: chosenStarter,
-      printerMaxWidthFeet: needsPrinterCap(subcategoryCode) ? printerMaxWidthFeet : null,
-    });
+    try {
+      const result = await createListing({
+        serviceLineId: target.service.id,
+        subcategoryCode,
+        name: name.trim(),
+        starterId: chosenStarter,
+        printerMaxWidthFeet: needsPrinterCap(subcategoryCode) ? printerMaxWidthFeet : null,
+      });
 
-    if (result.status !== "ok") {
+      if (result.status !== "ok") {
+        setSaveError(result.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : result.message);
+        return;
+      }
+
+      // SAMPLE PHOTOS only knows uploaded files. Copy the starter's example
+      // onto the listing before the editor opens so the shop is not staring at
+      // an empty frame they already chose a picture for. A failed copy still
+      // opens the listing — the shop can add a sample themselves.
+      if (chosenStarter) {
+        try {
+          await seedStarterSample(chosenStarter, result.value.id);
+        } catch {
+          // The listing exists. Opening it is more useful than a stuck overlay.
+        }
+      }
+      // Replace, so the back gesture from the editor lands on the board rather
+      // than on a create screen that would open a second listing.
+      router.replace({ pathname: "/shop/[id]", params: { id: result.value.id } });
+    } catch (error) {
+      setSaveError(humanizeApiError(error, offlineMessage("open this listing")));
+    } finally {
       setSaving(false);
-      setSaveError(result.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : result.message);
-      return;
     }
-
-    // SAMPLE PHOTOS only knows uploaded files. Copy the starter's example
-    // onto the listing before the editor opens so the shop is not staring at
-    // an empty frame they already chose a picture for. A failed copy still
-    // opens the listing — the shop can add a sample themselves.
-    if (chosenStarter) {
-      await seedStarterSample(chosenStarter, result.value.id);
-    }
-    setSaving(false);
-    // Replace, so the back gesture from the editor lands on the board rather
-    // than on a create screen that would open a second listing.
-    router.replace({ pathname: "/shop/[id]", params: { id: result.value.id } });
   }
 
   if (loading && !catalog) {

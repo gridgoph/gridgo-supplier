@@ -267,27 +267,33 @@ export default function ListingScreen() {
 
   async function takeOff() {
     if (!listing) return;
-    const confirmed = await askConfirm({
-      question: `Take “${listing.name}” off the board?`,
-      consequence:
-        "Clients stop seeing it straight away. Nothing you have written is lost, and you can put it back up any time.",
-      confirmLabel: "Take it off",
-      cancelLabel: "Leave it up",
-      destructive: true,
-    });
+    const confirmed = await askConfirm(
+      {
+        question: `Take “${listing.name}” off the board?`,
+        consequence:
+          "Clients stop seeing it straight away. Nothing you have written is lost, and you can put it back up any time.",
+        confirmLabel: "Take it off",
+        cancelLabel: "Leave it up",
+        destructive: true,
+      },
+      "/shop/confirm",
+    );
     if (confirmed) await persist(false);
   }
 
   async function remove() {
     if (!listing) return;
-    const confirmed = await askConfirm({
-      question: `Remove “${listing.name}” from your shop?`,
-      consequence:
-        "It comes off your board and its samples, steps and prices go with it. A listing a client has already ordered from is kept for that job's history instead.",
-      confirmLabel: "Remove it",
-      cancelLabel: "Keep it",
-      destructive: true,
-    });
+    const confirmed = await askConfirm(
+      {
+        question: `Remove “${listing.name}” from your shop?`,
+        consequence:
+          "It comes off your board and its samples, steps and prices go with it. A listing a client has already ordered from is kept for that job's history instead.",
+        confirmLabel: "Remove it",
+        cancelLabel: "Keep it",
+        destructive: true,
+      },
+      "/shop/confirm",
+    );
     if (!confirmed) return;
 
     setBusy(true);
@@ -1217,7 +1223,7 @@ function DestinationRow({
           {detail}
         </Text>
       </View>
-      <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+      <ChevronRight size={20} color={colors.textMuted} aria-hidden />
     </Pressable>
   );
 }

@@ -195,7 +195,7 @@ export async function uploadFile(
     return { ok: false, error: "Your session ended. Sign in again to send this file." };
   }
 
-  if (item.file || (Platform.OS === "web" && /^(blob:|data:)/.test(item.uri))) {
+  if (item.file || Platform.OS === "web") {
     return uploadFileOnWeb(item, purpose, token, onProgress);
   }
 

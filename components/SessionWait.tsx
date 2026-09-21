@@ -143,7 +143,7 @@ function GridPulse({
   }));
 
   return (
-    <View style={{ width: size, height: size }} accessibilityElementsHidden>
+    <View style={{ width: size, height: size }} aria-hidden>
       {Array.from({ length: 9 }, (_, cell) => {
         const centre = cellCentre(cell, size);
         const isLit = cell === LIT_CELL;

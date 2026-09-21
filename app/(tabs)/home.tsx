@@ -245,7 +245,7 @@ export default function HomeScreen() {
                 <Text className="text-body text-text-secondary">{headline.detail}</Text>
               </View>
               <View className="pt-0.5">
-                <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+                <ChevronRight size={20} color={colors.textMuted} aria-hidden />
               </View>
             </Pressable>
 
@@ -389,8 +389,9 @@ function BoardCard({
  * The finished board, at a glance.
  *
  * Deliberately not a second ranking: it is the shop's own board order, cropped
- * to what fits on one row, and its only job is to be a door. A shop that wants
- * to read its board opens its board.
+ * to what fits on one row, and its only job is to be a door. The samples here
+ * do not open the loupe — on web that would nest a button in this one. A shop
+ * that wants to read its board opens its board.
  */
 function SampleStrip({ listings }: { listings: Listing[] }) {
   const colors = useThemeColors();
@@ -412,11 +413,12 @@ function SampleStrip({ listings }: { listings: Listing[] }) {
                 altText={listing.name}
                 gutter="tight"
                 emptyLabel=""
+                enlarge={false}
               />
             </View>
           ))}
         </View>
-        <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+        <ChevronRight size={20} color={colors.textMuted} aria-hidden />
       </View>
       <Text className="mt-2 text-caption text-text-muted">
         {listings.length === 1

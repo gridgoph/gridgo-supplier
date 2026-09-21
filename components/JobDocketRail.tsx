@@ -143,8 +143,7 @@ export function JobDocketRail({ query, counts, shown, total, onChange }: Props) 
             size={16}
             color={colors.textPrimary}
             strokeWidth={2}
-            accessibilityElementsHidden
-            importantForAccessibility="no"
+            aria-hidden
           />
         </Pressable>
       </View>

@@ -165,7 +165,7 @@ export default function AccreditationScreen() {
                 {user?.shop?.label || "No pin yet"}
               </Text>
             </View>
-            <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+            <ChevronRight size={20} color={colors.textMuted} aria-hidden />
           </Pressable>
         </View>
 

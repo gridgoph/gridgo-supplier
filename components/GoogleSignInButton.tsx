@@ -31,7 +31,7 @@ export function GoogleSignInButton({ onPress, disabled }: Props) {
 
 function GoogleMark() {
   return (
-    <Svg width={18} height={18} viewBox="0 0 18 18" accessibilityElementsHidden>
+    <Svg width={18} height={18} viewBox="0 0 18 18" aria-hidden>
       <Path
         fill="#4285F4"
         d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.797 2.715v2.259h2.909c1.702-1.567 2.684-3.877 2.684-6.614Z"

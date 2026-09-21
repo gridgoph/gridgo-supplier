@@ -71,5 +71,5 @@ const TIGHT = [
 
 /** One hairline. Muted ink, so the sample stays the loudest thing in the frame. */
 function Mark({ className }: { className: string }) {
-  return <View className={`${className} bg-text-muted`} accessibilityElementsHidden />;
+  return <View className={`${className} bg-text-muted`} aria-hidden />;
 }

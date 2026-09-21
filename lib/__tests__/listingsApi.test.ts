@@ -174,9 +174,10 @@ describe("what the board sends GRIDGO", () => {
 
   /**
    * The captain's report: Remove this listing does nothing. GRIDGO answered
-   * `400 expected_version_required` to a body-less DELETE.
+   * `400 expected_version_required` to a body-less DELETE. Putting the version
+   * only in `If-Match` then failed on web (CORS), so it travels as a query.
    */
-  it("removes a listing with its version, in the body and the header", async () => {
+  it("removes a listing with its version on the query", async () => {
     const fetch = jest
       .spyOn(global, "fetch")
       .mockResolvedValue(answered(200, { ok: true }));
@@ -186,8 +187,9 @@ describe("what the board sends GRIDGO", () => {
     const call = sent(fetch);
     expect(call.method).toBe("DELETE");
     expect(call.url).toContain("/me/catalog-items/sci_1");
-    expect(call.body).toEqual({ expectedVersion: 7 });
-    expect(call.headers["If-Match"]).toBe("7");
+    expect(call.url).toContain("expectedVersion=7");
+    expect(call.body).toBeNull();
+    expect(call.headers["If-Match"]).toBeUndefined();
     expect(result).toEqual({ status: "ok", value: "deleted" });
   });
 

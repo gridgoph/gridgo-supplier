@@ -34,4 +34,11 @@ describe("askConfirm", () => {
     settleConfirm(false);
     await expect(pending).resolves.toBe(true);
   });
+
+  it("opens the sheet on the stack the caller is already in", async () => {
+    const pending = askConfirm(request, "/shop/confirm");
+    expect(router.push).toHaveBeenCalledWith("/shop/confirm");
+    settleConfirm(true);
+    await expect(pending).resolves.toBe(true);
+  });
 });

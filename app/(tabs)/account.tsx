@@ -118,7 +118,7 @@ export default function AccountScreen() {
                 {user?.email || "—"}
               </Text>
             </View>
-            <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+            <ChevronRight size={20} color={colors.textMuted} aria-hidden />
           </View>
           {/*
             The chip sits under the whole row rather than beside the name, so it
@@ -243,7 +243,7 @@ function DestinationRow({
           {detail}
         </Text>
       </View>
-      <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+      <ChevronRight size={20} color={colors.textMuted} aria-hidden />
     </Pressable>
   );
 }

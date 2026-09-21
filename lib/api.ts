@@ -1047,6 +1047,21 @@ function versioned(
 }
 
 /**
+ * Version a DELETE without a JSON body or `If-Match`.
+ *
+ * GRIDGO reads `expectedVersion` from the query, the header, or the body.
+ * A body-less DELETE used to 400; putting the version only in `If-Match`
+ * then failed on web because that header was not CORS-allowed, and the shop
+ * was told to check its connection. The query string is what both sides
+ * already agree on and what a browser will actually send.
+ */
+function versionedPath(path: string, version: number | null | undefined): string {
+  if (version == null) return path;
+  const join = path.includes("?") ? "&" : "?";
+  return `${path}${join}expectedVersion=${encodeURIComponent(String(version))}`;
+}
+
+/**
  * What the shop asks its own board for.
  *
  * Every one of these is a GRIDGO predicate, not a local `.filter` — the hunt,
@@ -1134,9 +1149,8 @@ export async function deleteCatalogItem(
   itemId: string,
   version: number | null,
 ): Promise<unknown> {
-  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}`, {
+  return request<unknown>(versionedPath(`/me/catalog-items/${encodeURIComponent(itemId)}`, version), {
     method: "DELETE",
-    ...versioned(version),
   });
 }
 
@@ -1193,8 +1207,11 @@ export async function deleteCatalogOptionGroup(
   groupVersion: number | null,
 ): Promise<unknown> {
   return request<unknown>(
-    `/me/catalog-items/${encodeURIComponent(itemId)}/option-groups/${encodeURIComponent(groupId)}`,
-    { method: "DELETE", ...versioned(groupVersion) },
+    versionedPath(
+      `/me/catalog-items/${encodeURIComponent(itemId)}/option-groups/${encodeURIComponent(groupId)}`,
+      groupVersion,
+    ),
+    { method: "DELETE" },
   );
 }
 
@@ -1227,8 +1244,11 @@ export async function deleteCatalogOption(
   groupVersion: number | null,
 ): Promise<unknown> {
   return request<unknown>(
-    `/me/catalog-option-groups/${encodeURIComponent(groupId)}/options/${encodeURIComponent(optionId)}`,
-    { method: "DELETE", ...versioned(groupVersion) },
+    versionedPath(
+      `/me/catalog-option-groups/${encodeURIComponent(groupId)}/options/${encodeURIComponent(optionId)}`,
+      groupVersion,
+    ),
+    { method: "DELETE" },
   );
 }
 
@@ -1329,8 +1349,11 @@ export async function deletePrepStep(
   version: number | null,
 ): Promise<unknown> {
   return request<unknown>(
-    `/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps/${encodeURIComponent(stepId)}`,
-    { method: "DELETE", ...versioned(version) },
+    versionedPath(
+      `/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps/${encodeURIComponent(stepId)}`,
+      version,
+    ),
+    { method: "DELETE" },
   );
 }
 

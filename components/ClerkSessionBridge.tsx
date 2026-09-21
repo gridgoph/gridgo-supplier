@@ -39,15 +39,19 @@ export function ClerkSessionBridge({ children }: Props) {
       };
     }
 
-    if (!isSignedIn || !user) {
+    if (!isSignedIn) {
       session.clearClerkIdentity();
       return () => {
         cancelled = true;
       };
     }
 
-    const email = user.primaryEmailAddress?.emailAddress ?? null;
-    const access = clerkAccessFor(user.publicMetadata);
+    // Clerk can report signed-in before `useUser()` has a person. Treating a
+    // missing user as sign-out wiped a shop that Sign in had just adopted and
+    // remounted the stack on welcome. Membership is `/auth/me`, not metadata,
+    // so probe even while the Clerk user object is still arriving.
+    const email = user?.primaryEmailAddress?.emailAddress ?? null;
+    const access = clerkAccessFor(user?.publicMetadata);
     // Primary-role metadata cannot reject a supplier membership. Ask the API
     // with this app's role header before deciding whether the account belongs here.
 
@@ -65,7 +69,8 @@ export function ClerkSessionBridge({ children }: Props) {
         );
         if (!token) {
           if (cancelled) return;
-          if (alreadyAdopted) return;
+          const current = useSession.getState();
+          if (current.identity.kind === "supplier" && current.user) return;
           // A finishing Clerk step has no JWT yet. That is not "new shop".
           if (access.kind === "supplier") {
             useSession.getState().setClerkIdentity({

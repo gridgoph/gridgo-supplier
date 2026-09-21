@@ -145,6 +145,27 @@ describe("Add a listing", () => {
     });
   });
 
+  it("still opens the listing when copying the starter sample throws", async () => {
+    (seedStarterSample as jest.Mock).mockRejectedValue(new Error("no cache directory"));
+    await render(<NewListingScreen />);
+    await fireEvent.press(screen.getByRole("radio", { name: "Flyers" }));
+    await screen.findByRole("radio", { name: "GRIDGO starter, Flyers" });
+    await fireEvent.changeText(screen.getByLabelText("Listing name"), "Event flyers");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Create listing" }).props.accessibilityState).toEqual(
+        expect.objectContaining({ disabled: false }),
+      );
+    });
+    await fireEvent.press(screen.getByRole("button", { name: "Create listing" }));
+
+    await waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith({
+        pathname: "/shop/[id]",
+        params: { id: "item_1" },
+      });
+    });
+  });
+
   it("still opens a blank listing when the shop asks for one", async () => {
     await render(<NewListingScreen />);
     await fireEvent.press(screen.getByRole("radio", { name: "Flyers" }));

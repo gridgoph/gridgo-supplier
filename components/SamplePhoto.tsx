@@ -20,6 +20,11 @@ type Props = {
   gutter?: "tight" | "standard";
   /** What an empty frame says. A blank plate reads as a broken listing. */
   emptyLabel?: string;
+  /**
+   * Whether a press opens the loupe. A strip that is already a door
+   * (Home's board card) must pass false — on web a button must not wrap a button.
+   */
+  enlarge?: boolean;
 };
 
 /**
@@ -50,13 +55,14 @@ function PhotoFrame({
   ratio = "square",
   gutter = "standard",
   emptyLabel,
+  enlarge = true,
 }: Props) {
   const colors = useThemeColors();
   const [uri, setUri] = useState<string | null>(() => localUri ?? heldLink(fileId));
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
   const alt = altText || "Sample photo";
-  const canOpen = Boolean(uri && !failed);
+  const canOpen = Boolean(uri && !failed && enlarge);
 
   useEffect(() => {
     if (localUri || !fileId) return;
@@ -78,37 +84,47 @@ function PhotoFrame({
   // without a real ratio a dark sample fills the client's-eye screen.
   const aspectRatio = ratio === "wide" ? 4 / 3 : 1;
 
+  function onImageError() {
+    // Local URI first; once GRIDGO has stored the file, a refused
+    // local preview can still show the signed link.
+    if (fileId && localUri && uri === localUri) {
+      void signedLink(fileId).then((link) => {
+        if (link) setUri(link);
+        else setFailed(true);
+      });
+      return;
+    }
+    setFailed(true);
+  }
+
+  const picture = (
+    <Image
+      source={{ uri: uri! }}
+      accessibilityLabel={alt}
+      resizeMode="cover"
+      style={{ width: "100%", height: "100%" }}
+      onError={onImageError}
+    />
+  );
+
   return (
     <CropMarkFrame gutter={gutter}>
       <View className="w-full" style={{ aspectRatio }}>
         {uri && !failed ? (
           <View collapsable={false} style={{ width: "100%", height: "100%" }}>
-            <Pressable
-              onPress={() => setOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${alt} larger`}
-              accessibilityHint="Opens the sample full screen so you can pinch to zoom"
-              style={{ width: "100%", height: "100%" }}
-            >
-              <Image
-                source={{ uri }}
-                accessibilityLabel={alt}
-                resizeMode="cover"
+            {enlarge ? (
+              <Pressable
+                onPress={() => setOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${alt} larger`}
+                accessibilityHint="Opens the sample full screen so you can pinch to zoom"
                 style={{ width: "100%", height: "100%" }}
-                onError={() => {
-                  // Local URI first; once GRIDGO has stored the file, a refused
-                  // local preview can still show the signed link.
-                  if (fileId && localUri && uri === localUri) {
-                    void signedLink(fileId).then((link) => {
-                      if (link) setUri(link);
-                      else setFailed(true);
-                    });
-                    return;
-                  }
-                  setFailed(true);
-                }}
-              />
-            </Pressable>
+              >
+                {picture}
+              </Pressable>
+            ) : (
+              picture
+            )}
             {canOpen ? (
               <SamplePhotoViewer
                 uri={uri}

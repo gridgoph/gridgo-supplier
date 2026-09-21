@@ -19,6 +19,16 @@ describe("SamplePhoto viewer", () => {
     await view.unmount();
   });
 
+  it("stays a picture when the plate is already a door", async () => {
+    const view = await render(
+      <SamplePhoto localUri="file:///sample.jpg" altText="Flyers on the rack" enlarge={false} />,
+    );
+
+    expect(screen.getByLabelText("Flyers on the rack")).toBeTruthy();
+    expect(screen.queryByLabelText("Open Flyers on the rack larger")).toBeNull();
+    await view.unmount();
+  });
+
   it("does not offer a viewer on an empty plate", async () => {
     const view = await render(<SamplePhoto emptyLabel="No sample yet" />);
 

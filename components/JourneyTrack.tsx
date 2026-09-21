@@ -33,7 +33,7 @@ export function JourneyTrack({ state }: Props) {
         </Text>
         <Text className="text-caption font-medium text-text-primary">{step.label}</Text>
       </View>
-      <View className="flex-row gap-1" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View className="flex-row gap-1" aria-hidden>
         {JOB_JOURNEY.map((entry, i) => (
           <View
             key={entry.id}

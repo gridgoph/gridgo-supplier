@@ -292,8 +292,7 @@ function Marker({ mustAnswer }: { mustAnswer: boolean }) {
   return (
     <View
       className={`h-[18px] w-[18px] border border-outline ${mustAnswer ? "rounded-pill" : "rounded-sm"}`}
-      accessibilityElementsHidden
-      importantForAccessibility="no"
+      aria-hidden
     />
   );
 }
