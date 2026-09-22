@@ -31,7 +31,7 @@ export type DevLogin = {
 
 export const DEV_LOGIN: DevLogin | null = __DEV__
   ? {
-      email: "venvilots@gmail.com",
+      email: "markdavidprado@gmail.com",
       // gridgo-api DEMO_PASSWORD — local fixture only; never a hosted secret.
       password: "Ilovegridgo-0990",
     }

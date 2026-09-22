@@ -9,7 +9,7 @@ const ROOT = resolve(__dirname, "../..");
 const GUARDED_MODULE = resolve(ROOT, "lib/devLogin.ts");
 
 /** Official Clerk supplier used by the __DEV__ prefill. */
-const OFFICIAL_DEV_EMAIL = "venvilots@gmail.com";
+const OFFICIAL_DEV_EMAIL = "markdavidprado@gmail.com";
 /** Retired demo domains. No `g` flag: reused with `.test()`. */
 const RETIRED_ACCOUNT_ADDRESS = /[A-Za-z0-9._%+-]+@gridgo\.(?:ph|local)\b/;
 /** The local fixture password from gridgo-api demo-fixtures. */
