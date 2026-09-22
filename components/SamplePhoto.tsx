@@ -1,8 +1,9 @@
 import { ImageOff, ImagePlus } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { Image, Text, View } from "react-native";
+import { Image, Pressable, Text, View } from "react-native";
 
 import { CropMarkFrame } from "@/components/CropMarkFrame";
+import { SamplePhotoViewer } from "@/components/SamplePhotoViewer";
 import { SkeletonBlock } from "@/components/Skeleton";
 import * as api from "@/lib/api";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -10,6 +11,12 @@ import { useThemeColors } from "@/hooks/useTheme";
 type Props = {
   /** A sample GRIDGO already holds. */
   fileId?: string | null;
+  /**
+   * Signed viewing link from this board read. Prefer this over asking again
+   * for the same file — a wall of eight tiles would otherwise pay for eight
+   * download-url round trips the list already made.
+   */
+  url?: string | null;
   /** A photo just picked on this phone, before it has been sent. */
   localUri?: string | null;
   /** What the sample shows, for anyone who cannot see it. */
@@ -19,6 +26,11 @@ type Props = {
   gutter?: "tight" | "standard";
   /** What an empty frame says. A blank plate reads as a broken listing. */
   emptyLabel?: string;
+  /**
+   * Whether a press opens the loupe. A strip that is already a door
+   * (Home's board card) must pass false — on web a button must not wrap a button.
+   */
+  enlarge?: boolean;
 };
 
 /**
@@ -33,26 +45,40 @@ type Props = {
  *
  * A photo that will not load says so in words. An empty grey square on a board
  * of samples reads as a listing with nothing on it.
+ *
+ * A stored photo is a press: the tile stays the board, and the loupe is a
+ * full-screen pinch so a shop can read the print rather than the thumbnail.
  */
 export function SamplePhoto(props: Props) {
   // A replacement source owns fresh loading/error state before it is painted.
-  return <PhotoFrame key={JSON.stringify([props.fileId, props.localUri])} {...props} />;
+  return <PhotoFrame key={JSON.stringify([props.fileId, props.localUri, props.url])} {...props} />;
 }
 
 function PhotoFrame({
   fileId,
+  url,
   localUri,
   altText,
   ratio = "square",
   gutter = "standard",
   emptyLabel,
+  enlarge = true,
 }: Props) {
   const colors = useThemeColors();
-  const [uri, setUri] = useState<string | null>(() => localUri ?? heldLink(fileId));
+  const [uri, setUri] = useState<string | null>(() => localUri ?? url ?? heldLink(fileId));
   const [failed, setFailed] = useState(false);
+  const [open, setOpen] = useState(false);
+  const alt = altText || "Sample photo";
+  const canOpen = Boolean(uri && !failed && enlarge);
 
   useEffect(() => {
-    if (localUri || !fileId) return;
+    if (localUri) return;
+    if (url) {
+      setUri(url);
+      setFailed(false);
+      return;
+    }
+    if (!fileId) return;
 
     let cancelled = false;
     void (async () => {
@@ -64,36 +90,71 @@ function PhotoFrame({
     return () => {
       cancelled = true;
     };
-  }, [fileId, localUri]);
+  }, [fileId, localUri, url]);
 
   // Native aspectRatio is the plate. NativeWind's `aspect-[4/3]` is an
   // arbitrary class this pipeline has shipped as a silent no-op before, and
   // without a real ratio a dark sample fills the client's-eye screen.
   const aspectRatio = ratio === "wide" ? 4 / 3 : 1;
 
+  function onImageError() {
+    // Local URI first; once GRIDGO has stored the file, a refused
+    // local preview can still show the signed link.
+    if (fileId && localUri && uri === localUri) {
+      void signedLink(fileId).then((link) => {
+        if (link) setUri(link);
+        else setFailed(true);
+      });
+      return;
+    }
+    // A list URL that 403s (expired, stale LAN origin) can still recover
+    // from a fresh download-url if the file is intact.
+    if (fileId && url && uri === url) {
+      void signedLink(fileId).then((link) => {
+        if (link && link !== url) setUri(link);
+        else setFailed(true);
+      });
+      return;
+    }
+    setFailed(true);
+  }
+
+  const picture = (
+    <Image
+      source={{ uri: uri! }}
+      accessibilityLabel={alt}
+      resizeMode="cover"
+      style={{ width: "100%", height: "100%" }}
+      onError={onImageError}
+    />
+  );
+
   return (
     <CropMarkFrame gutter={gutter}>
       <View className="w-full" style={{ aspectRatio }}>
         {uri && !failed ? (
           <View collapsable={false} style={{ width: "100%", height: "100%" }}>
-            <Image
-              source={{ uri }}
-              accessibilityLabel={altText || "Sample photo"}
-              resizeMode="cover"
-              style={{ width: "100%", height: "100%" }}
-              onError={() => {
-                // Local URI first; once GRIDGO has stored the file, a refused
-                // local preview can still show the signed link.
-                if (fileId && localUri && uri === localUri) {
-                  void signedLink(fileId).then((link) => {
-                    if (link) setUri(link);
-                    else setFailed(true);
-                  });
-                  return;
-                }
-                setFailed(true);
-              }}
-            />
+            {enlarge ? (
+              <Pressable
+                onPress={() => setOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${alt} larger`}
+                accessibilityHint="Opens the sample full screen so you can pinch to zoom"
+                style={{ width: "100%", height: "100%" }}
+              >
+                {picture}
+              </Pressable>
+            ) : (
+              picture
+            )}
+            {canOpen ? (
+              <SamplePhotoViewer
+                uri={uri}
+                alt={alt}
+                open={open}
+                onClose={() => setOpen(false)}
+              />
+            ) : null}
           </View>
         ) : !fileId && !localUri ? (
           <View className="flex-1 items-center justify-center gap-1 p-3">

@@ -5,7 +5,7 @@ jest.mock("expo-file-system/legacy", () => ({
   FileSystemUploadType: { MULTIPART: 1 },
 }));
 
-import { Image } from "react-native";
+import { Image, Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 
 import * as files from "@/lib/files";
@@ -86,6 +86,40 @@ describe("seedStarterSample", () => {
 
     expect(upload).not.toHaveBeenCalled();
     expect(attach).not.toHaveBeenCalled();
+  });
+
+  it("uploads the Metro asset URI on web instead of copying through the cache", async () => {
+    const previous = Platform.OS;
+    Platform.OS = "web";
+    jest.spyOn(Image, "resolveAssetSource").mockReturnValue({
+      uri: "http://supplier.localhost:8082/assets/lst_flyers.jpg",
+      width: 1024,
+      height: 1024,
+      scale: 1,
+    });
+    jest.spyOn(files, "uploadFile").mockResolvedValue({ ok: true, fileId: "file_starter" });
+    jest.spyOn(listingsApi, "attachPhoto").mockResolvedValue({ status: "ok", value: null });
+
+    try {
+      await expect(seedStarterSample("lst_flyers", "item_1")).resolves.toEqual({
+        status: "ok",
+        value: null,
+      });
+    } finally {
+      Platform.OS = previous;
+    }
+
+    expect(FileSystem.downloadAsync).not.toHaveBeenCalled();
+    expect(files.uploadFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: "http://supplier.localhost:8082/assets/lst_flyers.jpg",
+        fileName: "lst_flyers.jpg",
+        mimeType: "image/jpeg",
+      }),
+      "catalog_item_photo",
+      expect.any(Function),
+    );
+    expect(listingsApi.attachPhoto).toHaveBeenCalledWith("file_starter", "item_1", 0);
   });
 
   it("keeps the listing when the sample cannot be stored", async () => {

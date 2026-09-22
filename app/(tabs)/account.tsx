@@ -5,6 +5,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect, type Href } from "expo-router";
 
 import { AlertsBell } from "@/components/AlertsBell";
+import { ChatButton } from "@/components/ChatButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { ShopPortrait } from "@/components/ShopPortrait";
@@ -98,7 +99,15 @@ export default function AccountScreen() {
         contentContainerClassName="gg-page pb-10"
         showsVerticalScrollIndicator={false}
       >
-        <ScreenHeader title="Account" right={<AlertsBell />} />
+        <ScreenHeader
+          title="Account"
+          right={
+            <View className="flex-row items-center">
+              <ChatButton />
+              <AlertsBell />
+            </View>
+          }
+        />
 
         {/*
           Identity first, and the one status that governs everything else.
@@ -135,7 +144,7 @@ export default function AccountScreen() {
                 {user?.email || "—"}
               </Text>
             </View>
-            <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+            <ChevronRight size={20} color={colors.textMuted} aria-hidden />
           </View>
           {/*
             The chip sits under the whole row rather than beside the name, so it
@@ -267,7 +276,7 @@ function DestinationRow({
           {detail}
         </Text>
       </View>
-      <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+      <ChevronRight size={20} color={colors.textMuted} aria-hidden />
     </Pressable>
   );
 }

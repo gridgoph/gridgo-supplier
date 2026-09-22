@@ -67,7 +67,7 @@ export default function SettingsScreen() {
                   Papers and the wait — what Operations still needs from you
                 </Text>
               </View>
-              <Text className="pl-3 text-body text-text-muted" accessibilityElementsHidden>
+              <Text className="pl-3 text-body text-text-muted" aria-hidden>
                 ›
               </Text>
             </Pressable>
@@ -91,7 +91,7 @@ export default function SettingsScreen() {
                 Replay the three supplier beats — jobs, produce, hand off
               </Text>
             </View>
-            <Text className="pl-3 text-body text-text-muted" accessibilityElementsHidden>
+            <Text className="pl-3 text-body text-text-muted" aria-hidden>
               ›
             </Text>
           </Pressable>

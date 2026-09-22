@@ -9,6 +9,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { JobRow } from "@/components/JobRow";
 import { ScheduleDayCard } from "@/components/ScheduleDayCard";
 import { AlertsBell } from "@/components/AlertsBell";
+import { ChatButton } from "@/components/ChatButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -114,7 +115,15 @@ export default function ScheduleScreen() {
           />
         }
       >
-        <ScreenHeader title="Schedule" right={<AlertsBell />} />
+        <ScreenHeader
+          title="Schedule"
+          right={
+            <View className="flex-row items-center">
+              <ChatButton />
+              <AlertsBell />
+            </View>
+          }
+        />
 
         {/*
           The month first, then the list. A shop's own question is "which days

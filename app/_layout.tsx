@@ -28,12 +28,14 @@ import { ClerkSessionBridge } from "@/components/ClerkSessionBridge";
 
 import { colors, type ThemeName } from "@/constants/theme";
 import { useAlertStream } from "@/hooks/useAlertStream";
+import { useSupportChatUnread } from "@/hooks/useSupportChatUnread";
 import { useAppFonts } from "@/hooks/useAppFonts";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
 import { authDoorOpen } from "@/lib/launch";
 import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions";
 import { resolveClerkPublishableKey } from "@/lib/clerk";
+import { bounceToIsolatedDevWebHost, GRIDGO_DEV_WEB_HOST } from "@/lib/devWebHost";
 import { isMatchable, isSignedIn, useSession } from "@/store/session";
 
 SplashScreen.preventAutoHideAsync();
@@ -86,6 +88,10 @@ export default function RootLayout() {
   // once, so the flag is the whole gate — no route, no back-stack entry, and
   // nothing about where the launch lands is decided here.
   const [introPlaying, setIntroPlaying] = useState(true);
+
+  if (bounceToIsolatedDevWebHost(GRIDGO_DEV_WEB_HOST)) {
+    return null;
+  }
 
   return (
     // Without the metrics the platform already knows at launch, the provider
@@ -161,6 +167,7 @@ function RootStack() {
 
   // Live alerts for as long as there is a session to receive them.
   useAlertStream(signedIn);
+  useSupportChatUnread(signedIn);
   // The third delivery leg: the same alerts, on the phone, with GRIDGO closed.
   // Mounted here so registration, token rotation and a tapped alert are wired
   // once. It never raises the permission dialog — only `PushEnableCard` does
@@ -221,6 +228,20 @@ function RootStack() {
           name="alerts"
           options={{
             title: "Alerts",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        <Stack.Screen
+          name="chat/index"
+          options={{
+            title: "Chat",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        <Stack.Screen
+          name="chat/[thread]"
+          options={{
+            title: "Chat",
             headerBackButtonDisplayMode: "minimal",
           }}
         />

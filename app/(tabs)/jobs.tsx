@@ -10,6 +10,7 @@ import { FormScrollView } from "@/components/FormScrollView";
 import { JobCard } from "@/components/JobCard";
 import { JobDocketRail } from "@/components/JobDocketRail";
 import { AlertsBell } from "@/components/AlertsBell";
+import { ChatButton } from "@/components/ChatButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SectionHeader } from "@/components/SectionHeader";
 import { SkeletonList } from "@/components/Skeleton";
@@ -96,7 +97,15 @@ export default function JobsScreen() {
           />
         }
       >
-        <ScreenHeader title="Jobs" right={<AlertsBell />} />
+        <ScreenHeader
+          title="Jobs"
+          right={
+            <View className="flex-row items-center">
+              <ChatButton />
+              <AlertsBell />
+            </View>
+          }
+        />
 
         {loaded && jobs.length > 0 ? (
           <JobDocketRail

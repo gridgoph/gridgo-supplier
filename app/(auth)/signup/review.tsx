@@ -328,7 +328,7 @@ function ReviewCard({
         )}
       </View>
       <View className="pt-0.5">
-        <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+        <ChevronRight size={20} color={colors.textMuted} aria-hidden />
       </View>
     </Pressable>
   );

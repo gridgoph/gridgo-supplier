@@ -45,7 +45,7 @@ export function ServiceCategoryCard({ declaration, onPress }: Props) {
           ) : null}
         </View>
         <View className="pt-1">
-          <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+          <ChevronRight size={20} color={colors.textMuted} aria-hidden />
         </View>
       </View>
 

@@ -1,4 +1,4 @@
-import { Image, type ImageSourcePropType } from "react-native";
+import { Image, Platform, type ImageSourcePropType } from "react-native";
 import { cacheDirectory, downloadAsync } from "expo-file-system/legacy";
 
 import { starterImage } from "@/constants/images";
@@ -58,7 +58,10 @@ async function localFileForStarter(
   if (!resolved?.uri) {
     throw new Error("unreadable starter sample");
   }
-  if (resolved.uri.startsWith("file:")) return resolved.uri;
+  // Metro serves the bundled JPEG over HTTP on web. expo-file-system cannot
+  // copy that into a device file, and waiting on it leaves Create listing
+  // stuck on "Opening your listing…". The web uploader fetches this URI.
+  if (Platform.OS === "web" || resolved.uri.startsWith("file:")) return resolved.uri;
   if (!cacheDirectory) {
     throw new Error("no cache directory");
   }

@@ -214,6 +214,7 @@ export type ListingPatch = {
   speedTiers?: Listing["speedTiers"];
   turnaroundMode?: Listing["turnaroundMode"];
   turnaroundHours?: number | null;
+  minimumTurnaroundHours?: number | null;
   subcategoryCode?: string;
   /** The platform's `active`; "on the board" everywhere a shop can see. */
   active?: boolean;
@@ -444,10 +445,8 @@ export async function removeOption(
 /**
  * Set the order of a listing's samples. The first one is the board thumbnail.
  *
- * GRIDGO takes the whole current set and rejects anything else as stale, so
- * this only ever reorders. Removing a sample is not a thing the contract has:
- * an attached file cannot be deleted while it is referenced, and the way a
- * sample is taken down is to put another in its place — see {@link replacePhoto}.
+ * The ids are the samples that stay, in board order. A shorter list is how a
+ * photo comes off a listing — GRIDGO drops the missing ones.
  */
 export async function setPhotoOrder(
   listing: Listing,
@@ -457,6 +456,17 @@ export async function setPhotoOrder(
     await api.reorderCatalogItemPhotos(listing.id, listing.version, fileIds);
     return null;
   });
+}
+
+/** Take one sample off a listing. The rest keep their relative order. */
+export async function removePhoto(
+  listing: Listing,
+  fileId: string,
+): Promise<BoardOutcome<null>> {
+  return setPhotoOrder(
+    listing,
+    listing.photos.filter((photo) => photo.fileId !== fileId).map((photo) => photo.fileId),
+  );
 }
 
 /**

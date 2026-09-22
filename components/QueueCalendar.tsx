@@ -142,8 +142,7 @@ export function QueueCalendar({
             <Text
               key={`${letter}-${index}`}
               className="flex-1 text-center text-caption text-text-muted"
-              accessibilityElementsHidden
-              importantForAccessibility="no"
+              aria-hidden
             >
               {letter}
             </Text>

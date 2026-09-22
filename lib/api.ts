@@ -343,6 +343,11 @@ export type ResolveApiBaseInput = {
    * `:8787` works on any Wi-Fi without baking a LAN address into the app.
    */
   isDevice?: boolean;
+  /**
+   * Expo-web page hostname. `supplier.localhost` must call the API on that
+   * same host — `127.0.0.1` is a different site and Chromium blocks the fetch.
+   */
+  pageHostname?: string | null;
 };
 
 /**
@@ -396,17 +401,24 @@ function collectExpoHostCandidates(): (string | null | undefined)[] {
  *
  * Precedence:
  * 1. Non-empty `envUrl` (trailing slash stripped)
- * 2. Hostname from Expo dev-server host candidates → `http://<host>:<port>`
- * 3. If that host is loopback and platform is Android:
+ * 2. On web, the page hostname + port (Clerk isolation hosts)
+ * 3. Hostname from Expo dev-server host candidates → `http://<host>:<port>`
+ * 4. If that host is loopback and platform is Android:
  *    emulator (`isDevice === false`) → `http://10.0.2.2:<port>`
  *    physical phone / unknown → `http://127.0.0.1:<port>` (USB reverse is IPv4)
- * 4. `http://127.0.0.1:<port>`
+ * 5. `http://127.0.0.1:<port>`
  */
 export function resolveApiBase(input: ResolveApiBaseInput = {}): string {
   const envUrl = input.envUrl?.trim().replace(/\/$/, "");
   if (envUrl) return envUrl;
 
   const port = input.envPort?.trim() || "8787";
+  const pageHost = input.pageHostname?.trim();
+  if (input.platformOS === "web" && pageHost) {
+    const host =
+      pageHost.startsWith("[") || !pageHost.includes(":") ? pageHost : `[${pageHost}]`;
+    return `http://${host}:${port}`;
+  }
   const candidates = input.hostCandidates ?? [];
   let host: string | null = null;
   for (const candidate of candidates) {
@@ -430,12 +442,17 @@ export function resolveApiBase(input: ResolveApiBaseInput = {}): string {
 }
 
 export function getApiBase(): string {
+  const pageHostname =
+    Platform.OS === "web" && typeof window !== "undefined"
+      ? window.location.hostname?.trim() || null
+      : null;
   return resolveApiBase({
     envUrl: process.env.EXPO_PUBLIC_API_URL,
     envPort: process.env.EXPO_PUBLIC_API_PORT,
     hostCandidates: collectExpoHostCandidates(),
     platformOS: Platform.OS,
     isDevice: Constants.isDevice,
+    pageHostname,
   });
 }
 
@@ -465,12 +482,24 @@ export function setTokenProvider(provider: TokenProvider | null): void {
   if (provider) tokenMemory = null;
 }
 
-/** Fresh for every request; Clerk session JWTs rotate while the app is open. */
+/**
+ * Fresh for every request; Clerk session JWTs rotate while the app is open.
+ *
+ * Clerk's `getToken` function identity changes while the session stays the
+ * same. Dropping a JWT just because that function was replaced is what sent
+ * listing PATCH with no Bearer (401) and then signed the shop out. Sign-out
+ * clears the provider; a live-owner change is `assertLiveGeneration`.
+ */
 export async function getAuthToken(): Promise<string | null> {
   if (!tokenProvider) return tokenMemory;
   const provider = tokenProvider;
-  const token = await provider();
-  if (provider !== tokenProvider) return null;
+  let token: string | null = null;
+  try {
+    token = (await provider())?.trim() || null;
+  } catch {
+    token = null;
+  }
+  if (!tokenProvider) return null;
   tokenMemory = token;
   return token;
 }
@@ -536,8 +565,9 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   });
   let res: Response;
   let text: string;
+  let token: string | null = null;
   try {
-    const token = await Promise.race([getAuthToken(), aborted]);
+    token = await Promise.race([getAuthToken(), aborted]);
     assertLiveGeneration(generation);
     if (token) { headers.Authorization = `Bearer ${token}`; headers["X-GRIDGO-Role"] = "supplier"; }
     res = await Promise.race([fetch(`${getApiBase()}${path}`, {
@@ -567,10 +597,10 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     }
   }
   if (!res.ok) {
-    // Clear the bearer on any 401 so a stale token cannot keep calling APIs.
-    // The session store's unauthorized handler then nulls `user` and the root
-    // route guard unmounts the signed-in area (no per-screen redirects).
-    if (res.status === 401 && !ignoreUnauthorized) {
+    // A 401 on a request that carried a Bearer is a dead session. A 401 on a
+    // request we sent without one is our miss — signing the shop out then
+    // turns a brief Clerk token gap into "this shop is still closed".
+    if (res.status === 401 && !ignoreUnauthorized && token) {
       setToken(null);
       unauthorizedHandler?.();
     }
@@ -1030,6 +1060,21 @@ function versioned(
 }
 
 /**
+ * Version a DELETE without a JSON body or `If-Match`.
+ *
+ * GRIDGO reads `expectedVersion` from the query, the header, or the body.
+ * A body-less DELETE used to 400; putting the version only in `If-Match`
+ * then failed on web because that header was not CORS-allowed, and the shop
+ * was told to check its connection. The query string is what both sides
+ * already agree on and what a browser will actually send.
+ */
+function versionedPath(path: string, version: number | null | undefined): string {
+  if (version == null) return path;
+  const join = path.includes("?") ? "&" : "?";
+  return `${path}${join}expectedVersion=${encodeURIComponent(String(version))}`;
+}
+
+/**
  * What the shop asks its own board for.
  *
  * Every one of these is a GRIDGO predicate, not a local `.filter` — the hunt,
@@ -1117,9 +1162,8 @@ export async function deleteCatalogItem(
   itemId: string,
   version: number | null,
 ): Promise<unknown> {
-  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}`, {
+  return request<unknown>(versionedPath(`/me/catalog-items/${encodeURIComponent(itemId)}`, version), {
     method: "DELETE",
-    ...versioned(version),
   });
 }
 
@@ -1176,8 +1220,11 @@ export async function deleteCatalogOptionGroup(
   groupVersion: number | null,
 ): Promise<unknown> {
   return request<unknown>(
-    `/me/catalog-items/${encodeURIComponent(itemId)}/option-groups/${encodeURIComponent(groupId)}`,
-    { method: "DELETE", ...versioned(groupVersion) },
+    versionedPath(
+      `/me/catalog-items/${encodeURIComponent(itemId)}/option-groups/${encodeURIComponent(groupId)}`,
+      groupVersion,
+    ),
+    { method: "DELETE" },
   );
 }
 
@@ -1210,16 +1257,19 @@ export async function deleteCatalogOption(
   groupVersion: number | null,
 ): Promise<unknown> {
   return request<unknown>(
-    `/me/catalog-option-groups/${encodeURIComponent(groupId)}/options/${encodeURIComponent(optionId)}`,
-    { method: "DELETE", ...versioned(groupVersion) },
+    versionedPath(
+      `/me/catalog-option-groups/${encodeURIComponent(groupId)}/options/${encodeURIComponent(optionId)}`,
+      groupVersion,
+    ),
+    { method: "DELETE" },
   );
 }
 
 /**
  * Set the order of a listing's sample photos. The first id is the board thumb.
  *
- * GRIDGO requires the **whole current set**, so this reorders and nothing else
- * — a shorter list is rejected as stale rather than quietly dropping a sample.
+ * The first id is the board thumb. A shorter list is the samples that stay —
+ * that is how a photo comes off a listing. An unknown id is rejected as stale.
  */
 export async function reorderCatalogItemPhotos(
   itemId: string,
@@ -1312,8 +1362,11 @@ export async function deletePrepStep(
   version: number | null,
 ): Promise<unknown> {
   return request<unknown>(
-    `/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps/${encodeURIComponent(stepId)}`,
-    { method: "DELETE", ...versioned(version) },
+    versionedPath(
+      `/me/catalog-items/${encodeURIComponent(itemId)}/prep-steps/${encodeURIComponent(stepId)}`,
+      version,
+    ),
+    { method: "DELETE" },
   );
 }
 
@@ -1554,4 +1607,81 @@ export function formatPhp(minor: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+export type SupportChatPartyRole = "client" | "supplier" | "rider";
+export type SupportChatSenderRole = SupportChatPartyRole | "ops_admin" | "super_admin";
+
+export type SupportChatThread = {
+  id: string;
+  partyUserId: string;
+  partyRole: SupportChatPartyRole;
+  partyName?: string | null;
+  partyEmail?: string | null;
+  lastMessageAt?: string | null;
+  lastMessagePreview?: string | null;
+  lastMessageSenderRole?: SupportChatSenderRole | null;
+  unreadCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SupportChatMessage = {
+  id: string;
+  threadId: string;
+  senderUserId: string;
+  senderRole: SupportChatSenderRole;
+  senderName?: string | null;
+  body: string;
+  createdAt: string;
+  mine: boolean;
+};
+
+export async function getSupportChatMe(): Promise<{
+  threads?: SupportChatThread[];
+  thread: SupportChatThread | null;
+  messages: SupportChatMessage[];
+  unreadCount?: number;
+}> {
+  return request("/support-chat/me");
+}
+
+export async function getSupportChatThread(threadId: string): Promise<{
+  thread: SupportChatThread;
+  messages: SupportChatMessage[];
+}> {
+  return request(`/support-chat/threads/${encodeURIComponent(threadId)}`);
+}
+
+export async function openSupportChatThread(): Promise<{ thread: SupportChatThread }> {
+  return request("/support-chat/me/threads", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function sendSupportChatMessage(
+  body: string,
+  threadId?: string,
+): Promise<{
+  thread: SupportChatThread;
+  message: SupportChatMessage;
+}> {
+  return request("/support-chat/me/messages", {
+    method: "POST",
+    body: JSON.stringify({ body, ...(threadId ? { threadId } : {}) }),
+  });
+}
+
+export async function markSupportChatRead(threadId?: string): Promise<{
+  thread: SupportChatThread | null;
+  unreadCount?: number;
+}> {
+  if (threadId) {
+    return request(`/support-chat/threads/${encodeURIComponent(threadId)}/read`, {
+      method: "PATCH",
+      body: JSON.stringify({}),
+    });
+  }
+  return request("/support-chat/me/read", { method: "PATCH", body: JSON.stringify({}) });
 }

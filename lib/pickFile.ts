@@ -2,6 +2,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 
 import type { PickedDocument } from "@/store/signupDraft";
+import { canPickOnWeb, pickFileOnWeb, type WebPickedAsset } from "@/lib/webFilePick";
 
 /**
  * Choosing a file without sending it anywhere.
@@ -19,7 +20,22 @@ export type PickOutcome =
 
 const CANCELLED: PickOutcome = { ok: false, cancelled: true };
 
+function fromWeb(picked: WebPickedAsset): PickedDocument {
+  return {
+    uri: picked.uri,
+    fileName: picked.name,
+    mimeType: picked.mimeType,
+    sizeBytes: picked.size,
+    file: picked.file,
+  };
+}
+
 export async function takePhoto(): Promise<PickOutcome> {
+  if (canPickOnWeb()) {
+    const picked = await pickFileOnWeb("image/*");
+    if (!picked) return CANCELLED;
+    return { ok: true, document: fromWeb(picked) };
+  }
   const permission = await ImagePicker.requestCameraPermissionsAsync();
   if (!permission.granted) {
     return {
@@ -44,6 +60,11 @@ export async function takePhoto(): Promise<PickOutcome> {
 }
 
 export async function chooseFile(): Promise<PickOutcome> {
+  if (canPickOnWeb()) {
+    const picked = await pickFileOnWeb("application/pdf,image/*");
+    if (!picked) return CANCELLED;
+    return { ok: true, document: fromWeb(picked) };
+  }
   const result = await DocumentPicker.getDocumentAsync({
     type: ["application/pdf", "image/*"],
     copyToCacheDirectory: true,

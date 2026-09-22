@@ -1,7 +1,7 @@
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack } from "expo-router";
 
-import { stackScreenOptions } from "@/lib/navigationOptions";
+import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions";
 import { useThemeName } from "@/hooks/useTheme";
 
 /**
@@ -26,6 +26,12 @@ export default function ShopLayout() {
       <Stack.Screen name="[id]/index" options={{ title: "Listing" }} />
       <Stack.Screen name="[id]/photos" options={{ title: "Sample photos" }} />
       <Stack.Screen name="[id]/preview" options={{ title: "What clients see" }} />
+      {/*
+        The listing editor is this stack, not the root. A root formSheet has
+        no card here to present over, so Remove this listing opened nothing
+        on the phone. This is the same sheet, presented on the listing.
+      */}
+      <Stack.Screen name="confirm" options={sheetScreenOptions(scheme)} />
     </Stack>
   );
 }

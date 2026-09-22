@@ -12,6 +12,7 @@ import {
   normalizeListing,
   normalizeListings,
   normalizeStarters,
+  photoViewUrl,
   priceLine,
   printerCapLine,
   printerMaxWidthFeetForPayload,
@@ -108,6 +109,32 @@ describe("reading what GRIDGO sends", () => {
         printer_max_width_feet: 7,
       })?.printerMaxWidthFeet,
     ).toBe(7);
+  });
+
+  it("keeps the signed viewing link that arrived with the listing", () => {
+    const listing = normalizeListing({
+      id: "item_2",
+      name: "Flyers",
+      photos: [
+        {
+          fileId: "file_lovis_flyers",
+          sortOrder: 0,
+          downloadUrl: "https://files.test/flyers.jpg",
+          downloadUrlExpiresAt: "2099-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+    expect(listing?.photos[0].downloadUrl).toBe("https://files.test/flyers.jpg");
+    expect(photoViewUrl(listing?.photos[0])).toBe("https://files.test/flyers.jpg");
+    expect(
+      photoViewUrl({
+        fileId: "file_1",
+        sortOrder: 0,
+        altText: null,
+        downloadUrl: "https://files.test/expired.jpg",
+        downloadUrlExpiresAt: "2020-01-01T00:00:00.000Z",
+      }),
+    ).toBeNull();
   });
 
   it("reads photos sent as bare file ids", () => {
@@ -230,6 +257,7 @@ describe("what a listing costs", () => {
   it("says the wait in the unit a shop would say it in", () => {
     expect(readyInLine(24)).toBe("Ready in 24 hours");
     expect(readyInLine(72)).toBe("Ready in 3 days");
+    expect(readyInLine(72, 24)).toBe("Ready in 24–72 hours");
     expect(readyInLine(null)).toBe("Ready-in not set");
   });
 });

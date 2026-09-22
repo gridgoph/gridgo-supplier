@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { router } from "expo-router";
+import { Platform } from "react-native";
+import { router, useNavigation } from "expo-router";
 
 import { DangerButton } from "@/components/DangerButton";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -20,9 +21,18 @@ import { settleConfirm, useSheets } from "@/store/sheets";
  */
 export default function ConfirmSheet() {
   const pending = useSheets((s) => s.confirm);
+  const navigation = useNavigation();
 
-  // Whatever dismisses this sheet, the caller gets an answer.
-  useEffect(() => () => settleConfirm(false), []);
+  // Native: the sheet is gone when this screen unmounts (drag, back, scrim).
+  // Web: that cleanup also runs on React Strict Mode's first remount, which
+  // resolved every confirm as "no" before a button was pressed. beforeRemove
+  // is the leave that a remount is not.
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      return navigation.addListener("beforeRemove", () => settleConfirm(false));
+    }
+    return () => settleConfirm(false);
+  }, [navigation]);
 
   if (!pending) return null;
   const { question, consequence, confirmLabel, cancelLabel, destructive } = pending.request;

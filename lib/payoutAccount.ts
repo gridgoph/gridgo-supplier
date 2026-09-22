@@ -5,6 +5,7 @@ import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { newUploadItem, uploadFile } from "@/lib/files";
 import { isPhoneish } from "@/lib/onboardingSteps";
 import { takePhoto, type PickOutcome } from "@/lib/pickFile";
+import { canPickOnWeb, pickFileOnWeb } from "@/lib/webFilePick";
 import type { Option } from "@/components/controls/OptionList";
 
 /**
@@ -230,6 +231,7 @@ export type PickedQr = {
   fileName: string;
   mimeType: string | null;
   sizeBytes: number | null;
+  file?: File;
 };
 
 /** GRIDGO keeps a receiving QR under 5 MB; a phone photo is well under that. */
@@ -241,6 +243,20 @@ export async function takeQrPhoto(): Promise<PickOutcome> {
 
 /** Pictures only. A QR saved as a PDF would not scan from a screen anyway. */
 export async function chooseQrPicture(): Promise<PickOutcome> {
+  if (canPickOnWeb()) {
+    const picked = await pickFileOnWeb("image/*");
+    if (!picked) return { ok: false, cancelled: true };
+    return {
+      ok: true,
+      document: {
+        uri: picked.uri,
+        fileName: picked.name || "payout-qr.jpg",
+        mimeType: picked.mimeType,
+        sizeBytes: picked.size,
+        file: picked.file,
+      },
+    };
+  }
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ["images"],
     quality: 0.9,

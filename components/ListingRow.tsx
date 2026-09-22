@@ -10,6 +10,7 @@ import {
   effectiveTurnaroundHours,
   fromPriceMinor,
   hasPriceRange,
+  photoViewUrl,
   priceLine,
   readyInLine,
   subcategoryName,
@@ -54,7 +55,19 @@ export function ListingRow({
   const money = formatPhp(fromPriceMinor(listing));
 
   return (
-    <View collapsable={false} className="rounded-card border border-outline bg-surface">
+    <View
+      collapsable={false}
+      className="flex-row items-start gap-3 rounded-card border border-outline bg-surface py-1 pr-4"
+    >
+      <View className="w-28 shrink-0">
+        <SamplePhoto
+          fileId={first?.fileId}
+          url={photoViewUrl(first)}
+          altText={first?.altText ?? listing.name}
+          emptyLabel="No sample yet"
+          gutter="tight"
+        />
+      </View>
       <Pressable
         onPress={onPress}
         onLongPress={onRemove}
@@ -65,17 +78,9 @@ export function ListingRow({
         onAccessibilityAction={(event) => {
           if (event.nativeEvent.actionName === "remove") onRemove?.();
         }}
-        className="flex-row items-start gap-3 py-1 pr-4"
+        className="min-w-0 flex-1 flex-row items-start gap-3"
         style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
       >
-        <View className="w-28 shrink-0">
-          <SamplePhoto
-            fileId={first?.fileId}
-            altText={first?.altText ?? listing.name}
-            emptyLabel="No sample yet"
-            gutter="tight"
-          />
-        </View>
         <View className="min-w-0 flex-1 gap-1 py-3">
           <HuntedName
             name={listing.name || "Untitled listing"}
@@ -87,7 +92,7 @@ export function ListingRow({
             {subcategoryName(catalog, listing.subcategoryCode)}
           </Text>
           <Text className="text-caption text-text-muted" numberOfLines={1}>
-            {readyInLine(hours)}
+            {readyInLine(hours, listing.minimumTurnaroundHours)}
           </Text>
           <View className="mt-0.5 flex-row flex-wrap">
             <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />

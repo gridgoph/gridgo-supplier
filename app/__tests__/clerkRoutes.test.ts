@@ -90,6 +90,8 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(source("app/(auth)/login.tsx")).toContain("emailUnavailableMessage");
     expect(source("app/(auth)/login.tsx")).toContain("gridgoUnreachableMessage");
     expect(source("app/(auth)/login.tsx")).toContain("prepareApplyDraft");
+    expect(source("app/(auth)/login.tsx")).toContain('beginSessionWait("in")');
+    expect(source("app/(auth)/login.tsx")).toContain("function adoptAndEnter");
     expect(source("lib/clerkSignIn.ts")).toContain("needs_second_factor");
     expect(source("lib/clerkSignIn.ts")).toContain("needs_client_trust");
     expect(source("app/(auth)/recover-password.tsx")).toContain("JobTicketCode");
@@ -152,8 +154,11 @@ describe("public apply and Clerk sign-in routes", () => {
 
     expect(layout).toContain('from "@clerk/expo/token-cache"');
     expect(layout).toContain("tokenCache={tokenCache}");
-    expect(bridge).toContain("clerkAccessFor(user.publicMetadata)");
+    expect(bridge).toContain("clerkAccessFor(user?.publicMetadata)");
     expect(bridge).toContain("api.me(");
+    // A live Clerk session with no `useUser()` yet is not signed-out.
+    expect(bridge).toContain("if (!isSignedIn)");
+    expect(bridge).not.toContain("if (!isSignedIn || !user)");
     // Clerk restoration must not blank the door. Setting loading before
     // isLoaded unmounts welcome and paints the dark canvas with nothing on it.
     const restoring = bridge.slice(

@@ -45,7 +45,7 @@ export function ObligationRow({ obligation, onPress }: Props) {
         </Text>
       </View>
       <Text className="text-caption text-text-secondary">{obligation.actionLabel}</Text>
-      <ChevronRight size={18} color={colors.textMuted} accessibilityElementsHidden />
+      <ChevronRight size={18} color={colors.textMuted} aria-hidden />
     </Pressable>
   );
 }

@@ -81,6 +81,7 @@ export default function LoginScreen() {
   }
 
   async function adoptAndEnter() {
+    useSession.getState().beginSessionWait("in");
     const next = await enterAfterClerkSession(getToken as ClerkGetToken);
     if (next.kind === "blocked") {
       if (next.message === emailUnavailableMessage) {

@@ -47,6 +47,7 @@ import type { CatalogListQuery } from "@/lib/api";
 import type { Listing } from "@/lib/listings";
 import { loadBoard, loadBoardKinds, removeListing } from "@/lib/listingsApi";
 import { askConfirm, askPick } from "@/store/sheets";
+import { useListingWizard } from "@/store/listingWizard";
 import { useSession } from "@/store/session";
 
 const approvedShop = {
@@ -318,6 +319,7 @@ describe("the shop's board", () => {
       .mockResolvedValueOnce(page([listing]))
       .mockResolvedValue(page([]));
     (removeListing as jest.Mock).mockResolvedValue({ status: "ok", value: "deleted" });
+    useListingWizard.setState({ listingId: listing.id, step: "about", furthest: "about" });
 
     const view = await render(<BoardScreen />);
 
@@ -332,6 +334,7 @@ describe("the shop's board", () => {
       expect.objectContaining({ destructive: true, confirmLabel: "Remove it" }),
     );
     await waitFor(() => expect(screen.queryByText("Tarpaulin, 13oz")).toBeNull());
+    expect(useListingWizard.getState().listingId).toBeNull();
     await view.unmount();
   });
 

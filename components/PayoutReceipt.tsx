@@ -73,7 +73,7 @@ export function PayoutReceipt({ fileId, reference, label }: Props) {
     >
       <View
         className="h-16 w-12 overflow-hidden rounded-field bg-white"
-        accessibilityElementsHidden
+        aria-hidden
       >
         {uri && !failed ? (
           <Image
@@ -92,7 +92,7 @@ export function PayoutReceipt({ fileId, reference, label }: Props) {
       </View>
       <View className="min-w-0 flex-1 gap-0.5">
         <View className="flex-row items-center gap-1.5">
-          <Receipt size={16} color={colors.textMuted} strokeWidth={2} accessibilityElementsHidden />
+          <Receipt size={16} color={colors.textMuted} strokeWidth={2} aria-hidden />
           <Text className="text-body text-text-primary">Wallet receipt</Text>
         </View>
         <Text className="text-caption text-text-muted" numberOfLines={1}>
@@ -100,7 +100,7 @@ export function PayoutReceipt({ fileId, reference, label }: Props) {
           {failed ? " · picture will not load" : ""}
         </Text>
       </View>
-      <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+      <ChevronRight size={20} color={colors.textMuted} aria-hidden />
     </Pressable>
   );
 }

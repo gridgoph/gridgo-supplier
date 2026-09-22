@@ -11,6 +11,7 @@ jest.mock("@/components/ClerkSessionBridge", () => ({ ClerkSessionBridge: ({ chi
 jest.mock("@/components/BrandIntro", () => ({ BrandIntro: () => null }));
 jest.mock("@/components/ToastHost", () => ({ ToastHost: () => null }));
 jest.mock("@/hooks/useAlertStream", () => ({ useAlertStream: jest.fn() }));
+jest.mock("@/hooks/useSupportChatUnread", () => ({ useSupportChatUnread: jest.fn() }));
 jest.mock("@/hooks/usePushNotifications", () => ({ usePushNotifications: jest.fn() }));
 jest.mock("@/hooks/useAppFonts", () => ({ useAppFonts: jest.fn() }));
 jest.mock("@/hooks/useTheme", () => ({
