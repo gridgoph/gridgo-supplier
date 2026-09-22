@@ -6,6 +6,7 @@ import {
   loadBoard,
   loadListing,
   removeListing,
+  removePhoto,
   reorderPrepSteps,
   saveListing,
 } from "@/lib/listingsApi";
@@ -260,6 +261,23 @@ describe("what the board sends GRIDGO", () => {
   });
 
   /** Steps move as a whole set; two swapping would collide one at a time. */
+  it("takes a sample off by sending the photos that stay", async () => {
+    const fetch = jest.spyOn(global, "fetch").mockResolvedValue(answered(200, {}));
+    const withPhotos: Listing = {
+      ...listing,
+      photos: [
+        { fileId: "file_keep", sortOrder: 0, altText: null },
+        { fileId: "file_drop", sortOrder: 1, altText: null },
+      ],
+    };
+
+    await removePhoto(withPhotos, "file_drop");
+
+    const call = sent(fetch);
+    expect(call.url).toContain("/me/catalog-items/sci_1/photos/reorder");
+    expect(call.body).toEqual({ fileIds: ["file_keep"], expectedVersion: 7 });
+  });
+
   it("reorders steps by sending every one of them", async () => {
     const fetch = jest.spyOn(global, "fetch").mockResolvedValue(answered(200, {}));
 

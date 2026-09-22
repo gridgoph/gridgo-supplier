@@ -232,7 +232,14 @@ function RootStack() {
           }}
         />
         <Stack.Screen
-          name="chat"
+          name="chat/index"
+          options={{
+            title: "Chat",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        <Stack.Screen
+          name="chat/[thread]"
           options={{
             title: "Chat",
             headerBackButtonDisplayMode: "minimal",

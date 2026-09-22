@@ -37,6 +37,7 @@ import { useBoard } from "@/hooks/useBoard";
 import { useCatalogueView } from "@/hooks/useCatalogueView";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
+import { useListingWizard } from "@/store/listingWizard";
 import { askConfirm, askPick } from "@/store/sheets";
 import { isMatchable, useSession } from "@/store/session";
 
@@ -140,6 +141,7 @@ export default function BoardScreen() {
       setNotice(null);
       const result = await removeListing(listing);
       if (result.status === "ok") {
+        useListingWizard.getState().forget(listing.id);
         dropListing(listing.id);
         setNotice(result.value === "archived" ? ARCHIVED_SENTENCE : null);
         await reload();

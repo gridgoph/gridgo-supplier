@@ -1,6 +1,6 @@
-import { ChevronRight, Link2 } from "lucide-react-native";
+import { Link2 } from "lucide-react-native";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -10,7 +10,6 @@ import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { FormScrollView } from "@/components/FormScrollView";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { SamplePhoto } from "@/components/SamplePhoto";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { AddGroupButton, SpecGroupEditor } from "@/components/SpecGroupEditor";
@@ -21,13 +20,29 @@ import { FormatPlusField } from "@/components/FormatPlusField";
 import { MoneyField } from "@/components/controls/MoneyField";
 import { NoteField } from "@/components/controls/NoteField";
 import { OptionList } from "@/components/controls/OptionList";
+import { DestinationRow } from "@/components/listing/DestinationRow";
+import { ListingSection as Section } from "@/components/listing/ListingSection";
 import { PrinterCapField } from "@/components/listing/PrinterCapField";
+import { SampleStrip } from "@/components/listing/SampleStrip";
 import { PriceTierEditor, SpeedTierEditor } from "@/components/listing/TierEditor";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import { Stepper } from "@/components/controls/Stepper";
 import { TextField } from "@/components/controls/TextField";
 import { fileFormatName, linkFormatInvitation } from "@/data/fileFormats";
 import { spacing } from "@/constants/theme";
+import {
+  applyDraft,
+  draftFrom,
+  formatsMoved,
+  listingSavePatch,
+  measureUnitFor,
+  needsMeasure,
+  packageQtyFor,
+  PACK_STEP,
+  sameDraft,
+  type ListingDraft as Draft,
+  unitHint,
+} from "@/lib/listingDraft";
 import {
   addOns,
   asksQuantity,
@@ -42,7 +57,6 @@ import {
   needsPrinterCap,
   PRICING_UNITS,
   priceLine,
-  printerMaxWidthFeetForPayload,
   unitChoiceLabel,
   readyInLine,
   specs,
@@ -59,6 +73,7 @@ import {
   removeGroup,
   removeListing,
   removeOption,
+  removePhoto,
   removePrepStep,
   reorderPrepSteps,
   saveGroup,
@@ -72,6 +87,7 @@ import { resolveCategoryCode } from "@/lib/taxonomy";
 import { useAcceptedFileFormats } from "@/hooks/useAcceptedFileFormats";
 import { routeId, useListing } from "@/hooks/useBoard";
 import { useThemeColors } from "@/hooks/useTheme";
+import { useListingWizard } from "@/store/listingWizard";
 import { askConfirm } from "@/store/sheets";
 import { isMatchable, useSession } from "@/store/session";
 
@@ -184,36 +200,10 @@ export default function ListingScreen() {
       setBusy(true);
       setActionError(null);
       try {
-        const saved = await saveListing(baseline, {
-          name: working.name.trim(),
-          description: working.description.trim(),
-          basePriceMinor: money.minor ?? 0,
-          pricingUnit: working.pricingUnit,
-          packageQty: working.pricingUnit === "per_package" ? working.packageQty : null,
-          // A rule only exists while its unit does: a square-foot minimum left
-          // on a listing switched to per-piece would price the next order off
-          // something nobody can see any more.
-          measureUnit: needsMeasure(working.pricingUnit) ? working.measureUnit : null,
-          minimumWidthMilli:
-            measurementKind(working.pricingUnit) === "area" ? toMilli(working.minimumWidth) : null,
-          minimumHeightMilli:
-            measurementKind(working.pricingUnit) === "area" ? toMilli(working.minimumHeight) : null,
-          minimumLengthMilli:
-            measurementKind(working.pricingUnit) === "length" ? toMilli(working.minimumLength) : null,
-          printerMaxWidthFeet: printerMaxWidthFeetForPayload(
-            working.subcategoryCode,
-            working.printerMaxWidthFeet,
-          ),
-          minimumOrderQuantity:
-            asksQuantity(working.pricingUnit) ? working.minimumOrderQuantity : null,
-          priceTiers: asksQuantity(working.pricingUnit) ? working.priceTiers : [],
-          speedTiers: working.speedTiers,
-          turnaroundMode: working.turnaroundMode,
-          turnaroundHours:
-            working.turnaroundMode === "override" ? working.turnaroundHours : null,
-          subcategoryCode: working.subcategoryCode,
-          ...(onTheBoard == null ? {} : { active: onTheBoard }),
-        });
+        const saved = await saveListing(
+          baseline,
+          listingSavePatch(working, money.minor ?? 0, onTheBoard),
+        );
         if (saved.status !== "ok") {
           setActionError(saved.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : saved.message);
           return false;
@@ -221,10 +211,7 @@ export default function ListingScreen() {
         dirtyRef.current = false;
         storeDraft(null);
 
-        const formatsMoved =
-          working.fileFormatMode !== baseline.fileFormatMode ||
-          working.formatCodes.join(",") !== baseline.formatCodes.join(",");
-        if (formatsMoved) {
+        if (formatsMoved(working, baseline)) {
           const formatsSaved = await setFileFormats(
             saved.value,
             working.fileFormatMode,
@@ -303,6 +290,7 @@ export default function ListingScreen() {
 
     if (result.status === "ok") {
       dirtyRef.current = false;
+      useListingWizard.getState().forget(listing.id);
       if (result.value === "deleted") {
         // Leave the wait up until this screen is gone. Clearing it and
         // popping in the same moment crashed the project on Android.
@@ -426,9 +414,28 @@ export default function ListingScreen() {
               : "A listing cannot go on the board without one."
           }
         >
-          <SampleStrip listing={listing} />
+          <SampleStrip
+            listing={listing}
+            onRemove={(fileId) => {
+              void (async () => {
+                const confirmed = await askConfirm(
+                  {
+                    question: `Take this sample off “${listing.name || "this listing"}”?`,
+                    consequence:
+                      "It will no longer appear on this listing. You can add another sample afterwards.",
+                    confirmLabel: "Remove",
+                    cancelLabel: "Keep it",
+                    destructive: true,
+                  },
+                  "/shop/confirm",
+                );
+                if (!confirmed) return;
+                await run(async () => removePhoto(listing, fileId));
+              })();
+            }}
+          />
           <DestinationRow
-            title={listing.photos.length ? "Change your samples" : "Add a sample photo"}
+            title={listing.photos.length ? "Edit photos" : "Add a sample photo"}
             detail={`${listing.photos.length} of ${LISTING_CAPS.photos} used.`}
             onPress={() =>
               void persistThen(() =>
@@ -510,7 +517,14 @@ export default function ListingScreen() {
               hint: unitHint(unit),
             }))}
             value={working.pricingUnit}
-            onChange={(value) => setDraft({ ...working, pricingUnit: value })}
+            onChange={(value) =>
+              setDraft({
+                ...working,
+                pricingUnit: value,
+                measureUnit: measureUnitFor(value, working.measureUnit),
+                packageQty: packageQtyFor(value, working.packageQty),
+              })
+            }
             accessibilityLabel="How this listing is priced"
           />
           <MoneyField
@@ -1010,46 +1024,7 @@ export default function ListingScreen() {
   );
 }
 
-/**
- * Every sample, in a row.
- *
- * A wall of samples is a row, not a grid: horizontal keeps the price section
- * above the fold on a small phone, and it makes "the first one is your board
- * photo" mean the leftmost one, which is how a strip is read. All of them are
- * drawn — a shop that added six and saw four believed two had not saved.
- */
-function SampleStrip({ listing }: { listing: Listing }) {
-  if (!listing.photos.length) {
-    return (
-      <View className="w-1/2">
-        <SamplePhoto gutter="tight" emptyLabel="No samples yet" />
-      </View>
-    );
-  }
-
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      accessibilityLabel={`${listing.photos.length} sample photos`}
-    >
-      <View className="flex-row">
-        {listing.photos.map((photo, index) => (
-          <View key={photo.fileId} className="w-28">
-            <SamplePhoto
-              fileId={photo.fileId}
-              altText={photo.altText ?? listing.name}
-              gutter="tight"
-            />
-            <Text className="px-1.5 text-caption text-text-muted" numberOfLines={1}>
-              {index === 0 ? "Board photo" : `Sample ${index + 1}`}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </ScrollView>
-  );
-}
+export { sameDraft } from "@/lib/listingDraft";
 
 function LinkGlyph() {
   const colors = useThemeColors();
@@ -1067,200 +1042,3 @@ function swap<T>(items: readonly T[], from: number, to: number): T[] {
   return next;
 }
 
-/** A pack is usually round: 100, 500, 1000. Stepping by one would be cruel. */
-const PACK_STEP = 25;
-
-type Draft = {
-  name: string;
-  description: string;
-  /** Pesos as typed, so a half-typed "12." is not mangled. */
-  price: string;
-  pricingUnit: Listing["pricingUnit"];
-  packageQty: number | null;
-  measureUnit: Listing["measureUnit"];
-  /** Smallest billable size, in whole units of `measureUnit` as the shop types them. */
-  minimumWidth: number | null;
-  minimumHeight: number | null;
-  minimumLength: number | null;
-  printerMaxWidthFeet: number | null;
-  minimumOrderQuantity: number | null;
-  priceTiers: Listing["priceTiers"];
-  speedTiers: Listing["speedTiers"];
-  turnaroundMode: Listing["turnaroundMode"];
-  turnaroundHours: number | null;
-  subcategoryCode: string;
-  fileFormatMode: Listing["fileFormatMode"];
-  formatCodes: string[];
-};
-
-function draftFrom(listing: Listing): Draft {
-  return {
-    name: listing.name,
-    description: listing.description,
-    price: listing.basePriceMinor ? (listing.basePriceMinor / 100).toFixed(2) : "",
-    pricingUnit: listing.pricingUnit,
-    packageQty: listing.packageQty,
-    measureUnit: listing.measureUnit,
-    minimumWidth: fromMilli(listing.minimumWidthMilli),
-    minimumHeight: fromMilli(listing.minimumHeightMilli),
-    minimumLength: fromMilli(listing.minimumLengthMilli),
-    printerMaxWidthFeet: listing.printerMaxWidthFeet,
-    minimumOrderQuantity: listing.minimumOrderQuantity,
-    priceTiers: listing.priceTiers,
-    speedTiers: listing.speedTiers,
-    turnaroundMode: listing.turnaroundMode,
-    turnaroundHours: listing.turnaroundHours,
-    subcategoryCode: listing.subcategoryCode,
-    fileFormatMode: listing.fileFormatMode,
-    formatCodes: listing.formatCodes,
-  };
-}
-
-/** Whether anything a shop typed differs from what GRIDGO holds. */
-export function sameDraft(left: Draft, right: Draft): boolean {
-  return (
-    left.name === right.name &&
-    left.description === right.description &&
-    left.price === right.price &&
-    left.pricingUnit === right.pricingUnit &&
-    left.packageQty === right.packageQty &&
-    left.measureUnit === right.measureUnit &&
-    left.minimumWidth === right.minimumWidth &&
-    left.minimumHeight === right.minimumHeight &&
-    left.minimumLength === right.minimumLength &&
-    left.printerMaxWidthFeet === right.printerMaxWidthFeet &&
-    left.minimumOrderQuantity === right.minimumOrderQuantity &&
-    tierKey(left.priceTiers) === tierKey(right.priceTiers) &&
-    speedKey(left.speedTiers) === speedKey(right.speedTiers) &&
-    left.turnaroundMode === right.turnaroundMode &&
-    left.turnaroundHours === right.turnaroundHours &&
-    left.subcategoryCode === right.subcategoryCode &&
-    left.fileFormatMode === right.fileFormatMode &&
-    left.formatCodes.join(",") === right.formatCodes.join(",")
-  );
-}
-
-/**
- * The listing as it would be if the shop pressed save now.
- *
- * Completeness and the price line are read off this rather than off what GRIDGO
- * holds, so what a shop sees matches what it typed — a shop that has just
- * entered a price should not be told the listing has none.
- */
-function applyDraft(listing: Listing, draft: Draft): Listing {
-  const money = parseMoney(draft.price);
-  return {
-    ...listing,
-    name: draft.name.trim(),
-    description: draft.description.trim(),
-    basePriceMinor: money.ok ? (money.minor ?? 0) : listing.basePriceMinor,
-    pricingUnit: draft.pricingUnit,
-    packageQty: draft.pricingUnit === "per_package" ? draft.packageQty : null,
-    // A field only exists while its unit does. Keeping a stale square-foot
-    // minimum on a listing a shop just switched to per-piece would price the
-    // next order off a rule nobody can see any more.
-    measureUnit: needsMeasure(draft.pricingUnit) ? draft.measureUnit : null,
-    minimumWidthMilli: measurementKind(draft.pricingUnit) === "area" ? toMilli(draft.minimumWidth) : null,
-    minimumHeightMilli: measurementKind(draft.pricingUnit) === "area" ? toMilli(draft.minimumHeight) : null,
-    minimumLengthMilli: measurementKind(draft.pricingUnit) === "length" ? toMilli(draft.minimumLength) : null,
-    printerMaxWidthFeet: printerMaxWidthFeetForPayload(
-      draft.subcategoryCode,
-      draft.printerMaxWidthFeet,
-    ),
-    minimumOrderQuantity: asksQuantity(draft.pricingUnit) ? draft.minimumOrderQuantity : null,
-    priceTiers: asksQuantity(draft.pricingUnit) ? draft.priceTiers : [],
-    speedTiers: draft.speedTiers,
-    turnaroundMode: draft.turnaroundMode,
-    turnaroundHours: draft.turnaroundMode === "override" ? draft.turnaroundHours : null,
-    subcategoryCode: draft.subcategoryCode,
-    fileFormatMode: draft.fileFormatMode,
-    formatCodes: draft.formatCodes,
-  };
-}
-
-function Section({
-  title,
-  hint,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View className="mt-8 gap-3">
-      <View className="gap-1">
-        <Text className="text-overline text-text-muted">{title}</Text>
-        {hint ? <Text className="text-caption text-text-muted">{hint}</Text> : null}
-      </View>
-      {children}
-    </View>
-  );
-}
-
-function DestinationRow({
-  title,
-  detail,
-  onPress,
-}: {
-  title: string;
-  detail: string;
-  onPress: () => void;
-}) {
-  const colors = useThemeColors();
-
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      className="gg-touch flex-row items-center gap-3 rounded-card border border-outline bg-surface px-4 py-3"
-      style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
-    >
-      <View className="min-w-0 flex-1 gap-0.5">
-        <Text className="text-body font-medium text-text-primary">{title}</Text>
-        <Text className="text-caption text-text-muted" numberOfLines={2}>
-          {detail}
-        </Text>
-      </View>
-      <ChevronRight size={20} color={colors.textMuted} aria-hidden />
-    </Pressable>
-  );
-}
-
-/** Thousandths of the shop's measure unit, which is how the platform stores a size. */
-function toMilli(value: number | null): number | null {
-  return value == null || value <= 0 ? null : Math.round(value * 1000);
-}
-
-function fromMilli(value: number | null): number | null {
-  return value == null ? null : value / 1000;
-}
-
-function needsMeasure(unit: Listing["pricingUnit"]): boolean {
-  const kind = measurementKind(unit);
-  return kind === "area" || kind === "length";
-}
-
-/** What choosing this unit means for the shop, and for what a client is asked. */
-function unitHint(unit: Listing["pricingUnit"]): string {
-  switch (unit) {
-    case "per_package": return "A price for a pack. You say how many are in one.";
-    case "per_page": return "A price a page. The client says how many copies.";
-    case "per_area": return "A price a square unit. The client gives a width and a height.";
-    case "per_length": return "A price a unit of length. The client gives one measurement.";
-    case "whole_job": return "One price for the whole thing. No quantity is asked.";
-    default: return "A price each. The client says how many.";
-  }
-}
-
-/** Tier lists compare by content, so an unchanged ladder is not a dirty draft. */
-function tierKey(tiers: Listing["priceTiers"]): string {
-  return tiers.map((tier) => `${tier.minQuantity}:${tier.unitPriceMinor}`).join(",");
-}
-
-function speedKey(tiers: Listing["speedTiers"]): string {
-  return tiers
-    .map((tier) => `${tier.turnaroundHours}:${tier.label}:${tier.priceMinor ?? "-"}:${tier.surchargeMinor ?? "-"}`)
-    .join(",");
-}

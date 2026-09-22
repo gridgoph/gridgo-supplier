@@ -13,36 +13,55 @@ import { openSupportChatStream } from "@/lib/supportChatStream";
 import { useSupportChatStore } from "@/store/supportChat";
 
 /**
- * One conversation with Operations. The shop already has Alerts for job
- * news; this is the desk they write to when a job notice is not enough.
+ * One Operations conversation. The shop already has Alerts for job news; this
+ * is the desk they write to when a job notice is not enough.
  */
-export default function SupplierChatScreen() {
+export function SupportChatConversation({ threadId }: { threadId?: string }) {
   const colors = useThemeColors();
   const setUnreadCount = useSupportChatStore((s) => s.setUnreadCount);
   const listRef = useRef<ScrollView>(null);
+  const [activeId, setActiveId] = useState<string | undefined>(threadId);
   const [messages, setMessages] = useState<api.SupportChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
 
+  const adopt = useCallback((next: api.SupportChatMessage[]) => {
+    setMessages(next);
+    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
+  }, []);
+
   const load = useCallback(async () => {
     setError(null);
     try {
+      if (threadId) {
+        const detail = await api.getSupportChatThread(threadId);
+        setActiveId(detail.thread.id);
+        adopt(detail.messages);
+        const read = await api.markSupportChatRead(detail.thread.id);
+        if (typeof read.unreadCount === "number") setUnreadCount(read.unreadCount);
+        else {
+          const me = await api.getSupportChatMe();
+          setUnreadCount(me.unreadCount ?? me.threads?.reduce((sum, row) => sum + row.unreadCount, 0) ?? 0);
+        }
+        return;
+      }
       const me = await api.getSupportChatMe();
-      setMessages(me.messages);
+      setActiveId(me.thread?.id);
+      adopt(me.messages);
       if (me.thread) {
-        const read = await api.markSupportChatRead();
-        setUnreadCount(read.thread?.unreadCount ?? 0);
+        const read = await api.markSupportChatRead(me.thread.id);
+        setUnreadCount(read.unreadCount ?? me.unreadCount ?? 0);
       } else {
-        setUnreadCount(0);
+        setUnreadCount(me.unreadCount ?? 0);
       }
     } catch (err) {
       setError(humanizeApiError(err, offlineMessage("open Operations")));
     } finally {
       setLoading(false);
     }
-  }, [setUnreadCount]);
+  }, [adopt, setUnreadCount, threadId]);
 
   useEffect(() => {
     void load();
@@ -51,20 +70,20 @@ export default function SupplierChatScreen() {
   useEffect(() => {
     const stream = openSupportChatStream({
       onEvent: (event) => {
+        if (activeId && event.thread.id !== activeId) return;
+        setActiveId(event.thread.id);
         setMessages((current) => (
           current.some((row) => row.id === event.message.id) ? current : [...current, event.message]
         ));
-        setUnreadCount(event.message.mine ? 0 : event.thread.unreadCount ?? 0);
-        if (!event.message.mine) {
-          void api.markSupportChatRead().then((result) => {
-            setUnreadCount(result.thread?.unreadCount ?? 0);
-          }).catch(() => {});
-        }
+        if (event.message.mine) return;
+        void api.markSupportChatRead(event.thread.id).then((result) => {
+          if (typeof result.unreadCount === "number") setUnreadCount(result.unreadCount);
+        }).catch(() => {});
         requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
       },
     });
     return () => stream.close();
-  }, [setUnreadCount]);
+  }, [activeId, setUnreadCount]);
 
   const send = useCallback(async () => {
     const body = draft.trim();
@@ -72,19 +91,19 @@ export default function SupplierChatScreen() {
     setSending(true);
     setError(null);
     try {
-      const posted = await api.sendSupportChatMessage(body);
+      const posted = await api.sendSupportChatMessage(body, activeId);
+      setActiveId(posted.thread.id);
       setDraft("");
       setMessages((current) => (
         current.some((row) => row.id === posted.message.id) ? current : [...current, posted.message]
       ));
-      setUnreadCount(0);
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     } catch (err) {
       setError(humanizeApiError(err, offlineMessage("send that message")));
     } finally {
       setSending(false);
     }
-  }, [draft, sending, setUnreadCount]);
+  }, [activeId, draft, sending]);
 
   return (
     <Screen edges={["bottom"]}>
@@ -94,7 +113,15 @@ export default function SupplierChatScreen() {
             <Text className="text-h2 text-text-primary">Operations</Text>
             <Text className="text-body text-text-secondary">GRIDGO operations</Text>
           </View>
-          {error ? <ErrorNotice message={error} onRetry={() => { setLoading(true); void load(); }} /> : null}
+          {error ? (
+            <ErrorNotice
+              message={error}
+              onRetry={() => {
+                setLoading(true);
+                void load();
+              }}
+            />
+          ) : null}
           <ScrollView
             ref={listRef}
             className="flex-1"
@@ -143,6 +170,7 @@ export default function SupplierChatScreen() {
               disabled={sending || !draft.trim()}
               accessibilityRole="button"
               accessibilityLabel="Send"
+              accessibilityState={{ disabled: sending || !draft.trim() }}
               className="gg-touch h-12 w-12 items-center justify-center rounded-field bg-accent"
               style={{ opacity: sending || !draft.trim() ? 0.38 : 1 }}
             >

@@ -26,6 +26,7 @@ describe("API authentication token source", () => {
   afterEach(() => {
     api.setToken(null);
     api.setTokenProvider(null);
+    api.setUnauthorizedHandler(null);
     jest.restoreAllMocks();
   });
 
@@ -77,5 +78,59 @@ describe("API authentication token source", () => {
   it("shares the fresh token surface with uploads and streams", async () => {
     api.setTokenProvider(async () => "clerk-token");
     await expect(api.getAuthToken()).resolves.toBe("clerk-token");
+  });
+
+  it("keeps a Clerk JWT when the token function is replaced mid-request", async () => {
+    let finish = (_token: string) => {};
+    api.setTokenProvider(
+      () =>
+        new Promise<string | null>((resolve) => {
+          finish = (token) => resolve(token);
+        }),
+    );
+    const fetch = jest.spyOn(global, "fetch").mockResolvedValue(okUserResponse());
+
+    const pending = api.me();
+    await Promise.resolve();
+    await Promise.resolve();
+    api.setTokenProvider(async () => "second-token");
+    finish("first-token");
+    await pending;
+
+    expect(fetch.mock.calls[0][1]).toMatchObject({
+      headers: expect.objectContaining({ Authorization: "Bearer first-token" }),
+    });
+  });
+
+  it("does not sign the shop out when a 401 arrives without a bearer", async () => {
+    const unauthorized = jest.fn();
+    api.setUnauthorizedHandler(unauthorized);
+    api.setTokenProvider(async () => null);
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => JSON.stringify({ error: "unauthorized" }),
+    } as Response);
+
+    await expect(api.me()).rejects.toBeInstanceOf(api.ApiError);
+    expect(unauthorized).not.toHaveBeenCalled();
+  });
+
+  it("drops a token that arrived after sign-out cleared the provider", async () => {
+    let finish = (_token: string) => {};
+    api.setTokenProvider(
+      () =>
+        new Promise<string | null>((resolve) => {
+          finish = (token) => resolve(token);
+        }),
+    );
+
+    const pending = api.getAuthToken();
+    await Promise.resolve();
+    await Promise.resolve();
+    api.setTokenProvider(null);
+    finish("stale-token");
+
+    await expect(pending).resolves.toBeNull();
   });
 });

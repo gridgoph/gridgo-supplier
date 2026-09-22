@@ -20,7 +20,7 @@ import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { clerkDisplayName } from "@/lib/clerk";
 import { buildObligations, greeting, homeHeadline, type Obligation } from "@/lib/homeBoard";
-import { boardCountLine, boardPrompt, type Listing, type ServiceLine } from "@/lib/listings";
+import { boardCountLine, boardPrompt, photoViewUrl, type Listing, type ServiceLine } from "@/lib/listings";
 import { loadBoard } from "@/lib/listingsApi";
 import { useAlertsStore } from "@/store/alerts";
 import { isMatchable, useSession } from "@/store/session";
@@ -410,6 +410,7 @@ function SampleStrip({ listings }: { listings: Listing[] }) {
             <View key={listing.id} className="w-1/4">
               <SamplePhoto
                 fileId={listing.photos[0]?.fileId}
+                url={photoViewUrl(listing.photos[0])}
                 altText={listing.name}
                 gutter="tight"
                 emptyLabel=""

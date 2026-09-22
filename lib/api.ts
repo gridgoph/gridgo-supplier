@@ -482,12 +482,24 @@ export function setTokenProvider(provider: TokenProvider | null): void {
   if (provider) tokenMemory = null;
 }
 
-/** Fresh for every request; Clerk session JWTs rotate while the app is open. */
+/**
+ * Fresh for every request; Clerk session JWTs rotate while the app is open.
+ *
+ * Clerk's `getToken` function identity changes while the session stays the
+ * same. Dropping a JWT just because that function was replaced is what sent
+ * listing PATCH with no Bearer (401) and then signed the shop out. Sign-out
+ * clears the provider; a live-owner change is `assertLiveGeneration`.
+ */
 export async function getAuthToken(): Promise<string | null> {
   if (!tokenProvider) return tokenMemory;
   const provider = tokenProvider;
-  const token = await provider();
-  if (provider !== tokenProvider) return null;
+  let token: string | null = null;
+  try {
+    token = (await provider())?.trim() || null;
+  } catch {
+    token = null;
+  }
+  if (!tokenProvider) return null;
   tokenMemory = token;
   return token;
 }
@@ -553,8 +565,9 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   });
   let res: Response;
   let text: string;
+  let token: string | null = null;
   try {
-    const token = await Promise.race([getAuthToken(), aborted]);
+    token = await Promise.race([getAuthToken(), aborted]);
     assertLiveGeneration(generation);
     if (token) { headers.Authorization = `Bearer ${token}`; headers["X-GRIDGO-Role"] = "supplier"; }
     res = await Promise.race([fetch(`${getApiBase()}${path}`, {
@@ -584,10 +597,10 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     }
   }
   if (!res.ok) {
-    // Clear the bearer on any 401 so a stale token cannot keep calling APIs.
-    // The session store's unauthorized handler then nulls `user` and the root
-    // route guard unmounts the signed-in area (no per-screen redirects).
-    if (res.status === 401 && !ignoreUnauthorized) {
+    // A 401 on a request that carried a Bearer is a dead session. A 401 on a
+    // request we sent without one is our miss — signing the shop out then
+    // turns a brief Clerk token gap into "this shop is still closed".
+    if (res.status === 401 && !ignoreUnauthorized && token) {
       setToken(null);
       unauthorizedHandler?.();
     }
@@ -1255,8 +1268,8 @@ export async function deleteCatalogOption(
 /**
  * Set the order of a listing's sample photos. The first id is the board thumb.
  *
- * GRIDGO requires the **whole current set**, so this reorders and nothing else
- * — a shorter list is rejected as stale rather than quietly dropping a sample.
+ * The first id is the board thumb. A shorter list is the samples that stay —
+ * that is how a photo comes off a listing. An unknown id is rejected as stale.
  */
 export async function reorderCatalogItemPhotos(
   itemId: string,
@@ -1625,22 +1638,50 @@ export type SupportChatMessage = {
 };
 
 export async function getSupportChatMe(): Promise<{
+  threads?: SupportChatThread[];
   thread: SupportChatThread | null;
   messages: SupportChatMessage[];
+  unreadCount?: number;
 }> {
   return request("/support-chat/me");
 }
 
-export async function sendSupportChatMessage(body: string): Promise<{
+export async function getSupportChatThread(threadId: string): Promise<{
+  thread: SupportChatThread;
+  messages: SupportChatMessage[];
+}> {
+  return request(`/support-chat/threads/${encodeURIComponent(threadId)}`);
+}
+
+export async function openSupportChatThread(): Promise<{ thread: SupportChatThread }> {
+  return request("/support-chat/me/threads", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function sendSupportChatMessage(
+  body: string,
+  threadId?: string,
+): Promise<{
   thread: SupportChatThread;
   message: SupportChatMessage;
 }> {
   return request("/support-chat/me/messages", {
     method: "POST",
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({ body, ...(threadId ? { threadId } : {}) }),
   });
 }
 
-export async function markSupportChatRead(): Promise<{ thread: SupportChatThread | null }> {
+export async function markSupportChatRead(threadId?: string): Promise<{
+  thread: SupportChatThread | null;
+  unreadCount?: number;
+}> {
+  if (threadId) {
+    return request(`/support-chat/threads/${encodeURIComponent(threadId)}/read`, {
+      method: "PATCH",
+      body: JSON.stringify({}),
+    });
+  }
   return request("/support-chat/me/read", { method: "PATCH", body: JSON.stringify({}) });
 }

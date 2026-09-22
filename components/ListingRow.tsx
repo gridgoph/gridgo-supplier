@@ -10,6 +10,7 @@ import {
   effectiveTurnaroundHours,
   fromPriceMinor,
   hasPriceRange,
+  photoViewUrl,
   priceLine,
   readyInLine,
   subcategoryName,
@@ -61,6 +62,7 @@ export function ListingRow({
       <View className="w-28 shrink-0">
         <SamplePhoto
           fileId={first?.fileId}
+          url={photoViewUrl(first)}
           altText={first?.altText ?? listing.name}
           emptyLabel="No sample yet"
           gutter="tight"
@@ -90,7 +92,7 @@ export function ListingRow({
             {subcategoryName(catalog, listing.subcategoryCode)}
           </Text>
           <Text className="text-caption text-text-muted" numberOfLines={1}>
-            {readyInLine(hours)}
+            {readyInLine(hours, listing.minimumTurnaroundHours)}
           </Text>
           <View className="mt-0.5 flex-row flex-wrap">
             <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />

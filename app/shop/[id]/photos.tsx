@@ -10,8 +10,9 @@ import { SamplePhoto } from "@/components/SamplePhoto";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { UploadList } from "@/components/UploadList";
-import { LISTING_CAPS } from "@/lib/listings";
-import { attachPhoto, BOARD_NOT_OPEN_YET, setPhotoOrder } from "@/lib/listingsApi";
+import { LISTING_CAPS, photoViewUrl } from "@/lib/listings";
+import { attachPhoto, BOARD_NOT_OPEN_YET, removePhoto, setPhotoOrder } from "@/lib/listingsApi";
+import { askConfirm } from "@/store/sheets";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { routeId, useListing } from "@/hooks/useBoard";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -30,12 +31,8 @@ import { useThemeColors } from "@/hooks/useTheme";
  * no sample on it, and this screen says so rather than showing a frame that
  * will be empty tomorrow.
  *
- * There is no remove. The contract has no way to take a sample down — an
- * attached file cannot be deleted while a listing references it, and the
- * reorder route rejects anything but the whole current set. What it does have
- * is replacement: attaching at a position that already holds a sample swaps it.
- * So the screen offers exactly that, and says so, instead of a button that
- * would fail every time.
+ * A sample comes off by sending the photos that stay. Replace still swaps
+ * one in place when the shop wants a different picture in the same slot.
  */
 export default function SamplePhotosScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
@@ -86,6 +83,35 @@ export default function SamplePhotosScreen() {
       setBusy(false);
     })();
   }, [items, markAttached, dropUpload, listing, photos.length, replacing, reload]);
+
+  const takeOff = useCallback(
+    async (fileId: string) => {
+      if (!listing) return;
+      const confirmed = await askConfirm(
+        {
+          question: `Take this sample off “${listing.name || "this listing"}”?`,
+          consequence: "It will no longer appear on this listing. You can add another sample afterwards.",
+          confirmLabel: "Remove",
+          cancelLabel: "Keep it",
+          destructive: true,
+        },
+        "/shop/confirm",
+      );
+      if (!confirmed) return;
+      setBusy(true);
+      const result = await removePhoto(listing, fileId);
+      if (result.status === "ok") {
+        setActionError(null);
+        await reload();
+      } else {
+        setActionError(
+          result.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : result.message,
+        );
+      }
+      setBusy(false);
+    },
+    [listing, reload],
+  );
 
   const makeFirst = useCallback(
     async (fileId: string) => {
@@ -170,7 +196,11 @@ export default function SamplePhotosScreen() {
             {photos.map((photo, index) => (
               <View key={photo.fileId} className="w-1/2 px-1.5 pb-3">
                 <View className="gg-card-flush">
-                  <SamplePhoto fileId={photo.fileId} altText={photo.altText ?? listing.name} />
+                  <SamplePhoto
+                    fileId={photo.fileId}
+                    url={photoViewUrl(photo)}
+                    altText={photo.altText ?? listing.name}
+                  />
                   <View className="gap-2 px-3 pb-3">
                     <View className="flex-row items-center justify-between gap-2">
                       <Text className="min-w-0 flex-1 text-caption text-text-muted">
@@ -196,6 +226,11 @@ export default function SamplePhotosScreen() {
                         setReplacing(index);
                         void uploads.pickImage();
                       }}
+                    />
+                    <SecondaryButton
+                      label="Remove"
+                      disabled={picking}
+                      onPress={() => void takeOff(photo.fileId)}
                     />
                   </View>
                 </View>
@@ -253,8 +288,8 @@ export default function SamplePhotosScreen() {
           )}
           <Text className="text-caption text-text-muted">
             JPEG, PNG or WebP. Shoot it in daylight against a plain wall — that is what makes a
-            board look like a shop rather than a listing site. A sample stays on the listing
-            until you put another in its place.
+            board look like a shop rather than a listing site. Remove a sample you do not want,
+            or put another in its place.
           </Text>
         </View>
       </ScrollView>

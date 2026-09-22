@@ -1,9 +1,9 @@
 import { useAuth, useClerk, useUser } from "@clerk/expo";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import * as api from "@/lib/api";
 import { isUnmappedIdentity, supplierProjectionErrorMessage } from "@/lib/apiErrors";
-import { awaitClerkSessionToken, clerkAccessFor } from "@/lib/clerk";
+import { awaitClerkSessionToken, clerkAccessFor, clerkSessionToken } from "@/lib/clerk";
 import {
   setClerkSignOutHandler,
   useSession,
@@ -21,11 +21,24 @@ export function ClerkSessionBridge({ children }: Props) {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const { user } = useUser();
   const { signOut } = useClerk();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
 
   useEffect(() => {
     setClerkSignOutHandler(() => signOut());
     return () => setClerkSignOutHandler(null);
   }, [signOut]);
+
+  // Clerk recreates `getToken` often. Keep one provider so an in-flight listing
+  // save is not asked for a token from a function that is about to be replaced.
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      api.setTokenProvider(null);
+      return;
+    }
+    api.setTokenProvider(() => clerkSessionToken((options) => getTokenRef.current(options)));
+  }, [isLoaded, isSignedIn]);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,13 +70,17 @@ export function ClerkSessionBridge({ children }: Props) {
 
     const alreadyAdopted =
       session.identity.kind === "supplier" && session.user != null;
-    if (!alreadyAdopted) session.setClerkIdentity({ kind: "loading" });
-    api.setTokenProvider(getToken);
+    if (alreadyAdopted) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    session.setClerkIdentity({ kind: "loading" });
     void (async () => {
       try {
         const joining = useSession.getState().sessionWait === "in";
         const token = await awaitClerkSessionToken(
-          getToken,
+          (options) => getTokenRef.current(options),
           joining ? 10 : 5,
           joining ? 400 : 120,
         );
@@ -114,7 +131,7 @@ export function ClerkSessionBridge({ children }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [getToken, isLoaded, isSignedIn, user]);
+  }, [isLoaded, isSignedIn, user]);
 
   return children;
 }

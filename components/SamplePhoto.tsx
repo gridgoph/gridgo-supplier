@@ -11,6 +11,12 @@ import { useThemeColors } from "@/hooks/useTheme";
 type Props = {
   /** A sample GRIDGO already holds. */
   fileId?: string | null;
+  /**
+   * Signed viewing link from this board read. Prefer this over asking again
+   * for the same file — a wall of eight tiles would otherwise pay for eight
+   * download-url round trips the list already made.
+   */
+  url?: string | null;
   /** A photo just picked on this phone, before it has been sent. */
   localUri?: string | null;
   /** What the sample shows, for anyone who cannot see it. */
@@ -45,11 +51,12 @@ type Props = {
  */
 export function SamplePhoto(props: Props) {
   // A replacement source owns fresh loading/error state before it is painted.
-  return <PhotoFrame key={JSON.stringify([props.fileId, props.localUri])} {...props} />;
+  return <PhotoFrame key={JSON.stringify([props.fileId, props.localUri, props.url])} {...props} />;
 }
 
 function PhotoFrame({
   fileId,
+  url,
   localUri,
   altText,
   ratio = "square",
@@ -58,14 +65,20 @@ function PhotoFrame({
   enlarge = true,
 }: Props) {
   const colors = useThemeColors();
-  const [uri, setUri] = useState<string | null>(() => localUri ?? heldLink(fileId));
+  const [uri, setUri] = useState<string | null>(() => localUri ?? url ?? heldLink(fileId));
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
   const alt = altText || "Sample photo";
   const canOpen = Boolean(uri && !failed && enlarge);
 
   useEffect(() => {
-    if (localUri || !fileId) return;
+    if (localUri) return;
+    if (url) {
+      setUri(url);
+      setFailed(false);
+      return;
+    }
+    if (!fileId) return;
 
     let cancelled = false;
     void (async () => {
@@ -77,7 +90,7 @@ function PhotoFrame({
     return () => {
       cancelled = true;
     };
-  }, [fileId, localUri]);
+  }, [fileId, localUri, url]);
 
   // Native aspectRatio is the plate. NativeWind's `aspect-[4/3]` is an
   // arbitrary class this pipeline has shipped as a silent no-op before, and
@@ -90,6 +103,15 @@ function PhotoFrame({
     if (fileId && localUri && uri === localUri) {
       void signedLink(fileId).then((link) => {
         if (link) setUri(link);
+        else setFailed(true);
+      });
+      return;
+    }
+    // A list URL that 403s (expired, stale LAN origin) can still recover
+    // from a fresh download-url if the file is intact.
+    if (fileId && url && uri === url) {
+      void signedLink(fileId).then((link) => {
+        if (link && link !== url) setUri(link);
         else setFailed(true);
       });
       return;

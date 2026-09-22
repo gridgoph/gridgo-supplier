@@ -88,6 +88,38 @@ describe("ClerkSessionBridge supplier projection", () => {
     },
   );
 
+  it("does not re-ask /auth/me when the shop is already adopted", async () => {
+    const shop = {
+      id: "u1",
+      email: "shop@example.com",
+      name: "Ben",
+      role: "supplier" as const,
+      verificationStatus: "approved" as const,
+    };
+    useSession.setState({
+      user: shop,
+      loading: false,
+      error: null,
+      authSource: "clerk",
+      identity: { kind: "supplier" },
+    });
+    const me = jest.spyOn(api, "me").mockResolvedValue(shop);
+
+    const view = await render(
+      <ClerkSessionBridge>
+        <Text>Supplier shell</Text>
+      </ClerkSessionBridge>,
+    );
+
+    await waitFor(async () => {
+      await expect(api.getAuthToken()).resolves.toBe("clerk-token");
+    });
+    expect(me).not.toHaveBeenCalled();
+    expect(useSession.getState().identity.kind).toBe("supplier");
+
+    view.unmount();
+  });
+
   it("does not drop an adopted shop when Clerk is signed in but useUser has not arrived", async () => {
     mockClerkUser = null;
     const shop = {
@@ -146,6 +178,18 @@ describe("ClerkSessionBridge supplier projection", () => {
 
 it("probes supplier membership when Clerk's primary role is client",async()=>{
   mockRole="client";
+  mockIsSignedIn=true;
+  mockClerkUser={
+    primaryEmailAddress:{emailAddress:"dual@test"},
+    publicMetadata:{gridgoRole:"client"},
+  };
+  useSession.setState({
+    user:null,
+    loading:false,
+    error:null,
+    authSource:"none",
+    identity:{kind:"signed_out"},
+  });
   const member={id:"dual",role:"supplier" as const,name:"Dual",email:"dual@test",verificationStatus:"approved" as const};
   jest.spyOn(api,"me").mockResolvedValue(member);
   const view=await render(<ClerkSessionBridge><Text>Shell</Text></ClerkSessionBridge>);

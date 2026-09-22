@@ -154,7 +154,28 @@ export type SamplePhoto = {
   fileId: string;
   sortOrder: number;
   altText: string | null;
+  /**
+   * Short-lived signed GET from this board read. Capability, not identity —
+   * the file id is what a shop keeps. Dropped a minute before GRIDGO stops
+   * honouring it so a tile is never handed a link that is about to 403.
+   */
+  downloadUrl?: string | null;
+  downloadUrlExpiresAt?: string | null;
 };
+
+/**
+ * The signed viewing link from this board read, if GRIDGO still honours it.
+ *
+ * Identity stays `fileId`. A link that has less than a minute left is treated
+ * as already gone, matching the in-memory cache on the plate.
+ */
+export function photoViewUrl(photo: SamplePhoto | null | undefined): string | null {
+  if (!photo?.downloadUrl) return null;
+  if (!photo.downloadUrlExpiresAt) return photo.downloadUrl;
+  const until = Date.parse(photo.downloadUrlExpiresAt);
+  if (!Number.isFinite(until) || until - 60_000 <= Date.now()) return null;
+  return photo.downloadUrl;
+}
 
 export type SpecOption = {
   id: string;
@@ -235,6 +256,8 @@ export type Listing = {
   speedTiers: SpeedTier[];
   turnaroundMode: TurnaroundMode;
   turnaroundHours: number | null;
+  /** Soonest this listing can be ready, in hours. Null when it inherits. */
+  minimumTurnaroundHours?: number | null;
   fileFormatMode: FileFormatMode;
   /** The listing's own set when it overrides; otherwise what GRIDGO echoed back. */
   formatCodes: string[];
@@ -399,6 +422,8 @@ function readPhoto(raw: Raw, index: number): SamplePhoto | null {
     fileId,
     sortOrder: num(pick(raw, "sortOrder", "sort_order")) ?? index,
     altText: str(pick(raw, "altText", "alt_text")),
+    downloadUrl: str(pick(raw, "downloadUrl", "download_url")),
+    downloadUrlExpiresAt: str(pick(raw, "downloadUrlExpiresAt", "download_url_expires_at")),
   };
 }
 
@@ -409,6 +434,8 @@ function readPhotos(value: unknown): SamplePhoto[] {
       fileId,
       sortOrder: index,
       altText: null,
+      downloadUrl: null,
+      downloadUrlExpiresAt: null,
     }));
   }
   return asArray(value)
@@ -478,6 +505,7 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     speedTiers: readSpeedTiers(pick(raw, "speedTiers", "speed_tiers")),
     turnaroundMode,
     turnaroundHours: num(pick(raw, "turnaroundHours", "turnaround_hours")),
+    minimumTurnaroundHours: num(pick(raw, "minimumTurnaroundHours", "minimum_turnaround_hours")),
     fileFormatMode,
     formatCodes: readFormatCodes(
       pick(raw, "formatCodes", "format_codes", "fileFormats", "acceptedFormats"),
@@ -708,8 +736,11 @@ export function effectiveTurnaroundHours(
   return listing.turnaroundMode === "override" ? listing.turnaroundHours : inheritedHours;
 }
 
-export function readyInLine(hours: number | null): string {
+export function readyInLine(hours: number | null, minimumHours?: number | null): string {
   if (hours == null || hours <= 0) return "Ready-in not set";
+  if (minimumHours != null && minimumHours > 0 && minimumHours < hours) {
+    return `Ready in ${minimumHours}–${hours} hours`;
+  }
   if (hours < 48) return `Ready in ${hours} hours`;
   if (hours % 24 === 0) return `Ready in ${hours / 24} days`;
   return `Ready in ${hours} hours`;
@@ -739,12 +770,12 @@ export type BoardContext = {
   serviceLive?: boolean | null;
 };
 
-const PHOTO_NEEDED = "Add at least one sample photo before it can go on the board.";
-const NAME_NEEDED = "Give this listing a name a client would recognise.";
-const PRICE_NEEDED = "Set your price before it can go on the board.";
+export const PHOTO_NEEDED = "Add at least one sample photo before it can go on the board.";
+export const NAME_NEEDED = "Give this listing a name a client would recognise.";
+export const PRICE_NEEDED = "Set your price before it can go on the board.";
 const KIND_NEEDED = "Choose the kind of work this listing is.";
 const PRINTER_CAP_NEEDED = "Set your max printer width in feet before it can go on the board.";
-const FORMATS_NEEDED = "Say which artwork files you accept for this listing.";
+export const FORMATS_NEEDED = "Say which artwork files you accept for this listing.";
 const SERVICE_NEEDED = "This listing has no accredited category to sit under.";
 const SERVICE_NOT_LIVE = "This kind of work is not live yet.";
 

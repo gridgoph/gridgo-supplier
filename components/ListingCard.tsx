@@ -6,6 +6,7 @@ import { StatusChip } from "@/components/StatusChip";
 import {
   boardContextFor,
   boardStanding,
+  photoViewUrl,
   priceLine,
   printerCapLine,
   subcategoryName,
@@ -65,6 +66,7 @@ export function ListingCard({
     <View collapsable={false} className="rounded-card border border-outline bg-surface">
       <SamplePhoto
         fileId={first?.fileId}
+        url={photoViewUrl(first)}
         altText={first?.altText ?? listing.name}
         emptyLabel="No sample yet"
       />
