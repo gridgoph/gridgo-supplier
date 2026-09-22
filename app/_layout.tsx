@@ -347,6 +347,13 @@ function RootStack() {
             headerBackButtonDisplayMode: "minimal",
           }}
         />
+        <Stack.Screen
+          name="reviews"
+          options={{
+            title: "Reviews",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
         {/* The catalogue draws its own headers for the list and one category. */}
         <Stack.Screen name="services" options={{ headerShown: false }} />
         {/*
