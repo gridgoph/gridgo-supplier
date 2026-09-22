@@ -4,7 +4,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import SupplierChatScreen from "@/app/chat";
 
-const mockGetSupportChatMe = jest.fn(async () => ({ thread: null, messages: [] }));
+const mockGetSupportChatMe = jest.fn(async (..._args: unknown[]) => ({ thread: null, messages: [] }));
 const mockSendSupportChatMessage = jest.fn();
 
 jest.mock("react-native-keyboard-controller", () => {
