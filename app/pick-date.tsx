@@ -1,7 +1,7 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useEffect, useState } from "react";
-import { View } from "react-native";
-import { router } from "expo-router";
+import { Platform, View } from "react-native";
+import { router, useNavigation } from "expo-router";
 
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
@@ -18,12 +18,18 @@ import { settleDate, useSheets } from "@/store/sheets";
  */
 export default function PickDateSheet() {
   const pending = useSheets((s) => s.date);
+  const navigation = useNavigation();
   const scheme = useThemeName();
   const request = pending?.request ?? null;
 
   const [draft, setDraft] = useState<Date>(() => startFrom(request));
 
-  useEffect(() => () => settleDate(null), []);
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      return navigation.addListener("beforeRemove", () => settleDate(null));
+    }
+    return () => settleDate(null);
+  }, [navigation]);
 
   if (!request) return null;
 

@@ -191,8 +191,7 @@ function Slide({
 
   return (
     <Animated.View
-      accessibilityElementsHidden={!active}
-      importantForAccessibility={active ? "auto" : "no-hide-descendants"}
+      aria-hidden={!active}
       style={[{ width, height: height > 0 ? height : undefined }, style]}
     >
       <View className="min-h-0 flex-1">

@@ -10,7 +10,7 @@ import type { OnboardingArt } from "@/data/onboarding";
  */
 export function OnboardingMark({ name }: { name: OnboardingArt }) {
   return (
-    <View className="min-h-0 w-full flex-1 px-6" accessibilityElementsHidden>
+    <View className="min-h-0 w-full flex-1 px-6" aria-hidden>
       <Image
         source={images.onboarding[name]}
         style={{ width: "100%", height: "100%" }}

@@ -7,6 +7,7 @@ import { ChevronRight } from "lucide-react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { AlertsBell } from "@/components/AlertsBell";
+import { ChatButton } from "@/components/ChatButton";
 import { EmptyState } from "@/components/EmptyState";
 import { ObligationRow } from "@/components/ObligationRow";
 import { SamplePhoto } from "@/components/SamplePhoto";
@@ -19,7 +20,7 @@ import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { clerkDisplayName } from "@/lib/clerk";
 import { buildObligations, greeting, homeHeadline, type Obligation } from "@/lib/homeBoard";
-import { boardCountLine, boardPrompt, type Listing, type ServiceLine } from "@/lib/listings";
+import { boardCountLine, boardPrompt, photoViewUrl, type Listing, type ServiceLine } from "@/lib/listings";
 import { loadBoard } from "@/lib/listingsApi";
 import { useAlertsStore } from "@/store/alerts";
 import { isMatchable, useSession } from "@/store/session";
@@ -150,7 +151,12 @@ export default function HomeScreen() {
         <ScreenHeader
           eyebrow={greeting(clerkDisplayName(clerkUser) || user?.name)}
           title={user?.supplierName || "Your shop"}
-          right={<AlertsBell />}
+          right={
+            <View className="flex-row items-center">
+              <ChatButton />
+              <AlertsBell />
+            </View>
+          }
         />
 
         {/*
@@ -239,7 +245,7 @@ export default function HomeScreen() {
                 <Text className="text-body text-text-secondary">{headline.detail}</Text>
               </View>
               <View className="pt-0.5">
-                <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+                <ChevronRight size={20} color={colors.textMuted} aria-hidden />
               </View>
             </Pressable>
 
@@ -383,8 +389,9 @@ function BoardCard({
  * The finished board, at a glance.
  *
  * Deliberately not a second ranking: it is the shop's own board order, cropped
- * to what fits on one row, and its only job is to be a door. A shop that wants
- * to read its board opens its board.
+ * to what fits on one row, and its only job is to be a door. The samples here
+ * do not open the loupe — on web that would nest a button in this one. A shop
+ * that wants to read its board opens its board.
  */
 function SampleStrip({ listings }: { listings: Listing[] }) {
   const colors = useThemeColors();
@@ -403,14 +410,16 @@ function SampleStrip({ listings }: { listings: Listing[] }) {
             <View key={listing.id} className="w-1/4">
               <SamplePhoto
                 fileId={listing.photos[0]?.fileId}
+                url={photoViewUrl(listing.photos[0])}
                 altText={listing.name}
                 gutter="tight"
                 emptyLabel=""
+                enlarge={false}
               />
             </View>
           ))}
         </View>
-        <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+        <ChevronRight size={20} color={colors.textMuted} aria-hidden />
       </View>
       <Text className="mt-2 text-caption text-text-muted">
         {listings.length === 1

@@ -3,6 +3,7 @@ import * as ImagePicker from "expo-image-picker";
 import { clerkErrorCode, clerkErrorMessage } from "@/lib/clerk";
 import { isEmailish } from "@/lib/onboardingSteps";
 import { MIN_PASSWORD_LENGTH } from "@/lib/signup";
+import { canPickOnWeb, pickFileOnWeb } from "@/lib/webFilePick";
 
 /**
  * The half of a shop's identity Clerk owns: its portrait, its sign-in email,
@@ -86,6 +87,23 @@ export function portraitFile(asset: {
 export async function changeShopPortrait(
   user: ClerkPortraitUser,
 ): Promise<PortraitOutcome> {
+  if (canPickOnWeb()) {
+    let webPicked: Awaited<ReturnType<typeof pickFileOnWeb>>;
+    try {
+      webPicked = await pickFileOnWeb("image/*");
+    } catch {
+      return { status: "failed", message: PORTRAIT_LIBRARY_REFUSED };
+    }
+    if (!webPicked) return { status: "cancelled" };
+    try {
+      await user.setProfileImage({ file: webPicked.file });
+      await user.reload?.();
+      return { status: "ok" };
+    } catch (error) {
+      return { status: "failed", message: clerkErrorMessage(error, PORTRAIT_FAILED) };
+    }
+  }
+
   let picked: ImagePicker.ImagePickerResult;
   try {
     picked = await ImagePicker.launchImageLibraryAsync({

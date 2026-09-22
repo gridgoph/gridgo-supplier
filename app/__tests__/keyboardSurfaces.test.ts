@@ -15,7 +15,7 @@ function sourceFiles(dir: string): string[] {
 }
 
 function relative(file: string): string {
-  return path.relative(ROOT, file);
+  return path.relative(ROOT, file).split(path.sep).join("/");
 }
 
 /** Anything that opens a soft keyboard when it is tapped. */
@@ -26,7 +26,7 @@ const OPENS_A_KEYBOARD = /<(TextInput|TextField|PasswordField|NoteField|MoneyFie
  * app's keyboard-aware scroll surface, or the avoiding view the two map screens
  * use because their content is a map rather than a scroll.
  */
-const HANDLES_A_KEYBOARD = /<(FormScrollView|KeyboardAvoidingView|OnboardingStep|FlowScreen)\b/;
+const HANDLES_A_KEYBOARD = /<(FormScrollView|KeyboardAvoidingView|OnboardingStep|FlowScreen|ListingWizardShell)\b/;
 
 /**
  * The controls themselves — a text field is not a screen, and cannot know what
@@ -56,6 +56,11 @@ const HANDLED_BY_ITS_CALLERS = [
   "components/JobDocketRail.tsx",
   "components/FormatPlusField.tsx",
   "components/listing/TierEditor.tsx",
+  "components/listing/wizard/AboutStep.tsx",
+  "components/listing/wizard/PriceStep.tsx",
+  "components/listing/wizard/SpeedStep.tsx",
+  "components/listing/wizard/StepsStep.tsx",
+  "components/listing/wizard/ArtworkStep.tsx",
 ];
 
 /**
@@ -83,6 +88,11 @@ const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
   // owns the keyboard-aware surface they are typed into.
   { component: "PriceTierEditor", users: /<PriceTierEditor\b/, least: 1 },
   { component: "SpeedTierEditor", users: /<SpeedTierEditor\b/, least: 1 },
+  { component: "AboutStep", users: /<AboutStep\b/, least: 1 },
+  { component: "PriceStep", users: /<PriceStep\b/, least: 1 },
+  { component: "SpeedStep", users: /<SpeedStep\b/, least: 1 },
+  { component: "StepsStep", users: /<StepsStep\b/, least: 1 },
+  { component: "ArtworkStep", users: /<ArtworkStep\b/, least: 1 },
 ];
 
 describe("every field a shop types into sits in a keyboard-aware surface", () => {
@@ -118,9 +128,11 @@ describe("every field a shop types into sits in a keyboard-aware surface", () =>
       expect(users.length).toBeGreaterThanOrEqual(check.least);
 
       for (const file of users) {
+        const rel = relative(file);
+        if (HANDLED_BY_ITS_CALLERS.includes(rel)) continue;
         const source = fs.readFileSync(file, "utf8");
-        expect({ file: relative(file), handled: HANDLES_A_KEYBOARD.test(source) }).toEqual({
-          file: relative(file),
+        expect({ file: rel, handled: HANDLES_A_KEYBOARD.test(source) }).toEqual({
+          file: rel,
           handled: true,
         });
       }

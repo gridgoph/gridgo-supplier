@@ -324,7 +324,7 @@ export default function PayoutScreen() {
                   <ChevronRight
                     size={20}
                     color={colors.textMuted}
-                    accessibilityElementsHidden
+                    aria-hidden
                   />
                 )}
               </View>

@@ -6,6 +6,7 @@ import {
   loadBoard,
   loadListing,
   removeListing,
+  removePhoto,
   reorderPrepSteps,
   saveListing,
 } from "@/lib/listingsApi";
@@ -174,9 +175,10 @@ describe("what the board sends GRIDGO", () => {
 
   /**
    * The captain's report: Remove this listing does nothing. GRIDGO answered
-   * `400 expected_version_required` to a body-less DELETE.
+   * `400 expected_version_required` to a body-less DELETE. Putting the version
+   * only in `If-Match` then failed on web (CORS), so it travels as a query.
    */
-  it("removes a listing with its version, in the body and the header", async () => {
+  it("removes a listing with its version on the query", async () => {
     const fetch = jest
       .spyOn(global, "fetch")
       .mockResolvedValue(answered(200, { ok: true }));
@@ -186,8 +188,9 @@ describe("what the board sends GRIDGO", () => {
     const call = sent(fetch);
     expect(call.method).toBe("DELETE");
     expect(call.url).toContain("/me/catalog-items/sci_1");
-    expect(call.body).toEqual({ expectedVersion: 7 });
-    expect(call.headers["If-Match"]).toBe("7");
+    expect(call.url).toContain("expectedVersion=7");
+    expect(call.body).toBeNull();
+    expect(call.headers["If-Match"]).toBeUndefined();
     expect(result).toEqual({ status: "ok", value: "deleted" });
   });
 
@@ -258,6 +261,23 @@ describe("what the board sends GRIDGO", () => {
   });
 
   /** Steps move as a whole set; two swapping would collide one at a time. */
+  it("takes a sample off by sending the photos that stay", async () => {
+    const fetch = jest.spyOn(global, "fetch").mockResolvedValue(answered(200, {}));
+    const withPhotos: Listing = {
+      ...listing,
+      photos: [
+        { fileId: "file_keep", sortOrder: 0, altText: null },
+        { fileId: "file_drop", sortOrder: 1, altText: null },
+      ],
+    };
+
+    await removePhoto(withPhotos, "file_drop");
+
+    const call = sent(fetch);
+    expect(call.url).toContain("/me/catalog-items/sci_1/photos/reorder");
+    expect(call.body).toEqual({ fileIds: ["file_keep"], expectedVersion: 7 });
+  });
+
   it("reorders steps by sending every one of them", async () => {
     const fetch = jest.spyOn(global, "fetch").mockResolvedValue(answered(200, {}));
 

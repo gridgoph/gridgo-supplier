@@ -26,6 +26,8 @@ export type PickedDocument = {
   fileName: string;
   mimeType: string | null;
   sizeBytes: number | null;
+  /** Browser `File` from the web picker. Required for `FormData` on web. */
+  file?: File;
 };
 
 /** What Operations asks a shop for. Codes are this app's, not the platform's. */

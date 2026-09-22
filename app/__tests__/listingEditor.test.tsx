@@ -130,6 +130,20 @@ describe("the listing editor", () => {
     expect(screen.queryByText("This listing did not load")).toBeNull();
   });
 
+  it("still loads as one page, not the add-a-listing wizard", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith() });
+
+    view = await render(<ListingScreen />);
+
+    expect(await screen.findByText("PRICE")).toBeTruthy();
+    expect(screen.getByText("READY IN")).toBeTruthy();
+    expect(screen.getByText("WHAT A CLIENT PICKS")).toBeTruthy();
+    expect(screen.getByText("ARTWORK YOU ACCEPT")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Proceed" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Place on Board" })).toBeNull();
+    expect(screen.queryByLabelText("Add a listing steps")).toBeNull();
+  });
+
   /**
    * The captain's report: samples were added and one empty frame was drawn.
    * All of them go in the strip — a shop that added six and saw four believed

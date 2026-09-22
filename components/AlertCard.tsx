@@ -133,8 +133,7 @@ export function AlertCard({
         {unread ? (
           <View
             className="mt-1.5 h-2 w-2 rounded-pill bg-brand"
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
+            aria-hidden
           />
         ) : null}
         {/*
@@ -169,8 +168,7 @@ export function AlertCard({
         */
         <View
           className="ml-2 flex-row items-stretch gap-2"
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
+          aria-hidden
         >
           {unread ? (
             <SwipeAction

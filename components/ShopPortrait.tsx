@@ -51,7 +51,7 @@ export function ShopPortrait({ imageUrl, shopName, size }: Props) {
           resizeMode="cover"
           style={{ width: "100%", height: "100%" }}
           onError={() => setFailedUrl(imageUrl ?? null)}
-          accessibilityElementsHidden
+          aria-hidden
         />
       ) : (
         <Store size={Math.round(size * 0.38)} color={colors.textMuted} strokeWidth={1.75} />

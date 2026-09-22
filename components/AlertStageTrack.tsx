@@ -48,8 +48,7 @@ export function AlertStageTrack({ index }: Props) {
     >
       <View
         className="flex-row"
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
+        aria-hidden
       >
         {ALERT_STAGES.map((entry, position) => {
           const reached = position <= index;

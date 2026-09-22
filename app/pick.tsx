@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { router } from "expo-router";
+import { Platform } from "react-native";
+import { router, useNavigation } from "expo-router";
 
 import { OptionList } from "@/components/controls/OptionList";
 import { SecondaryButton } from "@/components/SecondaryButton";
@@ -15,8 +16,14 @@ import { settlePick, useSheets } from "@/store/sheets";
  */
 export default function PickSheet() {
   const pending = useSheets((s) => s.pick);
+  const navigation = useNavigation();
 
-  useEffect(() => () => settlePick(null), []);
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      return navigation.addListener("beforeRemove", () => settlePick(null));
+    }
+    return () => settlePick(null);
+  }, [navigation]);
 
   if (!pending) return null;
   const { title, body, options, selected, cancelLabel } = pending.request;

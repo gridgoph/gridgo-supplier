@@ -12,6 +12,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { FormScrollView } from "@/components/FormScrollView";
 import { ListingCard } from "@/components/ListingCard";
 import { ListingRow } from "@/components/ListingRow";
+import { ChatButton } from "@/components/ChatButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
@@ -36,6 +37,7 @@ import { useBoard } from "@/hooks/useBoard";
 import { useCatalogueView } from "@/hooks/useCatalogueView";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
+import { useListingWizard } from "@/store/listingWizard";
 import { askConfirm, askPick } from "@/store/sheets";
 import { isMatchable, useSession } from "@/store/session";
 
@@ -139,6 +141,7 @@ export default function BoardScreen() {
       setNotice(null);
       const result = await removeListing(listing);
       if (result.status === "ok") {
+        useListingWizard.getState().forget(listing.id);
         dropListing(listing.id);
         setNotice(result.value === "archived" ? ARCHIVED_SENTENCE : null);
         await reload();
@@ -214,7 +217,15 @@ export default function BoardScreen() {
           />
         }
       >
-        <ScreenHeader title="Catalogues" right={<AlertsBell />} />
+        <ScreenHeader
+          title="Catalogues"
+          right={
+            <View className="flex-row items-center">
+              <ChatButton />
+              <AlertsBell />
+            </View>
+          }
+        />
 
         {/*
           Demoted to a footnote on purpose. It is a real thing to know once —

@@ -1,6 +1,6 @@
 import * as api from "@/lib/api";
 import { humanizeApiError, isNonSupplierIdentity, isUnmappedIdentity } from "@/lib/apiErrors";
-import { awaitClerkSessionToken, type ClerkAccess, type ClerkGetToken } from "@/lib/clerk";
+import { awaitClerkSessionToken, clerkSessionToken, type ClerkAccess, type ClerkGetToken } from "@/lib/clerk";
 import { debugAuth } from "@/lib/debugAuth";
 import { applyRoute } from "@/lib/onboardingSteps";
 import { APP_ROLE, useSession } from "@/store/session";
@@ -60,7 +60,7 @@ export function leftoverActionForTypedEmail(input: {
 export async function supplierDoorForClerkSession(
   getToken: ClerkGetToken,
 ): Promise<SupplierDoor> {
-  api.setTokenProvider(async () => (await getToken()) ?? null);
+  api.setTokenProvider(() => clerkSessionToken(getToken));
   const token = await awaitClerkSessionToken(getToken);
   if (!token) return "unknown";
   try {
@@ -85,7 +85,7 @@ export async function supplierDoorForClerkSession(
 export async function enterAfterClerkSession(
   getToken: ClerkGetToken,
 ): Promise<AfterClerkAuth> {
-  api.setTokenProvider(async () => (await getToken()) ?? null);
+  api.setTokenProvider(() => clerkSessionToken(getToken));
   const token = await awaitClerkSessionToken(getToken);
   debugAuth("after-clerk-session", { hasToken: Boolean(token) });
   if (!token) {

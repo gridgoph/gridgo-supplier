@@ -350,7 +350,7 @@ export default function ShopDetailsScreen() {
                     </Text>
                     <Text className="text-caption text-text-muted">Change email</Text>
                   </View>
-                  <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+                  <ChevronRight size={20} color={colors.textMuted} aria-hidden />
                 </Pressable>
                 <Text className="text-caption text-text-muted">
                   This is what you sign in with. Changing it sends a code to the new address
@@ -374,12 +374,12 @@ export default function ShopDetailsScreen() {
                   style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
                 >
                   <View className="min-w-0 flex-1 gap-0.5">
-                    <Text className="text-body text-text-primary" accessibilityElementsHidden>
+                    <Text className="text-body text-text-primary" aria-hidden>
                       ••••••••
                     </Text>
                     <Text className="text-caption text-text-muted">Change password</Text>
                   </View>
-                  <ChevronRight size={20} color={colors.textMuted} accessibilityElementsHidden />
+                  <ChevronRight size={20} color={colors.textMuted} aria-hidden />
                 </Pressable>
                 <Text className="text-caption text-text-muted">
                   This is what you sign in with. Changing it signs you out of GRIDGO everywhere

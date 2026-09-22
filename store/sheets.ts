@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { InteractionManager } from "react-native";
 import { create } from "zustand";
 
@@ -101,10 +101,10 @@ export function afterNativePresentation(): Promise<void> {
   });
 }
 
-export function askConfirm(request: ConfirmRequest): Promise<boolean> {
+export function askConfirm(request: ConfirmRequest, href: Href = "/confirm"): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     useSheets.setState({ confirm: { request, resolve, settled: false } });
-    router.push("/confirm");
+    router.push(href);
   }).then(async (answer) => {
     await afterNativePresentation();
     return answer;
