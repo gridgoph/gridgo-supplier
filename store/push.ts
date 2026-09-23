@@ -129,7 +129,7 @@ async function ensureChannel(): Promise<void> {
     description: "When a job on your press has not moved and the promised date is at risk.",
     importance: Notifications.AndroidImportance.HIGH,
     sound: PRODUCTION_NUDGE_SOUND,
-    enableVibration: true,
+    enableVibrate: true,
     vibrationPattern: [0, 250, 250, 250],
   }), api.API_REQUEST_MS);
 }
