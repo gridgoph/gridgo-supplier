@@ -16,6 +16,7 @@ import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { localOnlyCaveat } from "@/lib/alertsApi";
 import { stageForAlert } from "@/lib/alertStages";
+import { jobScreenHref } from "@/lib/productionNudge";
 import { isAlertUnread, useAlertsStore, visibleAlerts } from "@/store/alerts";
 import { askConfirm } from "@/store/sheets";
 import { useViewing } from "@/store/toasts";
@@ -234,9 +235,10 @@ export default function NotificationsScreen() {
         stageIndex={stageForAlert(alert, jobs)}
         onMarkRead={() => void clearOne(alert)}
         onDelete={() => void confirmDelete(alert)}
+        job={job}
         onOpen={
-          job
-            ? () => router.push({ pathname: "/job/[id]", params: { id: job.id } })
+          alert.orderId && (job || alert.type === "shop_production_inactive")
+            ? () => router.push(jobScreenHref(alert.orderId as string))
             : undefined
         }
       />

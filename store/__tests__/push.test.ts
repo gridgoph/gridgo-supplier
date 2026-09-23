@@ -2,7 +2,7 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
 import * as api from "@/lib/api";
-import { PUSH_CHANNEL_ID } from "@/lib/push";
+import { PRODUCTION_NUDGE_SOUND, PUSH_CHANNEL_ID, PUSH_PRODUCTION_NUDGE_CHANNEL_ID } from "@/lib/push";
 import { usePush, pushSupported, serializeDeviceMutation } from "@/store/push";
 import { useSession } from "@/store/session";
 
@@ -172,8 +172,18 @@ describe("registerIfGranted", () => {
       expect.objectContaining({ name: expect.any(String) }),
     );
     const channelOrder = mocked.setNotificationChannelAsync.mock.invocationCallOrder[0];
+    const nudgeOrder = mocked.setNotificationChannelAsync.mock.invocationCallOrder[1];
     const permissionOrder = mocked.getPermissionsAsync.mock.invocationCallOrder[0];
     expect(channelOrder).toBeLessThan(permissionOrder);
+    expect(nudgeOrder).toBeLessThan(permissionOrder);
+    expect(mocked.setNotificationChannelAsync).toHaveBeenCalledWith(
+      PUSH_PRODUCTION_NUDGE_CHANNEL_ID,
+      expect.objectContaining({ sound: PRODUCTION_NUDGE_SOUND, importance: Notifications.AndroidImportance.HIGH }),
+    );
+    expect(mocked.setNotificationChannelAsync).toHaveBeenCalledWith(
+      PUSH_CHANNEL_ID,
+      expect.not.objectContaining({ sound: PRODUCTION_NUDGE_SOUND }),
+    );
   });
 
   it("survives a native module that throws — Expo Go has no remote push at all", async () => {

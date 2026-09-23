@@ -154,4 +154,76 @@ describe("AlertCard", () => {
     );
     expect(screen.getByTestId("alert-picture")).toBeTruthy();
   });
+
+  it("renders the owed move and Open job for a production reminder", async () => {
+    const onOpen = jest.fn();
+    await render(
+      <AlertCard
+        alert={alert({
+          type: "shop_production_inactive",
+          title: "Update this job on the press",
+          body: "Nothing has moved on this job for a while.",
+          orderTitle: "Thesis copies",
+        })}
+        job={{
+          state: "production",
+          title: "Thesis copies",
+          payoutHold: false,
+          payoutMilestones: [
+            { code: "printing", sharePercent: 50, amountMinor: 100, status: "pending_pof", pofFileIds: [], releasedAt: null },
+            { code: "packaging_qc", sharePercent: 15, amountMinor: 30, status: "pending_pof", pofFileIds: [], releasedAt: null },
+          ],
+        }}
+        unread
+        stageIndex={1}
+        onMarkRead={jest.fn()}
+        onDelete={jest.fn()}
+        onOpen={onOpen}
+      />,
+    );
+    expect(screen.getByText("Needs an update")).toBeTruthy();
+    expect(screen.getByText("Update the press or file printing proof")).toBeTruthy();
+    expect(screen.getByText("Thesis copies")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: "Open job" }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not add that chrome to an ordinary job alert", async () => {
+    await render(
+      <AlertCard
+        alert={alert({ type: "shop_job_may_start", title: "You can start this job" })}
+        unread
+        stageIndex={1}
+        onMarkRead={jest.fn()}
+        onDelete={jest.fn()}
+        onOpen={jest.fn()}
+      />,
+    );
+    expect(screen.queryByText("Needs an update")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open job" })).toBeNull();
+  });
+
+  it("keeps the swipeable mounted after a production reminder is read", async () => {
+    const unreadTree = (await render(
+      <AlertCard
+        alert={alert({ type: "shop_production_inactive" })}
+        unread
+        stageIndex={1}
+        onMarkRead={jest.fn()}
+        onDelete={jest.fn()}
+        onOpen={jest.fn()}
+      />,
+    )).toJSON();
+    const readTree = (await render(
+      <AlertCard
+        alert={alert({ type: "shop_production_inactive", read: true })}
+        unread={false}
+        stageIndex={1}
+        onMarkRead={jest.fn()}
+        onDelete={jest.fn()}
+        onOpen={jest.fn()}
+      />,
+    )).toJSON();
+    expect(rootType(readTree)).toEqual(rootType(unreadTree));
+  });
 });

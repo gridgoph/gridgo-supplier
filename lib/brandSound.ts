@@ -157,6 +157,34 @@ function waitUntilLoaded(player: AudioPlayer, timeoutMs: number): Promise<void> 
  * *remember* they were asked, and `armFromGesture` is what actually calls
  * `play()`.
  */
+/**
+ * Play one bundled sting. Missing audio, a blocked web autoplay, and a failed
+ * download are silence — never an error and never a microphone prompt.
+ */
+export function playAlertSting(source: number): void {
+  const expoAudio = audioModule();
+  if (!expoAudio || !webGestureActive()) return;
+  void (async () => {
+    try {
+      await expoAudio.setIsAudioActiveAsync?.(true);
+      await expoAudio.setAudioModeAsync?.({
+        playsInSilentMode: true,
+        interruptionMode: "mixWithOthers",
+        shouldPlayInBackground: false,
+      });
+      const player = expoAudio.createAudioPlayer(source, { downloadFirst: true });
+      await waitUntilLoaded(player, 2500);
+      if (!webGestureActive()) {
+        try { player.remove(); } catch { /* already gone */ }
+        return;
+      }
+      cuePlay(player);
+    } catch {
+      // A sting that cannot play is silence.
+    }
+  })();
+}
+
 export function loadBrandStings(): BrandStings | null {
   const expoAudio = audioModule();
   if (!expoAudio) return null;

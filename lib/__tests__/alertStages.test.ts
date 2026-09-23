@@ -91,6 +91,10 @@ describe("stageForAlert", () => {
     expect(stage).toBe(3);
   });
 
+  it("puts a production reminder on Printing even when the job has left the list", () => {
+    expect(stageForAlert(alert({ orderId: "ord_gone", type: "shop_production_inactive" }), [])).toBe(1);
+  });
+
   it("falls back to the alert's own event when the job has left the list", () => {
     expect(stageForAlert(alert({ orderId: "ord_gone", type: "order_delivered" }), [])).toBe(3);
     expect(stageForAlert(alert({ orderId: "ord_gone", type: "rider_assigned" }), [])).toBe(2);
