@@ -62,6 +62,7 @@ export function stageIndexForState(state: string): number {
 /** Fallback when the job is no longer in the shop's list. */
 function stageIndexForType(type: string | undefined): number {
   if (!type) return -1;
+  if (type === "shop_production_inactive") return 1;
   if (type.includes("delivered") || type.includes("payout") || type.includes("issue")) return 3;
   if (type.includes("pickup") || type.includes("dispatch") || type.includes("rider")) return 2;
   if (type.includes("production") || type.includes("printing")) return 1;

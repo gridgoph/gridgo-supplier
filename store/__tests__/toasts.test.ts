@@ -12,7 +12,18 @@ describe("what is worth interrupting for", () => {
 
   /** Toasting the job on screen is telling someone what they are reading. */
   it("stays quiet about the job already on screen", () => {
-    expect(shouldToast({ orderId: "ord_1" }, { orderId: "ord_1", onAlerts: false })).toBe(false);
+    expect(
+      shouldToast(
+        { orderId: "ord_1", type: "shop_production_inactive" },
+        { orderId: "ord_1", onAlerts: false },
+      ),
+    ).toBe(false);
+    expect(
+      shouldToast(
+        { orderId: "ord_2", type: "shop_production_inactive" },
+        { orderId: null, onAlerts: true },
+      ),
+    ).toBe(false);
   });
 
   it("stays quiet on the alerts list, where it would already be visible", () => {

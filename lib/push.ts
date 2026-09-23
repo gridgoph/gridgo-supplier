@@ -61,6 +61,13 @@ import { Platform } from "react-native";
  */
 export const PUSH_CHANNEL_ID = "gridgo_default";
 
+/**
+ * Production inactivity only. Ordinary job news stays on `gridgo_default`.
+ * The filename is the Android raw resource and the APNs sound name.
+ */
+export const PUSH_PRODUCTION_NUDGE_CHANNEL_ID = "gridgo_production_nudge";
+export const PRODUCTION_NUDGE_SOUND = "notification_alert.mp3";
+
 /** Channel presentation. Importance is high — these are SLA-bearing updates. */
 export const PUSH_CHANNEL = {
   name: "Job and payout alerts",
@@ -254,7 +261,7 @@ export function pushOfferCopy(
   }
   return {
     title: "Get these on your phone",
-    body: "We will notify this phone when GRIDGO offers your shop work, when a payout is waiting on your evidence, when a rider is at your counter, and when a job pays — even with GRIDGO closed.",
+    body: "We will notify this phone when GRIDGO offers your shop work, when a payout is waiting on your evidence, when a rider is at your counter, when a job pays, and for production reminders when a job on the press has not moved — even with GRIDGO closed.",
     action: "Turn on alerts",
   };
 }

@@ -7,8 +7,10 @@ import * as api from "@/lib/api";
 import { humanizeApiError } from "@/lib/apiErrors";
 import {
   devicePlatform,
+  PRODUCTION_NUDGE_SOUND,
   PUSH_CHANNEL,
   PUSH_CHANNEL_ID,
+  PUSH_PRODUCTION_NUDGE_CHANNEL_ID,
   readPushPermission,
   type PushPermission,
 } from "@/lib/push";
@@ -119,8 +121,16 @@ async function ensureChannel(): Promise<void> {
     description: PUSH_CHANNEL.description,
     // These are expiring job offers and money waiting on a photograph: worth a
     // sound and a heads-up banner, which is also what the server's
-    // `priority: high` asks for.
+    // `priority: high` asks for. This channel keeps the system sound.
     importance: Notifications.AndroidImportance.HIGH,
+  }), api.API_REQUEST_MS);
+  await withDeadline(Notifications.setNotificationChannelAsync(PUSH_PRODUCTION_NUDGE_CHANNEL_ID, {
+    name: "Production reminders",
+    description: "When a job on your press has not moved and the promised date is at risk.",
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: PRODUCTION_NUDGE_SOUND,
+    enableVibration: true,
+    vibrationPattern: [0, 250, 250, 250],
   }), api.API_REQUEST_MS);
 }
 

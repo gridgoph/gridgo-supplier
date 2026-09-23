@@ -231,6 +231,10 @@ export type Notification = {
   orderId?: string;
   title: string;
   body: string;
+  /** Current job title, when the alert is about a job the caller can see. */
+  orderTitle?: string;
+  /** Current job state. The inactivity card prefers the live job over this. */
+  orderState?: string;
   /** Broadcast picture. Public HTTPS link or `/public/announcement-images/<fileId>`. */
   imageUrl?: string | null;
   read: boolean;

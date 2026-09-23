@@ -70,7 +70,7 @@ export const useViewing = create<ViewingState>((set) => ({
 
 /** Whether an incoming alert is worth interrupting for. */
 export function shouldToast(
-  alert: { id?: string; orderId?: string; read?: boolean },
+  alert: { id?: string; orderId?: string; read?: boolean; type?: string },
   viewing: Pick<ViewingState, "orderId" | "onAlerts">,
   dismissed: readonly string[] = [],
 ): boolean {
