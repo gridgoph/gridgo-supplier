@@ -77,6 +77,9 @@ describe("pushTargetRoute", () => {
     // Decline, the yellow proof step, the pickup handoff, and the issue that
     // is holding the money. `lib/jobState` has already decided which leads.
     expect(pushTargetRoute(parsePushData({ orderId: "ord_demo_1" }))).toBe("/job/ord_demo_1");
+    expect(
+      pushTargetRoute(parsePushData({ type: "shop_production_inactive", orderId: "ord_demo_1" })),
+    ).toBe("/job/ord_demo_1");
   });
 
   it("opens the alerts list when there is no job behind the alert", () => {

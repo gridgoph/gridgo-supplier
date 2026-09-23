@@ -4,8 +4,10 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 
 import * as api from "@/lib/api";
 import { getNotificationsNative as notifications } from "@/lib/expoNotifications";
+import { playProductionNudgeSting } from "@/lib/nudgeSound";
 import { parsePushData, PUSH_FOREGROUND_BEHAVIOR, pushTargetRoute } from "@/lib/push";
 import { useAlertsStore } from "@/store/alerts";
+import { shouldToast, useViewing } from "@/store/toasts";
 import { usePush } from "@/store/push";
 import { isMatchable, isSignedIn, useSession } from "@/store/session";
 
@@ -58,7 +60,16 @@ function withoutNativeModule<T>(call: () => T): T | null {
 withoutNativeModule(() => {
   const Notifications = notifications();
   Notifications?.setNotificationHandler({
-    handleNotification: async () => ({ ...PUSH_FOREGROUND_BEHAVIOR }),
+    handleNotification: async (notification) => {
+      const data = parsePushData(notification?.request?.content?.data);
+      const toasting = shouldToast(
+        { id: data.notificationId ?? undefined, orderId: data.orderId ?? undefined, read: false },
+        useViewing.getState(),
+        useAlertsStore.getState().dismissed,
+      );
+      playProductionNudgeSting({ type: data.type, id: data.notificationId, toasting });
+      return { ...PUSH_FOREGROUND_BEHAVIOR };
+    },
   });
 });
 

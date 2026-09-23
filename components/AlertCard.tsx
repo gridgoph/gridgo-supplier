@@ -7,8 +7,11 @@ import ReanimatedSwipeable, {
 } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { AlertStageTrack } from "@/components/AlertStageTrack";
-import { notificationImageUrl, type Notification } from "@/lib/api";
+import { PrimaryButton } from "@/components/PrimaryButton";
+import { StatusChip } from "@/components/StatusChip";
+import { notificationImageUrl, type Notification, type Order } from "@/lib/api";
 import { formatNotificationAt } from "@/lib/dates";
+import { owedProductionMove } from "@/lib/productionNudge";
 import { useThemeColors } from "@/hooks/useTheme";
 
 type Props = {
@@ -21,6 +24,8 @@ type Props = {
   onDelete: () => void;
   /** Absent when the alert is not about a job the shop can open. */
   onOpen?: () => void;
+  /** The live job, when the inbox has it. The owed-move line reads this, not the snapshot. */
+  job?: Pick<Order, "state" | "title" | "payoutMilestones" | "payoutHold"> | null;
 };
 
 /**
@@ -56,10 +61,18 @@ export function AlertCard({
   onMarkRead,
   onDelete,
   onOpen,
+  job,
 }: Props) {
   const colors = useThemeColors();
   const row = useRef<SwipeableMethods>(null);
   const picture = notificationImageUrl(alert.imageUrl);
+  const inactive = alert.type === "shop_production_inactive";
+  const jobTitle = job?.title || alert.orderTitle;
+  const owed = inactive ? owedProductionMove(job, alert.orderState) : null;
+  const openJob = () => {
+    onMarkRead();
+    onOpen?.();
+  };
 
   /** Close the revealed panel, then act — never inside the gesture's frame. */
   const runFromRow = (action: () => void) => {
@@ -71,15 +84,13 @@ export function AlertCard({
     <View
       className={
         unread
-          ? "flex-row items-start gap-2 rounded-card border border-outline bg-surface-high p-4"
-          : "flex-row items-start gap-2 rounded-card border border-outline bg-surface p-4"
+          ? "rounded-card border border-outline bg-surface-high p-4"
+          : "rounded-card border border-outline bg-surface p-4"
       }
     >
+    <View className="flex-row items-start gap-2">
       <Pressable
-        onPress={() => {
-          onMarkRead();
-          onOpen?.();
-        }}
+        onPress={openJob}
         accessibilityRole="button"
         accessibilityLabel={`${unread ? "Unread. " : ""}${alert.title}. ${alert.body}`}
         accessibilityHint={onOpen ? "Opens the job and marks this read" : "Marks this read"}
@@ -96,6 +107,10 @@ export function AlertCard({
         style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
       >
         <View className="gap-1">
+          {inactive ? <StatusChip tone="warning" icon="triangle-alert" label="Needs an update" /> : null}
+          {jobTitle && inactive ? (
+            <Text className="text-body font-medium text-text-primary">{jobTitle}</Text>
+          ) : null}
           <Text
             className={
               unread
@@ -111,6 +126,7 @@ export function AlertCard({
             {alert.body}
           </Text>
           <Text className="text-caption text-text-muted">{formatNotificationAt(alert.at)}</Text>
+          {owed ? <Text className="text-body font-medium text-text-primary">{owed}</Text> : null}
         </View>
         {picture ? (
           <Image
@@ -150,6 +166,12 @@ export function AlertCard({
           <Trash2 size={18} color={colors.textMuted} strokeWidth={2} />
         </Pressable>
       </View>
+    </View>
+      {inactive && onOpen ? (
+        <View className="mt-3">
+          <PrimaryButton label="Open job" onPress={openJob} />
+        </View>
+      ) : null}
     </View>
   );
 

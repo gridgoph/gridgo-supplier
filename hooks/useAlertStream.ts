@@ -4,6 +4,7 @@ import { openAlertStream, type AlertStreamHandle } from "@/lib/alertStream";
 import { invalidate, liveGeneration, subscribeLive } from "@/lib/live";
 import { useSession } from "@/store/session";
 import { useAlertsStore } from "@/store/alerts";
+import { playProductionNudgeSting } from "@/lib/nudgeSound";
 import { shouldToast, useToasts, useViewing } from "@/store/toasts";
 
 /**
@@ -71,9 +72,11 @@ export function useAlertStream(enabled = true): void {
           if (seen.has(notification.id)) return;
           seen.add(notification.id);
           if (seen.size > 500) seen.delete(seen.values().next().value as string);
-          if (Date.parse(notification.at) >= startedAt && shouldToast(notification, useViewing.getState(), useAlertsStore.getState().dismissed)) {
+          const toasting = Date.parse(notification.at) >= startedAt && shouldToast(notification, useViewing.getState(), useAlertsStore.getState().dismissed);
+          if (toasting) {
             useToasts.getState().show({id:notification.id,title:notification.title,body:notification.body,orderId:notification.orderId});
           }
+          playProductionNudgeSting({ type: notification.type, id: notification.id, toasting });
         },
       });
     }
