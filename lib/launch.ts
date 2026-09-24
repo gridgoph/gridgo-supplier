@@ -1,7 +1,7 @@
 import type { User } from "@/lib/api";
 import { isSignedIn, type IdentityState } from "@/store/session";
 
-export type LaunchHref = "/access" | "/(auth)/welcome" | "/(tabs)/home";
+export type LaunchHref = "/access" | "/(auth)/welcome" | "/(auth)/login" | "/(tabs)/home";
 
 /**
  * Where a cold start begins.
@@ -18,6 +18,7 @@ export function launchHref(
   user: User | null,
 ): LaunchHref {
   if (identity.kind === "mismatch" || identity.kind === "error") return "/access";
+  if (identity.kind === "signed_out" && identity.reason === "session_ended") return "/(auth)/login";
   if (!isSignedIn(user)) return "/(auth)/welcome";
   return "/(tabs)/home";
 }

@@ -11,7 +11,7 @@ The supplied visual contract and architecture report are the approved product de
 - One shared Clerk application serves the GRIDGO fleet.
 - The bridge requests `/auth/me` with a Clerk JWT and `X-GRIDGO-Role: supplier`, including when primary-role metadata names another role. Metadata alone cannot reject a supplier membership.
 - `lib/api.ts` projects supplier access when `/auth/me` includes a supplier membership and takes accreditation status from the supplier approval case when available; otherwise it uses the returned user projection. `store/session.ts` accepts only the supplier role.
-- An unmapped identity enters public apply. A non-supplier projection or an unresolved authorization error stays behind the access guard.
+- An unmapped identity enters public apply. A non-supplier projection or a forbidden supplier projection stays behind the access guard. An expired/invalid session retries once with a cache-bypassing Clerk token, then opens Sign in with the session-ended message if still unauthenticated.
 - Invitation metadata is server-written. Invitation acceptance consumes a Clerk `__clerk_ticket`; public enrollment follows the separate contract in [AGENTS.md](../../../AGENTS.md#mvp-stack-current-phase).
 - Google may create or authenticate a Clerk identity, but it never grants supplier membership by itself.
 - `gridgo-api` remains authoritative for the supplier projection, accreditation, ownership, and every domain write.
@@ -20,7 +20,7 @@ The supplied visual contract and architecture report are the approved product de
 
 `ClerkProvider` wraps the existing root shell with Clerk's SecureStore-backed `tokenCache`. A small bridge reads Clerk auth and user resources, reads metadata for error handling, registers an async token provider with `lib/api.ts`, and fetches `/auth/me` before adopting the server-projected user into Zustand.
 
-The API layer asks the Clerk token provider for a fresh token for each request. File uploads and SSE connection setup use the same async token path. The old in-memory bearer remains for the development-only local demo login. Signing out sends the device token to `gridgo-api`, signs out Clerk when Clerk owns the session, clears both token paths, and returns push registration to the unclaimed state.
+The API layer asks the Clerk token provider for a token for each request; `lib/api.ts` owns the single silent refresh/retry after a 401. `store/session.ts` owns session expiry and `components/ClerkSessionBridge.tsx` prevents stale Clerk updates from turning expiry into an access error. File uploads and SSE connection setup use the same async token path. The old in-memory bearer remains for the development-only local demo login. Signing out sends the device token to `gridgo-api`, signs out Clerk when Clerk owns the session, clears both token paths, and returns push registration to the unclaimed state.
 
 The route guards and pending-shop access are documented in [AGENTS.md](../../../AGENTS.md#mvp-stack-current-phase) and implemented in `app/_layout.tsx`. The navigator remounts on account changes, preserving drafts across approval changes for the same account.
 

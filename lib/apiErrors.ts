@@ -1,4 +1,17 @@
-import * as api from "@/lib/api";
+/** Shared with the transport without importing it back into its error helpers. */
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(status: number, body: unknown) {
+    super(
+      typeof body === "object" && body && "error" in body
+        ? String((body as { error: string }).error)
+        : `HTTP ${status}`,
+    );
+    this.status = status;
+    this.body = body;
+  }
+}
 
 /**
  * Turn a demo-API failure into a sentence that names what happened and how to
@@ -11,7 +24,7 @@ export const supplierAccountNotFoundMessage =
   "No supplier account is connected to this sign-in. Apply as a shop, or ask Operations to check your invitation.";
 
 function apiErrorCode(error: unknown): string {
-  if (!(error instanceof api.ApiError)) return "";
+  if (!(error instanceof ApiError)) return "";
   const body = error.body;
   return typeof body === "object" && body && "error" in body
     ? String((body as { error: string }).error)
@@ -20,12 +33,12 @@ function apiErrorCode(error: unknown): string {
 
 /** Verified Clerk session, no GRIDGO user yet — open apply, do not treat as a dead token. */
 export function isUnmappedIdentity(error: unknown): boolean {
-  return error instanceof api.ApiError && error.status === 401 && apiErrorCode(error) === "unmapped_identity";
+  return error instanceof ApiError && error.status === 401 && apiErrorCode(error) === "unmapped_identity";
 }
 
 /** Mapped GRIDGO identity that is not a shop. */
 export function isNonSupplierIdentity(error: unknown): boolean {
-  if (!(error instanceof api.ApiError) || error.status !== 403) return false;
+  if (!(error instanceof ApiError) || error.status !== 403) return false;
   const code = apiErrorCode(error);
   return code === "supplier_account_not_found" || code === "membership_required";
 }
@@ -137,7 +150,7 @@ const MESSAGES: Record<string, string> = {
 };
 
 export function humanizeApiError(error: unknown, fallback: string): string {
-  if (error instanceof api.ApiError) {
+  if (error instanceof ApiError) {
     const body = error.body;
     const code =
       typeof body === "object" && body && "error" in body
@@ -184,7 +197,7 @@ export function humanizeApiError(error: unknown, fallback: string): string {
 
 /** Supplier-role Clerk identity that the domain API will not project. */
 export function supplierProjectionErrorMessage(error: unknown): string {
-  if (error instanceof api.ApiError && (error.status === 401 || error.status === 403)) {
+  if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
     return "No supplier account is connected to this sign-in. Sign out and apply as a shop, or ask Operations to check your invitation.";
   }
   return "GRIDGO could not open this supplier account. Try again, or ask Operations to check the invitation.";
