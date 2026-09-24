@@ -1,7 +1,7 @@
 import type { User } from "@/lib/api";
 import { isSignedIn, type IdentityState } from "@/store/session";
 
-export type LaunchHref = "/access" | "/(auth)/welcome" | "/(tabs)/home";
+export type LaunchHref = "/access" | "/(auth)/welcome" | "/(auth)/login" | "/(tabs)/home";
 
 /**
  * Where a cold start begins.
@@ -18,6 +18,7 @@ export function launchHref(
   user: User | null,
 ): LaunchHref {
   if (identity.kind === "mismatch" || identity.kind === "error") return "/access";
+  if (identity.kind === "signed_out" && identity.reason === "session_ended") return "/(auth)/login";
   if (!isSignedIn(user)) return "/(auth)/welcome";
   return "/(tabs)/home";
 }
@@ -34,4 +35,14 @@ export function launchHref(
 export function authDoorOpen(identity: IdentityState, user: User | null): boolean {
   if (isSignedIn(user)) return false;
   return identity.kind !== "mismatch" && identity.kind !== "error";
+}
+
+/**
+ * The root stack's key. It changes when a session arrives or leaves, which
+ * remounts the stack and every screen on it — so a sheet that outlives its
+ * stack key was taken down by the navigator, not by the person holding the
+ * phone (see `app/app-update.tsx`).
+ */
+export function rootStackKey(user: User | null): string {
+  return user?.id ?? "signed-out";
 }

@@ -1,4 +1,5 @@
 import { withDeadline } from "@/lib/withDeadline";
+import { ApiError, isUnmappedIdentity } from "@/lib/apiErrors";
 import { assertLiveGeneration, liveGeneration } from "@/lib/live";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
@@ -6,6 +7,8 @@ import { Platform } from "react-native";
 import type { PublishedFileFormat } from "@/data/fileFormats";
 import { readPublishedFormats } from "@/lib/fileFormatResolve";
 import type { DevicePlatform } from "@/lib/push";
+
+export { ApiError } from "@/lib/apiErrors";
 
 /**
  * GRIDGO demo API client.
@@ -325,8 +328,9 @@ export type SupplierServicePatch = {
 };
 
 let tokenMemory: string | null = null;
-export type TokenProvider = () => Promise<string | null>;
+export type TokenProvider = (options?: { skipCache?: boolean }) => Promise<string | null>;
 let tokenProvider: TokenProvider | null = null;
+let tokenRefresh: { generation: number; promise: Promise<string | null> } | null = null;
 
 /** Inputs for pure API-base resolution (exported for unit tests). */
 export type ResolveApiBaseInput = {
@@ -494,18 +498,29 @@ export function setTokenProvider(provider: TokenProvider | null): void {
  * listing PATCH with no Bearer (401) and then signed the shop out. Sign-out
  * clears the provider; a live-owner change is `assertLiveGeneration`.
  */
-export async function getAuthToken(): Promise<string | null> {
+export async function getAuthToken(options?: { skipCache?: boolean }): Promise<string | null> {
   if (!tokenProvider) return tokenMemory;
   const provider = tokenProvider;
+  const generation = liveGeneration();
   let token: string | null = null;
   try {
-    token = (await provider())?.trim() || null;
+    token = (await provider(options))?.trim() || null;
   } catch {
     token = null;
   }
-  if (!tokenProvider) return null;
+  if (!tokenProvider || generation !== liveGeneration()) return null;
   tokenMemory = token;
   return token;
+}
+
+/** Concurrent rejected requests share one cache-bypassing Clerk refresh. */
+function refreshAuthToken(generation: number): Promise<string | null> {
+  if (tokenRefresh?.generation === generation) return tokenRefresh.promise;
+  const promise = getAuthToken({ skipCache: true }).finally(() => {
+    if (tokenRefresh?.promise === promise) tokenRefresh = null;
+  });
+  tokenRefresh = { generation, promise };
+  return promise;
 }
 
 /** Fired when an authenticated request gets HTTP 401 (token gone or invalid). */
@@ -521,19 +536,6 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
   unauthorizedHandler = handler;
 }
 
-export class ApiError extends Error {
-  status: number;
-  body: unknown;
-  constructor(status: number, body: unknown) {
-    super(
-      typeof body === "object" && body && "error" in body
-        ? String((body as { error: string }).error)
-        : `HTTP ${status}`,
-    );
-    this.status = status;
-    this.body = body;
-  }
-}
 
 type RequestOptions = RequestInit & {
   /**
@@ -568,18 +570,31 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     else controller.signal.addEventListener("abort", fail, { once: true });
   });
   let res: Response;
-  let text: string;
+  let data: unknown = null;
   let token: string | null = null;
+  const clerkOwned = tokenProvider != null;
   try {
     token = await Promise.race([getAuthToken(), aborted]);
     assertLiveGeneration(generation);
-    if (token) { headers.Authorization = `Bearer ${token}`; headers["X-GRIDGO-Role"] = "supplier"; }
-    res = await Promise.race([fetch(`${getApiBase()}${path}`, {
-      ...fetchInit,
-      headers,
-      signal: controller.signal,
-    }), aborted]);
-    text = await Promise.race([res.text(), aborted]);
+    for (let attempt = 0; ; attempt += 1) {
+      if (token) { headers.Authorization = `Bearer ${token}`; headers["X-GRIDGO-Role"] = "supplier"; }
+      res = await Promise.race([fetch(`${getApiBase()}${path}`, {
+        ...fetchInit,
+        headers: { ...headers },
+        signal: controller.signal,
+      }), aborted]);
+      const text = await Promise.race([res.text(), aborted]);
+      assertLiveGeneration(generation);
+      data = null;
+      if (text) {
+        try { data = JSON.parse(text); } catch { data = text; }
+      }
+      if (res.status !== 401 || attempt > 0 || !clerkOwned ||
+          isUnmappedIdentity(new ApiError(res.status, data))) break;
+      token = await Promise.race([refreshAuthToken(generation), aborted]);
+      assertLiveGeneration(generation);
+      if (!token) break;
+    }
   } catch (error) {
     const timedOut =
       (error instanceof Error && error.name === "AbortError") ||
@@ -592,19 +607,11 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     clearTimeout(timer);
   }
   assertLiveGeneration(generation);
-  let data: unknown = null;
-  if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = text;
-    }
-  }
   if (!res.ok) {
-    // A 401 on a request that carried a Bearer is a dead session. A 401 on a
-    // request we sent without one is our miss — signing the shop out then
-    // turns a brief Clerk token gap into "this shop is still closed".
-    if (res.status === 401 && !ignoreUnauthorized && token) {
+    // Unmapped means a valid identity may apply. Other Clerk 401s have now
+    // exhausted one silent refresh; the session boundary opens sign-in.
+    if (res.status === 401 && !ignoreUnauthorized && (token || clerkOwned) &&
+        !isUnmappedIdentity(new ApiError(res.status, data))) {
       setToken(null);
       unauthorizedHandler?.();
     }
@@ -1664,16 +1671,25 @@ export async function openSupportChatThread(): Promise<{ thread: SupportChatThre
   });
 }
 
+/**
+ * `newThread` starts a conversation of its own (or reuses the shop's empty
+ * one) instead of adding to the latest — how a problem report arrives as its
+ * own thread. Ignored when `threadId` names one.
+ */
 export async function sendSupportChatMessage(
   body: string,
   threadId?: string,
+  options: { newThread?: boolean } = {},
 ): Promise<{
   thread: SupportChatThread;
   message: SupportChatMessage;
 }> {
   return request("/support-chat/me/messages", {
     method: "POST",
-    body: JSON.stringify({ body, ...(threadId ? { threadId } : {}) }),
+    body: JSON.stringify({
+      body,
+      ...(threadId ? { threadId } : options.newThread ? { newThread: true } : {}),
+    }),
   });
 }
 

@@ -237,6 +237,11 @@ export default function AccountScreen() {
         <View className="mt-6 gap-2">
           <Text className="text-overline text-text-muted">APP</Text>
           <DestinationRow
+            title="Report a problem"
+            detail="Tell Operations what went wrong. They reply in your chat"
+            onPress={() => router.push("/report" as Href)}
+          />
+          <DestinationRow
             title="Settings"
             detail="Theme, the product tour, and the connection this app is using"
             onPress={() => router.push("/settings" as Href)}

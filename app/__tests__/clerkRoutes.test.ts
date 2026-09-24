@@ -166,6 +166,7 @@ describe("public apply and Clerk sign-in routes", () => {
       bridge.indexOf("if (!isSignedIn"),
     );
     expect(restoring).not.toContain('setClerkIdentity({ kind: "loading" })');
-    expect(access).toContain("Supplier work stays closed here");
+    expect(access).toContain("This account belongs to a different GRIDGO app");
+    expect(access).not.toContain("This shop is still closed");
   });
 });

@@ -28,11 +28,12 @@ import { ClerkSessionBridge } from "@/components/ClerkSessionBridge";
 
 import { colors, type ThemeName } from "@/constants/theme";
 import { useAlertStream } from "@/hooks/useAlertStream";
+import { useAppUpdateCheck } from "@/hooks/useAppUpdateCheck";
 import { useSupportChatUnread } from "@/hooks/useSupportChatUnread";
 import { useAppFonts } from "@/hooks/useAppFonts";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
-import { authDoorOpen } from "@/lib/launch";
+import { authDoorOpen, rootStackKey } from "@/lib/launch";
 import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions";
 import { resolveClerkPublishableKey } from "@/lib/clerk";
 import { bounceToIsolatedDevWebHost, GRIDGO_DEV_WEB_HOST } from "@/lib/devWebHost";
@@ -121,7 +122,7 @@ export default function RootLayout() {
           <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
             <SafeAreaProvider initialMetrics={initialWindowMetrics}>
               <ThemeProvider value={navigationTheme(scheme)}>
-                <RootStack />
+                <RootStack introDone={!introPlaying} />
                 {/*
                   Above the navigator so an alert can arrive on any screen,
                   and at the top of it so it can never sit on the action a
@@ -153,10 +154,11 @@ export default function RootLayout() {
  * those routes have nothing a waiting shop can do. Settings stays reachable
  * from both so a waiting shop is not locked out of its own theme and sign-out.
  */
-function RootStack() {
+function RootStack({ introDone }: { introDone: boolean }) {
   const { top } = useSafeAreaInsets();
   const user = useSession((s) => s.user);
   const identity = useSession((s) => s.identity);
+  const sessionWait = useSession((s) => s.sessionWait);
   const scheme = useThemeName();
   const signedIn = isSignedIn(user);
   const matchable = signedIn && isMatchable(user);
@@ -173,14 +175,23 @@ function RootStack() {
   // once. It never raises the permission dialog — only `PushEnableCard` does
   // that, and only from a tap.
   usePushNotifications();
+  // A newer APK, or the first launch of one. The sheet waits for the opening
+  // and for the session to settle, because the stack below is re-keyed when a
+  // restored session arrives and would take a sheet pushed earlier with it.
+  useAppUpdateCheck(introDone && identity.kind !== "loading" && !sessionWait);
 
   return (
-    <Stack key={user?.id ?? "signed-out"} screenOptions={stackScreenOptions(scheme, top)}>
+    <Stack key={rootStackKey(user)} screenOptions={stackScreenOptions(scheme, top)}>
       {/* Launch redirect stays public so cold start always has an anchor. */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
       {/* Clerk's default browser-SSO return must stay reachable before activation. */}
       <Stack.Screen name="sso-callback" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+      {/*
+        The update sheet is public: a shop that never signs in still has to
+        hear there is a new version. See `hooks/useAppUpdateCheck`.
+      */}
+      <Stack.Screen name="app-update" options={sheetScreenOptions(scheme)} />
 
       <Stack.Protected guard={signedOut}>
         <Stack.Screen name="(auth)/welcome" options={{ headerShown: false }} />
@@ -242,6 +253,17 @@ function RootStack() {
           name="chat/[thread]"
           options={{
             title: "Chat",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
+          A problem report is posted into the shop's Operations chat, so it sits
+          beside chat: a shop waiting on accreditation can be stuck too.
+        */}
+        <Stack.Screen
+          name="report"
+          options={{
+            title: "Report a problem",
             headerBackButtonDisplayMode: "minimal",
           }}
         />
