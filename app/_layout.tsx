@@ -33,7 +33,7 @@ import { useSupportChatUnread } from "@/hooks/useSupportChatUnread";
 import { useAppFonts } from "@/hooks/useAppFonts";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
-import { authDoorOpen } from "@/lib/launch";
+import { authDoorOpen, rootStackKey } from "@/lib/launch";
 import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions";
 import { resolveClerkPublishableKey } from "@/lib/clerk";
 import { bounceToIsolatedDevWebHost, GRIDGO_DEV_WEB_HOST } from "@/lib/devWebHost";
@@ -181,7 +181,7 @@ function RootStack({ introDone }: { introDone: boolean }) {
   useAppUpdateCheck(introDone && identity.kind !== "loading" && !sessionWait);
 
   return (
-    <Stack key={user?.id ?? "signed-out"} screenOptions={stackScreenOptions(scheme, top)}>
+    <Stack key={rootStackKey(user)} screenOptions={stackScreenOptions(scheme, top)}>
       {/* Launch redirect stays public so cold start always has an anchor. */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
       {/* Clerk's default browser-SSO return must stay reachable before activation. */}

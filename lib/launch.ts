@@ -36,3 +36,13 @@ export function authDoorOpen(identity: IdentityState, user: User | null): boolea
   if (isSignedIn(user)) return false;
   return identity.kind !== "mismatch" && identity.kind !== "error";
 }
+
+/**
+ * The root stack's key. It changes when a session arrives or leaves, which
+ * remounts the stack and every screen on it — so a sheet that outlives its
+ * stack key was taken down by the navigator, not by the person holding the
+ * phone (see `app/app-update.tsx`).
+ */
+export function rootStackKey(user: User | null): string {
+  return user?.id ?? "signed-out";
+}

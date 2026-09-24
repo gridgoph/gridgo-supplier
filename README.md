@@ -49,10 +49,12 @@ For native push, use an installed development build. Connect an authorized Andro
 A release build compares its `versionCode` with the newest GitHub Release at launch and on return to the foreground, and offers the APK when there is a newer one ([lib/appUpdate.ts](lib/appUpdate.ts)). Development builds and Expo Go have no real `versionCode` and skip the check. To see the prompt anyway, pretend to be an old build:
 
 ```bash
-EXPO_PUBLIC_UPDATE_CHECK_FORCE_VERSION_CODE=1 npm start
+EXPO_PUBLIC_UPDATE_CHECK_FORCE_VERSION_CODE=1 npm start -- --clear
 ```
 
-The override works in development only. Restart Metro with a higher number (for example `2`) to see the one-time "Update completed" note on the next launch.
+The override works in development only. `--clear` matters: the value is inlined at bundle time, and Metro's cache would keep the old one. Restart Metro with a higher number (for example `2`) to see the one-time "Update completed" note on the next launch.
+
+Every decision the check makes is logged to Metro in a development build, one `[update-check]` line each: which build it compared (or `off: Expo Go and EXPO_PUBLIC_UPDATE_CHECK_FORCE_VERSION_CODE is not set` when the override never reached the bundle), what GitHub answered, whether the release was offered, and when the sheet is presented. If the prompt does not appear, those lines say why. A **Later** from an earlier run is remembered on the phone for the rest of that day; clear Expo Go's storage for the project to see the prompt again.
 
 ## Android emulator API URL
 

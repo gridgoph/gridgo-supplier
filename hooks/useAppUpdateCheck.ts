@@ -3,10 +3,11 @@ import { router } from "expo-router";
 import { useEffect } from "react";
 import { AppState, Platform } from "react-native";
 
-import { installedBuild, type Build } from "@/lib/appUpdate";
+import { describeInstalledBuild, installedBuild, type Build } from "@/lib/appUpdate";
 import {
   appUpdateHydrated,
   checkForUpdate,
+  logUpdateCheck,
   recordLaunch,
   setUpdateSheetOpen,
   useAppUpdate,
@@ -22,16 +23,18 @@ import { afterNativePresentation } from "@/store/sheets";
  * `process.env.EXPO_PUBLIC_*` only in that spelling.
  */
 export function resolveInstalledBuild(): Build | null {
-  return installedBuild({
+  const expoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+  const input = {
     versionCode: Constants.expoConfig?.android?.versionCode,
     versionName: Constants.expoConfig?.version,
-    releaseBuild:
-      !__DEV__ &&
-      Platform.OS === "android" &&
-      Constants.executionEnvironment !== ExecutionEnvironment.StoreClient,
+    releaseBuild: !__DEV__ && Platform.OS === "android" && !expoGo,
     forceVersionCode: process.env.EXPO_PUBLIC_UPDATE_CHECK_FORCE_VERSION_CODE,
     dev: __DEV__,
-  });
+    expoGo,
+  };
+  const build = installedBuild(input);
+  logUpdateCheck(describeInstalledBuild(input, build));
+  return build;
 }
 
 /** One launch per JS runtime, however often the root effect re-runs. */
@@ -76,7 +79,11 @@ export function useAppUpdateCheck(ready: boolean): void {
   const sheetOpen = useAppUpdate((s) => s.sheetOpen);
 
   useEffect(() => {
-    if (!ready || !waiting || sheetOpen) return;
+    if (!waiting || sheetOpen) return;
+    if (!ready) {
+      logUpdateCheck("the sheet is waiting for the opening and a settled session");
+      return;
+    }
     let cancelled = false;
     // Let a sheet that has just been dismissed finish leaving before the next
     // one (the offer queued behind "Update completed") is pushed.
@@ -84,6 +91,7 @@ export function useAppUpdateCheck(ready: boolean): void {
       const state = useAppUpdate.getState();
       if (cancelled || state.sheetOpen) return;
       if (state.completed === null && state.offer === null) return;
+      logUpdateCheck("presenting the update sheet");
       setUpdateSheetOpen(true);
       router.push("/app-update");
     });

@@ -9,6 +9,7 @@ import { SheetSurface } from "@/components/SheetSurface";
 import { SpecRow } from "@/components/SpecRow";
 import { DOWNLOAD_URL, formatDownloadSize } from "@/lib/appUpdate";
 import { formatDeadlineLabel } from "@/lib/dates";
+import { rootStackKey } from "@/lib/launch";
 import {
   closeUpdateSheet,
   dismissCompleted,
@@ -17,6 +18,7 @@ import {
   useAppUpdate,
   type UpdateSheetSubject,
 } from "@/store/appUpdate";
+import { useSession } from "@/store/session";
 
 /**
  * A newer GRIDGO is out, or this launch is the first run of one.
@@ -46,14 +48,22 @@ export default function AppUpdateSheet() {
     return null;
   });
 
+  // The stack this sheet was pushed onto. A session arriving or leaving
+  // re-keys the root stack and takes the sheet with it; that is not the shop
+  // answering, so it must not be remembered as a "Later".
+  const [stackKey] = useState(() => rootStackKey(useSession.getState().user));
+
   // Native: the sheet is gone when this screen unmounts (drag, back, scrim).
   // Web: that cleanup also runs on Strict Mode's remount — see `app/confirm`.
   useEffect(() => {
     if (Platform.OS === "web") {
       return navigation.addListener("beforeRemove", () => closeUpdateSheet(subject));
     }
-    return () => closeUpdateSheet(subject);
-  }, [navigation, subject]);
+    return () => {
+      const byShop = rootStackKey(useSession.getState().user) === stackKey;
+      closeUpdateSheet(subject, new Date(), byShop);
+    };
+  }, [navigation, subject, stackKey]);
 
   useEffect(() => {
     if (!subject && router.canGoBack()) router.back();

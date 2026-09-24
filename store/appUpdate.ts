@@ -3,11 +3,13 @@ import { persist } from "zustand/middleware";
 
 import {
   completedUpdate,
+  describeOffer,
   fetchLatestRelease,
   shouldCheck,
   shouldOffer,
   type Build,
   type LatestRelease,
+  type ReleaseRead,
   type Snooze,
 } from "@/lib/appUpdate";
 import { toDayKey } from "@/lib/day";
@@ -22,6 +24,15 @@ import { createPersistStorage } from "@/lib/persistStorage";
  * across launches — the last build this phone ran, and a "Later".
  */
 
+/**
+ * Every decision the check makes, in a development build's Metro log, so a
+ * prompt that does not appear says why instead of failing silently. A release
+ * build logs nothing: an update check that finds nothing is not news.
+ */
+export function logUpdateCheck(line: string): void {
+  if (__DEV__) console.info(`[update-check] ${line}`);
+}
+
 export type UpdateOffer = {
   installed: Build;
   latest: LatestRelease;
@@ -34,8 +45,13 @@ type AppUpdateState = {
   snooze: Snooze | null;
 
   hydrated: boolean;
-  /** When GitHub was last asked, this run. */
+  /**
+   * When GitHub last answered, this run. Not persisted: a cold launch always
+   * reads, and the interval only spaces out returns to the foreground.
+   */
   lastCheckedAt: number | null;
+  /** A read is in flight; a foreground return during it does not start another. */
+  checking: boolean;
   offer: UpdateOffer | null;
   /** Set on the first launch of a newer build than the previous one. */
   completed: Build | null;
@@ -52,6 +68,7 @@ export const useAppUpdate = create<AppUpdateState>()(
       snooze: null,
       hydrated: false,
       lastCheckedAt: null,
+      checking: false,
       offer: null,
       completed: null,
       sheetOpen: false,
@@ -99,16 +116,33 @@ export async function checkForUpdate(
   installed: Build,
   reason: "launch" | "foreground",
   now: Date = new Date(),
-  fetchLatest: () => Promise<LatestRelease | null> = () => fetchLatestRelease(),
+  fetchLatest: () => Promise<ReleaseRead> = () => fetchLatestRelease(),
 ): Promise<void> {
-  if (!shouldCheck(reason, useAppUpdate.getState().lastCheckedAt, now.getTime())) return;
-  useAppUpdate.setState({ lastCheckedAt: now.getTime() });
+  const { checking, lastCheckedAt } = useAppUpdate.getState();
+  if (checking) return;
+  if (!shouldCheck(reason, lastCheckedAt, now.getTime())) {
+    logUpdateCheck("skipped: GitHub was read less than 4 hours ago");
+    return;
+  }
+  useAppUpdate.setState({ checking: true });
 
-  const latest = await fetchLatest();
+  let latest: LatestRelease | null;
+  try {
+    const read = await fetchLatest();
+    logUpdateCheck(read.detail);
+    // Only a read GitHub answered starts the interval. Offline or timed out,
+    // the next return to the foreground asks again.
+    if (read.answered) useAppUpdate.setState({ lastCheckedAt: now.getTime() });
+    latest = read.latest;
+  } finally {
+    useAppUpdate.setState({ checking: false });
+  }
   if (!latest) return;
 
   const { snooze, offer } = useAppUpdate.getState();
-  if (!shouldOffer(installed, latest, snooze, toDayKey(now))) return;
+  const today = toDayKey(now);
+  logUpdateCheck(describeOffer(installed, latest, snooze, today));
+  if (!shouldOffer(installed, latest, snooze, today)) return;
   // The same offer already waiting — leave it, so the sheet is not re-pushed.
   if (offer?.latest.versionCode === latest.versionCode) return;
   useAppUpdate.setState({ offer: { installed, latest } });
@@ -150,8 +184,22 @@ export type UpdateSheetSubject =
  * the thing it was showing is settled: the completion note has been seen, and
  * an offer left unanswered — dragged away, backed out of — counts as "Later".
  * An offer queued behind the completion note is left for its own turn.
+ *
+ * `byShop: false` is the navigator taking the sheet down on its own — the root
+ * stack is re-keyed when a session arrives or leaves. Nobody answered, so
+ * nothing is settled and the sheet comes back on the new stack; counting that
+ * as "Later" would hide the offer for the rest of the day, unseen.
  */
-export function closeUpdateSheet(subject: UpdateSheetSubject | null, now: Date = new Date()): void {
+export function closeUpdateSheet(
+  subject: UpdateSheetSubject | null,
+  now: Date = new Date(),
+  byShop: boolean = true,
+): void {
+  if (!byShop) {
+    logUpdateCheck("the sheet was taken down with the stack; it will be shown again");
+    setUpdateSheetOpen(false);
+    return;
+  }
   const { offer } = useAppUpdate.getState();
   if (subject?.kind === "completed") dismissCompleted();
   if (subject?.kind === "offer" && offer?.latest.versionCode === subject.versionCode) {

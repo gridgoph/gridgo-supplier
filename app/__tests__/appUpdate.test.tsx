@@ -13,7 +13,7 @@ jest.mock("expo-router", () => ({
 import { router } from "expo-router";
 
 import AppUpdateSheet from "@/app/app-update";
-import { DOWNLOAD_URL, type LatestRelease } from "@/lib/appUpdate";
+import { DOWNLOAD_URL, type LatestRelease, type ReleaseRead } from "@/lib/appUpdate";
 import {
   checkForUpdate,
   closeUpdateSheet,
@@ -30,13 +30,22 @@ const latest: LatestRelease = {
 };
 const morning = new Date(2026, 8, 24, 9, 0);
 
+/** A read GitHub answered with `latest`. */
+const answered = async (): Promise<ReleaseRead> => ({
+  latest,
+  answered: true,
+  detail: "latest release is 1.0.84",
+});
+
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.spyOn(console, "info").mockImplementation(() => undefined);
   useAppUpdate.setState({
     lastSeenVersionCode: null,
     snooze: null,
     hydrated: true,
     lastCheckedAt: null,
+    checking: false,
     offer: null,
     completed: null,
     sheetOpen: false,
@@ -45,17 +54,60 @@ beforeEach(() => {
 
 describe("the update check", () => {
   it("queues an offer for a newer release", async () => {
-    await checkForUpdate(installed, "launch", morning, async () => latest);
+    await checkForUpdate(installed, "launch", morning, answered);
     expect(useAppUpdate.getState().offer).toEqual({ installed, latest });
   });
 
   it("queues nothing when the check fails", async () => {
-    await checkForUpdate(installed, "launch", morning, async () => null);
+    await checkForUpdate(installed, "launch", morning, async () => ({
+      latest: null,
+      answered: true,
+      detail: "GitHub answered HTTP 403",
+    }));
     expect(useAppUpdate.getState().offer).toBeNull();
   });
 
+  it("logs each decision in a development build", async () => {
+    await checkForUpdate(installed, "launch", morning, answered);
+    expect(console.info).toHaveBeenCalledWith("[update-check] latest release is 1.0.84");
+    expect(console.info).toHaveBeenCalledWith("[update-check] offering 1.0.84 over 1.0.80");
+  });
+
+  it("asks again at the next foreground after a read nobody answered", async () => {
+    const fetchLatest = jest
+      .fn<Promise<ReleaseRead>, []>()
+      .mockResolvedValueOnce({ latest: null, answered: false, detail: "no answer (aborted)" })
+      .mockImplementationOnce(answered);
+    await checkForUpdate(installed, "launch", morning, fetchLatest);
+    const minuteLater = new Date(morning.getTime() + 60 * 1000);
+    await checkForUpdate(installed, "foreground", minuteLater, fetchLatest);
+    expect(fetchLatest).toHaveBeenCalledTimes(2);
+    expect(useAppUpdate.getState().offer?.latest.versionCode).toBe(84);
+  });
+
+  it("does not start a second read while one is in flight", async () => {
+    let finish: (read: ReleaseRead) => void = () => undefined;
+    const fetchLatest = jest.fn(
+      () => new Promise<ReleaseRead>((resolve) => (finish = resolve)),
+    );
+    const launch = checkForUpdate(installed, "launch", morning, fetchLatest);
+    await checkForUpdate(installed, "foreground", morning, fetchLatest);
+    finish(await answered());
+    await launch;
+    expect(fetchLatest).toHaveBeenCalledTimes(1);
+    expect(useAppUpdate.getState().checking).toBe(false);
+  });
+
+  it("always reads on a cold launch, whatever the last run did", async () => {
+    // lastCheckedAt is not persisted, and a launch reads even if it were set.
+    useAppUpdate.setState({ lastCheckedAt: morning.getTime() });
+    const fetchLatest = jest.fn(answered);
+    await checkForUpdate(installed, "launch", morning, fetchLatest);
+    expect(fetchLatest).toHaveBeenCalledTimes(1);
+  });
+
   it("does not ask GitHub again on a quick return to the foreground", async () => {
-    const fetchLatest = jest.fn(async () => latest);
+    const fetchLatest = jest.fn(answered);
     await checkForUpdate(installed, "launch", morning, fetchLatest);
     const later = new Date(morning.getTime() + 30 * 60 * 1000);
     await checkForUpdate(installed, "foreground", later, fetchLatest);
@@ -63,16 +115,26 @@ describe("the update check", () => {
   });
 
   it("holds a 'Later' for the rest of the day, then asks again", async () => {
-    await checkForUpdate(installed, "launch", morning, async () => latest);
+    await checkForUpdate(installed, "launch", morning, answered);
     closeUpdateSheet({ kind: "offer", versionCode: 84 }, morning);
     expect(useAppUpdate.getState().offer).toBeNull();
 
     const evening = new Date(2026, 8, 24, 20, 0);
-    await checkForUpdate(installed, "launch", evening, async () => latest);
+    await checkForUpdate(installed, "launch", evening, answered);
     expect(useAppUpdate.getState().offer).toBeNull();
+    expect(console.info).toHaveBeenCalledWith(
+      '[update-check] not offering 1.0.84: "Later" was tapped for 84 on 2026-09-24',
+    );
 
     const tomorrow = new Date(2026, 8, 25, 8, 0);
-    await checkForUpdate(installed, "launch", tomorrow, async () => latest);
+    await checkForUpdate(installed, "launch", tomorrow, answered);
+    expect(useAppUpdate.getState().offer?.latest.versionCode).toBe(84);
+  });
+
+  it("does not count the navigator taking the sheet down as a 'Later'", () => {
+    useAppUpdate.setState({ offer: { installed, latest }, sheetOpen: true });
+    closeUpdateSheet({ kind: "offer", versionCode: 84 }, morning, false);
+    expect(useAppUpdate.getState()).toMatchObject({ snooze: null, sheetOpen: false });
     expect(useAppUpdate.getState().offer?.latest.versionCode).toBe(84);
   });
 });

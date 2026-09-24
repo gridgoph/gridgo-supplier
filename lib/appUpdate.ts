@@ -11,12 +11,15 @@
  *
  * This module is pure on purpose — no React, no storage, no `expo-*` — because
  * the client and rider apps carry the same feature and should be able to take
- * this file as it is. The only per-app values are the three URLs below.
+ * this file as it is. The only per-app values are the three URLs and the
+ * User-Agent below.
  *
- * Every failure is silent. Offline, rate-limited (GitHub allows 60
+ * Every failure is silent to the shop. Offline, rate-limited (GitHub allows 60
  * unauthenticated requests an hour per IP), a malformed answer: all of them
  * mean "no offer this time", never an error a shop has to read. A missed check
- * costs nothing; the next launch asks again.
+ * costs nothing; the next launch asks again. A development build still says
+ * why, through the one-line describers below, because a prompt that silently
+ * never appears cannot otherwise be diagnosed.
  */
 
 /** The public repo whose latest Release names the newest build. */
@@ -28,6 +31,13 @@ export const DOWNLOAD_URL = "https://gridgo.talasora.com/downloads/gridgo-suppli
 
 /** The human page, named when the APK link itself cannot be opened. */
 export const DOWNLOAD_PAGE_URL = "https://gridgo.talasora.com/download";
+
+/**
+ * GitHub refuses an API request with no `User-Agent` — 403, the same status as
+ * its rate limit — so the read names itself rather than trusting the phone's
+ * HTTP stack to add one.
+ */
+export const USER_AGENT = "GRIDGO-supplier";
 
 /**
  * How long a foreground return waits before asking again. A launch always
@@ -104,31 +114,69 @@ export function parseLatestRelease(body: unknown): LatestRelease | null {
 type FetchLike = (
   url: string,
   init: { headers: Record<string, string>; signal?: AbortSignal },
-) => Promise<{ ok: boolean; json: () => Promise<unknown> }>;
+) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+
+/** What one read of the latest Release came back with. */
+export type ReleaseRead = {
+  /** The newest Release worth comparing, or `null` when there is none. */
+  latest: LatestRelease | null;
+  /**
+   * Whether GitHub answered at all, with any status. `false` offline or on a
+   * timeout — worth asking again at the next foreground, not hours later.
+   */
+  answered: boolean;
+  /** One line for the development log: what came back, and why it counts. */
+  detail: string;
+};
 
 /**
- * Ask GitHub for the newest Release. Resolves `null` on every failure —
- * offline, timeout, rate limit, a 404 while a repo has no Release yet, or an
- * answer this module cannot read. Never rejects.
+ * Ask GitHub for the newest Release. Never rejects.
+ *
+ * Offline, timeout, rate limit, a 404 while a repo has no Release yet, or an
+ * answer this module cannot read all come back as `latest: null`; `detail`
+ * says which.
  */
 export async function fetchLatestRelease(
   fetchImpl: FetchLike = fetch,
   timeoutMs: number = CHECK_TIMEOUT_MS,
-): Promise<LatestRelease | null> {
+): Promise<ReleaseRead> {
   const controller = typeof AbortController === "function" ? new AbortController() : null;
   const timer = setTimeout(() => controller?.abort(), timeoutMs);
+  let answered = false;
   try {
     const response = await fetchImpl(LATEST_RELEASE_URL, {
-      headers: { Accept: "application/vnd.github+json" },
+      headers: { Accept: "application/vnd.github+json", "User-Agent": USER_AGENT },
       signal: controller?.signal,
     });
-    if (!response.ok) return null;
-    return parseLatestRelease(await response.json());
-  } catch {
-    return null;
+    answered = true;
+    if (!response.ok) {
+      return { latest: null, answered, detail: `GitHub answered HTTP ${response.status}` };
+    }
+    const body = await response.json();
+    const latest = parseLatestRelease(body);
+    return latest
+      ? { latest, answered, detail: `latest release is ${latest.versionName}` }
+      : { latest: null, answered, detail: describeUnusableRelease(body) };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      latest: null,
+      answered,
+      detail: answered ? `unreadable release body (${reason})` : `no answer (${reason})`,
+    };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Why a Release GitHub did send is not one to compare against. */
+function describeUnusableRelease(body: unknown): string {
+  if (!body || typeof body !== "object") return "GitHub answered an empty body";
+  const release = body as Record<string, unknown>;
+  if (release.draft === true || release.prerelease === true) {
+    return `release ${JSON.stringify(release.tag_name)} is not final`;
+  }
+  return `tag ${JSON.stringify(release.tag_name)} is not a CI release`;
 }
 
 export type InstalledBuildInput = {
@@ -149,6 +197,8 @@ export type InstalledBuildInput = {
   forceVersionCode?: string | null;
   /** `__DEV__`. The override is ignored outside development. */
   dev: boolean;
+  /** Running inside Expo Go. Only names the runtime in the development log. */
+  expoGo?: boolean;
 };
 
 /**
@@ -181,6 +231,28 @@ export function installedBuild(input: InstalledBuildInput): Build | null {
   return { versionCode, versionName: baseName || String(versionCode) };
 }
 
+/**
+ * One line saying which build the check will compare, or why it will not run.
+ * This is what tells someone testing the override in Expo Go whether
+ * `EXPO_PUBLIC_UPDATE_CHECK_FORCE_VERSION_CODE` reached the bundle at all.
+ */
+export function describeInstalledBuild(input: InstalledBuildInput, build: Build | null): string {
+  const forced = (input.forceVersionCode ?? "").trim();
+  if (build) {
+    const how = input.dev && forced ? "forced by override" : "release build";
+    return `installed ${build.versionName} (versionCode ${build.versionCode}, ${how})`;
+  }
+  if (input.dev && forced) {
+    return `off: EXPO_PUBLIC_UPDATE_CHECK_FORCE_VERSION_CODE=${JSON.stringify(forced)} is not a whole number above 0`;
+  }
+  if (!input.releaseBuild) {
+    if (!input.dev) return "off: not an Android release build";
+    const runtime = input.expoGo ? "Expo Go" : "development build";
+    return `off: ${runtime} and EXPO_PUBLIC_UPDATE_CHECK_FORCE_VERSION_CODE is not set`;
+  }
+  return `off: versionCode ${String(input.versionCode)} is not a CI release`;
+}
+
 /** A launch always checks; a return to the foreground waits out the interval. */
 export function shouldCheck(
   reason: "launch" | "foreground",
@@ -210,6 +282,22 @@ export function shouldOffer(
     return false;
   }
   return true;
+}
+
+/** One line for the development log: what `shouldOffer` decided, and why. */
+export function describeOffer(
+  installed: Build,
+  latest: Build,
+  snooze: Snooze | null,
+  todayKey: string,
+): string {
+  if (shouldOffer(installed, latest, snooze, todayKey)) {
+    return `offering ${latest.versionName} over ${installed.versionName}`;
+  }
+  if (latest.versionCode <= installed.versionCode) {
+    return `not offering: ${installed.versionName} is already the latest`;
+  }
+  return `not offering ${latest.versionName}: "Later" was tapped for ${latest.versionCode} on ${todayKey}`;
 }
 
 /**
