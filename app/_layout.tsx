@@ -246,6 +246,17 @@ function RootStack() {
           }}
         />
         {/*
+          A problem report is posted into the shop's Operations chat, so it sits
+          beside chat: a shop waiting on accreditation can be stuck too.
+        */}
+        <Stack.Screen
+          name="report"
+          options={{
+            title: "Report a problem",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
           The shop's pin is reachable from both signed-in states on purpose: a
           shop waiting on accreditation is exactly the shop most likely to have
           put its pin on the wrong corner, and making it wait for approval to
