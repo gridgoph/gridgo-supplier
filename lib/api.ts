@@ -1664,16 +1664,25 @@ export async function openSupportChatThread(): Promise<{ thread: SupportChatThre
   });
 }
 
+/**
+ * `newThread` starts a conversation of its own (or reuses the shop's empty
+ * one) instead of adding to the latest — how a problem report arrives as its
+ * own thread. Ignored when `threadId` names one.
+ */
 export async function sendSupportChatMessage(
   body: string,
   threadId?: string,
+  options: { newThread?: boolean } = {},
 ): Promise<{
   thread: SupportChatThread;
   message: SupportChatMessage;
 }> {
   return request("/support-chat/me/messages", {
     method: "POST",
-    body: JSON.stringify({ body, ...(threadId ? { threadId } : {}) }),
+    body: JSON.stringify({
+      body,
+      ...(threadId ? { threadId } : options.newThread ? { newThread: true } : {}),
+    }),
   });
 }
 
