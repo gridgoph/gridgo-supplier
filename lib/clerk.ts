@@ -166,7 +166,11 @@ async function readClerkToken(
   }
 }
 
-export async function clerkSessionToken(getToken: ClerkGetToken): Promise<string | null> {
+export async function clerkSessionToken(
+  getToken: ClerkGetToken,
+  options?: { skipCache?: boolean },
+): Promise<string | null> {
+  if (options?.skipCache) return readClerkToken(getToken, true, CLERK_TOKEN_ATTEMPT_MS);
   return (
     (await readClerkToken(getToken, false, CLERK_CACHED_TOKEN_MS)) ??
     (await readClerkToken(getToken, true, CLERK_TOKEN_ATTEMPT_MS))

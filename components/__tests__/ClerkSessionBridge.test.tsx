@@ -1,9 +1,10 @@
 import { Text } from "react-native";
 
-import { render, waitFor } from "@testing-library/react-native";
+import { act, render, waitFor } from "@testing-library/react-native";
 
 import { ClerkSessionBridge } from "@/components/ClerkSessionBridge";
 import * as api from "@/lib/api";
+import { launchHref } from "@/lib/launch";
 import { setClerkSignOutHandler, useSession } from "@/store/session";
 
 let mockRole = "supplier";
@@ -60,12 +61,12 @@ describe("ClerkSessionBridge supplier projection", () => {
     jest.restoreAllMocks();
   });
 
-  it.each([401, 403])(
-    "turns an HTTP %s projection rejection into no-account access copy",
-    async (status) => {
+  it(
+    "explains withdrawn supplier access after a forbidden projection",
+    async () => {
       jest
         .spyOn(api, "me")
-        .mockRejectedValue(new api.ApiError(status, { error: "forbidden" }));
+        .mockRejectedValue(new api.ApiError(403, { error: "forbidden" }));
 
       const view = await render(
         <ClerkSessionBridge>
@@ -79,14 +80,47 @@ describe("ClerkSessionBridge supplier projection", () => {
       const identity = useSession.getState().identity;
       expect(identity).toMatchObject({ kind: "error", email: "shop@example.com" });
       if (identity.kind === "error") {
-        expect(identity.message).toMatch(/no supplier account/i);
-        expect(identity.message).toMatch(/apply as a shop/i);
+        expect(identity.message).toMatch(/access was withdrawn/i);
         expect(identity.message).toMatch(/Operations/);
       }
 
       view.unmount();
     },
   );
+
+  it("keeps an expired restored session on sign-in across Clerk user updates", async () => {
+    jest.spyOn(api, "me").mockRejectedValue(new api.ApiError(401, { error: "unauthorized" }));
+    const view = await render(<ClerkSessionBridge><Text>Shell</Text></ClerkSessionBridge>);
+    await waitFor(() => {
+      const { identity, user } = useSession.getState();
+      expect(launchHref(identity, user)).toBe("/(auth)/login");
+    });
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    mockClerkUser = { ...mockClerkUser };
+    await view.rerender(<ClerkSessionBridge><Text>Updated shell</Text></ClerkSessionBridge>);
+    expect(api.me).toHaveBeenCalledTimes(1);
+    mockIsSignedIn = false;
+    await view.rerender(<ClerkSessionBridge><Text>Signed out shell</Text></ClerkSessionBridge>);
+    const { identity, user } = useSession.getState();
+    expect(launchHref(identity, user)).toBe("/(auth)/login");
+    await view.unmount();
+  });
+
+  it("refreshes a rejected bearer through Clerk's cache-bypassing option", async () => {
+    useSession.getState().adoptClerkUser({
+      id: "u1", email: "shop@example.com", name: "Shop", role: "supplier", verificationStatus: "approved",
+    });
+    const fetch = jest.spyOn(global, "fetch")
+      .mockResolvedValueOnce({ ok: false, status: 401, text: async () => JSON.stringify({ error: "unauthorized" }) } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => JSON.stringify({ jobs: [] }) } as Response);
+    const view = await render(<ClerkSessionBridge><Text>Shell</Text></ClerkSessionBridge>);
+    await act(async () => { await expect(api.listJobs()).resolves.toEqual([]); });
+    expect(mockGetToken.mock.calls).toEqual([[undefined], [{ skipCache: true }]]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(mockSignOut).not.toHaveBeenCalled();
+    expect(useSession.getState().identity.kind).toBe("supplier");
+    await view.unmount();
+  });
 
   it("does not re-ask /auth/me when the shop is already adopted", async () => {
     const shop = {

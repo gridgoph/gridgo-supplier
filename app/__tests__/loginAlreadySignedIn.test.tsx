@@ -109,7 +109,10 @@ describe("Sign in leftover Clerk session", () => {
     (api.me as jest.Mock).mockReset().mockResolvedValue(pendingShop);
   });
 
-  it("signs the leftover out and retries the typed password, never showing already-signed-in", async () => {
+  it.each([false, true])("recovers a leftover session and signs in (previous session ended: %s)", async (sessionEnded) => {
+    if (sessionEnded) {
+      useSession.setState({ identity: { kind: "signed_out", reason: "session_ended" } });
+    }
     mockPassword
       .mockResolvedValueOnce({ error: alreadySignedIn })
       .mockImplementationOnce(async () => {

@@ -102,7 +102,7 @@ describe("API authentication token source", () => {
     });
   });
 
-  it("does not sign the shop out when a 401 arrives without a bearer", async () => {
+  it("ends a Clerk session when a token gap cannot recover after a confirmed 401", async () => {
     const unauthorized = jest.fn();
     api.setUnauthorizedHandler(unauthorized);
     api.setTokenProvider(async () => null);
@@ -113,7 +113,7 @@ describe("API authentication token source", () => {
     } as Response);
 
     await expect(api.me()).rejects.toBeInstanceOf(api.ApiError);
-    expect(unauthorized).not.toHaveBeenCalled();
+    expect(unauthorized).toHaveBeenCalledTimes(1);
   });
 
   it("drops a token that arrived after sign-out cleared the provider", async () => {
@@ -133,4 +133,39 @@ describe("API authentication token source", () => {
 
     await expect(pending).resolves.toBeNull();
   });
+});
+
+it("shares one in-flight silent refresh across concurrent rejected requests", async () => {
+  let finish!: (token: string) => void;
+  const freshToken = new Promise<string>((resolve) => { finish = resolve; });
+  let bothRejected!: () => void;
+  const rejected = new Promise<void>((resolve) => { bothRejected = resolve; });
+  let refusals = 0;
+  const provider = jest.fn<ReturnType<api.TokenProvider>, Parameters<api.TokenProvider>>(
+    (options) => options?.skipCache ? freshToken : Promise.resolve("expired"),
+  );
+  api.setTokenProvider(provider);
+  const fetch = jest.spyOn(global, "fetch").mockImplementation(async (_url, init) => {
+    if ((init?.headers as Record<string, string>).Authorization === "Bearer fresh") return okUserResponse();
+    return {
+      ok: false, status: 401,
+      text: async () => {
+        refusals += 1;
+        if (refusals === 2) bothRejected();
+        return JSON.stringify({ error: "unauthorized" });
+      },
+    } as Response;
+  });
+  try {
+    const requests = Promise.all([api.me(), api.me()]);
+    await rejected;
+    finish("fresh");
+    await expect(requests).resolves.toEqual([supplierUser, supplierUser]);
+    expect(provider.mock.calls.filter(([options]) => options?.skipCache)).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledTimes(4);
+  } finally {
+    api.setTokenProvider(null);
+    api.setToken(null);
+    fetch.mockRestore();
+  }
 });

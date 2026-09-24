@@ -212,6 +212,19 @@ export default function JobWorkspaceScreen() {
           nothing is offered.
         */}
         {!primary ? <PushEnableCard spacing="above" /> : null}
+
+        {/*
+          Last, and charcoal: the way out when the job itself is what is wrong.
+          The report carries this job's reference, so Operations starts from it.
+        */}
+        <View className="mt-8">
+          <SecondaryButton
+            label="Report a problem with this job"
+            onPress={() =>
+              router.push({ pathname: "/report", params: { orderId: job.id, title: job.title } })
+            }
+          />
+        </View>
       </ScrollView>
 
       {hasSteps ? (
