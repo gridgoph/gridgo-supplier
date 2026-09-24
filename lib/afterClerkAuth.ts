@@ -60,7 +60,7 @@ export function leftoverActionForTypedEmail(input: {
 export async function supplierDoorForClerkSession(
   getToken: ClerkGetToken,
 ): Promise<SupplierDoor> {
-  api.setTokenProvider(() => clerkSessionToken(getToken));
+  api.setTokenProvider((options) => clerkSessionToken(getToken, options));
   const token = await awaitClerkSessionToken(getToken);
   if (!token) return "unknown";
   try {
@@ -85,7 +85,7 @@ export async function supplierDoorForClerkSession(
 export async function enterAfterClerkSession(
   getToken: ClerkGetToken,
 ): Promise<AfterClerkAuth> {
-  api.setTokenProvider(() => clerkSessionToken(getToken));
+  api.setTokenProvider((options) => clerkSessionToken(getToken, options));
   const token = await awaitClerkSessionToken(getToken);
   debugAuth("after-clerk-session", { hasToken: Boolean(token) });
   if (!token) {

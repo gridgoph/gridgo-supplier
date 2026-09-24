@@ -67,6 +67,14 @@ describe("Sign in", () => {
     });
   });
 
+  it("explains an ended session beside the sign-in form", async () => {
+    useSession.setState({ identity: { kind: "signed_out", reason: "session_ended" } });
+    await render(<LoginScreen />);
+    expect(screen.getByText("Your session ended. Sign in again to keep working.")).toBeTruthy();
+    expect(screen.getByText("Sign in")).toBeTruthy();
+    expect(screen.queryByText("This shop is still closed")).toBeNull();
+  });
+
   it("keeps Clerk fields empty and does not offer a local demo", async () => {
     await render(<LoginScreen />);
 

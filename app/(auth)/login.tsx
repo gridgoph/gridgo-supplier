@@ -38,7 +38,7 @@ import {
 } from "@/lib/clerkSignIn";
 import { SessionWait } from "@/components/SessionWait";
 import { completeGoogleSso } from "@/lib/googleSso";
-import { useSession } from "@/store/session";
+import { SESSION_ENDED_MESSAGE, useSession } from "@/store/session";
 
 type HealthState = "checking" | "reachable" | "unreachable";
 
@@ -279,6 +279,9 @@ export default function LoginScreen() {
             <View className="mt-8 gap-1">
               <Text className="text-h1 text-text-primary">Welcome Back.</Text>
               <Text className="text-body-lg text-text-secondary">Let’s sign in</Text>
+              {identity.kind === "signed_out" && identity.reason === "session_ended" ? (
+                <Text className="text-body text-text-secondary" accessibilityRole="alert">{SESSION_ENDED_MESSAGE}</Text>
+              ) : null}
             </View>
 
             <View className="mt-8 gap-4">

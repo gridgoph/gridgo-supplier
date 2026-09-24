@@ -7,6 +7,7 @@ import type { User } from "@/lib/api";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { sessionWaitHold } from "@/lib/sessionWait";
+import { releaseClerkSession } from "@/lib/clerkSignIn";
 import { serializeDeviceMutation, usePush } from "@/store/push";
 
 /** Expected role for this binary — mismatched login is rejected. */
@@ -14,13 +15,16 @@ export const APP_ROLE = "supplier" as const;
 
 export type AuthSource = "none" | "legacy" | "clerk";
 
+export const SESSION_ENDED_MESSAGE = "Your session ended. Sign in again to keep working.";
+export const ACCESS_WITHDRAWN_MESSAGE = "Supplier access was withdrawn from this account. Contact Operations for help.";
+
 export type IdentityState =
   | { kind: "loading" }
-  | { kind: "signed_out" }
+  | { kind: "signed_out"; reason?: "session_ended" }
   | { kind: "supplier" }
   | { kind: "unassigned"; email?: string | null }
   | { kind: "mismatch"; destination: string; email?: string | null }
-  | { kind: "error"; message: string; email?: string | null };
+  | { kind: "error"; reason?: "access_withdrawn"; message: string; email?: string | null };
 
 let refreshVersion = 0;
 
@@ -85,6 +89,7 @@ type SessionState = {
   setClerkIdentity: (identity: IdentityState) => void;
   adoptClerkUser: (user: User) => boolean;
   clearClerkIdentity: () => void;
+  endClerkSession: () => void;
   login: (email: string, password: string) => Promise<void>;
   /** Public apply via Clerk enroll. Lands pending; Operations still has to approve matching. */
   enrollSupplier: (input: api.SupplierEnrollment, idempotencyKey: string) => Promise<boolean>;
@@ -106,6 +111,24 @@ export const useSession = create<SessionState>((set, get) => ({
   clearError: () => set({ error: null }),
   beginSessionWait: (tone) => set({ sessionWait: tone }),
   clearSessionWait: () => set({ sessionWait: null }),
+  endClerkSession: () => {
+    const { identity, sessionWait } = get();
+    if (identity.kind === "signed_out" && identity.reason === "session_ended") return;
+    api.setTokenProvider(null);
+    api.setToken(null);
+    set({
+      user: null,
+      loading: false,
+      error: null,
+      authSource: "none",
+      identity: { kind: "signed_out", reason: "session_ended" },
+      sessionWait: null,
+    });
+    // An already-dead session may refuse signOut. Keep the sign-in door open;
+    // its existing leftover-session recovery can settle Clerk on the next tap.
+    // An explicit logout already owns the Clerk sign-out in its finally block.
+    if (clerkSignOutHandler && sessionWait !== "out") void releaseClerkSession(clerkSignOutHandler);
+  },
   setClerkIdentity: (identity) =>
     set((state) => ({
       user: null,
@@ -171,7 +194,9 @@ export const useSession = create<SessionState>((set, get) => ({
       else set({ user });
     } catch (error) {
       if (!current()) return;
-      if (error instanceof api.ApiError && error.status === 403) get().setClerkIdentity({kind:"error",message:"This account no longer has supplier access."});
+      if (error instanceof api.ApiError && error.status === 403) {
+        get().setClerkIdentity({ kind: "error", reason: "access_withdrawn", message: ACCESS_WITHDRAWN_MESSAGE });
+      }
       // A 401 already clears the session through the unauthorized handler, and
       // anything else leaves the account as last known rather than signing a
       // shop out because one request did not land.
@@ -285,26 +310,19 @@ export const useSession = create<SessionState>((set, get) => ({
  * guard then drops signed-in routes; call sites must not sprinkle redirects.
  */
 api.setUnauthorizedHandler(() => {
-  const { authSource } = useSession.getState();
+  const { authSource, identity } = useSession.getState();
+  if (identity.kind === "signed_out" && identity.reason === "session_ended") return;
+  if (authSource === "clerk") {
+    useSession.getState().endClerkSession();
+    return;
+  }
   api.setToken(null);
-  useSession.setState(
-    authSource === "clerk"
-      ? {
-          user: null,
-          loading: false,
-          identity: {
-            kind: "error",
-            message:
-              "GRIDGO could not open this supplier account. Ask Operations to check the invitation.",
-          },
-        }
-      : {
-          user: null,
-          loading: false,
-          authSource: "none",
-          identity: { kind: "signed_out" },
-        },
-  );
+  useSession.setState({
+    user: null,
+    loading: false,
+    authSource: "none",
+    identity: { kind: "signed_out" },
+  });
 });
 
 useSession.subscribe((state, previous) => {
