@@ -44,6 +44,16 @@ Typecheck: `npx tsc --noEmit`. Script definitions and the Metro port live in [pa
 
 For native push, use an installed development build. Connect an authorized Android device over USB, build with `npm run android`, then use `npm run start:usb` for later Metro sessions. Supply `GOOGLE_SERVICES_JSON` when building with Firebase; see [Push notifications](AGENTS.md#push-notifications) for configuration and Expo Go limitations.
 
+## Update prompt
+
+A release build compares its `versionCode` with the newest GitHub Release at launch and on return to the foreground, and offers the APK when there is a newer one ([lib/appUpdate.ts](lib/appUpdate.ts)). Development builds and Expo Go have no real `versionCode` and skip the check. To see the prompt anyway, pretend to be an old build:
+
+```bash
+EXPO_PUBLIC_UPDATE_CHECK_FORCE_VERSION_CODE=1 npm start
+```
+
+The override works in development only. Restart Metro with a higher number (for example `2`) to see the one-time "Update completed" note on the next launch.
+
 ## Android emulator API URL
 
 From the **Android emulator**, `127.0.0.1` is the emulator itself. Use:
