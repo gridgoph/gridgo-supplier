@@ -44,7 +44,7 @@ it("offers the ask, and says in one line what will arrive", async () => {
 
   expect(screen.getByText("Get these on your phone")).toBeTruthy();
   expect(screen.getByText(/offers your shop work/i)).toBeTruthy();
-  expect(screen.getByText("Turn on alerts")).toBeTruthy();
+  expect(screen.getByText("Turn on notifications")).toBeTruthy();
 });
 
 it("draws nothing at all once permission is granted", async () => {
@@ -71,7 +71,7 @@ it("points a refused phone at its own settings instead of a dialog it cannot rai
   usePush.setState({ permission: "blocked" });
   await render(<PushEnableCard />);
 
-  expect(screen.getByText("Alerts are off for GRIDGO")).toBeTruthy();
+  expect(screen.getByText("Notifications are off for GRIDGO")).toBeTruthy();
   expect(screen.getByText("Open phone settings")).toBeTruthy();
   // And it still says the Alerts tab keeps working, so a refusal never reads
   // as the app being broken.
@@ -89,6 +89,6 @@ it("does not raise the dialog until someone taps it", async () => {
   // spent on a deliberate tap, never on a screen appearing.
   expect(mocked.requestPermissionsAsync).not.toHaveBeenCalled();
 
-  fireEvent.press(screen.getByText("Turn on alerts"));
+  fireEvent.press(screen.getByText("Turn on notifications"));
   await waitFor(() => expect(mocked.requestPermissionsAsync).toHaveBeenCalled());
 });

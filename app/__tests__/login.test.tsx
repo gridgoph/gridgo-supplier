@@ -91,7 +91,7 @@ describe("Sign in", () => {
     expect(screen.getByText("Continue with Google")).toBeTruthy();
     expect(screen.getByText("New shop? Sign up")).toBeTruthy();
     expect(screen.queryByText(/Ask Operations to invite this email/)).toBeNull();
-    expect(screen.queryByText("Turn on alerts")).toBeNull();
+    expect(screen.queryByText("Turn on notifications")).toBeNull();
   });
 
   it("exposes a show/hide control on the password field", async () => {

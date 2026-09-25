@@ -103,6 +103,7 @@ jest.mock("expo-router", () => {
       replace: jest.fn(),
     },
     useNavigation: () => ({ addListener: jest.fn(() => jest.fn()) }),
+    usePathname: () => "/",
   };
 });
 // Expo Go: no real versionCode, so only the development override makes a build.

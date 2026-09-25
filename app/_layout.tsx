@@ -32,11 +32,14 @@ import { useAppUpdateCheck } from "@/hooks/useAppUpdateCheck";
 import { useSupportChatUnread } from "@/hooks/useSupportChatUnread";
 import { useAppFonts } from "@/hooks/useAppFonts";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { usePushPromptCheck } from "@/hooks/usePushPromptCheck";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
 import { authDoorOpen, rootStackKey } from "@/lib/launch";
 import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions";
 import { resolveClerkPublishableKey } from "@/lib/clerk";
 import { bounceToIsolatedDevWebHost, GRIDGO_DEV_WEB_HOST } from "@/lib/devWebHost";
+import { useAppUpdate } from "@/store/appUpdate";
+import { usePushPrompt } from "@/store/pushPrompt";
 import { isMatchable, isSignedIn, useSession } from "@/store/session";
 
 SplashScreen.preventAutoHideAsync();
@@ -172,13 +175,22 @@ function RootStack({ introDone }: { introDone: boolean }) {
   useSupportChatUnread(signedIn);
   // The third delivery leg: the same alerts, on the phone, with GRIDGO closed.
   // Mounted here so registration, token rotation and a tapped alert are wired
-  // once. It never raises the permission dialog — only `PushEnableCard` does
-  // that, and only from a tap.
+  // once. It never raises the permission dialog — only a tap on
+  // `PushEnableCard` or on the explainer below does that.
   usePushNotifications();
-  // A newer APK, or the first launch of one. The sheet waits for the opening
-  // and for the session to settle, because the stack below is re-keyed when a
-  // restored session arrives and would take a sheet pushed earlier with it.
-  useAppUpdateCheck(introDone && identity.kind !== "loading" && !sessionWait);
+  // Both sheets wait for the opening and for the session to settle, because
+  // the stack below is re-keyed when a restored session arrives and would take
+  // a sheet pushed earlier with it. And one sheet at a time: the notifications
+  // explainer waits for an update sheet, and an update found while the
+  // explainer is up waits for it to close.
+  const settled = introDone && identity.kind !== "loading" && !sessionWait;
+  const updateWaiting = useAppUpdate((s) => s.sheetOpen || s.completed !== null || s.offer !== null);
+  const pushPromptOpen = usePushPrompt((s) => s.sheetOpen);
+  // A newer APK, or the first launch of one.
+  useAppUpdateCheck(settled && !pushPromptOpen);
+  // What phone notifications are for, before Android asks — see
+  // `lib/pushPrompt.ts` for when.
+  usePushPromptCheck(settled && !updateWaiting);
 
   return (
     <Stack key={rootStackKey(user)} screenOptions={stackScreenOptions(scheme, top)}>
@@ -348,6 +360,12 @@ function RootStack({ introDone }: { introDone: boolean }) {
         <Stack.Screen name="confirm" options={sheetScreenOptions(scheme)} />
         <Stack.Screen name="pick-date" options={sheetScreenOptions(scheme)} />
         <Stack.Screen name="pick" options={sheetScreenOptions(scheme)} />
+        {/*
+          The notifications explainer opens by itself over Home — see
+          `hooks/usePushPromptCheck`. Signed-in, because what it promises is a
+          shop's own jobs.
+        */}
+        <Stack.Screen name="push-prompt" options={sheetScreenOptions(scheme)} />
       </Stack.Protected>
 
       <Stack.Protected guard={matchable}>

@@ -187,7 +187,8 @@ export type PushOffer = "hidden" | "ask" | "settings" | "retry";
  * Whether to offer phone notifications, and how.
  *
  * The ask is never fired cold: this returns `ask` only so a **card** can be
- * drawn, and the OS dialog is raised from that card's button. A refusal on
+ * drawn, and the OS dialog is raised from that card's button (or from the
+ * explainer sheet's, `app/push-prompt.tsx`). A refusal on
  * Android 13+ cannot be taken back by the app, so once blocked the only honest
  * offer is a link to the phone's own settings — and it is still only an offer.
  * Granted or unsupported: nothing is shown, because there is nothing to gain by
@@ -242,27 +243,27 @@ export function pushOfferCopy(
     return {
       title: "Get GRIDGO news on this phone",
       body: "Turn this on now and GRIDGO can tell this phone when there is a new version to install. Once you sign in, your job offers and payout news come the same way.",
-      action: "Turn on alerts",
+      action: "Turn on notifications",
     };
   }
   if (offer === "retry") {
     return {
-      title: "This phone is not registered for alerts",
+      title: "This phone is not registered for notifications",
       body: "Permission is on, but we could not register this phone, so nothing will reach it while GRIDGO is closed. Your alerts still arrive in the app.",
       action: "Try again",
     };
   }
   if (offer === "settings") {
     return {
-      title: "Alerts are off for GRIDGO",
-      body: "Your phone is blocking them, so new work and payout news only appear while the app is open. Turn them on in your phone's settings.",
+      title: "Notifications are off for GRIDGO",
+      body: "Your phone is blocking them, so new work and payout news only appear while the app is open. Turn them on in your phone's settings, then come back to GRIDGO.",
       action: "Open phone settings",
     };
   }
   return {
     title: "Get these on your phone",
     body: "We will notify this phone when GRIDGO offers your shop work, when a payout is waiting on your evidence, when a rider is at your counter, when a job pays, and for production reminders when a job on the press has not moved — even with GRIDGO closed.",
-    action: "Turn on alerts",
+    action: "Turn on notifications",
   };
 }
 
