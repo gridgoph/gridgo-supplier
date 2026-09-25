@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { FlowScreen } from "@/components/FlowScreen";
+import { PackageInvoiceNotice } from "@/components/PackageInvoiceNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { StatusChip } from "@/components/StatusChip";
@@ -178,6 +179,8 @@ export default function FulfilmentProofScreen() {
       {availability === "checking" ? (
         <Text className="text-body text-text-muted">Checking GRIDGO file storage…</Text>
       ) : null}
+
+      {target?.code === "packaging_qc" ? <PackageInvoiceNotice /> : null}
 
       {target && definition && availability === "available" ? (
         <>
