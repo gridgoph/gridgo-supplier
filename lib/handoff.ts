@@ -119,3 +119,17 @@ export const HANDOFF_SEQUENCE = [
       "The rider records the result in their GRIDGO app. A failed check keeps the package with you until Operations resolves it.",
   },
 ] as const;
+
+/**
+ * The shop's own invoice stays out of the package. GRIDGO buys the job from the
+ * shop and gives the customer GRIDGO's receipt, so a shop invoice in the box
+ * tells the customer a price and a seller that are not theirs. The shop keeps
+ * it for GRIDGO instead, which collects invoices from every shop monthly.
+ * Drawn wherever the shop packs or hands over finished work.
+ */
+export const PACKAGE_INVOICE_REMINDER = {
+  title: "No invoice or receipt in the package",
+  detail:
+    "Do not put your own invoice or receipt inside the package. GRIDGO buys this job from you and gives the customer its own receipt.",
+  keep: "Keep your invoice for GRIDGO. It collects invoices from each shop monthly.",
+} as const;
