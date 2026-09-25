@@ -53,11 +53,13 @@ export default function FulfilmentProofScreen() {
   }, []);
 
   // The route may be opened without naming a part (from a card that only knows
-  // the job), so fall back to the next one this shop owes.
-  const target = job
-    ? (findMilestoneView(job, milestoneParam) ?? nextShopProof(job))
-    : null;
-  const definition = target ? milestoneDefinition(target.code) : null;
+  // the job), so fall back to the next one this shop owes. A named part whose
+  // evidence is not the shop's — the rider's, or one that takes no file — is
+  // not a target: filing against it would only earn a refusal.
+  const named = job ? findMilestoneView(job, milestoneParam) : null;
+  const target = job ? (named?.proofOwner === "shop" ? named : nextShopProof(job)) : null;
+  const milestone = target ? job?.payoutMilestones?.find((m) => m.code === target.code) : undefined;
+  const definition = target ? milestoneDefinition(target.code, milestone) : null;
   const ready = storedUploads(upload.items);
   const latest = ready[ready.length - 1] ?? null;
 

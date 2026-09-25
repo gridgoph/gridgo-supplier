@@ -352,6 +352,17 @@ describe("the statement", () => {
     expect(lines[0]).toMatchObject({ code: "packaging_qc", receiptFileId: null, reference: null });
   });
 
+  it("names a plan-2 release by GRIDGO's own label", () => {
+    const lines = statementLines([
+      job("ord_c", "Menu boards", [
+        { ...part("production_started", 40_000, "2026-09-26T02:00:00.000Z"), label: "Start of production", releaseRequires: "shop_proof" },
+        { ...part("issue_window", 25_000, "2026-10-06T02:00:00.000Z"), label: "Issue window closed", releaseRequires: "issue_window_closed" },
+        part("some_future_stage", 1_000, "2026-10-07T02:00:00.000Z"),
+      ]),
+    ]);
+    expect(lines.map((line) => line.label)).toEqual(["Some future stage", "Issue window closed", "Start of production"]);
+  });
+
   it("groups by the Davao month, not the phone's own", () => {
     // A release at 09:00 on 1 September in Manila is 01:00 UTC that day, but a
     // release at 07:00 on 1 September Manila is 23:00 on 31 August UTC — and it

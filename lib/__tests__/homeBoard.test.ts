@@ -158,6 +158,25 @@ describe("the day's obligations", () => {
     expect(obligation.amountMinor).toBe(50000);
   });
 
+  it("prices a plan-2 job's owed proof at its start-of-production share", () => {
+    const escrow = job({
+      id: "b",
+      state: "production",
+      payoutPlanVersion: 2,
+      payoutMilestones: [
+        { code: "production_started", label: "Start of production", releaseRequires: "shop_proof", sharePercent: 40, amountMinor: 40000, status: "pending_pof", pofFileIds: [], releasedAt: null },
+        { code: "delivered", label: "Delivered", releaseRequires: "delivery_proof", sharePercent: 35, amountMinor: 35000, status: "pending_pof", pofFileIds: [], releasedAt: null },
+        { code: "issue_window", label: "Issue window closed", releaseRequires: "issue_window_closed", sharePercent: 25, amountMinor: 25000, status: "pending_pof", pofFileIds: [], releasedAt: null },
+      ],
+    });
+    const [obligation] = buildObligations([escrow], now);
+    expect(obligation.kind).toBe("proof");
+    expect(obligation.actionLabel).toBe("Add start-of-production proof");
+    expect(obligation.amountMinor).toBe(40000);
+    // Only the shop's own 40% is evidence it can file today.
+    expect(homeHeadline([escrow]).amountMinor).toBe(40000);
+  });
+
   it("leaves out jobs waiting on somebody else entirely", () => {
     expect(
       buildObligations([filed({ id: "a", state: "awaiting_downpayment" })], now),

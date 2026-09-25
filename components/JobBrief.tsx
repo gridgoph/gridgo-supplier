@@ -13,7 +13,7 @@ import { useThemeColors } from "@/hooks/useTheme";
 import { formatPhp, type Order } from "@/lib/api";
 import { formatDeadlineFull } from "@/lib/dates";
 import { custodyForOrder } from "@/lib/handoff";
-import { earningsSplit, milestoneViews } from "@/lib/milestones";
+import { earningsSplit, milestoneViews, payoutPlanCopy } from "@/lib/milestones";
 import { unreleasedMinor } from "@/lib/payout";
 import {
   DEFAULT_BRIEF_SECTIONS,
@@ -182,7 +182,7 @@ function SectionBody({
     }
     case "earnings": {
       /*
-        Once GRIDGO has split the price into its four parts, the row is about
+        Once GRIDGO has split the price into its parts, the row is about
         where each part has got to. The amounts are the shop's own earnings —
         the client's total, the delivery fee and GRIDGO's commission are
         somebody else's money and none of them belong on a supplier's screen.
@@ -223,9 +223,7 @@ function SectionBody({
           <View className="gap-1">
             <Text className="text-body font-medium text-text-primary">How it reaches you</Text>
             <Text className="text-body text-text-secondary">
-              In four parts as the job moves — printing, packaging, delivery, and a retention part
-              that lands once the client&apos;s window to report a problem closes. Each needs
-              evidence before it is released, and you file the first two here.
+              {payoutPlanCopy(order).howItReachesYou}
             </Text>
           </View>
         </View>

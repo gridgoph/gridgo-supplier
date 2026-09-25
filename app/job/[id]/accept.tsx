@@ -11,6 +11,7 @@ import { blackoutOnDay, blackoutReasonLabel } from "@/lib/blackouts";
 import { toDayKey } from "@/lib/day";
 import { formatDeadlineFull } from "@/lib/dates";
 import { findAction } from "@/lib/jobState";
+import { payoutPlanCopy } from "@/lib/milestones";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
 import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
@@ -139,10 +140,8 @@ export default function AcceptJobScreen() {
           <View className="gg-panel gap-2">
             <Text className="text-body font-medium text-text-primary">How it reaches you</Text>
             <Text className="text-body text-text-secondary">
-              In four parts as the job moves — printing, packaging, delivery,
-              and a retention part that lands once the client&apos;s window to report a problem
-              closes. Each needs evidence before it is released, and you file the first two
-              here. You will see what each is worth as soon as you accept.
+              {payoutPlanCopy(job).howItReachesYou} You will see what each is worth as soon as you
+              accept.
             </Text>
           </View>
 

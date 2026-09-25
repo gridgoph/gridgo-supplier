@@ -127,8 +127,9 @@ export default function PayoutScreen() {
             {api.formatPhp(outstanding)}
           </Text>
           <Text className="text-body text-text-secondary">
-            Every job pays out in four parts, and each one needs evidence before GRIDGO releases
-            it. Delivery fees and GRIDGO&apos;s own charge sit outside what you earn.
+            Every job pays out in parts as it moves, and GRIDGO releases each one once its evidence
+            is in or the client&apos;s window to report a problem has closed. Delivery fees and
+            GRIDGO&apos;s own charge sit outside what you earn.
           </Text>
         </View>
 
@@ -288,7 +289,7 @@ export default function PayoutScreen() {
               body={
                 allRows.length
                   ? "Switch to All to see every job you have been paid for."
-                  : "Accept a job and name your price, and the four parts you are paid in appear here as you work through it."
+                  : "Accept a job and name your price, and the parts you are paid in appear here as you work through it."
               }
               actionLabel={allRows.length ? "Show all" : "Open jobs"}
               onAction={() =>

@@ -103,8 +103,8 @@ export function unreleasedMinor(split: EarningsSplit): number {
  * One release, as a line a shop can reconcile against its own bank.
  *
  * A job row answers "how is this job going". It cannot answer "what did GRIDGO
- * send me last month", because one job's four parts land on four different
- * days and a shop reads its bank by date, not by job.
+ * send me last month", because one job's parts land on different days and a
+ * shop reads its bank by date, not by job.
  */
 export type StatementLine = {
   orderId: string;
@@ -130,7 +130,7 @@ export function statementLines(jobs: Order[]): StatementLine[] {
         orderId: job.id,
         title: job.title,
         code: milestone.code,
-        label: milestoneDefinition(milestone.code).label,
+        label: milestoneDefinition(milestone.code, milestone).label,
         amountMinor: milestone.amountMinor,
         releasedAt: milestone.releasedAt,
         reference: milestone.reference ?? null,

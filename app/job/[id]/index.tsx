@@ -20,6 +20,7 @@ import {
   waitingOn,
   type SupplierAction,
 } from "@/lib/jobState";
+import { payoutPlanOf } from "@/lib/milestones";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useViewing } from "@/store/toasts";
 import { useJob } from "@/hooks/useJob";
@@ -108,7 +109,7 @@ export default function JobWorkspaceScreen() {
   const primary = actions.find((a) => a.primary) ?? null;
   const secondary = actions.filter((a) => !a.primary);
   const urgency = deadlineUrgency(job.promisedDate || job.deadline);
-  const waiting = waitingOn(job.state);
+  const waiting = waitingOn(job.state, payoutPlanOf(job));
   const handoff = hasHandoff(job);
   const hasSteps = Boolean(primary) || secondary.length > 0 || handoff;
 

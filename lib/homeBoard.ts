@@ -7,6 +7,7 @@ import {
   type StatePresentation,
   type SupplierActionRoute,
 } from "@/lib/jobState";
+import { nextShopProof } from "@/lib/milestones";
 import { summarizePayouts, unreleasedMinor } from "@/lib/payout";
 import { deadlineUrgency, type UrgencyLevel } from "@/lib/urgency";
 
@@ -242,12 +243,7 @@ function byId(jobs: Order[], id: string): Order {
 
 /** What the outstanding proof on this job is worth, for the row that owes it. */
 function proofAmount(job: Order): number | undefined {
-  const owed = (job.payoutMilestones ?? []).find(
-    (milestone) =>
-      milestone.status === "pending_pof" &&
-      (milestone.code === "printing" || milestone.code === "packaging_qc"),
-  );
-  return owed?.amountMinor;
+  return nextShopProof(job)?.amountMinor;
 }
 
 /* -------------------------------------------------------------------------- */

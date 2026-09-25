@@ -3,7 +3,7 @@ import { formatPhp } from "@/lib/api";
 import { formatDeadlineFull } from "@/lib/dates";
 import { custodyForOrder } from "@/lib/handoff";
 import { primaryAction } from "@/lib/jobState";
-import { earningsSplit, milestoneViews, nextShopProof } from "@/lib/milestones";
+import { earningsSplit, milestoneViews, nextShopProof, payoutPlanCopy } from "@/lib/milestones";
 import { orderArtwork } from "@/lib/orderArtwork";
 import { unreleasedMinor } from "@/lib/payout";
 import { orderProductionItems, readableSpec } from "@/lib/productionSpecs";
@@ -55,6 +55,7 @@ type BriefOrder = Pick<
   | "state"
   | "riderId"
   | "payoutMilestones"
+  | "payoutPlanVersion"
   | "payoutHold"
   | "id"
   | "title"
@@ -139,7 +140,7 @@ export function earningsSummary(order: BriefOrder): string {
     return `${formatPhp(unreleasedMinor(split))} still to come`;
   }
   if (order.supplierPriceMinor == null) return "Price not recorded yet";
-  return `${formatPhp(order.supplierPriceMinor)} · paid in four parts`;
+  return `${formatPhp(order.supplierPriceMinor)} · paid in ${payoutPlanCopy(order).parts} parts`;
 }
 
 /** Where the package is between the counter and the client, for the pickup row. */
