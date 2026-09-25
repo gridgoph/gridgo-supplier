@@ -88,3 +88,36 @@ it("keeps the filed milestone and photo when no shop proof remains", async () =>
   expect(screen.getByLabelText("packing.jpg").props.source).toEqual({ uri: "file:///packing.jpg" });
   await view.unmount();
 });
+
+const escrowParts = (start: "pending_pof" | "pof_attached" = "pending_pof"): api.Order["payoutMilestones"] => [
+  { code: "production_started", label: "Start of production", releaseRequires: "shop_proof", sharePercent: 40, amountMinor: 40000, status: start, pofFileIds: start === "pending_pof" ? [] : ["start"], releasedAt: null },
+  { code: "delivered", label: "Delivered", releaseRequires: "delivery_proof", sharePercent: 35, amountMinor: 35000, status: "pending_pof", pofFileIds: [], releasedAt: null },
+  { code: "issue_window", label: "Issue window closed", releaseRequires: "issue_window_closed", sharePercent: 25, amountMinor: 25000, status: "pending_pof", pofFileIds: [], releasedAt: null },
+];
+
+it("files a plan-2 start-of-production proof against production_started", async () => {
+  (api.attachFulfilmentProof as jest.Mock).mockClear();
+  (api.getOrder as jest.Mock).mockResolvedValue({ ...orderWith(escrowParts()), payoutPlanVersion: 2 });
+  const view = await render(<FulfilmentProofScreen />);
+  expect(await screen.findByText("Start of production evidence")).toBeTruthy();
+  expect(screen.getByText("Photo that production has started")).toBeTruthy();
+  expect(screen.getByText(/GRIDGO releases 40% of what you earn on this job — ₱400\.00/)).toBeTruthy();
+  // No packing evidence on the escrow plan, so no packing reminder here either.
+  expect(screen.queryByText("No invoice or receipt in the package")).toBeNull();
+  expect(screen.queryByText(/printing|packaging/i)).toBeNull();
+
+  await fireEvent.press(screen.getByLabelText("File this evidence"));
+  expect(await screen.findByText("Evidence filed")).toBeTruthy();
+  expect(api.attachFulfilmentProof).toHaveBeenCalledWith("file_1", "ord_1", "production_started");
+  await view.unmount();
+});
+
+it("offers nothing to file on a plan-2 job once the start is filed", async () => {
+  (api.getOrder as jest.Mock).mockResolvedValue({
+    ...orderWith(escrowParts("pof_attached")), state: "ready_for_dispatch", payoutPlanVersion: 2,
+  });
+  const view = await render(<FulfilmentProofScreen />);
+  expect(await screen.findByText("Nothing to file here")).toBeTruthy();
+  expect(screen.queryByLabelText("File this evidence")).toBeNull();
+  await view.unmount();
+});

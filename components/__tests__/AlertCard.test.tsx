@@ -188,6 +188,32 @@ describe("AlertCard", () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
+  it("names the start-of-production proof on a plan-2 job's production reminder", async () => {
+    await render(
+      <AlertCard
+        alert={alert({ type: "shop_production_inactive", orderTitle: "Thesis copies" })}
+        job={{
+          state: "production",
+          title: "Thesis copies",
+          payoutHold: false,
+          payoutPlanVersion: 2,
+          payoutMilestones: [
+            { code: "production_started", label: "Start of production", releaseRequires: "shop_proof", sharePercent: 40, amountMinor: 400, status: "pending_pof", pofFileIds: [], releasedAt: null },
+            { code: "delivered", label: "Delivered", releaseRequires: "delivery_proof", sharePercent: 35, amountMinor: 350, status: "pending_pof", pofFileIds: [], releasedAt: null },
+            { code: "issue_window", label: "Issue window closed", releaseRequires: "issue_window_closed", sharePercent: 25, amountMinor: 250, status: "pending_pof", pofFileIds: [], releasedAt: null },
+          ],
+        }}
+        unread
+        stageIndex={1}
+        onMarkRead={jest.fn()}
+        onDelete={jest.fn()}
+        onOpen={jest.fn()}
+      />,
+    );
+    expect(screen.getByText("Update the press or file start-of-production proof")).toBeTruthy();
+    expect(screen.queryByText(/printing proof|packaging proof/)).toBeNull();
+  });
+
   it("does not add that chrome to an ordinary job alert", async () => {
     await render(
       <AlertCard

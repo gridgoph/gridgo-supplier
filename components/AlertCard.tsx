@@ -25,7 +25,7 @@ type Props = {
   /** Absent when the alert is not about a job the shop can open. */
   onOpen?: () => void;
   /** The live job, when the inbox has it. The owed-move line reads this, not the snapshot. */
-  job?: Pick<Order, "state" | "title" | "payoutMilestones" | "payoutHold"> | null;
+  job?: Pick<Order, "state" | "title" | "payoutMilestones" | "payoutHold" | "payoutPlanVersion"> | null;
 };
 
 /**

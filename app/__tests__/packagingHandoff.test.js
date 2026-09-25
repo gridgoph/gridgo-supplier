@@ -29,9 +29,10 @@ jest.mock("@/components/StatusChip", () => ({ StatusChip: "StatusChip" }));
 jest.mock("lucide-react-native", () => ({ ReceiptText: "ReceiptText" }));
 jest.mock("@/hooks/useTheme", () => ({ useThemeColors: () => ({ info: "#1565C0" }) }));
 let mockJobState = "production";
+let mockPlan = {};
 jest.mock("@/hooks/useJob", () => ({
   useJob: () => ({
-    job: { id: "job", state: mockJobState, title: "Printed job", quantity: 2, payoutMilestones: [] },
+    job: { id: "job", state: mockJobState, title: "Printed job", quantity: 2, payoutMilestones: [], ...mockPlan },
     loading: false, error: null, reload: jest.fn(),
   }),
 }));
@@ -48,6 +49,7 @@ beforeEach(async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   jest.clearAllMocks();
   mockJobState = "production";
+  mockPlan = {};
   mockConfirm.mockResolvedValue(true);
   mockRun.mockResolvedValue({ id: "job", state: "ready_for_dispatch" });
   await act(async () => { rendered = create(React.createElement(HandoffScreen)); });
@@ -117,3 +119,23 @@ it.each(["picked_up", "delivered"])("drops the invoice reminder once the rider h
   await act(async () => rendered.update(React.createElement(HandoffScreen)));
   expect(texts()).not.toContain("No invoice or receipt in the package");
 });
+
+/** The escrow plan has no packing evidence step, so this screen is the one place the reminder lives. */
+const escrow = {
+  payoutPlanVersion: 2,
+  payoutMilestones: [
+    { code: "production_started", label: "Start of production", releaseRequires: "shop_proof", sharePercent: 40, amountMinor: 400, status: "pof_attached", pofFileIds: ["start"], releasedAt: null },
+    { code: "delivered", label: "Delivered", releaseRequires: "delivery_proof", sharePercent: 35, amountMinor: 350, status: "pending_pof", pofFileIds: [], releasedAt: null },
+    { code: "issue_window", label: "Issue window closed", releaseRequires: "issue_window_closed", sharePercent: 25, amountMinor: 250, status: "pending_pof", pofFileIds: [], releasedAt: null },
+  ],
+};
+
+it.each(["production", "ready_for_dispatch", "rider_assigned"])(
+  "keeps the invoice reminder at pickup on a plan-2 job (%s)",
+  async (state) => {
+    mockJobState = state;
+    mockPlan = escrow;
+    await act(async () => rendered.update(React.createElement(HandoffScreen)));
+    expect(texts()).toContain("No invoice or receipt in the package");
+  },
+);

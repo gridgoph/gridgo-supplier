@@ -67,7 +67,10 @@ describe("job brief summaries", () => {
   });
 
   it("states the shop's price, never the client's total", () => {
-    expect(earningsSummary(order())).toBe("₱1,000.00 · paid in four parts");
+    // Every new commitment pays out on the three-part escrow plan.
+    expect(earningsSummary(order())).toBe("₱1,000.00 · paid in three parts");
+    expect(earningsSummary(order({ payoutPlanVersion: 2 }))).toBe("₱1,000.00 · paid in three parts");
+    expect(earningsSummary(order({ payoutPlanVersion: 1 }))).toBe("₱1,000.00 · paid in four parts");
     expect(earningsSummary(order({ supplierPriceMinor: undefined }))).toBe("Price not recorded yet");
   });
 
