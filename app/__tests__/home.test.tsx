@@ -46,6 +46,7 @@ import type { User } from "@/lib/api";
 import type { Listing } from "@/lib/listings";
 import { loadBoard } from "@/lib/listingsApi";
 import { useSession } from "@/store/session";
+import { usePush } from "@/store/push";
 
 const pendingShop: User = {
   id: "u1",
@@ -204,6 +205,66 @@ describe("the corner of Home's masthead", () => {
     await fireEvent.press(await screen.findByText("Put something on the board"));
 
     expect(router.push).toHaveBeenCalledWith("/(tabs)/catalogues");
+    await view.unmount();
+  });
+});
+
+/**
+ * Home is where every signed-in launch lands, so it carries the way back to
+ * phone notifications for a shop that said "Not now" to the explainer — and
+ * nothing at all once the phone allows them.
+ */
+describe("phone notifications on Home", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (loadBoard as jest.Mock).mockResolvedValue({ status: "not_open_yet" });
+  });
+
+  afterEach(() => {
+    usePush.setState({ supported: true, permission: "unknown", error: null, busy: false });
+    useSession.setState({
+      user: null,
+      loading: false,
+      error: null,
+      authSource: "none",
+      identity: { kind: "signed_out" },
+    });
+  });
+
+  it.each([
+    ["an approved shop", approvedShop],
+    ["a shop waiting on Operations", pendingShop],
+  ])("offers them to %s whose phone has not allowed them", async (_label, shop) => {
+    usePush.setState({ supported: true, permission: "undetermined", error: null, busy: false });
+    signIn(shop);
+
+    const view = await render(<HomeScreen />);
+
+    expect(await screen.findByText("Get these on your phone")).toBeTruthy();
+    expect(screen.getByText("Turn on notifications")).toBeTruthy();
+    await view.unmount();
+  });
+
+  it("points a blocked phone at its settings", async () => {
+    usePush.setState({ supported: true, permission: "blocked", error: null, busy: false });
+    signIn(approvedShop);
+
+    const view = await render(<HomeScreen />);
+
+    expect(await screen.findByText("Notifications are off for GRIDGO")).toBeTruthy();
+    expect(screen.getByText("Open phone settings")).toBeTruthy();
+    await view.unmount();
+  });
+
+  it("draws nothing once the phone allows them", async () => {
+    usePush.setState({ supported: true, permission: "granted", error: null, busy: false });
+    signIn(approvedShop);
+
+    const view = await render(<HomeScreen />);
+
+    await screen.findByLabelText("Alerts");
+    expect(screen.queryByText("Get these on your phone")).toBeNull();
+    expect(screen.queryByText("Turn on notifications")).toBeNull();
     await view.unmount();
   });
 });

@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ObligationRow } from "@/components/ObligationRow";
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { PushEnableCard } from "@/components/PushEnableCard";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
@@ -178,6 +179,11 @@ export default function HomeScreen() {
                   }
                 : {})}
             />
+            {/*
+              Operations' answer is the notification a waiting shop most wants
+              with GRIDGO closed. Draws nothing once the phone allows them.
+            */}
+            <PushEnableCard spacing="above" />
           </View>
         ) : null}
 
@@ -289,6 +295,13 @@ export default function HomeScreen() {
                 />
               </View>
             )}
+
+            {/*
+              Under the day's work, above the board: the way back to phone
+              notifications for a shop that said "Not now" to the explainer.
+              Draws nothing once the phone allows them.
+            */}
+            <PushEnableCard spacing="above" />
 
             {board ? (
               <View className="mt-8 gap-2">

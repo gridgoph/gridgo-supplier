@@ -272,29 +272,6 @@ jobs:
             echo "| API base | deployed URL verified inside the bundle |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Only the default branch names a release. A build from anywhere else is
-      # downloadable as a run artifact and nothing more. Publish from the APK
-      # on disk *before* upload-artifact: GitHub storage quota must not leave
-      # the landing site serving a stale file after a successful signed build.
-      - name: Publish the GitHub Release
-        if: github.ref == 'refs/heads/main' || github.event.inputs.publish_release == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.config.outputs.version }}
-          APK: ${{ steps.config.outputs.apk }}
-          SIZE: ${{ steps.apk.outputs.size }}
-        run: |
-          set -euo pipefail
-          notes="$(printf '%s\n' \
-            "Signed release APK for sideloading ($SIZE). Install it on the phone directly." \
-            "" \
-            "Commit \`${GITHUB_SHA::7}\`, build $GITHUB_RUN_NUMBER." \
-            "Verified in CI: signed with the release key, and the deployed API base is inlined in the JS bundle.")"
-          gh release create "v$VERSION" "$RUNNER_TEMP/out/$APK" \
-            --target "$GITHUB_SHA" \
-            --title "GRIDGO Supplier $VERSION" \
-            --notes "$notes"
-
       # The landing site serves this file to the shops, so only a merge to the
       # default branch may replace it. Not a pull request, and not a manual
       # dispatch from a branch — either would put unreviewed code on the public
@@ -355,7 +332,43 @@ jobs:
 
           echo "| Published | \`gridgo-supplier.apk\` on the captain's server |" >> "$GITHUB_STEP_SUMMARY"
 
-      # After the landing site (and GitHub Release) have the APK. Quota on
+      # Only the default branch names a release. A build from anywhere else is
+      # downloadable as a run artifact and nothing more. Publish from the APK
+      # on disk *before* upload-artifact: GitHub storage quota must not leave
+      # the landing site serving a stale file after a successful signed build.
+      #
+      # *After* the landing site has the APK, and only if that succeeded: the
+      # in-app update prompt reads the latest GitHub Release but "Update now"
+      # downloads from the landing site, so a Release published first offers
+      # version N while the site still serves N-1, and a shop reinstalls the
+      # same build and is asked again on every launch. A manual dispatch never
+      # uploads to the landing site (off main, or on it), so its Release is
+      # never marked latest either.
+      - name: Publish the GitHub Release
+        if: github.ref == 'refs/heads/main' || github.event.inputs.publish_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.config.outputs.version }}
+          APK: ${{ steps.config.outputs.apk }}
+          SIZE: ${{ steps.apk.outputs.size }}
+        run: |
+          set -euo pipefail
+          notes="$(printf '%s\n' \
+            "Signed release APK for sideloading ($SIZE). Install it on the phone directly." \
+            "" \
+            "Commit \`${GITHUB_SHA::7}\`, build $GITHUB_RUN_NUMBER." \
+            "Verified in CI: signed with the release key, and the deployed API base is inlined in the JS bundle.")"
+          latest=()
+          if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            latest=(--latest=false)
+          fi
+          gh release create "v$VERSION" "$RUNNER_TEMP/out/$APK" \
+            --target "$GITHUB_SHA" \
+            --title "GRIDGO Supplier $VERSION" \
+            --notes "$notes" \
+            "${latest[@]}"
+
+      # After the landing site and the GitHub Release have the APK. Quota on
       # Actions artifacts is not allowed to fail this job once the signed
       # build has already been published.
       - uses: actions/upload-artifact@v4

@@ -170,6 +170,26 @@ describe("the APK reaches the captain's server only from the default branch", ()
     expect(upload).toBeGreaterThan(published);
     expect(upload).toBeGreaterThan(release);
   });
+
+  it("names the Release only after the landing site serves the same APK", () => {
+    // The update prompt reads GitHub's latest Release; "Update now" downloads
+    // from the landing site. A Release first offers N while the site serves
+    // N-1, and a failed upload must stop the Release (default `success()`).
+    const published = apkSteps.findIndex((step) => step.includes("upload-apk supplier"));
+    const release = apkSteps.findIndex((step) => step.includes("gh release create"));
+
+    expect(release).toBeGreaterThan(published);
+    expect(apkSteps[release]).not.toMatch(/always\(\)|continue-on-error/);
+  });
+
+  it("never marks a Release latest when the landing site was not updated", () => {
+    const release = apkSteps.find((step) => step.includes("gh release create"));
+
+    expect(release).toContain('"$GITHUB_EVENT_NAME" != "push"');
+    expect(release).toContain('"$GITHUB_REF" != "refs/heads/main"');
+    expect(release).toContain("latest=(--latest=false)");
+    expect(release).toContain('"${latest[@]}"');
+  });
 });
 
 describe("the release APK is built with Firebase, or not at all", () => {

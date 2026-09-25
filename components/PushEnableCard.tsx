@@ -1,24 +1,26 @@
 import { Bell } from "lucide-react-native";
-import { Linking, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { useThemeColors } from "@/hooks/useTheme";
 import { pushOffer, pushOfferCopy } from "@/lib/push";
-import { usePush } from "@/store/push";
+import { openNotificationSettings, usePush } from "@/store/push";
 import { isSignedIn, useSession } from "@/store/session";
 
 /**
  * The invitation to turn on phone alerts.
  *
- * This card is the *only* thing in the app that can raise the system
- * permission dialog. Android 13+ shows that dialog once and treats a refusal as
- * effectively permanent, so firing it cold on first launch — before a shop has
- * seen a single job — spends the one ask on a stranger. Instead the card is
- * drawn where the value is already obvious and states in one line what will
- * arrive; the dialog follows a deliberate tap and nothing else.
+ * This card and the explainer sheet (`app/push-prompt.tsx`) are the only
+ * things in the app that can raise the system permission dialog. Android 13+
+ * shows that dialog once or twice and then treats a refusal as permanent, so it
+ * is never fired cold: the card states in one line what will arrive, and the
+ * dialog follows a deliberate tap and nothing else.
  *
- * Where it is drawn is this app's decision, and it is three places:
+ * Where it is drawn is this app's decision, and it is four places:
  *
+ * - **Home**, the screen every signed-in launch lands on. The explainer opens
+ *   there at most once a week; this card is what stays between those, so a
+ *   shop that said "Not now" always has the way back in front of it.
  * - **The alerts list**, where a shop is already reading the things push would
  *   deliver.
  * - **A job waiting on somebody else** — a shop that has just accepted an offer
@@ -88,7 +90,8 @@ export function PushEnableCard({ spacing }: Props) {
           if (offer === "settings") {
             // Only the OS can undo a blocked permission, so this is an honest
             // handover rather than a dialog the app cannot actually raise.
-            void Linking.openSettings();
+            // Coming back re-reads it and registers (`usePushNotifications`).
+            void openNotificationSettings();
             return;
           }
           // Permission is already granted in the retry case, so asking again

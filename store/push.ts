@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { Linking, Platform } from "react-native";
 import { create } from "zustand";
 
 import { withDeadline } from "@/lib/withDeadline";
@@ -75,7 +75,7 @@ type PushState = {
   error: string | null;
   /** Read the OS's answer without asking for anything. */
   syncPermission: () => Promise<PushPermission>;
-  /** Raise the system dialog, then register. Only ever called from a tap. */
+  /** Channels, then the system dialog, then register. Only ever called from a tap. */
   enable: () => Promise<boolean>;
   /** Launch, sign-in and token rotation all land here. No dialog is raised. */
   registerIfGranted: () => Promise<void>;
@@ -188,9 +188,9 @@ export const usePush = create<PushState>((set, get) => ({
         set({ busy: false, permission: "unknown" });
         return false;
       }
-      // The dialog. Android 13+ shows it once and a refusal is effectively
-      // permanent, which is why nothing calls this except an explicit tap on a
-      // card that has already said what will arrive.
+      // The dialog. Android 13+ shows it once or twice and a refusal is then
+      // permanent, which is why nothing calls this except an explicit tap on
+      // the card or the explainer, after each has said what will arrive.
       const permission = readPushPermission(await Notifications.requestPermissionsAsync());
       set({ permission });
       if (permission !== "granted") {
@@ -279,4 +279,42 @@ function errorText(e: unknown): string {
     e,
     "Could not turn on alerts for this phone. Your alerts still arrive in the app.",
   );
+}
+
+/**
+ * Hand a blocked phone to the only screen that can unblock it.
+ *
+ * Android: this app's own notification settings, one switch away, rather than
+ * the whole app-info page. Anywhere that intent is refused — an older Android,
+ * a vendor build, iOS — the app's settings page is the fallback. Returning to
+ * GRIDGO re-reads the permission and registers (`hooks/usePushNotifications`).
+ */
+export async function openNotificationSettings(): Promise<void> {
+  if (Platform.OS === "android") {
+    try {
+      await Linking.sendIntent("android.settings.APP_NOTIFICATION_SETTINGS", [
+        { key: "android.provider.extra.APP_PACKAGE", value: androidPackage() },
+      ]);
+      return;
+    } catch {
+      // Fall through to the app's settings page.
+    }
+  }
+  try {
+    await Linking.openSettings();
+  } catch {
+    // Nothing else to offer; the card stays and says what is off.
+  }
+}
+
+function androidPackage(): string {
+  try {
+    // Required lazily: this store is also loaded where `expo-constants` has no
+    // native half to read (unit tests of the push runtime).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Constants = require("expo-constants").default as typeof import("expo-constants").default;
+    return Constants.expoConfig?.android?.package ?? "ph.gridgo.supplier";
+  } catch {
+    return "ph.gridgo.supplier";
+  }
 }
