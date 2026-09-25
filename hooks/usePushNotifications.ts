@@ -1,6 +1,7 @@
 import { invalidate, liveGeneration, subscribeLive } from "@/lib/live";
 import { useRouter, useRootNavigationState, type Href } from "expo-router";
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { AppState } from "react-native";
 
 import * as api from "@/lib/api";
 import { getNotificationsNative as notifications } from "@/lib/expoNotifications";
@@ -154,6 +155,22 @@ export function usePushNotifications(): void {
     // is closed.
     void usePush.getState().registerIfGranted();
   }, [signedIn, user?.id]);
+
+  useEffect(() => {
+    // And on every return to the foreground. The permission is re-read first:
+    // a shop sent to the phone's settings by the card or the explainer comes
+    // back here, and a phone that was blocked a moment ago may be granted now.
+    // Registering again is idempotent, and it is also what carries a token
+    // Firebase rotated while GRIDGO was in the background.
+    const subscription = withoutNativeModule(() =>
+      AppState.addEventListener("change", (next) => {
+        if (next !== "active") return;
+        const push = usePush.getState();
+        void push.syncPermission().then(() => usePush.getState().registerIfGranted(), noop);
+      }),
+    );
+    return () => subscription?.remove();
+  }, []);
 
   useEffect(() => {
     const route = (identifier: string, data: unknown) => {
