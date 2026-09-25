@@ -1,8 +1,14 @@
-import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
+import type {
+  MilestoneCode,
+  Order,
+  PayoutMilestone,
+  PayoutPlanVersion,
+  PayoutReleaseRequirement,
+} from "@/lib/api";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 
 /**
- * The four parts a shop is paid in, and the evidence each one waits on.
+ * The parts a shop is paid in, and the evidence each one waits on.
  *
  * This is the only place that reads `payoutMilestones`. Two rules from the
  * platform shape every screen built on it, and neither is this app's to bend:
@@ -15,16 +21,27 @@ import type { StatusIconName, StatusTone } from "@/components/StatusChip";
  *   Fulfilment; Operations reviews it and releases. So "done" here means
  *   *evidence filed*, and the screen must not imply the money has moved.
  *
- * Who provides which proof is fixed by the platform: the shop for printing and
- * packing, the rider for delivery, and retention inherits the rider's delivered
- * proof rather than taking one of its own.
+ * Each order snapshots the plan it was committed under (`payoutPlanVersion`,
+ * `docs/OPERATIONAL_MODEL_V2_API.md#supplier-payout-milestones` in gridgo-api):
+ * plan 2 pays 40% at the start of production on the shop's photo, 35% on the
+ * rider's delivery evidence and 25% once the client's window to report a
+ * problem closes; plan 1, every older order, pays printing, packaging,
+ * delivered and retention. Stages render in the API's order with the API's
+ * `label`, and who owes the evidence comes from `releaseRequires` — the table
+ * below only supplies proof wording and a fallback for an older API that sent
+ * neither. A code it does not know is never borrowed from another stage.
  */
 
-export type ProofOwner = "shop" | "rider" | "inherited";
+/**
+ * Who has to produce a part's evidence: the shop, the rider, nobody because
+ * it rides on the delivered proof (legacy retention), or nobody because it
+ * waits on the client's window closing (plan 2).
+ */
+export type ProofOwner = "shop" | "rider" | "inherited" | "window";
 
 export type MilestoneDefinition = {
   code: MilestoneCode;
-  /** What the shop calls this part of the job. */
+  /** What the shop calls this part of the job, when GRIDGO sent no label. */
   label: string;
   /** The evidence that releases it, in the shop's own words. */
   proofLabel: string;
@@ -32,10 +49,21 @@ export type MilestoneDefinition = {
   proofOwner: ProofOwner;
   /** What the shop should photograph, when the proof is theirs to file. */
   proofHint: string;
+  /** The proof in a button: "Add {proofName} proof". */
+  proofName: string;
 };
 
-/** Order matters: this is the sequence money is released in. */
-export const MILESTONES: readonly MilestoneDefinition[] = [
+/** Every stage either plan has used, keyed by its code. Not a sequence. */
+const KNOWN_MILESTONES: readonly MilestoneDefinition[] = [
+  {
+    code: "production_started",
+    label: "Start of production",
+    proofLabel: "Photo that production has started",
+    proofOwner: "shop",
+    proofHint:
+      "Show this job under way on your floor — the loaded material, the first sheets off the press, or the set-up — enough of it to recognise the job.",
+    proofName: "start-of-production",
+  },
   {
     code: "printing",
     label: "Printing",
@@ -43,6 +71,7 @@ export const MILESTONES: readonly MilestoneDefinition[] = [
     proofOwner: "shop",
     proofHint:
       "Show the finished print on your floor — enough of it to recognise the job, with the colour and the trim readable.",
+    proofName: "printing",
   },
   {
     code: "packaging_qc",
@@ -51,6 +80,7 @@ export const MILESTONES: readonly MilestoneDefinition[] = [
     proofOwner: "shop",
     proofHint:
       "Show the job boxed or wrapped as the rider will collect it, labelled and ready to move on a motorcycle.",
+    proofName: "packaging",
   },
   {
     code: "delivered",
@@ -58,6 +88,7 @@ export const MILESTONES: readonly MilestoneDefinition[] = [
     proofLabel: "The rider's delivery evidence",
     proofOwner: "rider",
     proofHint: "",
+    proofName: "delivery",
   },
   {
     code: "retention",
@@ -65,18 +96,79 @@ export const MILESTONES: readonly MilestoneDefinition[] = [
     proofLabel: "Carried over from the delivery evidence",
     proofOwner: "inherited",
     proofHint: "",
+    proofName: "retention",
   },
-] as const;
+  {
+    code: "issue_window",
+    label: "Issue window closed",
+    proofLabel: "No file — the client's window to report a problem closing",
+    proofOwner: "window",
+    proofHint: "",
+    proofName: "issue window",
+  },
+];
 
-export function milestoneDefinition(code: MilestoneCode): MilestoneDefinition {
-  return MILESTONES.find((m) => m.code === code) ?? MILESTONES[0];
+/** Codes only the four-stage plan used. Their presence marks a plan-1 order. */
+const LEGACY_ONLY_CODES: readonly MilestoneCode[] = ["printing", "packaging_qc", "retention"];
+
+/** The plan every new commitment is placed under. */
+export const CURRENT_PAYOUT_PLAN: PayoutPlanVersion = 2;
+
+/**
+ * The plan this order pays under. An API that predates the field sends the
+ * four legacy codes, so those mark plan 1; an order with no stages yet will be
+ * committed under the current plan.
+ */
+export function payoutPlanOf(order: Pick<Order, "payoutMilestones" | "payoutPlanVersion">): PayoutPlanVersion {
+  if (order.payoutPlanVersion === 1 || order.payoutPlanVersion === 2) return order.payoutPlanVersion;
+  const legacy = (order.payoutMilestones ?? []).some((m) => LEGACY_ONLY_CODES.includes(m.code));
+  return legacy ? 1 : CURRENT_PAYOUT_PLAN;
 }
 
-/** The milestones a shop files evidence for itself. */
-export const SHOP_PROOF_CODES: readonly MilestoneCode[] = ["printing", "packaging_qc"];
+function ownerFor(code: MilestoneCode, requires: PayoutReleaseRequirement | null | undefined): ProofOwner | null {
+  if (requires === "shop_proof") return "shop";
+  if (requires === "delivery_proof") return "rider";
+  if (requires === "issue_window_closed") return code === "retention" ? "inherited" : "window";
+  return null;
+}
 
-export function isShopProof(code: MilestoneCode): boolean {
-  return SHOP_PROOF_CODES.includes(code);
+/** "some_stage" → "Some stage", for a code GRIDGO sent with no label. */
+function humanizeCode(code: string): string {
+  const words = code.replace(/[_-]+/g, " ").trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : "Payout";
+}
+
+/**
+ * The wording for one stage. GRIDGO's own `label` and `releaseRequires` win
+ * whenever they arrive; a code this app has never seen gets neutral words
+ * rather than another stage's, so a new plan can never read as "Printing".
+ */
+export function milestoneDefinition(
+  code: MilestoneCode,
+  from: Pick<PayoutMilestone, "label" | "releaseRequires"> = {},
+): MilestoneDefinition {
+  const known = KNOWN_MILESTONES.find((m) => m.code === code);
+  const label = from.label?.trim() || known?.label || humanizeCode(code);
+  const owner = ownerFor(code, from.releaseRequires) ?? known?.proofOwner ?? "window";
+  if (known && known.proofOwner === owner) return { ...known, label };
+  return {
+    code,
+    label,
+    proofLabel:
+      owner === "shop"
+        ? `Photo for ${label.toLowerCase()}`
+        : owner === "rider"
+          ? "The rider's delivery evidence"
+          : "No file for this part",
+    proofOwner: owner,
+    proofHint: owner === "shop" ? "Show the work this part of the job pays for, enough of it to recognise the job." : "",
+    proofName: label.toLowerCase(),
+  };
+}
+
+/** True when this shop files the evidence for this part itself. */
+export function isShopProof(milestone: Pick<PayoutMilestone, "code" | "label" | "releaseRequires">): boolean {
+  return milestoneDefinition(milestone.code, milestone).proofOwner === "shop";
 }
 
 /**
@@ -93,7 +185,9 @@ export type MilestoneStage =
   | "needs_shop_proof"
   /** The shop's to evidence, but the job has not got there yet. */
   | "not_reached"
-  | "waiting_on_delivery";
+  | "waiting_on_delivery"
+  /** Plan 2's last part: nothing to file, waiting on the client's window. */
+  | "waiting_on_window";
 
 export type MilestoneView = {
   code: MilestoneCode;
@@ -106,6 +200,10 @@ export type MilestoneView = {
   icon: StatusIconName;
   /** One sentence naming whose move it is. */
   detail: string;
+  /** Who produces this part's evidence. */
+  proofOwner: ProofOwner;
+  /** The proof in a button: "Add {proofName} proof". */
+  proofName: string;
   proofCount: number;
   /** Proof of Fulfilment files GRIDGO holds for this part. */
   pofFileIds: string[];
@@ -117,38 +215,40 @@ export type MilestoneView = {
   reference: string | null;
 };
 
-/** Milestone codes the job's own state has not reached yet. */
-function reachedForProof(code: MilestoneCode, state: string): boolean {
-  const producing = new Set([
-    "production",
-    "supplier_self_qc",
-    "ready_for_dispatch",
-    "rider_assigned",
-    "picked_up",
-    "out_for_delivery",
-    "awaiting_collection",
-    "delivered",
-    "issue_window_open",
-    "completed",
-    "payout_released",
-  ]);
-  if (code === "printing") return producing.has(state);
-  if (code === "packaging_qc") return producing.has(state);
-  return false;
-}
+/** Production or later: a shop's own evidence has something to photograph. */
+const PRODUCING = new Set([
+  "production",
+  "supplier_self_qc",
+  "ready_for_dispatch",
+  "rider_assigned",
+  "picked_up",
+  "out_for_delivery",
+  "awaiting_collection",
+  "delivered",
+  "issue_window_open",
+  "completed",
+  "payout_released",
+]);
+
+/** The client has the job and may still report a problem. */
+const WINDOW_OPEN = new Set(["delivered", "issue_window_open"]);
+/** The window has closed with nothing held: Operations may release the last part. */
+const WINDOW_CLOSED = new Set(["completed", "payout_released"]);
 
 export function viewMilestone(order: Order, milestone: PayoutMilestone): MilestoneView {
-  const definition = milestoneDefinition(milestone.code);
+  const definition = milestoneDefinition(milestone.code, milestone);
   const held = order.payoutHold === true;
   const pofFileIds = milestone.pofFileIds ?? [];
   const proofCount = pofFileIds.length;
-  const shopProof = isShopProof(milestone.code);
+  const owner = definition.proofOwner;
 
   const base = {
     code: milestone.code,
     label: definition.label,
     sharePercent: milestone.sharePercent,
     amountMinor: milestone.amountMinor,
+    proofOwner: owner,
+    proofName: definition.proofName,
     proofCount,
     pofFileIds,
     receiptFileId: milestone.status === "released" ? (milestone.receiptFileId ?? null) : null,
@@ -180,6 +280,34 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
     };
   }
 
+  // Plan 2's last part takes no file: it stays `pending_pof` until Operations
+  // releases it, so its status says nothing about the window. The job does.
+  if (owner === "window") {
+    if (WINDOW_CLOSED.has(order.state)) {
+      return {
+        ...base,
+        stage: "awaiting_release",
+        statusLabel: "With GRIDGO",
+        tone: "info",
+        icon: "clock",
+        detail:
+          "The client's window to report a problem has closed. GRIDGO reviews the job and releases this part.",
+        canAddProof: false,
+      };
+    }
+    return {
+      ...base,
+      stage: "waiting_on_window",
+      statusLabel: WINDOW_OPEN.has(order.state) ? "Window open" : "After delivery",
+      tone: "neutral",
+      icon: "clock",
+      detail: WINDOW_OPEN.has(order.state)
+        ? "The client can still report a problem. This part can be released once that window closes with nothing reported. Nothing for you to file."
+        : "This part can be released once the client has the job and their window to report a problem closes. Nothing for you to file.",
+      canAddProof: false,
+    };
+  }
+
   if (milestone.status === "pof_attached") {
     return {
       ...base,
@@ -188,19 +316,21 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
       tone: "info",
       icon: "clock",
       detail:
-        milestone.code === "retention"
+        owner === "inherited"
           ? "Retention releases on its own once the client's window to report a problem closes."
-          : "Your evidence is filed. GRIDGO reviews it and releases this part.",
+          : owner === "rider"
+            ? "The rider's delivery evidence is filed. GRIDGO reviews it and releases this part."
+            : "Your evidence is filed. GRIDGO reviews it and releases this part.",
       canAddProof: false,
     };
   }
 
-  if (shopProof) {
-    // "Proof needed" on a job that has not started printing reads as a job the
-    // shop is behind on. It is not — there is nothing to photograph yet, and a
-    // chip that asks for work nobody can do is the kind of thing a shop learns
-    // to ignore, taking the real ones with it.
-    if (!reachedForProof(milestone.code, order.state)) {
+  if (owner === "shop") {
+    // "Proof needed" on a job that has not started production reads as a job
+    // the shop is behind on. It is not — there is nothing to photograph yet,
+    // and a chip that asks for work nobody can do is the kind of thing a shop
+    // learns to ignore, taking the real ones with it.
+    if (!PRODUCING.has(order.state)) {
       return {
         ...base,
         stage: "not_reached",
@@ -229,7 +359,7 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
     tone: "neutral",
     icon: "clock",
     detail:
-      milestone.code === "delivered"
+      owner === "rider"
         ? "The rider's delivery evidence releases this part. Nothing for you to file."
         : "Retention rides on the same delivery evidence, and releases after the client's window to report a problem closes.",
     canAddProof: false,
@@ -254,6 +384,30 @@ export function findMilestoneView(
 }
 
 /**
+ * How a job pays out, before GRIDGO has split it into parts, in the words of
+ * the plan it will be — or was — committed under.
+ */
+export function payoutPlanCopy(order: Pick<Order, "payoutMilestones" | "payoutPlanVersion">): {
+  /** "paid in {parts} parts". */
+  parts: string;
+  /** One or two sentences: what each part waits on, and what the shop files. */
+  howItReachesYou: string;
+} {
+  if (payoutPlanOf(order) === 1) {
+    return {
+      parts: "four",
+      howItReachesYou:
+        "In four parts as the job moves — printing, packaging, delivery, and a retention part that lands once the client's window to report a problem closes. Each needs evidence before it is released, and you file the first two here.",
+    };
+  }
+  return {
+    parts: "three",
+    howItReachesYou:
+      "In three parts as the job moves — 40% once you file a photo that production has started, 35% on the rider's delivery evidence, and 25% once the client's window to report a problem closes with nothing reported. Operations releases each part, and the first one's evidence is yours to file here.",
+  };
+}
+
+/**
  * What a job is worth to this shop, split by where each part has got to.
  *
  * `needsProofMinor` is the sharp one and it means exactly one thing: money the
@@ -264,7 +418,7 @@ export function findMilestoneView(
  * learns to be ignored.
  */
 export type EarningsSplit = {
-  /** Everything the four parts add up to — the shop's own price. */
+  /** Everything the parts add up to — the shop's own price. */
   totalMinor: number;
   releasedMinor: number;
   awaitingReleaseMinor: number;

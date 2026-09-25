@@ -74,11 +74,26 @@ export type Installment = {
   confirmationSource: string | null;
 };
 
-/** The four parts the shop is paid in. Shares split the shop's own price. */
-export type MilestoneCode = "printing" | "packaging_qc" | "delivered" | "retention";
+/**
+ * One stage of the shop's payout. Open on purpose: plan 2 pays
+ * `production_started`, `delivered`, `issue_window`; plan 1 (older orders)
+ * `printing`, `packaging_qc`, `delivered`, `retention`; a future plan adds
+ * codes without a screen change. Read it through `lib/milestones.ts`.
+ */
+export type MilestoneCode = string;
+
+/** 1: the legacy four stages. 2: the escrow split from 25 Sep 2026. */
+export type PayoutPlanVersion = 1 | 2;
+
+/** What a stage waits on before Operations can release it. */
+export type PayoutReleaseRequirement = "shop_proof" | "delivery_proof" | "issue_window_closed";
 
 export type PayoutMilestone = {
   code: MilestoneCode;
+  /** The shop-facing name. Absent from an API older than the escrow plan. */
+  label?: string;
+  /** Absent from an API older than the escrow plan. */
+  releaseRequires?: PayoutReleaseRequirement | null;
   sharePercent: number;
   /** The shop's own earnings for this part. Withheld from client and rider. */
   amountMinor: number;
@@ -146,6 +161,9 @@ export type Order = {
   paymentMethod: string | null;
   paymentStatus: string;
   payments?: Record<InstallmentCode, Installment>;
+  /** The plan this order's stages were committed under; null before commitment. */
+  payoutPlanVersion?: PayoutPlanVersion | null;
+  /** Stages in release order. Render them in this order, never a fixed list. */
   payoutMilestones?: PayoutMilestone[];
   /** True while a claim holds every unreleased part of this payout. */
   payoutHold?: boolean;

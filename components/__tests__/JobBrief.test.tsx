@@ -51,8 +51,48 @@ describe("JobBrief", () => {
     expect(screen.getByText("1 print file")).toBeTruthy();
     expect(screen.getByText("1 reference picture")).toBeTruthy();
     expect(screen.getByText(/^Ready by /)).toBeTruthy();
-    expect(screen.getByText("₱1,000.00 · paid in four parts")).toBeTruthy();
+    expect(screen.getByText("₱1,000.00 · paid in three parts")).toBeTruthy();
     expect(screen.queryByTestId("job-brief-make")).toBeNull();
+  });
+
+  it("explains the three-part escrow payout before the job is split, with no retention", async () => {
+    await render(<JobBrief order={order({ payoutPlanVersion: 2 })} defaultOpen="earnings" />);
+
+    expect(screen.getByText(/^In three parts as the job moves — 40% once you file a photo that production has started/)).toBeTruthy();
+    expect(screen.queryByText(/retention|four parts|printing, packaging/i)).toBeNull();
+  });
+
+  it("keeps the four-part wording on a legacy plan-1 job", async () => {
+    await render(<JobBrief order={order({ payoutPlanVersion: 1 })} defaultOpen="earnings" />);
+
+    expect(screen.getByText("₱1,000.00 · paid in four parts")).toBeTruthy();
+    expect(screen.getByText(/^In four parts as the job moves — printing, packaging, delivery/)).toBeTruthy();
+  });
+
+  it("lists a plan-2 job's parts in GRIDGO's order under GRIDGO's labels", async () => {
+    await render(
+      <JobBrief
+        order={order({
+          state: "production",
+          payoutPlanVersion: 2,
+          payoutMilestones: [
+            { code: "production_started", label: "Start of production", releaseRequires: "shop_proof", sharePercent: 40, amountMinor: 40000, status: "pending_pof", pofFileIds: [], releasedAt: null },
+            { code: "delivered", label: "Delivered", releaseRequires: "delivery_proof", sharePercent: 35, amountMinor: 35000, status: "pending_pof", pofFileIds: [], releasedAt: null },
+            { code: "issue_window", label: "Issue window closed", releaseRequires: "issue_window_closed", sharePercent: 25, amountMinor: 25000, status: "pending_pof", pofFileIds: [], releasedAt: null },
+          ],
+        })}
+        defaultOpen="earnings"
+      />,
+    );
+
+    expect(screen.getByText("₱400.00 waiting on your proof")).toBeTruthy();
+    const labels = ["Start of production", "Delivered", "Issue window closed"].map(
+      (label) => screen.getByText(label),
+    );
+    expect(labels).toHaveLength(3);
+    expect(screen.getByText("Proof needed")).toBeTruthy();
+    expect(screen.queryByText("Printing")).toBeNull();
+    expect(screen.queryByText(/retention/i)).toBeNull();
   });
 
   it("opens one row at a time and closes the previous one", async () => {

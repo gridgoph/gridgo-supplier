@@ -1,6 +1,6 @@
-import type { MilestoneCode, Order } from "@/lib/api";
+import type { MilestoneCode, Order, PayoutPlanVersion } from "@/lib/api";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
-import { nextShopProof } from "@/lib/milestones";
+import { CURRENT_PAYOUT_PLAN, nextShopProof } from "@/lib/milestones";
 
 /**
  * Supplier-facing order state: plain labels, tones, and the steps the mobile
@@ -96,10 +96,10 @@ export function presentOrderState(state: string): StatePresentation {
  * an enabled control.
  *
  * Where the shop owes evidence, that comes first and takes the yellow: the
- * proof is what releases half the job's money, and a shop that walks the job
- * forward without it has quietly worked for nothing. The forward step stays
- * available underneath — the platform lets a job move without its proof, so
- * this app warns rather than blocks.
+ * proof is what releases the shop's first part of the job's money, and a shop
+ * that walks the job forward without it has quietly worked for nothing. The
+ * forward step stays available underneath — the platform lets a job move
+ * without its proof, so this app warns rather than blocks.
  */
 export function actionsForJob(order: Pick<Order, "state" | "payoutMilestones" | "payoutHold">): SupplierAction[] {
   const state = order.state;
@@ -107,7 +107,7 @@ export function actionsForJob(order: Pick<Order, "state" | "payoutMilestones" | 
   const proofStep: SupplierAction | null = owed
     ? {
         kind: "add_proof",
-        label: `Add ${owed.label.toLowerCase()} proof`,
+        label: `Add ${owed.proofName} proof`,
         targetState: null,
         primary: true,
         consequence: `GRIDGO releases ${percentText(owed.sharePercent)} of your earnings on this job once it has your evidence for ${owed.label.toLowerCase()}.`,
@@ -273,8 +273,14 @@ export function needsSupplierAction(
 /**
  * What the shop is waiting for when it has no action of its own. A screen that
  * only says "nothing to do" leaves a supplier guessing whose move it is.
+ *
+ * `plan` is the order's payout plan (`payoutPlanOf`): only a legacy order has
+ * a retention part to talk about.
  */
-export function waitingOn(state: string): { title: string; body: string } {
+export function waitingOn(
+  state: string,
+  plan: PayoutPlanVersion = CURRENT_PAYOUT_PLAN,
+): { title: string; body: string } {
   switch (state) {
     case "supplier_accepted":
     case "awaiting_downpayment":
@@ -312,7 +318,10 @@ export function waitingOn(state: string): { title: string; body: string } {
     case "issue_window_open":
       return {
         title: "Delivered",
-        body: "The client has the job and a window to report a problem. Retention releases once that window closes.",
+        body:
+          plan === 1
+            ? "The client has the job and a window to report a problem. Retention releases once that window closes."
+            : "The client has the job and a window to report a problem. GRIDGO can release the last part of your earnings once that window closes with nothing reported.",
       };
     case "completed":
     case "payout_released":

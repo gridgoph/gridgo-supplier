@@ -8,7 +8,7 @@ import { StatusChip } from "@/components/StatusChip";
 import { formatPhp, getFile, type StoredFile } from "@/lib/api";
 import { isProofImage, proofDocumentKind } from "@/lib/files";
 import { useThemeColors } from "@/hooks/useTheme";
-import { isShopProof, type MilestoneView } from "@/lib/milestones";
+import type { MilestoneView } from "@/lib/milestones";
 
 type Props = {
   milestones: MilestoneView[];
@@ -16,13 +16,13 @@ type Props = {
   /**
    * Whether each row explains whose move it is. The job workspace wants it —
    * the shop is deciding what to do next. A payout list of several jobs does
-   * not: four sentences per row, repeated, is noise rather than guidance.
+   * not: a sentence per part, repeated, is noise rather than guidance.
    */
   showDetail?: boolean;
 };
 
 /**
- * The four parts a job pays out in, and where each one has got to.
+ * The parts a job pays out in, in GRIDGO's order, and where each one has got to.
  *
  * These are genuinely sequential and each carries its share, so the shares are
  * shown — they are what the shop is owed, not decoration. The list stays
@@ -65,7 +65,7 @@ export function MilestoneList({ milestones, showDetail = false, proofReloadVersi
             {showDetail ? (
               <Text className="text-caption text-text-secondary">{milestone.detail}</Text>
             ) : null}
-            {showDetail && isShopProof(milestone.code) && milestone.pofFileIds.length
+            {showDetail && milestone.proofOwner === "shop" && milestone.pofFileIds.length
               ? milestone.pofFileIds.map((fileId) => (
                   <FiledProof
                     key={`${fileId}:${proofReloadVersion}`}

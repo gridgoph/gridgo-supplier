@@ -30,6 +30,8 @@ function view(partial: Partial<MilestoneView> = {}): MilestoneView {
     tone: "info",
     icon: "clock",
     detail: "Your evidence is filed. GRIDGO reviews it and releases this part.",
+    proofOwner: "shop",
+    proofName: "printing",
     proofCount: 1,
     canAddProof: false,
     pofFileIds: ["file_print"],
@@ -93,6 +95,8 @@ describe("MilestoneList", () => {
           view({
             code: "delivered",
             label: "Delivered",
+            proofOwner: "rider",
+            proofName: "delivery",
             pofFileIds: ["file_rider"],
           }),
         ]}
@@ -102,6 +106,48 @@ describe("MilestoneList", () => {
 
     expect(screen.queryByLabelText("Delivered evidence")).toBeNull();
   });
+});
+
+it("shows a plan-2 start-of-production photo, and lists the parts in the order given", async () => {
+  await render(
+    <MilestoneList
+      milestones={[
+        view({
+          code: "production_started",
+          label: "Start of production",
+          sharePercent: 40,
+          proofName: "start-of-production",
+          pofFileIds: ["file_start"],
+        }),
+        view({
+          code: "delivered",
+          label: "Delivered",
+          sharePercent: 35,
+          proofOwner: "rider",
+          proofName: "delivery",
+          pofFileIds: ["file_rider"],
+        }),
+        view({
+          code: "issue_window",
+          label: "Issue window closed",
+          sharePercent: 25,
+          proofOwner: "window",
+          proofName: "issue window",
+          pofFileIds: [],
+        }),
+      ]}
+      showDetail
+    />,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByLabelText("Start of production evidence").props.source).toEqual({
+      uri: "https://example.test/file_start.jpg",
+    });
+  });
+  expect(screen.queryByLabelText("Delivered evidence")).toBeNull();
+  const shares = screen.getAllByText(/% of this job$/).map((node) => node.props.children.join(""));
+  expect(shares).toEqual(["40% of this job", "35% of this job", "25% of this job"]);
 });
 
 it("renders a stored PDF as a document even when its name suggests an image", async () => {

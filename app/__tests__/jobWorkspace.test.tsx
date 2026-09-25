@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 
 import JobWorkspaceScreen from "@/app/job/[id]/index";
 import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
@@ -214,3 +214,78 @@ describe("job workspace docket and pinned step", () => {
     expect(screen.getByText("₱650.00 released of ₱1,000.00")).toBeTruthy();
   });
 });
+
+/** Plan 2, the escrow split, exactly as gridgo-api serves it. */
+function escrow(
+  status: Partial<Record<MilestoneCode, PayoutMilestone["status"]>> = {},
+  files: Partial<Record<MilestoneCode, string[]>> = {},
+): PayoutMilestone[] {
+  const stages = [
+    { code: "production_started", label: "Start of production", sharePercent: 40, releaseRequires: "shop_proof" },
+    { code: "delivered", label: "Delivered", sharePercent: 35, releaseRequires: "delivery_proof" },
+    { code: "issue_window", label: "Issue window closed", sharePercent: 25, releaseRequires: "issue_window_closed" },
+  ] as const;
+  return stages.map((stage) => ({
+    ...stage,
+    amountMinor: stage.sharePercent * 1000,
+    status: status[stage.code] ?? "pending_pof",
+    pofFileIds: files[stage.code] ?? [],
+    releasedAt: status[stage.code] === "released" ? "2026-09-26T02:00:00.000Z" : null,
+  }));
+}
+
+describe("job workspace on the escrow plan", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("asks for the start-of-production proof and opens it against production_started", async () => {
+    const { router } = jest.requireMock<{ router: { push: jest.Mock } }>("expo-router");
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({ state: "production", payoutPlanVersion: 2, payoutMilestones: escrow() }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByTestId("job-brief-earnings")).toBeTruthy();
+    expect(screen.getByText("₱400.00 waiting on your proof")).toBeTruthy();
+    expect(screen.getByText("Start of production")).toBeTruthy();
+    expect(screen.getByText("Issue window closed")).toBeTruthy();
+    expect(screen.queryByText(/Printing|Packaging|Retention/)).toBeNull();
+
+    const bar = screen.getByTestId("job-action-bar");
+    const add = within(bar).getByLabelText("Add start-of-production proof");
+    await fireEvent.press(add);
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: "/job/[id]/fulfilment",
+      params: { id: "ord_1", action: "add_proof", milestone: "production_started" },
+    });
+  });
+
+  it("shows the filed start photo and says whose move the rest is after delivery", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        state: "issue_window_open",
+        payoutPlanVersion: 2,
+        payoutMilestones: escrow(
+          { production_started: "released", delivered: "pof_attached" },
+          { production_started: ["file_start"], delivered: ["file_rider"] },
+        ),
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Start of production evidence").props.source).toEqual({
+        uri: "https://example.test/file_start.jpg",
+      });
+    });
+    expect(screen.queryByLabelText("Delivered evidence")).toBeNull();
+    expect(screen.queryByTestId("job-action-bar")).toBeNull();
+    expect(screen.getByText("Window open")).toBeTruthy();
+    expect(screen.getByText("₱400.00 released of ₱1,000.00")).toBeTruthy();
+    expect(screen.queryByText(/retention/i)).toBeNull();
+  });
+});
+

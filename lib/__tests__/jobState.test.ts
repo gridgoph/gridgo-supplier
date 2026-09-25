@@ -69,6 +69,24 @@ function job(partial: Partial<Order> & Pick<Order, "id" | "state">): Order {
   };
 }
 
+/** Plan 2, the escrow split, as gridgo-api serves it. */
+function escrow(
+  overrides: Partial<Record<MilestoneCode, PayoutMilestone["status"]>> = {},
+): PayoutMilestone[] {
+  const stages = [
+    { code: "production_started", label: "Start of production", sharePercent: 40, releaseRequires: "shop_proof" },
+    { code: "delivered", label: "Delivered", sharePercent: 35, releaseRequires: "delivery_proof" },
+    { code: "issue_window", label: "Issue window closed", sharePercent: 25, releaseRequires: "issue_window_closed" },
+  ] as const;
+  return stages.map((stage) => ({
+    ...stage,
+    amountMinor: stage.sharePercent * 1000,
+    status: overrides[stage.code] ?? "pending_pof",
+    pofFileIds: overrides[stage.code] && overrides[stage.code] !== "pending_pof" ? ["file_1"] : [],
+    releasedAt: null,
+  }));
+}
+
 /** A job whose evidence is all filed, so only the forward step is offered. */
 function filed(partial: Partial<Order> & Pick<Order, "id" | "state">): Order {
   return job({
@@ -146,6 +164,33 @@ describe("actionsForJob", () => {
     expect(actions[0].targetState).toBeNull();
     // Exactly one primary, so the screen keeps one yellow control.
     expect(actions.filter((a) => a.primary)).toHaveLength(1);
+  });
+
+  it("asks a plan-2 job for its start-of-production proof, and nothing about printing", () => {
+    const actions = actionsForJob(
+      job({ id: "e2", state: "production", payoutPlanVersion: 2, payoutMilestones: escrow() }),
+    );
+    expect(actions.map((a) => a.kind)).toEqual(["add_proof", "ready_for_pickup"]);
+    expect(actions[0].label).toBe("Add start-of-production proof");
+    expect(actions[0].milestoneCode).toBe("production_started");
+    expect(actions[0].consequence).toMatch(/^GRIDGO releases 40% of your earnings/);
+  });
+
+  it("owes a plan-2 job no packing proof once the start is filed", () => {
+    const actions = actionsForJob(
+      job({
+        id: "f2",
+        state: "production",
+        payoutPlanVersion: 2,
+        payoutMilestones: escrow({ production_started: "pof_attached" }),
+      }),
+    );
+    expect(actions.map((a) => a.kind)).toEqual(["ready_for_pickup"]);
+    expect(actionsForJob(job({ id: "f3", state: "ready_for_dispatch", payoutPlanVersion: 2, payoutMilestones: escrow({ production_started: "pof_attached" }) }))).toEqual([]);
+  });
+
+  it("keeps the legacy proof labels", () => {
+    expect(primaryAction(job({ id: "e3", state: "production" }))?.label).toBe("Add printing proof");
   });
 
   it("asks for the packing proof once printing is filed", () => {
@@ -330,6 +375,12 @@ describe("waitingOn", () => {
     expect(waitingOn("awaiting_downpayment").title).toContain("client");
     expect(waitingOn("downpayment_review").title).toContain("GRIDGO");
     expect(waitingOn("ready_for_dispatch").title).toContain("rider");
+  });
+
+  it("speaks of retention only on a legacy job", () => {
+    expect(waitingOn("issue_window_open", 1).body).toMatch(/Retention releases/);
+    expect(waitingOn("issue_window_open", 2).body).not.toMatch(/retention/i);
+    expect(waitingOn("delivered").body).toMatch(/last part of your earnings/);
   });
 
   it("never leaks a state string into the copy", () => {
