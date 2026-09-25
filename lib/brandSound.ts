@@ -161,9 +161,12 @@ function waitUntilLoaded(player: AudioPlayer, timeoutMs: number): Promise<void> 
  * Play one bundled sting. Missing audio, a blocked web autoplay, and a failed
  * download are silence — never an error and never a microphone prompt.
  */
-export function playAlertSting(source: number): void {
+let pendingSting: number | null = null;
+let stingArmed = false;
+
+function playAlertStingNow(source: number): void {
   const expoAudio = audioModule();
-  if (!expoAudio || !webGestureActive()) return;
+  if (!expoAudio) return;
   void (async () => {
     try {
       await expoAudio.setIsAudioActiveAsync?.(true);
@@ -174,15 +177,37 @@ export function playAlertSting(source: number): void {
       });
       const player = expoAudio.createAudioPlayer(source, { downloadFirst: true });
       await waitUntilLoaded(player, 2500);
-      if (!webGestureActive()) {
-        try { player.remove(); } catch { /* already gone */ }
-        return;
-      }
       cuePlay(player);
     } catch {
       // A sting that cannot play is silence.
     }
   })();
+}
+
+/** Remember the sting until the next click. A browser will not play it unprompted. */
+function armPendingSting(): void {
+  if (stingArmed || typeof window === "undefined") return;
+  stingArmed = true;
+  const release = () => {
+    stingArmed = false;
+    window.removeEventListener("pointerdown", play);
+    window.removeEventListener("keydown", play);
+    const source = pendingSting;
+    pendingSting = null;
+    if (source != null) playAlertStingNow(source);
+  };
+  const play = () => release();
+  window.addEventListener("pointerdown", play, { once: true });
+  window.addEventListener("keydown", play, { once: true });
+}
+
+export function playAlertSting(source: number): void {
+  if (Platform.OS === "web" && !webGestureActive()) {
+    pendingSting = source;
+    armPendingSting();
+    return;
+  }
+  playAlertStingNow(source);
 }
 
 export function loadBrandStings(): BrandStings | null {
