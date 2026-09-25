@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { FlowScreen } from "@/components/FlowScreen";
+import { PackageInvoiceNotice } from "@/components/PackageInvoiceNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SpecRow } from "@/components/SpecRow";
@@ -41,6 +42,8 @@ export default function HandoffScreen() {
   );
 
   const custody = job ? custodyForOrder(job) : null;
+  // The package is still at the counter until the rider confirms pickup.
+  const packing = custody ? custody.state !== "with_rider" && custody.state !== "delivered" : false;
   const step = job ? findAction(job, "ready_for_pickup") : null;
 
   async function markReady() {
@@ -117,6 +120,8 @@ export default function HandoffScreen() {
           </View>
         </View>
       ) : null}
+
+      {packing ? <PackageInvoiceNotice /> : null}
 
       <HandoffSequence />
     </FlowScreen>

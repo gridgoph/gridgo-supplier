@@ -26,9 +26,12 @@ jest.mock("@/components/PrimaryButton", () => ({ PrimaryButton: "PrimaryButton" 
 jest.mock("@/components/SecondaryButton", () => ({ SecondaryButton: "SecondaryButton" }));
 jest.mock("@/components/SpecRow", () => ({ SpecRow: "SpecRow" }));
 jest.mock("@/components/StatusChip", () => ({ StatusChip: "StatusChip" }));
+jest.mock("lucide-react-native", () => ({ ReceiptText: "ReceiptText" }));
+jest.mock("@/hooks/useTheme", () => ({ useThemeColors: () => ({ info: "#1565C0" }) }));
+let mockJobState = "production";
 jest.mock("@/hooks/useJob", () => ({
   useJob: () => ({
-    job: { id: "job", state: "production", title: "Printed job", quantity: 2, payoutMilestones: [] },
+    job: { id: "job", state: mockJobState, title: "Printed job", quantity: 2, payoutMilestones: [] },
     loading: false, error: null, reload: jest.fn(),
   }),
 }));
@@ -44,11 +47,16 @@ let rendered;
 beforeEach(async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   jest.clearAllMocks();
+  mockJobState = "production";
   mockConfirm.mockResolvedValue(true);
   mockRun.mockResolvedValue({ id: "job", state: "ready_for_dispatch" });
   await act(async () => { rendered = create(React.createElement(HandoffScreen)); });
 });
 afterEach(async () => { await act(async () => rendered.unmount()); });
+
+function texts() {
+  return rendered.root.findAllByType("Text").map((node) => node.props.children);
+}
 
 function press() { rendered.root.findByType("PrimaryButton").props.onPress(); }
 
@@ -87,4 +95,25 @@ it("retains packing answers after failure and permits an explicit retry", async 
   await act(async () => press());
   expect(mockRun).toHaveBeenCalledTimes(2);
   expect(mockClear).toHaveBeenCalledWith("job");
+});
+
+it("reminds the shop to keep its own invoice out of the package it is packing", () => {
+  const shown = texts();
+  expect(shown).toContain("No invoice or receipt in the package");
+  expect(shown).toContain(
+    "Do not put your own invoice or receipt inside the package. GRIDGO buys this job from you and gives the customer its own receipt.",
+  );
+  expect(shown).toContain("Keep your invoice for GRIDGO. It collects invoices from each shop monthly.");
+});
+
+it.each(["ready_for_dispatch", "rider_assigned"])("keeps the invoice reminder up at the counter (%s)", async (state) => {
+  mockJobState = state;
+  await act(async () => rendered.update(React.createElement(HandoffScreen)));
+  expect(texts()).toContain("No invoice or receipt in the package");
+});
+
+it.each(["picked_up", "delivered"])("drops the invoice reminder once the rider has the package (%s)", async (state) => {
+  mockJobState = state;
+  await act(async () => rendered.update(React.createElement(HandoffScreen)));
+  expect(texts()).not.toContain("No invoice or receipt in the package");
 });
