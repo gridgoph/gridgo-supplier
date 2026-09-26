@@ -3,6 +3,7 @@ import { useRouter, useRootNavigationState, type Href } from "expo-router";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { AppState } from "react-native";
 
+import { accountHold } from "@/lib/accountHold";
 import * as api from "@/lib/api";
 import { getNotificationsNative as notifications } from "@/lib/expoNotifications";
 import { playProductionNudgeSting } from "@/lib/nudgeSound";
@@ -96,6 +97,7 @@ export function usePushNotifications(): void {
   useLayoutEffect(() => { ready.current = navigationReady; }, [navigationReady]);
   const user = useSession((s) => s.user);
   const signedIn = isSignedIn(user);
+  const held = accountHold(user) != null;
   const loading = useSession((s) => s.loading);
   const sessionWait = useSession((s) => s.sessionWait);
   /** A tap waits for identity, then resolves its owned notification. */
@@ -153,8 +155,9 @@ export function usePushNotifications(): void {
     // Not gated on `matchable` either: a shop waiting on accreditation is
     // exactly the shop whose approval it most wants to hear about while the app
     // is closed.
+    if (held) return;
     void usePush.getState().registerIfGranted();
-  }, [signedIn, user?.id]);
+  }, [signedIn, user?.id, held]);
 
   useEffect(() => {
     // And on every return to the foreground. The permission is re-read first:
