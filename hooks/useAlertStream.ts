@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { AppState } from "react-native";
 import { openAlertStream, type AlertStreamHandle } from "@/lib/alertStream";
+import { accountHold } from "@/lib/accountHold";
 import { invalidate, liveGeneration, subscribeLive } from "@/lib/live";
 import { useSession } from "@/store/session";
 import { useAlertsStore } from "@/store/alerts";
@@ -17,8 +18,9 @@ import { shouldToast, useToasts, useViewing } from "@/store/toasts";
 export function useAlertStream(enabled = true): void {
   const userId = useSession((s) => s.user?.id ?? null);
   const verification = useSession((s) => s.user?.verificationStatus);
+  const held = useSession((s) => accountHold(s.user) != null);
   useEffect(() => {
-    if (!enabled || !userId) return;
+    if (!enabled || !userId || held) return;
     const generation = liveGeneration();
     const startedAt = Date.now();
     let stopped = false;
@@ -92,5 +94,5 @@ export function useAlertStream(enabled = true): void {
       stopped = true; handle?.close(); appState.remove(); unsubscribe(); clearInterval(fallback);
       if (timer) clearTimeout(timer);
     };
-  }, [enabled, userId, verification]);
+  }, [enabled, userId, verification, held]);
 }
