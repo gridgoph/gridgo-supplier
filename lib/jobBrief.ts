@@ -74,6 +74,8 @@ type BriefOrder = Pick<
   | "deliveryDistanceMeters"
   | "supplierPriceMinor"
   | "timeline"
+  | "pickupChecklist"
+  | "pickupCountItems"
 >;
 
 function plural(count: number, one: string, many: string): string {
@@ -155,7 +157,7 @@ export function handoffSummary(order: BriefOrder): string {
 
 /** True once the package is ready to leave, until the client has it. */
 export function hasHandoff(order: BriefOrder): boolean {
-  return ["ready", "rider_assigned", "with_rider"].includes(custodyForOrder(order).state);
+  return ["ready", "rider_assigned", "pickup_blocked", "with_rider"].includes(custodyForOrder(order).state);
 }
 
 export function historySummary(order: BriefOrder): { summary: string; empty: boolean } {

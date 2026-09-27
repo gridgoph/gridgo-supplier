@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 
+import { CounterCheckPanel } from "@/components/CounterCheckPanel";
 import { EmptyState } from "@/components/EmptyState";
 import { JobActionBar } from "@/components/JobActionBar";
 import { JobBrief } from "@/components/JobBrief";
@@ -15,12 +16,13 @@ import { formatDeadlineFull } from "@/lib/dates";
 import { defaultBriefSection, hasHandoff, workspaceBriefSections } from "@/lib/jobBrief";
 import {
   actionsForJob,
-  presentOrderState,
+  presentJobStatus,
   routeForAction,
   waitingOn,
   type SupplierAction,
 } from "@/lib/jobState";
 import { payoutPlanOf } from "@/lib/milestones";
+import { counterCheck } from "@/lib/pickupCheck";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useViewing } from "@/store/toasts";
 import { useJob } from "@/hooks/useJob";
@@ -104,7 +106,7 @@ export default function JobWorkspaceScreen() {
     );
   }
 
-  const status = presentOrderState(job.state);
+  const status = presentJobStatus(job);
   const actions = actionsForJob(job);
   const primary = actions.find((a) => a.primary) ?? null;
   const secondary = actions.filter((a) => !a.primary);
@@ -112,6 +114,13 @@ export default function JobWorkspaceScreen() {
   const waiting = waitingOn(job.state, payoutPlanOf(job));
   const handoff = hasHandoff(job);
   const hasSteps = Boolean(primary) || secondary.length > 0 || handoff;
+  // A counter check that stopped the pickup, or is waiting to be repeated.
+  const check = job.state === "rider_assigned" ? counterCheck(job) : null;
+  const counterIssue = check && check.stage !== "passed" ? check : null;
+
+  function messageOperations() {
+    router.push({ pathname: "/report", params: { orderId: job!.id, title: job!.title } });
+  }
 
   function openStep(action: SupplierAction) {
     router.push({
@@ -178,9 +187,14 @@ export default function JobWorkspaceScreen() {
           Whose move it is, said before the detail. A screen that only says
           "nothing to do" leaves a supplier guessing; this one names the
           person or the clock the job is waiting on, in two lines, where the
-          eye lands after the track.
+          eye lands after the track. A stopped pickup outranks it: that is the
+          one thing on this job the shop has to fix.
         */}
-        {!primary ? (
+        {counterIssue ? (
+          <View className="mt-6">
+            <CounterCheckPanel check={counterIssue} onMessageOperations={messageOperations} />
+          </View>
+        ) : !primary ? (
           <View className="gg-panel mt-6 gap-1">
             <Text className="text-body font-medium text-text-primary">{waiting.title}</Text>
             <Text className="text-body text-text-secondary">{waiting.body}</Text>
@@ -218,14 +232,11 @@ export default function JobWorkspaceScreen() {
           Last, and charcoal: the way out when the job itself is what is wrong.
           The report carries this job's reference, so Operations starts from it.
         */}
-        <View className="mt-8">
-          <SecondaryButton
-            label="Report a problem with this job"
-            onPress={() =>
-              router.push({ pathname: "/report", params: { orderId: job.id, title: job.title } })
-            }
-          />
-        </View>
+        {counterIssue ? null : (
+          <View className="mt-8">
+            <SecondaryButton label="Report a problem with this job" onPress={messageOperations} />
+          </View>
+        )}
       </ScrollView>
 
       {hasSteps ? (

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
+import { CounterCheckPanel } from "@/components/CounterCheckPanel";
 import { FlowScreen } from "@/components/FlowScreen";
 import { PackageInvoiceNotice } from "@/components/PackageInvoiceNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -10,6 +11,7 @@ import { SpecRow } from "@/components/SpecRow";
 import { StatusChip } from "@/components/StatusChip";
 import { custodyForOrder, HANDOFF_SEQUENCE } from "@/lib/handoff";
 import { findAction } from "@/lib/jobState";
+import { counterCheck, countTargets } from "@/lib/pickupCheck";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
 import { useJobDrafts } from "@/store/jobDrafts";
@@ -45,6 +47,10 @@ export default function HandoffScreen() {
   // The package is still at the counter until the rider confirms pickup.
   const packing = custody ? custody.state !== "with_rider" && custody.state !== "delivered" : false;
   const step = job ? findAction(job, "ready_for_pickup") : null;
+  // What the rider counts, per line, so the shop can count it first.
+  const targets = job ? countTargets(job) : [];
+  const check = job?.state === "rider_assigned" ? counterCheck(job) : null;
+  const counterIssue = check && check.stage !== "passed" ? check : null;
 
   async function markReady() {
     if (pending.current) return;
@@ -116,9 +122,30 @@ export default function HandoffScreen() {
               label="Collect from"
               value={job.pickup?.label || "Your shop address on file"}
             />
-            <SpecRow label="Pieces" value={`${job.quantity}`} />
+            {targets.length === 1 ? (
+              <SpecRow label="Pieces the rider counts" value={targets[0].expected.toLocaleString("en-PH")} />
+            ) : targets.length > 1 ? (
+              targets.map((target) => (
+                <SpecRow
+                  key={target.key}
+                  label={target.name}
+                  value={`${target.expected.toLocaleString("en-PH")} pieces`}
+                />
+              ))
+            ) : (
+              <SpecRow label="Pieces" value={`${job.quantity}`} />
+            )}
           </View>
         </View>
+      ) : null}
+
+      {counterIssue ? (
+        <CounterCheckPanel
+          check={counterIssue}
+          onMessageOperations={() =>
+            router.push({ pathname: "/report", params: { orderId: job!.id, title: job!.title } })
+          }
+        />
       ) : null}
 
       {packing ? <PackageInvoiceNotice /> : null}

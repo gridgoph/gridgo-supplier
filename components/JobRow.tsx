@@ -5,7 +5,7 @@ import { orderReferenceSpoken } from "@/lib/orderReference";
 import { StatusChip } from "@/components/StatusChip";
 import type { Order } from "@/lib/api";
 import { formatDeadlineTime } from "@/lib/dates";
-import { presentOrderState, primaryAction } from "@/lib/jobState";
+import { presentJobStatus, primaryAction } from "@/lib/jobState";
 import { deadlineUrgency } from "@/lib/urgency";
 
 type Props = {
@@ -26,7 +26,7 @@ type Props = {
  * happens on that job's own screen.
  */
 export function JobRow({ job, now = new Date(), onPress }: Props) {
-  const status = presentOrderState(job.state);
+  const status = presentJobStatus(job);
   const urgency = deadlineUrgency(job.promisedDate || job.deadline, now);
   const next = primaryAction(job);
   const time = formatDeadlineTime(job.promisedDate || job.deadline);

@@ -132,6 +132,35 @@ export type ProductionItem = {
 /** One design link on an order line, snapshotted at checkout. HTTPS by contract. */
 export type ArtworkLink = { formatCode: string; url: string };
 
+/**
+ * What the rider counts at the counter for one line, in pieces. GRIDGO derives
+ * it from the order's snapshot (a pack of 100 ordered twice is 200). `lineItemId`
+ * is null on an order older than line items. Read through `lib/pickupCheck.ts`.
+ */
+export type PickupCountItem = {
+  lineItemId: string | null;
+  itemName: string;
+  expectedQuantity: number;
+};
+
+/**
+ * The rider's latest check at the counter (gridgo-api
+ * `docs/OPERATIONAL_MODEL_V2_API.md#counter-count`). `counts` is absent on a
+ * check recorded before counts existed — that is "not recorded", never zero.
+ * Read through `lib/pickupCheck.ts`.
+ */
+export type PickupChecklist = {
+  status: "passed" | "failed_escalated" | "escalation_resolved" | string;
+  checks?: { code: string; passed: boolean }[];
+  counts?: { lineItemId: string | null; expectedQuantity: number; countedQuantity: number }[];
+  failureNote?: string | null;
+  evidenceFileIds?: string[];
+  completedAt?: string | null;
+  completedBy?: string | null;
+  escalationId?: string | null;
+  handoffSignature?: { signerName: string; signedAt: string } | null;
+};
+
 export type Order = {
   id: string;
   clientId: string;
@@ -192,6 +221,10 @@ export type Order = {
   /** Every Proof of Fulfilment on this job, from this shop and the rider. */
   fulfilmentProofFileIds?: string[];
   deliveryPhotoFileIds?: string[];
+  /** The rider's latest counter check. Absent until a rider has checked it. */
+  pickupChecklist?: PickupChecklist | null;
+  /** What the rider counts per line; null when GRIDGO cannot establish it. */
+  pickupCountItems?: PickupCountItem[] | null;
   timeline: {
     at: string;
     state: string;
