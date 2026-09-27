@@ -6,7 +6,7 @@ import { orderReferenceSpoken } from "@/lib/orderReference";
 import { StatusChip } from "@/components/StatusChip";
 import { formatDeadlineFull } from "@/lib/dates";
 import { formatPhp, type Order } from "@/lib/api";
-import { presentOrderState } from "@/lib/jobState";
+import { presentJobStatus } from "@/lib/jobState";
 import { deadlineUrgency } from "@/lib/urgency";
 
 type Props = {
@@ -31,7 +31,7 @@ type Props = {
  * workspace.
  */
 export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
-  const status = presentOrderState(job.state);
+  const status = presentJobStatus(job);
   const urgency = deadlineUrgency(job.promisedDate || job.deadline);
   const spec = [
     `${job.quantity} × ${job.size || "size not set"}`,

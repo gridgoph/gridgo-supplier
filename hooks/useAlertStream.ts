@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { AppState } from "react-native";
+import { presentAlertBody } from "@/lib/alertStages";
 import { openAlertStream, type AlertStreamHandle } from "@/lib/alertStream";
 import { accountHold } from "@/lib/accountHold";
 import { invalidate, liveGeneration, subscribeLive } from "@/lib/live";
@@ -76,7 +77,7 @@ export function useAlertStream(enabled = true): void {
           if (seen.size > 500) seen.delete(seen.values().next().value as string);
           const toasting = Date.parse(notification.at) >= startedAt && shouldToast(notification, useViewing.getState(), useAlertsStore.getState().dismissed);
           if (toasting) {
-            useToasts.getState().show({id:notification.id,title:notification.title,body:notification.body,orderId:notification.orderId});
+            useToasts.getState().show({id:notification.id,title:notification.title,body:presentAlertBody(notification),orderId:notification.orderId});
           }
           playProductionNudgeSting({ type: notification.type, id: notification.id, toasting });
         },

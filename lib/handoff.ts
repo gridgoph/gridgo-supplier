@@ -14,6 +14,7 @@ export type CustodyState =
   | "in_shop"
   | "ready"
   | "rider_assigned"
+  | "pickup_blocked"
   | "with_rider"
   | "delivered";
 
@@ -29,7 +30,21 @@ export type Custody = {
   nextActor: "You" | "Rider" | "Operations" | "Client";
 };
 
-export function custodyForOrder(order: Pick<Order, "state" | "riderId">): Custody {
+export function custodyForOrder(
+  order: Pick<Order, "state" | "riderId" | "pickupChecklist">,
+): Custody {
+  // A failed counter check keeps the package with the shop while the rider waits.
+  if (order.state === "rider_assigned" && order.pickupChecklist?.status === "failed_escalated") {
+    return {
+      state: "pickup_blocked",
+      label: "Pickup blocked at the counter",
+      tone: "error",
+      icon: "circle-x",
+      detail:
+        "The rider's check did not pass, so the package stays with your shop. Fix it with Operations; the rider will check again.",
+      nextActor: "You",
+    };
+  }
   switch (order.state) {
     case "ready_for_dispatch":
       return {
@@ -48,7 +63,7 @@ export function custodyForOrder(order: Pick<Order, "state" | "riderId">): Custod
         tone: "info",
         icon: "clock",
         detail:
-          "A rider has accepted and is travelling to your shop. Run the six pickup checks together at the counter. The rider records the result before the package leaves.",
+          "A rider has accepted and is travelling to your shop. The rider counts every piece and runs the six pickup checks together with you at the counter, then records the result before the package leaves.",
         nextActor: "Rider",
       };
     case "picked_up":
@@ -110,13 +125,13 @@ export const HANDOFF_SEQUENCE = [
     id: "checks",
     title: "You check it together",
     detail:
-      "The six pickup checks, done with the rider: the count against the order, the item against the spec, visible defects, the packing, the paperwork, and your sign-off.",
+      "The rider counts every piece against the order, then runs the six pickup checks with you: the count, the item against the spec, visible defects, the packing, the paperwork, and your sign-off.",
   },
   {
     id: "leaves",
     title: "It leaves when every check passes",
     detail:
-      "The rider records the result in their GRIDGO app. A failed check keeps the package with you until Operations resolves it.",
+      "The rider records the result in their GRIDGO app. A failed check or a wrong count keeps the package with you until you fix it with Operations and the rider checks again.",
   },
 ] as const;
 

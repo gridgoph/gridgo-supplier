@@ -15,7 +15,7 @@ import { spacing, touchTarget, typography } from "@/constants/theme";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { localOnlyCaveat } from "@/lib/alertsApi";
-import { stageForAlert } from "@/lib/alertStages";
+import { PICKUP_ISSUE_ALERT, stageForAlert } from "@/lib/alertStages";
 import { jobScreenHref } from "@/lib/productionNudge";
 import { isAlertUnread, useAlertsStore, visibleAlerts } from "@/store/alerts";
 import { askConfirm } from "@/store/sheets";
@@ -237,7 +237,8 @@ export default function NotificationsScreen() {
         onDelete={() => void confirmDelete(alert)}
         job={job}
         onOpen={
-          alert.orderId && (job || alert.type === "shop_production_inactive")
+          // A notice asking the shop to act opens its job even before the list has it.
+          alert.orderId && (job || alert.type === "shop_production_inactive" || alert.type === PICKUP_ISSUE_ALERT)
             ? () => router.push(jobScreenHref(alert.orderId as string))
             : undefined
         }

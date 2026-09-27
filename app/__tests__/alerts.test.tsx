@@ -127,3 +127,28 @@ it("updates the visible inbox from a silent notification event without navigatio
   await act(async () => { invalidate("notifications"); });
   expect(await screen.findByText("Live decision arrived")).toBeTruthy();
 });
+
+it("opens the job from a pickup-issue notice, in the shop's words, even before the job list has it", async () => {
+  const { router } = jest.requireMock("expo-router") as { router: { push: jest.Mock } };
+  router.push.mockClear();
+  useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, localOnly: false });
+  api.listNotifications.mockResolvedValue([{
+    id: "ntf_pickup",
+    userId: "user_supplier",
+    type: "shop_pickup_issue_changed",
+    orderId: "ord_blocked",
+    title: "Fix the failed pickup check before handoff",
+    body: "quantity_match: One tarp missing. Fix these items with Operations before the rider repeats the checks and count.",
+    read: false,
+    at: "2026-09-27T06:14:00.000Z",
+  }]);
+  api.listJobs.mockResolvedValue([]);
+
+  await render(<AlertsScreen />);
+
+  const body = await screen.findByText(/Did not pass: count against the order\. The rider wrote: “One tarp missing\.”/);
+  expect(screen.queryByText(/quantity_match/)).toBeNull();
+  fireEvent.press(body);
+  await waitFor(() => expect(router.push).toHaveBeenCalled());
+  expect(JSON.stringify(router.push.mock.calls[0][0])).toContain("ord_blocked");
+});
