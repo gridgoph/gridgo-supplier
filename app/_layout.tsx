@@ -23,6 +23,7 @@ import {
 } from "react-native-safe-area-context";
 
 import { BrandIntro } from "@/components/BrandIntro";
+import { SessionShell } from "@/components/SessionShell";
 import { ToastHost } from "@/components/ToastHost";
 import { ClerkSessionBridge } from "@/components/ClerkSessionBridge";
 
@@ -193,6 +194,7 @@ function RootStack({ introDone }: { introDone: boolean }) {
   usePushPromptCheck(settled && !updateWaiting);
 
   return (
+    <SessionShell>
     <Stack key={rootStackKey(user)} screenOptions={stackScreenOptions(scheme, top)}>
       {/* Launch redirect stays public so cold start always has an anchor. */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -429,5 +431,6 @@ function RootStack({ introDone }: { introDone: boolean }) {
         />
       </Stack.Protected>
     </Stack>
+    </SessionShell>
   );
 }

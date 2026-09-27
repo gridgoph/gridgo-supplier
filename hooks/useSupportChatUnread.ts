@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { accountHold } from "@/lib/accountHold";
 import { getSupportChatMe } from "@/lib/api";
 import { openSupportChatStream } from "@/lib/supportChatStream";
 import { useSession } from "@/store/session";
@@ -18,10 +19,11 @@ function unreadFromMe(me: {
 /** Keeps the header badge honest across every Operations conversation. */
 export function useSupportChatUnread(enabled = true): void {
   const owner = useSession((s) => s.user?.id ?? null);
+  const held = useSession((s) => accountHold(s.user) != null);
   const setUnreadCount = useSupportChatStore((s) => s.setUnreadCount);
 
   useEffect(() => {
-    if (!enabled || !owner) {
+    if (!enabled || !owner || held) {
       setUnreadCount(0);
       return;
     }
@@ -41,5 +43,5 @@ export function useSupportChatUnread(enabled = true): void {
       cancelled = true;
       stream.close();
     };
-  }, [enabled, owner, setUnreadCount]);
+  }, [enabled, owner, held, setUnreadCount]);
 }

@@ -43,6 +43,9 @@ export type User = {
   email: string;
   name: string;
   role: Role;
+  accountStatus?: "active" | "suspended" | "removed";
+  accountStatusReason?: string | null;
+  accountStatusAt?: string | null;
   phone?: string;
   orgName?: string;
   supplierName?: string;
