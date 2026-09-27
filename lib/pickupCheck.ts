@@ -188,6 +188,28 @@ export function countTargets(
   }));
 }
 
+/** The sentence the platform closes a shop's pickup-issue notice with. */
+const NOTICE_TAIL = "Fix these items with Operations before the rider repeats the checks and count.";
+
+/**
+ * The shop's pickup-issue notice, rebuilt in its own words.
+ *
+ * The platform writes it as "quantity_match, visible_defects: <rider's
+ * note>. Fix these items…" — codes first, and a second full stop when the
+ * rider ended the note with one. A body that does not have that shape passes
+ * through with only its codes translated.
+ */
+export function presentPickupIssueNotice(body: string): string {
+  const match = /^([a-z_]+(?:, [a-z_]+)*): ([\s\S]*?)\.? *$/.exec(
+    body.endsWith(NOTICE_TAIL) ? body.slice(0, -NOTICE_TAIL.length).trim() : "",
+  );
+  if (!match) return presentCheckCodes(body);
+  const failed = match[1].split(", ").map((code) => checkLabel(code).toLowerCase());
+  const note = match[2].trim();
+  const said = note ? ` The rider wrote: “${note.replace(/\.$/, "")}.”` : "";
+  return `Did not pass: ${failed.join(", ")}.${said} Fix it with Operations; the rider will check again.`;
+}
+
 /**
  * Check codes the platform writes into a note or an alert, in the shop's
  * words. A failed pickup reaches the timeline as "Pickup blocked and

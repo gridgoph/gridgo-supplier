@@ -1,16 +1,15 @@
 import type { Notification, Order } from "@/lib/api";
-import { presentCheckCodes } from "@/lib/pickupCheck";
+import { presentPickupIssueNotice } from "@/lib/pickupCheck";
 
 /** The alert type a failed or resolved counter check reaches the shop as. */
 export const PICKUP_ISSUE_ALERT = "shop_pickup_issue_changed";
 
 /**
- * An alert's body in the shop's words. A failed counter check arrives as
- * "quantity_match, visible_defects: <rider's note>. Fix these items…", and
- * those codes must not reach a shop's screen.
+ * An alert's body in the shop's words. A failed counter check arrives with
+ * the platform's check codes, which must not reach a shop's screen.
  */
 export function presentAlertBody(alert: Pick<Notification, "type" | "body">): string {
-  return alert.type === PICKUP_ISSUE_ALERT ? presentCheckCodes(alert.body) : alert.body;
+  return alert.type === PICKUP_ISSUE_ALERT ? presentPickupIssueNotice(alert.body) : alert.body;
 }
 
 /**

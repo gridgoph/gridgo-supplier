@@ -172,9 +172,25 @@ describe("a blocked pickup across the app", () => {
       type: "shop_pickup_issue_changed",
       body: "quantity_match, visible_defects: Twelve missing. Fix these items with Operations before the rider repeats the checks and count.",
     });
-    expect(body).not.toMatch(/_/);
-    expect(body).toContain("the count against the order, visible defects");
+    expect(body).toBe(
+      "Did not pass: count against the order, free of visible defects. The rider wrote: “Twelve missing.” Fix it with Operations; the rider will check again.",
+    );
     expect(presentCheckCodes("a person's note")).toBe("a person's note");
+  });
+
+  it("does not double the full stop when the rider ended the note with one", () => {
+    const body = presentAlertBody({
+      type: "shop_pickup_issue_changed",
+      body: "visible_defects: Torn grommet.. Fix these items with Operations before the rider repeats the checks and count.",
+    });
+    expect(body).toContain("“Torn grommet.”");
+    expect(body).not.toContain("..");
+  });
+
+  it("translates the codes of a notice in a shape it does not know", () => {
+    expect(presentAlertBody({ type: "shop_pickup_issue_changed", body: "Pickup failed: documentation" })).toBe(
+      "Pickup failed: the paperwork",
+    );
   });
 
   it("places a pickup-issue alert at the pickup stage, not after delivery", () => {

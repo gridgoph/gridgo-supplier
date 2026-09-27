@@ -205,9 +205,12 @@ export function workspaceBriefSections(order: BriefOrder): JobBriefSectionId[] {
  *
  * Deciding or about to start printing, the shop reads the specification.
  * Owing evidence, or past the counter, it is watching the money. With a rider
- * on the way, it is the pickup. Nothing else opens itself.
+ * on the way, it is the pickup — unless the rider's check stopped it, when the
+ * shop is fixing the work against the specification. Nothing else opens itself.
  */
 export function defaultBriefSection(order: BriefOrder): JobBriefSectionId {
+  // A stopped pickup has its own panel; fixing it starts from the specification.
+  if (custodyForOrder(order).state === "pickup_blocked") return "make";
   if (hasHandoff(order)) return "handoff";
   if (nextShopProof(order as Order)) return "earnings";
   const step = primaryAction(order)?.kind;

@@ -146,7 +146,7 @@ it("opens the job from a pickup-issue notice, in the shop's words, even before t
 
   await render(<AlertsScreen />);
 
-  const body = await screen.findByText(/the count against the order: One tarp missing/);
+  const body = await screen.findByText(/Did not pass: count against the order\. The rider wrote: “One tarp missing\.”/);
   expect(screen.queryByText(/quantity_match/)).toBeNull();
   fireEvent.press(body);
   await waitFor(() => expect(router.push).toHaveBeenCalled());

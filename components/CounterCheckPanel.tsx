@@ -38,14 +38,15 @@ export function CounterCheckPanel({ check, onMessageOperations }: Props) {
       testID="counter-check"
     >
       <View className="gap-2">
-        <View className="flex-row flex-wrap items-center justify-between gap-2">
-          <StatusChip tone={check.tone} label={check.status} icon={check.icon} />
-          {check.checkedAt ? (
-            <Text className="text-caption text-text-muted">
-              {earlier ? "Last checked" : "Checked"} {formatTimelineAt(check.checkedAt)}
-            </Text>
-          ) : null}
-        </View>
+        {/*
+          No chip of its own: the job's chip above already says "Pickup
+          blocked", and two of them read as two problems.
+        */}
+        {check.checkedAt ? (
+          <Text className="text-caption text-text-muted">
+            {earlier ? "Rider last checked it" : "Rider checked it"} {formatTimelineAt(check.checkedAt)}
+          </Text>
+        ) : null}
         <Text className="text-h3 text-text-primary" accessibilityRole="header">
           {check.headline}
         </Text>

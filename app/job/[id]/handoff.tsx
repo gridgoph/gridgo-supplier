@@ -92,7 +92,12 @@ export default function HandoffScreen() {
       onRetry={() => void reload()}
       title="Package for pickup"
       subject={job?.title}
-      lede={custody?.detail ?? "Getting a job ready for the rider who collects it."}
+      // A stopped pickup is explained once, in its own panel below.
+      lede={
+        counterIssue
+          ? "The package stays at your counter until the rider checks it again."
+          : custody?.detail ?? "Getting a job ready for the rider who collects it."
+      }
       actionError={action.error}
       footer={
         step ? (
@@ -115,7 +120,9 @@ export default function HandoffScreen() {
           <View className="flex-row">
             <StatusChip tone={custody.tone} label={custody.label} icon={custody.icon} />
           </View>
-          <Text className="text-body text-text-secondary">{custody.detail}</Text>
+          {counterIssue ? null : (
+            <Text className="text-body text-text-secondary">{custody.detail}</Text>
+          )}
           <View>
             <SpecRow label="Next move by" value={custody.nextActor} />
             <SpecRow
