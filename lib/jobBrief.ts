@@ -3,6 +3,7 @@ import { formatPhp } from "@/lib/api";
 import { formatDeadlineFull } from "@/lib/dates";
 import { custodyForOrder } from "@/lib/handoff";
 import { primaryAction } from "@/lib/jobState";
+import { linkOnlySummary, orderDesignLinks } from "@/lib/designLink";
 import { earningsSplit, milestoneViews, nextShopProof, payoutPlanCopy } from "@/lib/milestones";
 import { orderArtwork } from "@/lib/orderArtwork";
 import { unreleasedMinor } from "@/lib/payout";
@@ -96,10 +97,14 @@ export function makeSummary(order: BriefOrder): string {
   return parts.join(" · ");
 }
 
+/** Print files and design links both count: a link is artwork, never "no print file". */
 export function artworkSummary(order: BriefOrder): { summary: string; empty: boolean } {
   const count = orderArtwork(order).filter((file) => file.kind === "artwork").length;
-  if (!count) return { summary: "No print file attached yet", empty: true };
-  return { summary: plural(count, "print file", "print files"), empty: false };
+  const links = orderDesignLinks(order);
+  if (!count && !links.length) return { summary: "No print file attached yet", empty: true };
+  if (!count) return { summary: linkOnlySummary(links), empty: false };
+  const files = plural(count, "print file", "print files");
+  return { summary: links.length ? `${files} · ${plural(links.length, "design link", "design links")}` : files, empty: false };
 }
 
 export function mockupSummary(order: BriefOrder): { summary: string; empty: boolean } {
