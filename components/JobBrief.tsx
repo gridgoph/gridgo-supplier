@@ -21,6 +21,7 @@ import {
   jobBriefSections,
   type JobBriefSectionId,
 } from "@/lib/jobBrief";
+import { orderArtwork } from "@/lib/orderArtwork";
 import { orderProductionItems, productionSpecRows } from "@/lib/productionSpecs";
 
 type Props = {
@@ -148,9 +149,12 @@ function SectionBody({
     case "artwork":
       return (
         <View className="gap-2">
-          <Text className="text-caption text-text-muted">
-            The files you print from, as the client approved them. Open one to check it at full size.
-          </Text>
+          {/* A link-only job gets its own plain sentence from the panel instead. */}
+          {orderArtwork(order).some((file) => file.kind === "artwork") ? (
+            <Text className="text-caption text-text-muted">
+              The files you print from, as the client approved them. Open one to check it at full size.
+            </Text>
+          ) : null}
           <ArtworkPanel order={order} kinds={["artwork"]} />
         </View>
       );

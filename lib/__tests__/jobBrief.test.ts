@@ -55,6 +55,13 @@ describe("job brief summaries", () => {
     expect(mockupSummary(order({ productionItems: items }))).toEqual({ summary: "1 reference picture", empty: false });
   });
 
+  it("counts a design link as artwork, and says when it is the only artwork", () => {
+    const link = { formatCode: "canva_link", url: "https://www.canva.com/design/ABC/view" };
+    const item = { id: "l1", itemName: "Flyers", quantity: 500, pricingUnit: null, packageQty: null, measurement: null, structuredSpec: {}, options: [], artworkFileId: null, mockupFileId: null, artworkLinks: [link] };
+    expect(artworkSummary(order({ productionItems: [item] }))).toEqual({ summary: "Canva link only, no file uploaded", empty: false });
+    expect(artworkSummary(order({ productionItems: [{ ...item, artworkFileId: "f1" }] }))).toEqual({ summary: "1 print file · 1 design link", empty: false });
+  });
+
   it("says plainly when nothing is attached, and marks the row as not openable", () => {
     expect(artworkSummary(order())).toEqual({ summary: "No print file attached yet", empty: true });
     expect(mockupSummary(order())).toEqual({ summary: "None attached — go by the artwork", empty: true });
