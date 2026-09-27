@@ -121,7 +121,16 @@ export type ProductionItem = {
   options: { groupName: string; label: string }[];
   artworkFileId: string | null;
   mockupFileId: string | null;
+  /**
+   * Design links the client sent for this line (Canva, Drive, Dropbox,
+   * WeTransfer or another host), beside or instead of an uploaded file.
+   * Absent on an API older than the links; read through `lib/designLink.ts`.
+   */
+  artworkLinks?: ArtworkLink[];
 };
+
+/** One design link on an order line, snapshotted at checkout. HTTPS by contract. */
+export type ArtworkLink = { formatCode: string; url: string };
 
 export type Order = {
   id: string;

@@ -4,9 +4,11 @@ import { ExternalLink, FileImage, FileText } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
+import { DesignLinks } from "@/components/DesignLinks";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { useThemeColors } from "@/hooks/useTheme";
 import { getFile, getDownloadUrl, type Order, type StoredFile } from "@/lib/api";
+import { orderDesignLinks } from "@/lib/designLink";
 import { describeArtwork, isArtworkImage, readOrderArtwork, orderArtwork, type ArtworkReference } from "@/lib/orderArtwork";
 
 type Props = {
@@ -18,15 +20,39 @@ type Props = {
   kinds?: ArtworkReference["kind"][];
 };
 
-/** All production files, each with independent loading and recovery. */
+/**
+ * All production files, each with independent loading and recovery.
+ *
+ * Wherever print artwork is drawn, the client's design links are drawn with
+ * it: a link is the artwork for a job that has no file, so the panel names it
+ * plainly instead of falling through to "no print file".
+ */
 export function ArtworkPanel({ order, kinds }: Props) {
   const files = orderArtwork(order).filter((file) => !kinds || kinds.includes(file.kind));
-  if (!files.length) {
+  const links = !kinds || kinds.includes("artwork") ? orderDesignLinks(order) : [];
+  const showItem = (order.productionItems?.length ?? 0) > 1;
+  if (!files.length && !links.length) {
     return <Text className="text-body text-text-secondary">{emptyCopy(order, kinds)}</Text>;
   }
-  return <View className="gap-3">{files.map((file) => (
-    <ArtworkFile key={`${order.id}:${file.fileId}`} orderId={order.id} reference={file} />
-  ))}</View>;
+  return (
+    <View className="gap-3">
+      {files.map((file) => (
+        <ArtworkFile key={`${order.id}:${file.fileId}`} orderId={order.id} reference={file} />
+      ))}
+      {links.length ? (
+        <View className="gap-2">
+          <Text className="text-body text-text-secondary">
+            {files.length
+              ? `The client also sent ${links.length === 1 ? "a design link" : "design links"}.`
+              : links.length === 1
+                ? "The client sent the design as a link, not an uploaded file. Open it to get the artwork. If it asks you to sign in or will not open, ask Operations."
+                : "The client sent the design as links, not uploaded files. Open each one to get the artwork. If one asks you to sign in or will not open, ask Operations."}
+          </Text>
+          <DesignLinks links={links} showItem={showItem} />
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 /** What an empty panel says, for the files it was asked to show. */
