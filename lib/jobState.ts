@@ -1,6 +1,7 @@
 import type { MilestoneCode, Order, PayoutPlanVersion } from "@/lib/api";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 import { CURRENT_PAYOUT_PLAN, nextShopProof } from "@/lib/milestones";
+import { counterCheck, presentCheckCodes } from "@/lib/pickupCheck";
 
 /**
  * Supplier-facing order state: plain labels, tones, and the steps the mobile
@@ -89,6 +90,23 @@ export function presentOrderState(state: string): StatePresentation {
     default:
       return { label: "In progress", tone: "neutral", icon: "clock" };
   }
+}
+
+/**
+ * The chip for one job. The state alone says "Rider assigned" while a failed
+ * counter check has the package stuck at the shop, so a check that is holding
+ * the pickup speaks over it.
+ */
+export function presentJobStatus(
+  order: Pick<Order, "state" | "title" | "timeline" | "pickupChecklist" | "pickupCountItems">,
+): StatePresentation {
+  if (order.state === "rider_assigned") {
+    const check = counterCheck(order);
+    if (check && check.stage !== "passed") {
+      return { label: check.status, tone: check.tone, icon: check.icon };
+    }
+  }
+  return presentOrderState(order.state);
 }
 
 /**
@@ -353,33 +371,13 @@ export function presentTimelineState(state: string): string {
 }
 
 /**
- * The rider's six pickup checks, in the words a shop would use for them.
- *
- * These reach this app inside a timeline note the platform writes — a failed
- * pickup is recorded as "Pickup blocked and escalated: visible_defects" — so a
- * raw code lands on a shop's screen unless it is translated on the way past.
- */
-const PICKUP_CHECK_LABELS: Record<string, string> = {
-  quantity_match: "the count against the order",
-  specification_match: "the item against the spec",
-  visible_defects: "visible defects",
-  packaging_integrity: "the packing",
-  documentation: "the paperwork",
-  supplier_sign_off: "your sign-off",
-};
-
-/**
  * A timeline note, with anything the platform wrote in its own vocabulary
  * turned into the shop's.
  *
  * Notes are mostly written by people and pass through untouched. The exception
- * is the ones the platform composes from codes, and those are the ones a shop
- * cannot read.
+ * is the ones the platform composes from check codes — "Pickup blocked and
+ * escalated: visible_defects" — and those are the ones a shop cannot read.
  */
 export function presentTimelineNote(note: string): string {
-  let out = note;
-  for (const [code, label] of Object.entries(PICKUP_CHECK_LABELS)) {
-    out = out.replaceAll(code, label);
-  }
-  return out;
+  return presentCheckCodes(note);
 }

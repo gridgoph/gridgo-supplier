@@ -4,6 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import Animated, { FadeIn, LinearTransition, useReducedMotion } from "react-native-reanimated";
 
 import { ArtworkPanel } from "@/components/ArtworkPanel";
+import { CountLedger } from "@/components/CounterCheckPanel";
 import { JobTimeline } from "@/components/JobTimeline";
 import { MilestoneList } from "@/components/MilestoneList";
 import { SpecRow } from "@/components/SpecRow";
@@ -11,7 +12,7 @@ import { StatusChip } from "@/components/StatusChip";
 import { motion } from "@/constants/theme";
 import { useThemeColors } from "@/hooks/useTheme";
 import { formatPhp, type Order } from "@/lib/api";
-import { formatDeadlineFull } from "@/lib/dates";
+import { formatDeadlineFull, formatTimelineAt } from "@/lib/dates";
 import { custodyForOrder } from "@/lib/handoff";
 import { earningsSplit, milestoneViews, payoutPlanCopy } from "@/lib/milestones";
 import { unreleasedMinor } from "@/lib/payout";
@@ -22,6 +23,7 @@ import {
   type JobBriefSectionId,
 } from "@/lib/jobBrief";
 import { orderArtwork } from "@/lib/orderArtwork";
+import { counterCheck } from "@/lib/pickupCheck";
 import { orderProductionItems, productionSpecRows } from "@/lib/productionSpecs";
 
 type Props = {
@@ -235,12 +237,24 @@ function SectionBody({
     }
     case "handoff": {
       const custody = custodyForOrder(order);
+      // Once the rider has taken it, the check it passed is the handoff's record.
+      const check = counterCheck(order);
       return (
         <View className="gap-2">
           <View className="flex-row">
             <StatusChip tone={custody.tone} label={custody.label} icon={custody.icon} />
           </View>
           <Text className="text-body text-text-secondary">{custody.detail}</Text>
+          {check?.stage === "passed" ? (
+            <View className="gap-3 pt-2">
+              <Text className="text-body text-text-secondary">
+                {check.headline} at the counter
+                {check.checkedAt ? ` on ${formatTimelineAt(check.checkedAt)}` : ""}.{" "}
+                {check.detail}
+              </Text>
+              <CountLedger counts={check.counts} label="Counted at the counter" compact />
+            </View>
+          ) : null}
         </View>
       );
     }

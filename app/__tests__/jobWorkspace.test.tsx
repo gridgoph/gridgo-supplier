@@ -289,3 +289,65 @@ describe("job workspace on the escrow plan", () => {
   });
 });
 
+
+describe("job workspace after a failed counter check", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const blocked = () =>
+    job({
+      state: "rider_assigned",
+      riderId: "user_rider",
+      payoutMilestones: escrow({ production_started: "released" }, { production_started: ["file_start"] }),
+      payoutPlanVersion: 2,
+      pickupCountItems: [{ lineItemId: "cline_1", itemName: "3x5 tarpaulin", expectedQuantity: 4 }],
+      pickupChecklist: {
+        status: "failed_escalated",
+        checks: [
+          { code: "quantity_match", passed: false },
+          { code: "specification_match", passed: true },
+          { code: "visible_defects", passed: false },
+          { code: "packaging_integrity", passed: true },
+          { code: "documentation", passed: true },
+          { code: "supplier_sign_off", passed: true },
+        ],
+        counts: [{ lineItemId: "cline_1", expectedQuantity: 4, countedQuantity: 3 }],
+        failureNote: "One tarp missing, another has a torn grommet.",
+        completedAt: "2026-09-27T06:14:00.000Z",
+        completedBy: "user_rider",
+        escalationId: "esc_1",
+        handoffSignature: null,
+      },
+    });
+
+  it("says what failed, the count and the rider's note, with no payout action", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(blocked());
+
+    await render(<JobWorkspaceScreen />);
+
+    const panel = await screen.findByTestId("counter-check");
+    expect(within(panel).getByText("Fix it with Operations; the rider will check again")).toBeTruthy();
+    expect(within(panel).getByText("Count against the order")).toBeTruthy();
+    expect(within(panel).getByText("Free of visible defects")).toBeTruthy();
+    expect(within(panel).getByText("1 short")).toBeTruthy();
+    expect(within(panel).getByText("“One tarp missing, another has a torn grommet.”")).toBeTruthy();
+    expect(screen.getAllByText("Pickup blocked").length).toBeGreaterThan(0);
+    // Nothing on the job asks the shop to file or release money over it.
+    expect(screen.queryByText(/Add .* proof/)).toBeNull();
+    expect(screen.queryByText("Report a problem with this job")).toBeNull();
+  });
+
+  it("opens a message to Operations about this job", async () => {
+    const { router } = jest.requireMock("expo-router") as { router: { push: jest.Mock } };
+    (getOrder as jest.Mock).mockResolvedValue(blocked());
+
+    await render(<JobWorkspaceScreen />);
+    fireEvent.press(await screen.findByText("Message Operations"));
+
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: "/report",
+      params: { orderId: "ord_1", title: "Barangay tarpaulin" },
+    });
+  });
+});

@@ -7,6 +7,7 @@ import ReanimatedSwipeable, {
 } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { AlertStageTrack } from "@/components/AlertStageTrack";
+import { presentAlertBody } from "@/lib/alertStages";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { StatusChip } from "@/components/StatusChip";
 import { notificationImageUrl, type Notification, type Order } from "@/lib/api";
@@ -92,7 +93,7 @@ export function AlertCard({
       <Pressable
         onPress={openJob}
         accessibilityRole="button"
-        accessibilityLabel={`${unread ? "Unread. " : ""}${alert.title}. ${alert.body}`}
+        accessibilityLabel={`${unread ? "Unread. " : ""}${alert.title}. ${presentAlertBody(alert)}`}
         accessibilityHint={onOpen ? "Opens the job and marks this read" : "Marks this read"}
         // Published so a screen reader reaches both without the swipe.
         accessibilityActions={[
@@ -123,7 +124,7 @@ export function AlertCard({
           <Text
             className={unread ? "text-body text-text-secondary" : "text-body text-text-muted"}
           >
-            {alert.body}
+            {presentAlertBody(alert)}
           </Text>
           <Text className="text-caption text-text-muted">{formatNotificationAt(alert.at)}</Text>
           {owed ? <Text className="text-body font-medium text-text-primary">{owed}</Text> : null}
