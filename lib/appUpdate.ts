@@ -20,6 +20,10 @@
  * costs nothing; the next launch asks again. A development build still says
  * why, through the one-line describers below, because a prompt that silently
  * never appears cannot otherwise be diagnosed.
+ *
+ * The release body's `## What's new` section (written by CI from `whats-new/`,
+ * see `WHATS_NEW.md`) is read as a short list of plain bullets
+ * (`parseWhatsNew`) and shown in the sheet and on the Alerts card.
  */
 
 /** The public repo whose latest Release names the newest build. */
@@ -60,7 +64,62 @@ export type LatestRelease = Build & {
   publishedAt: string | null;
   /** Size of the APK attached to the Release, when there is one. */
   apkBytes: number | null;
+  /** Plain bullets from the release's `## What's new` section; empty when it has none. */
+  whatsNew: string[];
 };
+
+/**
+ * How much of a release's "What's new" a phone will show. The sheet is sized
+ * by its content, so an unbounded list would push "Update now" off the screen.
+ * `scripts/whats-new.js` holds each note to the same length.
+ */
+export const WHATS_NEW_LIMITS = { maxItems: 5, maxChars: 120 } as const;
+
+/** Heads a release's own notes, wherever they are drawn. */
+export function whatsNewTitle(versionName: string): string {
+  return `What's new in ${versionName}`;
+}
+
+const WHATS_NEW_HEADING = /^#{1,6}\s*what['’]?s\s+new\b/i;
+const ANY_HEADING = /^#{1,6}\s/;
+const BULLET = /^\s*[-*+]\s+(.*)$/;
+
+/** One bullet as plain words: no links, emphasis, code marks or HTML. */
+function plainBullet(raw: string): string {
+  const text = raw
+    .replace(/<[^>]*>/g, "")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[*_`~]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length <= WHATS_NEW_LIMITS.maxChars) return text;
+  return `${text.slice(0, WHATS_NEW_LIMITS.maxChars - 1).trimEnd()}…`;
+}
+
+/**
+ * The bullets under a release body's `## What's new` heading, as plain text.
+ *
+ * Only that section is read: the rest of the body is CI's build record, not
+ * something a shop needs. A body with no such section, or one with no bullets
+ * in it, answers `[]`, and the sheet looks as it did before notes existed.
+ * Long lists and long lines are cut to `WHATS_NEW_LIMITS`.
+ */
+export function parseWhatsNew(body: unknown): string[] {
+  if (typeof body !== "string") return [];
+  const lines = body.split(/\r?\n/);
+  const start = lines.findIndex((line) => WHATS_NEW_HEADING.test(line.trim()));
+  if (start === -1) return [];
+  const items: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (ANY_HEADING.test(line.trim())) break;
+    const bullet = BULLET.exec(line);
+    if (!bullet) continue;
+    const text = plainBullet(bullet[1]);
+    if (text) items.push(text);
+    if (items.length === WHATS_NEW_LIMITS.maxItems) break;
+  }
+  return items;
+}
 
 /** "Later" on an offer: quiet for this version for the rest of this day. */
 export type Snooze = {
@@ -108,7 +167,7 @@ export function parseLatestRelease(body: unknown): LatestRelease | null {
     }
   }
 
-  return { ...build, publishedAt, apkBytes };
+  return { ...build, publishedAt, apkBytes, whatsNew: parseWhatsNew(release.body) };
 }
 
 type FetchLike = (

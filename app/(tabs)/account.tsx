@@ -13,9 +13,11 @@ import { StatusChip } from "@/components/StatusChip";
 import * as api from "@/lib/api";
 import { clerkDisplayName } from "@/lib/clerk";
 import { standingLine } from "@/lib/reviews";
+import { WHATS_NEW_HISTORY_COPY } from "@/lib/whatsNewHistory";
 import { useThemeColors } from "@/hooks/useTheme";
 import { askConfirm } from "@/store/sheets";
 import { isMatchable, useSession } from "@/store/session";
+import { useTour } from "@/store/tour";
 
 /**
  * The shop's own account.
@@ -236,6 +238,26 @@ export default function AccountScreen() {
 
         <View className="mt-6 gap-2">
           <Text className="text-overline text-text-muted">APP</Text>
+          {/*
+            The first-run tour, again. It starts on Home, so the row takes the
+            shop there — the one navigation the tour ever does, and only
+            because the shop asked for it.
+          */}
+          {user ? (
+            <DestinationRow
+              title="Replay the tour"
+              detail="Where jobs arrive, your schedule, and adding to your catalogue"
+              onPress={() => {
+                useTour.getState().replay(user.id);
+                router.navigate("/(tabs)/home");
+              }}
+            />
+          ) : null}
+          <DestinationRow
+            title={WHATS_NEW_HISTORY_COPY.accountRow}
+            detail={WHATS_NEW_HISTORY_COPY.accountCaption}
+            onPress={() => router.push("/whats-new" as Href)}
+          />
           <DestinationRow
             title="Report a problem"
             detail="Tell Operations what went wrong. They reply in your chat"

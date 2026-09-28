@@ -14,6 +14,8 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SectionHeader } from "@/components/SectionHeader";
 import { SkeletonList } from "@/components/Skeleton";
+import { TourTarget } from "@/components/TourTarget";
+import { useTourScreen } from "@/hooks/useTourScreen";
 import { StatTile } from "@/components/StatTile";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import * as api from "@/lib/api";
@@ -96,6 +98,7 @@ export default function ScheduleScreen() {
     schedule.undatedJobs.length > 0;
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const firstLoad = loading && !loaded;
+  useTourScreen("schedule", !firstLoad);
 
   function openJob(jobId: string) {
     router.push({ pathname: "/job/[id]", params: { id: jobId } });
@@ -131,7 +134,7 @@ export default function ScheduleScreen() {
           below answers "and what exactly is on them", which is the second
           question and reads better after the first.
         */}
-        <View className="mt-2">
+        <TourTarget step="schedule.calendar" className="mt-2">
           <QueueCalendar
             days={calendarDays}
             month={viewMonth}
@@ -140,7 +143,7 @@ export default function ScheduleScreen() {
             onSelectDay={(day) => setSelectedDayKey(day.inMonth ? day.dayKey : null)}
             onChangeMonth={setViewMonth}
           />
-        </View>
+        </TourTarget>
 
         <View className="mt-8">
           <SegmentedControl

@@ -49,6 +49,8 @@ import { loadBoard, loadBoardKinds, removeListing } from "@/lib/listingsApi";
 import { askConfirm, askPick } from "@/store/sheets";
 import { useListingWizard } from "@/store/listingWizard";
 import { useSession } from "@/store/session";
+import { useTour } from "@/store/tour";
+import { router } from "expo-router";
 
 const approvedShop = {
   id: "u1",
@@ -178,6 +180,31 @@ describe("the shop's board", () => {
     expect(screen.getByLabelText("Add a listing")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Put something on the board" })).toBeNull();
     await view.unmount();
+  });
+
+  /**
+   * The tour's "Add a listing" step lights the plus. The new-listing flow is
+   * not a tour screen, so using the lit control is what finishes the step —
+   * back on the board, the shop is shown how to edit, not asked to add again.
+   */
+  it("moves the tour on to editing when the shop adds from the lit plus", async () => {
+    useTour.getState().reset();
+    useTour.setState({ hydrated: true, progress: { u1: { status: "active", step: 0 } } });
+    (loadBoard as jest.Mock).mockResolvedValue(page([listing]));
+
+    const view = await render(<BoardScreen />);
+    await screen.findByText("Tarpaulin, 13oz");
+    await waitFor(() =>
+      expect(useTour.getState().progress.u1).toEqual({ status: "active", step: 5 }),
+    );
+    expect(useTour.getState().screen).toBe("catalogue");
+
+    await fireEvent.press(screen.getByLabelText("Add a listing"));
+
+    expect(router.push).toHaveBeenCalledWith("/shop/new");
+    expect(useTour.getState().progress.u1).toEqual({ status: "active", step: 6 });
+    await view.unmount();
+    useTour.getState().reset();
   });
 
   /**

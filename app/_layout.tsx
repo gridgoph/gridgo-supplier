@@ -25,6 +25,7 @@ import {
 import { BrandIntro } from "@/components/BrandIntro";
 import { SessionShell } from "@/components/SessionShell";
 import { ToastHost } from "@/components/ToastHost";
+import { TourOverlay } from "@/components/TourOverlay";
 import { ClerkSessionBridge } from "@/components/ClerkSessionBridge";
 
 import { colors, type ThemeName } from "@/constants/theme";
@@ -74,7 +75,7 @@ export default function RootLayout() {
   useHydrateTheme();
   const scheme = useThemeName();
   const token = useThemeColors();
-  useAppFonts();
+  const fontsReady = useAppFonts();
 
   // Keeps the window behind the navigator on canvas, so theme changes and
   // screen transitions never flash the wrong background.
@@ -127,6 +128,12 @@ export default function RootLayout() {
             <SafeAreaProvider initialMetrics={initialWindowMetrics}>
               <ThemeProvider value={navigationTheme(scheme)}>
                 <RootStack introDone={!introPlaying} />
+                {/*
+                  The first-run tour, over the whole stack so its dim covers
+                  the headers and the tab bar too. Under the toasts, which may
+                  still arrive mid-tour. It waits behind both prompts itself.
+                */}
+                <TourOverlay ready={!introPlaying && fontsReady} />
                 {/*
                   Above the navigator so an alert can arrive on any screen,
                   and at the top of it so it can never sit on the action a
@@ -253,6 +260,17 @@ function RootStack({ introDone }: { introDone: boolean }) {
           name="alerts"
           options={{
             title: "Alerts",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
+          Every release's notes. Signed-in, like the Account row it opens from;
+          the update sheet itself stays public.
+        */}
+        <Stack.Screen
+          name="whats-new"
+          options={{
+            title: "What's new",
             headerBackButtonDisplayMode: "minimal",
           }}
         />

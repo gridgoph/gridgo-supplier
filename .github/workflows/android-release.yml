@@ -50,6 +50,12 @@ jobs:
       - name: Unit tests
         run: npm test -- --ci
 
+      # Every pending note reaches shops' phones in the update prompt, so a
+      # malformed one fails the pull request, not the release step after a
+      # 20-minute build. See whats-new/README.md.
+      - name: Check the What's new notes
+        run: node scripts/whats-new.js check
+
   apk:
     name: Signed release APK
     # A pull request gets the checks above and nothing else. No secrets are
@@ -353,11 +359,19 @@ jobs:
           SIZE: ${{ steps.apk.outputs.size }}
         run: |
           set -euo pipefail
-          notes="$(printf '%s\n' \
+          # The app reads only the "## What's new" section (parseWhatsNew in
+          # lib/appUpdate.ts) and its "Release type:" label
+          # (lib/whatsNewHistory.ts); the build record under it is for people here.
+          whats_new="$(node scripts/whats-new.js notes)"
+          build="$(printf '%s\n' \
+            "## Build" \
+            "" \
             "Signed release APK for sideloading ($SIZE). Install it on the phone directly." \
             "" \
             "Commit \`${GITHUB_SHA::7}\`, build $GITHUB_RUN_NUMBER." \
             "Verified in CI: signed with the release key, and the deployed API base is inlined in the JS bundle.")"
+          notes="$build"
+          if [ -n "$whats_new" ]; then notes="$(printf '%s\n\n%s\n' "$whats_new" "$build")"; fi
           latest=()
           if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "$GITHUB_REF" != "refs/heads/main" ]; then
             latest=(--latest=false)
@@ -378,6 +392,33 @@ jobs:
           path: ${{ runner.temp }}/out/*.apk
           if-no-files-found: error
           retention-days: 90
+
+      # The notes this release carried now belong to its version: they move
+      # under "## <version> (<label>)" in WHATS_NEW.md and leave whats-new/, so
+      # the next release does not repeat them. Only the run that published the
+      # latest release records it. A push made with the job's own token starts
+      # no workflow, so this cannot trigger another release build.
+      - name: Record What's new under the released version
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          VERSION: ${{ steps.config.outputs.version }}
+        run: |
+          set -euo pipefail
+          node scripts/whats-new.js record "$VERSION"
+          if [ -z "$(git status --porcelain -- WHATS_NEW.md whats-new)" ]; then
+            echo "No What's new notes were pending for $VERSION"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -- WHATS_NEW.md whats-new
+          git commit -m "Record What's new for $VERSION"
+          # main can move during the build. Only this step deletes note files,
+          # so replaying the commit over a newer main is clean. --autostash
+          # because prebuild has rewritten package.json's scripts.
+          git fetch origin main
+          git rebase --autostash origin/main
+          git push origin HEAD:main
 
       - name: Remove the signing key and deploy credentials
         if: always()

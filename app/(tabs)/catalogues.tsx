@@ -16,6 +16,9 @@ import { ChatButton } from "@/components/ChatButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
+import { TourTarget } from "@/components/TourTarget";
+import { useTourScreen } from "@/hooks/useTourScreen";
+import { useTour } from "@/store/tour";
 import { EMPTY_BOARD_BODY, EMPTY_BOARD_TITLE, type Listing } from "@/lib/listings";
 import {
   CATALOGUE_SORTS,
@@ -178,6 +181,19 @@ export default function BoardScreen() {
    */
   const hasBoard = kindSource.length > 0 || total > 0;
 
+  // The tour lights the add control and the wall, so it waits for the board.
+  useTourScreen("catalogue", !firstLoad);
+
+  /**
+   * "Add a listing" opens the new-listing flow, which the tour does not follow.
+   * A shop that tapped the lit "+" has done the step, so coming back shows the
+   * next one (editing) rather than asking it to add again.
+   */
+  function addListing() {
+    if (user?.id) useTour.getState().complete(user.id, "catalogue.add");
+    router.push("/shop/new");
+  }
+
   async function pickKind() {
     const picked = await askPick({
       title: "Kind of work",
@@ -289,7 +305,7 @@ export default function BoardScreen() {
               onPickKind={() => void pickKind()}
               onOnBoardChange={(next) => ask({ onBoard: next })}
               onPickSort={() => void pickSort()}
-              onAdd={() => router.push("/shop/new")}
+              onAdd={addListing}
             />
             {notice ? (
               <View className="gg-panel">
@@ -317,14 +333,14 @@ export default function BoardScreen() {
         ) : null}
 
         {!showSkeleton && !notOpenYet && !error && !hasBoard ? (
-          <View className="mt-8">
+          <TourTarget step="catalogue.add" className="mt-8">
             <EmptyState
               title={EMPTY_BOARD_TITLE}
               body={EMPTY_BOARD_BODY}
               actionLabel="Put something on the board"
-              onAction={() => router.push("/shop/new")}
+              onAction={addListing}
             />
-          </View>
+          </TourTarget>
         ) : null}
 
         {!showSkeleton && hasBoard ? (
@@ -354,15 +370,18 @@ export default function BoardScreen() {
                   key={settledKey}
                   entering={reduceMotion ? undefined : FadeIn.duration(motion.fast)}
                 >
-                  <Wall
-                    listings={listings}
-                    view={view}
-                    hunt={query.q}
-                    catalog={catalog}
-                    services={services}
-                    shopApproved={approved}
-                    onRemove={removing ? undefined : remove}
-                  />
+                  {/* Every listing opens its editor: the tour's "edit" step. */}
+                  <TourTarget step="catalogue.edit">
+                    <Wall
+                      listings={listings}
+                      view={view}
+                      hunt={query.q}
+                      catalog={catalog}
+                      services={services}
+                      shopApproved={approved}
+                      onRemove={removing ? undefined : remove}
+                    />
+                  </TourTarget>
                 </Animated.View>
                 <BoardPager
                   page={page}
