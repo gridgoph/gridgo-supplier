@@ -57,3 +57,23 @@ export function signedLink(
   inflight.set(fileId, settled);
   return settled;
 }
+
+/** The longest storage ever honours a link, so a server stamp can never outlive it here. */
+const SIGNING_WINDOW_MS = 300_000;
+
+/**
+ * Keep a link that arrived inside a record (an order's progress photos), so
+ * the picture draws without asking for another. Never replaces a link already
+ * held, and the phone's own clock caps it at the signing window: a server
+ * stamp read on a phone running behind would otherwise look good for longer
+ * than storage will honour it.
+ */
+export function rememberLink(fileId: string, url: string | null | undefined, expiresAtIso: string | null | undefined): void {
+  if (!fileId || !url || heldLink(fileId)) return;
+  const stamped = expiresAtIso ? Date.parse(expiresAtIso) : Number.NaN;
+  if (!Number.isFinite(stamped)) return;
+  const now = Date.now();
+  const expiresAt = Math.min(stamped, now + SIGNING_WINDOW_MS);
+  if (linkIsStale(expiresAt, now)) return;
+  links.set(fileId, { url, readAt: now, expiresAt });
+}

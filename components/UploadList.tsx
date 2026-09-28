@@ -11,6 +11,8 @@ type Props = {
   onRemove: (key: string) => void;
   /** Shown when nothing has been picked yet. An invitation, not a shrug. */
   emptyHint: string;
+  /** How a saved and an attached file are named. A progress photo is sent, not filed. */
+  wording?: "proof" | "photo";
 };
 
 /**
@@ -25,7 +27,7 @@ type Props = {
  * inside the same crop-mark frame as a listing sample. A PDF is a document
  * tile (name and type), never a broken image.
  */
-export function UploadList({ items, onRetry, onRemove, emptyHint }: Props) {
+export function UploadList({ items, onRetry, onRemove, emptyHint, wording = "proof" }: Props) {
   const colors = useThemeColors();
 
   if (!items.length) {
@@ -75,7 +77,7 @@ export function UploadList({ items, onRetry, onRemove, emptyHint }: Props) {
                         : "text-caption text-text-muted"
                   }
                 >
-                  {uploadStageLabel(item)}
+                  {uploadStageLabel(item, wording)}
                 </Text>
               </View>
 

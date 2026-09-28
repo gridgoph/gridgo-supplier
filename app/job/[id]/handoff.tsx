@@ -10,7 +10,9 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { SpecRow } from "@/components/SpecRow";
 import { StatusChip } from "@/components/StatusChip";
 import { custodyForOrder, HANDOFF_SEQUENCE } from "@/lib/handoff";
+import { isProductionPhotoRequired } from "@/lib/apiErrors";
 import { findAction } from "@/lib/jobState";
+import { needsProductionPhoto, productionProgressOf, takesProductionPhoto } from "@/lib/productionPhoto";
 import { counterCheck, countTargets } from "@/lib/pickupCheck";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
@@ -26,6 +28,11 @@ import { askConfirm } from "@/store/sheets";
  * checklist: it tells riders the job can be collected, and quality and count
  * are checked together with the rider at the counter. The rider's own
  * confirmation is what transfers custody.
+ *
+ * GRIDGO will not take that signal until one photo of the work is on the job.
+ * A job without one reaches this screen from an old link or a stale card, or
+ * is refused on the press; either way the screen turns into the way to the
+ * photo rather than a button GRIDGO would only refuse again.
  */
 export default function HandoffScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -47,6 +54,10 @@ export default function HandoffScreen() {
   // The package is still at the counter until the rider confirms pickup.
   const packing = custody ? custody.state !== "with_rider" && custody.state !== "delivered" : false;
   const step = job ? findAction(job, "ready_for_pickup") : null;
+  // A refusal speaks for a GRIDGO too old to say whether a photo is on the job.
+  const refused = isProductionPhotoRequired(action.failure);
+  const photoGate = job ? needsProductionPhoto(job, refused) : false;
+  const progress = job && takesProductionPhoto(job) ? productionProgressOf(job) : null;
   // What the rider counts, per line, so the shop can count it first.
   const targets = job ? countTargets(job) : [];
   const check = job?.state === "rider_assigned" ? counterCheck(job) : null;
@@ -74,7 +85,12 @@ export default function HandoffScreen() {
         targetState: step.targetState,
         note: "Packaging ready — packed and staged for the joint pickup checks with the rider",
       });
-      if (!updated) return;
+      if (!updated) {
+        // Refused for want of a photo: read the job again so the screen
+        // shows the photo step from GRIDGO's own record.
+        void reload();
+        return;
+      }
       saved = true;
       clearDraft(job.id);
       router.replace({ pathname: "/job/[id]", params: { id: job.id } });
@@ -94,13 +110,29 @@ export default function HandoffScreen() {
       subject={job?.title}
       // A stopped pickup is explained once, in its own panel below.
       lede={
-        counterIssue
-          ? "The package stays at your counter until the rider checks it again."
-          : custody?.detail ?? "Getting a job ready for the rider who collects it."
+        photoGate
+          ? "A photo of the work comes first. GRIDGO notifies riders once one is on the job."
+          : counterIssue
+            ? "The package stays at your counter until the rider checks it again."
+            : custody?.detail ?? "Getting a job ready for the rider who collects it."
       }
-      actionError={action.error}
+      // The photo panel below is the explanation; the refusal would say it twice.
+      actionError={photoGate ? null : action.error}
       footer={
-        step ? (
+        photoGate && job ? (
+          <>
+            <PrimaryButton
+              label="Add a production photo"
+              onPress={() =>
+                router.push({
+                  pathname: "/job/[id]/progress-photo",
+                  params: { id: job.id, ...(refused ? { required: "1" } : {}) },
+                })
+              }
+            />
+            <SecondaryButton label="Back to job" onPress={() => router.back()} />
+          </>
+        ) : step ? (
           <>
             <PrimaryButton
               label={action.busy ? "Notifying riders…" : "Mark package ready"}
@@ -114,6 +146,18 @@ export default function HandoffScreen() {
         )
       }
     >
+      {photoGate ? (
+        <View className="gg-card gap-2">
+          <View className="flex-row">
+            <StatusChip tone="warning" label="Production photo needed" icon="triangle-alert" />
+          </View>
+          <Text className="text-body text-text-secondary">
+            One photo of this job on your floor, so the client can see it was made. If you filed
+            your start-of-production proof as a photo, it already counts. A PDF does not.
+          </Text>
+        </View>
+      ) : null}
+
       {job && custody ? (
         <View className="gg-card gap-3">
           <Text className="text-overline text-text-muted">CUSTODY</Text>
@@ -125,6 +169,16 @@ export default function HandoffScreen() {
           )}
           <View>
             <SpecRow label="Next move by" value={custody.nextActor} />
+            {progress ? (
+              <SpecRow
+                label="Production photo"
+                value={
+                  progress.photos.length
+                    ? `${progress.photos.length} on the job`
+                    : "None yet"
+                }
+              />
+            ) : null}
             <SpecRow
               label="Collect from"
               value={job.pickup?.label || "Your shop address on file"}
