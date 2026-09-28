@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Linking, Platform, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Platform, View } from "react-native";
 import { router, useNavigation } from "expo-router";
 
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -7,18 +7,21 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SheetSurface } from "@/components/SheetSurface";
 import { SpecRow } from "@/components/SpecRow";
-import { DOWNLOAD_URL, formatDownloadSize } from "@/lib/appUpdate";
+import { WhatsNewList } from "@/components/WhatsNewList";
+import { useUpdateDownload } from "@/hooks/useUpdateDownload";
+import { formatDownloadSize } from "@/lib/appUpdate";
+import { bundledNotesFor } from "@/lib/whatsNewHistory";
 import { formatDeadlineLabel } from "@/lib/dates";
 import { rootStackKey } from "@/lib/launch";
 import {
   closeUpdateSheet,
   dismissCompleted,
   snoozeOffer,
-  takeOffer,
   useAppUpdate,
   type UpdateSheetSubject,
 } from "@/store/appUpdate";
 import { useSession } from "@/store/session";
+import { bundledHistory } from "@/store/whatsNewHistory";
 
 /**
  * A newer GRIDGO is out, or this launch is the first run of one.
@@ -30,6 +33,10 @@ import { useSession } from "@/store/session";
  * "Update now" only opens the APK link. Android's installer owns the rest,
  * which is why "Update completed" is said on the next launch rather than here.
  *
+ * Both say what the version brings. The offer reads the release's own
+ * "What's new" (`parseWhatsNew`); the completion note reads the notes this
+ * build carries (`extra.whatsNewHistory`), so it has them with no network.
+ *
  * The completion note is shown first when both are waiting (a shop installed
  * an older APK than the newest); the offer follows once it is closed.
  */
@@ -37,7 +44,11 @@ export default function AppUpdateSheet() {
   const navigation = useNavigation();
   const completed = useAppUpdate((s) => s.completed);
   const offer = useAppUpdate((s) => s.offer);
-  const [openFailed, setOpenFailed] = useState(false);
+  const { update, openFailed } = useUpdateDownload();
+  const installedNotes = useMemo(
+    () => (completed ? bundledNotesFor(bundledHistory(), completed.versionName) : []),
+    [completed],
+  );
 
   // Fixed at open: what this sheet is about does not change under the shop's
   // thumb because a check answered while it was reading.
@@ -83,7 +94,11 @@ export default function AppUpdateSheet() {
             }}
           />
         }
-      />
+      >
+        {installedNotes.length > 0 ? (
+          <WhatsNewList versionName={completed.versionName} items={installedNotes} />
+        ) : null}
+      </SheetSurface>
     );
   }
 
@@ -92,14 +107,7 @@ export default function AppUpdateSheet() {
   const size = formatDownloadSize(latest.apkBytes);
 
   async function updateNow() {
-    try {
-      await Linking.openURL(DOWNLOAD_URL);
-    } catch {
-      setOpenFailed(true);
-      return;
-    }
-    takeOffer();
-    router.back();
+    if (await update()) router.back();
   }
 
   return (
@@ -127,6 +135,11 @@ export default function AppUpdateSheet() {
         ) : null}
         {size ? <SpecRow label="Download" value={size} /> : null}
       </View>
+      {latest.whatsNew.length > 0 ? (
+        <View className="mt-5">
+          <WhatsNewList versionName={latest.versionName} items={latest.whatsNew} />
+        </View>
+      ) : null}
       {openFailed ? (
         <View className="mt-4">
           <ErrorNotice message="The download did not open. Go to gridgo.talasora.com/download in your browser to get it." />

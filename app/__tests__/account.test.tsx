@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 /**
  * Expo Router runs a screen's focus effect every time it comes back into view.
@@ -7,7 +7,7 @@ import { render, screen, waitFor } from "@testing-library/react-native";
  */
 const focusCallbacks: (() => void)[] = [];
 jest.mock("expo-router", () => ({
-  router: { push: jest.fn() },
+  router: { push: jest.fn(), navigate: jest.fn() },
   useFocusEffect: (callback: () => void) => {
     const { useEffect } = require("react");
     useEffect(() => {
@@ -47,6 +47,8 @@ jest.mock("@/lib/api", () => ({
 import AccountScreen from "@/app/(tabs)/account";
 import { me } from "@/lib/api";
 import { useSession } from "@/store/session";
+import { useTour } from "@/store/tour";
+import { router } from "expo-router";
 
 const shop = {
   id: "u1",
@@ -155,5 +157,23 @@ describe("the shop's account", () => {
       mockClerkUser.imageUrl = "https://img.clerk.test/lovis.jpg";
       mockClerkUser.hasImage = true;
     }
+  });
+
+  /** The tour, again: from the first step, starting where it starts, on Home. */
+  it("replays the tour from Home for a shop that finished or skipped it", async () => {
+    useTour.setState({ hydrated: true, progress: { u1: { status: "done" } } });
+    view = await render(<AccountScreen />);
+
+    await fireEvent.press(await screen.findByRole("button", { name: "Replay the tour" }));
+
+    expect(useTour.getState().progress.u1).toEqual({ status: "active", step: 0 });
+    expect(router.navigate).toHaveBeenCalledWith("/(tabs)/home");
+  });
+
+  it("opens every version's notes from What's new", async () => {
+    view = await render(<AccountScreen />);
+
+    await fireEvent.press(await screen.findByRole("button", { name: "What's new" }));
+    expect(router.push).toHaveBeenCalledWith("/whats-new");
   });
 });

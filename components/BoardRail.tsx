@@ -3,6 +3,7 @@ import { ArrowUpDown, LayoutGrid, List, Plus, SlidersHorizontal } from "lucide-r
 import { Pressable, Text, View } from "react-native";
 import Animated, { FadeIn, useReducedMotion } from "react-native-reanimated";
 
+import { TourTarget } from "@/components/TourTarget";
 import { BoardHuntField } from "@/components/BoardHuntField";
 import { SelectField } from "@/components/controls/SelectField";
 import { motion } from "@/constants/theme";
@@ -124,15 +125,18 @@ export function BoardRail({
           </ViewButton>
         </View>
 
-        <Pressable
-          onPress={onAdd}
-          accessibilityRole="button"
-          accessibilityLabel="Add a listing"
-          className="gg-btn-primary w-11 px-0"
-          style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
-        >
-          <Plus size={20} color={colors.actionYellowOn} strokeWidth={2} />
-        </Pressable>
+        {/* The first-run tour's "Add a listing" step lights this. */}
+        <TourTarget step="catalogue.add">
+          <Pressable
+            onPress={onAdd}
+            accessibilityRole="button"
+            accessibilityLabel="Add a listing"
+            className="gg-btn-primary w-11 px-0"
+            style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+          >
+            <Plus size={20} color={colors.actionYellowOn} strokeWidth={2} />
+          </Pressable>
+        </TourTarget>
       </View>
 
       <BoardHuntField value={query.q} onHunt={onHunt} onFocusChange={setTyping} />

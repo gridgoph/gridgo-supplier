@@ -3,8 +3,10 @@ import { Briefcase, Calendar, Frame, House, User, type LucideIcon } from "lucide
 import { Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { TourTarget } from "@/components/TourTarget";
 import { TABS, type TabName } from "@/constants/tabs";
 import { useThemeColors } from "@/hooks/useTheme";
+import { TAB_TOUR_STEPS } from "@/lib/tour";
 
 /* ---------------------------------------------------------------------------
    Bar geometry
@@ -181,7 +183,7 @@ export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
             }
           };
 
-          return (
+          const item = (
             <TabItem
               key={route.key}
               name={tab.name}
@@ -189,6 +191,17 @@ export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
               focused={focused}
               onPress={onPress}
             />
+          );
+
+          // The tour lights the tab that leads on from the screen it is
+          // explaining, so the shop takes itself there with the real control.
+          const tourStep = TAB_TOUR_STEPS[tab.name as keyof typeof TAB_TOUR_STEPS];
+          return tourStep ? (
+            <TourTarget key={route.key} step={tourStep} className="min-w-0 flex-1">
+              {item}
+            </TourTarget>
+          ) : (
+            item
           );
         })}
       </View>

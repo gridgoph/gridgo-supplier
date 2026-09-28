@@ -11,8 +11,10 @@ import {
   installedBuild,
   parseLatestRelease,
   parseReleaseTag,
+  parseWhatsNew,
   shouldCheck,
   shouldOffer,
+  WHATS_NEW_LIMITS,
 } from "@/lib/appUpdate";
 
 /** The shape GitHub returned for v1.0.84, trimmed to what is read. */
@@ -51,6 +53,7 @@ describe("parseLatestRelease", () => {
       versionName: "1.0.84",
       publishedAt: "2026-09-23T13:15:55Z",
       apkBytes: 130409988,
+      whatsNew: [],
     });
   });
 
@@ -60,7 +63,16 @@ describe("parseLatestRelease", () => {
       versionName: "1.0.90",
       publishedAt: null,
       apkBytes: null,
+      whatsNew: [],
     });
+  });
+
+  it("reads the release's What's new, not CI's build record", () => {
+    const body =
+      "## What's new\n\nRelease type: New feature\n\n- Take the tour again from Account\n\n## Build\n\nSigned release APK for sideloading (123M).";
+    expect(parseLatestRelease({ ...RELEASE, body })?.whatsNew).toEqual([
+      "Take the tour again from Account",
+    ]);
   });
 
   it("ignores drafts, prereleases and anything that is not a release", () => {
@@ -335,5 +347,63 @@ describe("formatDownloadSize", () => {
     expect(formatDownloadSize(400_000)).toBe("Under 1 MB");
     expect(formatDownloadSize(null)).toBeNull();
     expect(formatDownloadSize(0)).toBeNull();
+  });
+});
+
+describe("parseWhatsNew", () => {
+  const ciBoilerplate =
+    "## Build\n\nSigned release APK for sideloading (123M).\n\nCommit `abc1234`, build 122.";
+
+  it("reads the bullets under What's new and stops at the next heading", () => {
+    const body = [
+      "## What's new",
+      "",
+      "Release type: Improvement",
+      "",
+      "- Update notes appear in the prompt",
+      "* Update notes appear in Alerts",
+      "",
+      ciBoilerplate,
+    ].join("\n");
+    expect(parseWhatsNew(body)).toEqual([
+      "Update notes appear in the prompt",
+      "Update notes appear in Alerts",
+    ]);
+  });
+
+  it("is empty when the release has no What's new section", () => {
+    expect(parseWhatsNew(ciBoilerplate)).toEqual([]);
+    expect(parseWhatsNew("- A bullet outside any section")).toEqual([]);
+    expect(parseWhatsNew("")).toEqual([]);
+    expect(parseWhatsNew(null)).toEqual([]);
+    expect(parseWhatsNew(42)).toEqual([]);
+  });
+
+  it("is empty when the section has no bullets", () => {
+    expect(parseWhatsNew("## What's new\n\n## Build\n\n- build 122")).toEqual([]);
+    expect(parseWhatsNew("## What's new\n\n-   \n- **  **")).toEqual([]);
+  });
+
+  it("finds the heading however it is spelled", () => {
+    for (const heading of ["## What's new", "### What’s New", "# WHAT'S NEW", "## Whats new in 1.0.96"]) {
+      expect(parseWhatsNew(`${heading}\r\n- Faster proof uploads`)).toEqual(["Faster proof uploads"]);
+    }
+  });
+
+  it("shows plain words: no links, emphasis, code or HTML", () => {
+    const body =
+      "## What's new\n- **Faster** [uploads](https://example.com/x) with `retry` <b>now</b>\n-   Spaces   collapse  ";
+    expect(parseWhatsNew(body)).toEqual(["Faster uploads with retry now", "Spaces collapse"]);
+  });
+
+  it("caps a very long list and a very long line", () => {
+    const many = Array.from({ length: 40 }, (_, i) => `- Change ${i + 1}`).join("\n");
+    const items = parseWhatsNew(`## What's new\n${many}`);
+    expect(items).toHaveLength(WHATS_NEW_LIMITS.maxItems);
+    expect(items[0]).toBe("Change 1");
+
+    const [long] = parseWhatsNew(`## What's new\n- ${"word ".repeat(200)}`);
+    expect(long.length).toBeLessThanOrEqual(WHATS_NEW_LIMITS.maxChars);
+    expect(long.endsWith("\u2026")).toBe(true);
   });
 });

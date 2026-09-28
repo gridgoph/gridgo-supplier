@@ -2,8 +2,11 @@ import {
   CircleCheck,
   CircleX,
   Clock,
+  Sparkles,
   SquarePen,
+  TrendingUp,
   TriangleAlert,
+  Wrench,
   type LucideIcon,
 } from "lucide-react-native";
 import { Text, View } from "react-native";
@@ -26,6 +29,9 @@ const ICONS = {
   "circle-x": CircleX,
   clock: Clock,
   "square-pen": SquarePen,
+  sparkles: Sparkles,
+  "trending-up": TrendingUp,
+  wrench: Wrench,
 } satisfies Record<string, LucideIcon>;
 
 export type StatusIconName = keyof typeof ICONS;

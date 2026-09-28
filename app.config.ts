@@ -135,6 +135,35 @@ export function googleServicesFile(
   return fileExists(local) ? local : undefined;
 }
 
+/** One release as bundled into `extra.whatsNewHistory`; read by `lib/whatsNewHistory.ts`. */
+export type BundledRelease = { version: string; kind: string; notes: string[] };
+
+// Plain Node shared with the release job (see its header). A `.js` require is
+// what @expo/config's loader and `tsc` both accept.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const whatsNewScript = require("./scripts/whats-new.js") as {
+  releaseHistory: (root: string, version?: string) => BundledRelease[];
+};
+
+/**
+ * Every release's "What's new" this build can show with no network, newest
+ * first, for Account > What's new. It comes from WHATS_NEW.md, the history CI
+ * records after each release, so there is no second list to keep. A CI build
+ * (`buildNumber` set) also carries the notes pending in `whats-new/` as its own
+ * version: they are recorded under that version only after it ships. A local
+ * build leaves them out, since they belong to no release yet.
+ */
+export function whatsNewHistory(
+  projectRoot: string,
+  buildNumber: string | null | undefined,
+  versionName: string,
+): BundledRelease[] {
+  return whatsNewScript.releaseHistory(
+    projectRoot,
+    (buildNumber ?? "").trim() ? versionName : undefined,
+  );
+}
+
 export default ({ config }: ConfigContext): ExpoConfig => {
   const { name, slug, version } = config;
   if (!name || !slug || !version) {
@@ -157,6 +186,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     extra: {
       ...config.extra,
       ...(clerkKey ? { clerkPublishableKey: clerkKey } : {}),
+      whatsNewHistory: whatsNewHistory(
+        __dirname,
+        process.env.GRIDGO_BUILD_NUMBER,
+        versionName,
+      ),
     },
     android: {
       ...config.android,

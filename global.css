@@ -75,6 +75,10 @@
   /* Scrim behind sheets and modals */
   --color-scrim: rgb(0 0 0 / 0.4);
 
+  /* The tour's dim and the edge of its cut-out (components/TourOverlay.tsx) */
+  --color-tour-scrim: rgb(0 0 0 / 0.55);
+  --color-tour-ring: #ffffff;
+
   /* -- Type ---------------------------------------------------------------
      Satoshi carries all UI type. It ships as one file per cut, and React
      Native resolves a font by family name alone — `font-weight: 700` will
@@ -178,6 +182,8 @@
     --color-overlay-pressed: rgb(255 255 255 / 0.08);
 
     --color-scrim: rgb(0 0 0 / 0.6);
+    --color-tour-scrim: rgb(0 0 0 / 0.72);
+    --color-tour-ring: #f0f0f0;
   }
 }
 

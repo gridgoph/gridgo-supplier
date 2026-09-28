@@ -1,6 +1,8 @@
 import { Link2 } from "lucide-react-native";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
+import type { KeyboardAwareScrollViewRef } from "react-native-keyboard-controller";
+import { useReducedMotion } from "react-native-reanimated";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -28,6 +30,10 @@ import { PriceTierEditor, SpeedTierEditor } from "@/components/listing/TierEdito
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import { Stepper } from "@/components/controls/Stepper";
 import { TextField } from "@/components/controls/TextField";
+import { TourTarget } from "@/components/TourTarget";
+import { useTourScreen } from "@/hooks/useTourScreen";
+import { useVisibleTourStep } from "@/hooks/useTourStep";
+import type { TourStepId } from "@/lib/tour";
 import { fileFormatName, linkFormatInvitation } from "@/data/fileFormats";
 import { spacing } from "@/constants/theme";
 import {
@@ -144,6 +150,35 @@ export default function ListingScreen() {
 
   const dirty = Boolean(baseline && working && !sameDraft(working, draftFrom(baseline)));
   useLayoutEffect(() => { dirtyRef.current = dirty; });
+
+  /*
+    The tour's last two steps light Price and what a client picks. Both sit
+    below the fold on a phone, so each is scrolled into view before the light
+    lands on it — from the effect when the step changes, and from the
+    section's own layout when the step was already showing as it arrived.
+  */
+  useTourScreen("listing", Boolean(listing));
+  const tourStep = useVisibleTourStep().step?.id ?? null;
+  const reduceMotion = useReducedMotion();
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
+  const sectionY = useRef<Partial<Record<TourStepId, number>>>({});
+  const showSection = useCallback(
+    (step: TourStepId | null) => {
+      if (step !== "listing.price" && step !== "listing.options") return;
+      const y = sectionY.current[step];
+      if (y == null) return;
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing.xl), animated: !reduceMotion });
+    },
+    [reduceMotion],
+  );
+  useEffect(() => showSection(tourStep), [showSection, tourStep]);
+  const placeSection = useCallback(
+    (step: TourStepId, y: number) => {
+      sectionY.current[step] = y;
+      if (tourStep === step) showSection(step);
+    },
+    [showSection, tourStep],
+  );
 
   function setDraft(value: Draft | null) {
     const changed = Boolean(value && baseline && !sameDraft(value, draftFrom(baseline)));
@@ -394,7 +429,11 @@ export default function ListingScreen() {
       */}
       <Stack.Screen options={{ title: merged.name || "Untitled listing" }} />
 
-      <FormScrollView contentClassName="gg-page pb-10 pt-4" bottomOffset={spacing.xxl}>
+      <FormScrollView
+        contentClassName="gg-page pb-10 pt-4"
+        bottomOffset={spacing.xxl}
+        scrollRef={scrollRef}
+      >
         <View className="gap-2">
           <Text className="text-body-lg font-medium text-text-primary">{priceLine(merged)}</Text>
           <View className="flex-row">
@@ -501,143 +540,146 @@ export default function ListingScreen() {
         </Section>
 
         {/* 3. Price */}
-        <Section
-          title="PRICE"
-          hint="Your own asking price. What GRIDGO charges the client on top is not yours to set."
-        >
-          {/*
-            Six ways to sell something, as a list rather than a segmented row:
-            the labels are too long to sit side by side, and the choice decides
-            which questions a client is asked, so it is worth reading properly.
-          */}
-          <OptionList
-            options={PRICING_UNITS.map((unit) => ({
-              value: unit,
-              label: unitChoiceLabel(unit),
-              hint: unitHint(unit),
-            }))}
-            value={working.pricingUnit}
-            onChange={(value) =>
-              setDraft({
-                ...working,
-                pricingUnit: value,
-                measureUnit: measureUnitFor(value, working.measureUnit),
-                packageQty: packageQtyFor(value, working.packageQty),
-              })
-            }
-            accessibilityLabel="How this listing is priced"
-          />
-          <MoneyField
-            value={working.price}
-            onChange={(value) => setDraft({ ...working, price: value })}
-            accessibilityLabel="Your price"
-          />
+        <TourTarget step="listing.price" onLayout={(y) => placeSection("listing.price", y)} className="mt-8">
+          <Section
+            spaced={false}
+            title="PRICE"
+            hint="Your own asking price. What GRIDGO charges the client on top is not yours to set."
+          >
+            {/*
+              Six ways to sell something, as a list rather than a segmented row:
+              the labels are too long to sit side by side, and the choice decides
+              which questions a client is asked, so it is worth reading properly.
+            */}
+            <OptionList
+              options={PRICING_UNITS.map((unit) => ({
+                value: unit,
+                label: unitChoiceLabel(unit),
+                hint: unitHint(unit),
+              }))}
+              value={working.pricingUnit}
+              onChange={(value) =>
+                setDraft({
+                  ...working,
+                  pricingUnit: value,
+                  measureUnit: measureUnitFor(value, working.measureUnit),
+                  packageQty: packageQtyFor(value, working.packageQty),
+                })
+              }
+              accessibilityLabel="How this listing is priced"
+            />
+            <MoneyField
+              value={working.price}
+              onChange={(value) => setDraft({ ...working, price: value })}
+              accessibilityLabel="Your price"
+            />
 
-          {working.pricingUnit === "per_package" ? (
-            <View className="gap-2">
-              <Text className="text-caption text-text-muted">How many pieces in a pack</Text>
-              <Stepper
-                value={working.packageQty ?? 100}
-                onChange={(value) => setDraft({ ...working, packageQty: value })}
-                min={2}
-                max={5000}
-                step={PACK_STEP}
-                unit="pieces"
-                accessibilityLabel="Pieces in a pack"
-              />
-            </View>
-          ) : null}
+            {working.pricingUnit === "per_package" ? (
+              <View className="gap-2">
+                <Text className="text-caption text-text-muted">How many pieces in a pack</Text>
+                <Stepper
+                  value={working.packageQty ?? 100}
+                  onChange={(value) => setDraft({ ...working, packageQty: value })}
+                  min={2}
+                  max={5000}
+                  step={PACK_STEP}
+                  unit="pieces"
+                  accessibilityLabel="Pieces in a pack"
+                />
+              </View>
+            ) : null}
 
-          {needsMeasure(working.pricingUnit) ? (
-            <View className="gap-2">
-              <Text className="text-caption text-text-muted">What you measure in</Text>
-              <SegmentedControl
-                options={MEASURE_UNITS.map((unit) => ({ value: unit, label: unit }))}
-                value={working.measureUnit ?? "ft"}
-                onChange={(value) => setDraft({ ...working, measureUnit: value })}
-                accessibilityLabel="Measurement unit"
-              />
-            </View>
-          ) : null}
+            {needsMeasure(working.pricingUnit) ? (
+              <View className="gap-2">
+                <Text className="text-caption text-text-muted">What you measure in</Text>
+                <SegmentedControl
+                  options={MEASURE_UNITS.map((unit) => ({ value: unit, label: unit }))}
+                  value={working.measureUnit ?? "ft"}
+                  onChange={(value) => setDraft({ ...working, measureUnit: value })}
+                  accessibilityLabel="Measurement unit"
+                />
+              </View>
+            ) : null}
 
-          {/*
-            The smallest job worth setting up. Waste is the same on a small one,
-            and without this a shop is underpaid on every one of them.
-          */}
-          {measurementKind(working.pricingUnit) === "area" ? (
-            <View className="gap-2">
-              <Text className="text-caption text-text-muted">
-                Smallest size you charge for — optional
-              </Text>
-              <View className="flex-row gap-3">
-                <View className="flex-1">
-                  <Stepper
-                    value={working.minimumWidth ?? 0}
-                    onChange={(value) => setDraft({ ...working, minimumWidth: value || null })}
-                    min={0}
-                    max={100}
-                    step={1}
-                    unit={`${working.measureUnit ?? "ft"} wide`}
-                    accessibilityLabel="Smallest billable width"
-                  />
-                </View>
-                <View className="flex-1">
-                  <Stepper
-                    value={working.minimumHeight ?? 0}
-                    onChange={(value) => setDraft({ ...working, minimumHeight: value || null })}
-                    min={0}
-                    max={100}
-                    step={1}
-                    unit={`${working.measureUnit ?? "ft"} tall`}
-                    accessibilityLabel="Smallest billable height"
-                  />
+            {/*
+              The smallest job worth setting up. Waste is the same on a small one,
+              and without this a shop is underpaid on every one of them.
+            */}
+            {measurementKind(working.pricingUnit) === "area" ? (
+              <View className="gap-2">
+                <Text className="text-caption text-text-muted">
+                  Smallest size you charge for — optional
+                </Text>
+                <View className="flex-row gap-3">
+                  <View className="flex-1">
+                    <Stepper
+                      value={working.minimumWidth ?? 0}
+                      onChange={(value) => setDraft({ ...working, minimumWidth: value || null })}
+                      min={0}
+                      max={100}
+                      step={1}
+                      unit={`${working.measureUnit ?? "ft"} wide`}
+                      accessibilityLabel="Smallest billable width"
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <Stepper
+                      value={working.minimumHeight ?? 0}
+                      onChange={(value) => setDraft({ ...working, minimumHeight: value || null })}
+                      min={0}
+                      max={100}
+                      step={1}
+                      unit={`${working.measureUnit ?? "ft"} tall`}
+                      accessibilityLabel="Smallest billable height"
+                    />
+                  </View>
                 </View>
               </View>
-            </View>
-          ) : null}
+            ) : null}
 
-          {measurementKind(working.pricingUnit) === "length" ? (
-            <View className="gap-2">
-              <Text className="text-caption text-text-muted">
-                Shortest you charge for — optional
-              </Text>
-              <Stepper
-                value={working.minimumLength ?? 0}
-                onChange={(value) => setDraft({ ...working, minimumLength: value || null })}
-                min={0}
-                max={100}
-                step={1}
-                unit={working.measureUnit ?? "ft"}
-                accessibilityLabel="Shortest billable length"
+            {measurementKind(working.pricingUnit) === "length" ? (
+              <View className="gap-2">
+                <Text className="text-caption text-text-muted">
+                  Shortest you charge for — optional
+                </Text>
+                <Stepper
+                  value={working.minimumLength ?? 0}
+                  onChange={(value) => setDraft({ ...working, minimumLength: value || null })}
+                  min={0}
+                  max={100}
+                  step={1}
+                  unit={working.measureUnit ?? "ft"}
+                  accessibilityLabel="Shortest billable length"
+                />
+              </View>
+            ) : null}
+
+            {asksQuantity(working.pricingUnit) ? (
+              <PriceTierEditor
+                tiers={working.priceTiers}
+                unitLabel={unitLine(merged)}
+                onChange={(next) => setDraft({ ...working, priceTiers: next })}
               />
-            </View>
-          ) : null}
+            ) : null}
 
-          {asksQuantity(working.pricingUnit) ? (
-            <PriceTierEditor
-              tiers={working.priceTiers}
-              unitLabel={unitLine(merged)}
-              onChange={(next) => setDraft({ ...working, priceTiers: next })}
-            />
-          ) : null}
-
-          {asksQuantity(working.pricingUnit) ? (
-            <View className="gap-2">
-              <Text className="text-caption text-text-muted">
-                Least you will run — optional
-              </Text>
-              <Stepper
-                value={working.minimumOrderQuantity ?? 0}
-                onChange={(value) => setDraft({ ...working, minimumOrderQuantity: value || null })}
-                min={0}
-                max={1000}
-                step={1}
-                unit={working.minimumOrderQuantity ? "minimum" : "no minimum"}
-                accessibilityLabel="Smallest order you will take"
-              />
-            </View>
-          ) : null}
-        </Section>
+            {asksQuantity(working.pricingUnit) ? (
+              <View className="gap-2">
+                <Text className="text-caption text-text-muted">
+                  Least you will run — optional
+                </Text>
+                <Stepper
+                  value={working.minimumOrderQuantity ?? 0}
+                  onChange={(value) => setDraft({ ...working, minimumOrderQuantity: value || null })}
+                  min={0}
+                  max={1000}
+                  step={1}
+                  unit={working.minimumOrderQuantity ? "minimum" : "no minimum"}
+                  accessibilityLabel="Smallest order you will take"
+                />
+              </View>
+            ) : null}
+          </Section>
+        </TourTarget>
 
         {/* 4. Ready in */}
         <Section title="READY IN">
@@ -674,57 +716,60 @@ export default function ListingScreen() {
         </Section>
 
         {/* 5. Steps */}
-        <Section
-          title="WHAT A CLIENT PICKS"
-          hint="In this order, the way they will see it. Each one saves as you add it."
-        >
-          {specs(merged).map((group, index) => (
-            <SpecGroupEditor
-              key={group.id}
-              group={group}
-              step={index + 1}
-              busy={busy}
-              onSetRequired={(required) => {
-                void run(async () => saveGroup(listing, group, { required }));
-              }}
-              onAddOption={(label, minor, multiplier) =>
-                run(async () =>
-                  addOption(group, {
-                    label,
-                    priceModifierMinor: minor,
-                    priceMultiplierBps: multiplier,
-                  }),
-                )
-              }
-              onRemoveOption={(optionId) => {
-                void run(async () => removeOption(group, optionId));
-              }}
-              onRemoveGroup={() => {
-                void run(async () => removeGroup(listing, group));
-              }}
-            />
-          ))}
-          {merged.groups.length < LISTING_CAPS.specGroups ? (
-            <AddGroupButton
-              kind="spec"
-              busy={busy}
-              onAdd={(input) =>
-                run(async () =>
-                  addGroup(listing, {
-                    name: input.name,
-                    kind: "spec",
-                    required: true,
-                    firstOption: input.firstOption,
-                  }),
-                )
-              }
-            />
-          ) : (
-            <Text className="text-caption text-text-muted">
-              That is all six steps and add-ons. Remove one before adding another.
-            </Text>
-          )}
-        </Section>
+        <TourTarget step="listing.options" onLayout={(y) => placeSection("listing.options", y)} className="mt-8">
+          <Section
+            spaced={false}
+            title="WHAT A CLIENT PICKS"
+            hint="In this order, the way they will see it. Each one saves as you add it."
+          >
+            {specs(merged).map((group, index) => (
+              <SpecGroupEditor
+                key={group.id}
+                group={group}
+                step={index + 1}
+                busy={busy}
+                onSetRequired={(required) => {
+                  void run(async () => saveGroup(listing, group, { required }));
+                }}
+                onAddOption={(label, minor, multiplier) =>
+                  run(async () =>
+                    addOption(group, {
+                      label,
+                      priceModifierMinor: minor,
+                      priceMultiplierBps: multiplier,
+                    }),
+                  )
+                }
+                onRemoveOption={(optionId) => {
+                  void run(async () => removeOption(group, optionId));
+                }}
+                onRemoveGroup={() => {
+                  void run(async () => removeGroup(listing, group));
+                }}
+              />
+            ))}
+            {merged.groups.length < LISTING_CAPS.specGroups ? (
+              <AddGroupButton
+                kind="spec"
+                busy={busy}
+                onAdd={(input) =>
+                  run(async () =>
+                    addGroup(listing, {
+                      name: input.name,
+                      kind: "spec",
+                      required: true,
+                      firstOption: input.firstOption,
+                    }),
+                  )
+                }
+              />
+            ) : (
+              <Text className="text-caption text-text-muted">
+                That is all six steps and add-ons. Remove one before adding another.
+              </Text>
+            )}
+          </Section>
+        </TourTarget>
 
         {/* 6. Add-ons */}
         <Section
