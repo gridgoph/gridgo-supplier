@@ -38,11 +38,25 @@ export type UpdateOffer = {
   latest: LatestRelease;
 };
 
+/** The local "Updated to version X" card in Alerts, kept until the shop dismisses it. */
+export type UpdatedNotice = { build: Build; at: number };
+
 type AppUpdateState = {
   /** The versionCode the previous launch ran. Persisted. */
   lastSeenVersionCode: number | null;
   /** "Later" on an offer. Persisted. */
   snooze: Snooze | null;
+  /**
+   * The newest release GitHub named, with its What's new. Persisted, so the
+   * Alerts card still knows the phone is behind on a launch with no network.
+   * Unlike `offer`, "Later" does not clear it: the card stays while the phone
+   * is behind, and only the sheet steps aside.
+   */
+  latest: LatestRelease | null;
+  /** Set once, on the first launch of a newer build. Persisted. */
+  updatedNotice: UpdatedNotice | null;
+  /** This launch's build; `null` where the check does not run (dev, Expo Go). */
+  installed: Build | null;
 
   hydrated: boolean;
   /**
@@ -59,13 +73,19 @@ type AppUpdateState = {
   sheetOpen: boolean;
 };
 
-type Persisted = Pick<AppUpdateState, "lastSeenVersionCode" | "snooze">;
+type Persisted = Pick<
+  AppUpdateState,
+  "lastSeenVersionCode" | "snooze" | "latest" | "updatedNotice"
+>;
 
 export const useAppUpdate = create<AppUpdateState>()(
   persist(
     (): AppUpdateState => ({
       lastSeenVersionCode: null,
       snooze: null,
+      latest: null,
+      updatedNotice: null,
+      installed: null,
       hydrated: false,
       lastCheckedAt: null,
       checking: false,
@@ -79,6 +99,8 @@ export const useAppUpdate = create<AppUpdateState>()(
       partialize: (state): Persisted => ({
         lastSeenVersionCode: state.lastSeenVersionCode,
         snooze: state.snooze,
+        latest: state.latest,
+        updatedNotice: state.updatedNotice,
       }),
       onRehydrateStorage: () => () => {
         useAppUpdate.setState({ hydrated: true });
@@ -103,12 +125,43 @@ export function appUpdateHydrated(): Promise<void> {
  * Once per launch: note which build this is, and if it is newer than the one
  * the phone ran last time, queue the one-time "Update completed".
  */
-export function recordLaunch(installed: Build): void {
-  const { lastSeenVersionCode } = useAppUpdate.getState();
+export function recordLaunch(installed: Build, now: number = Date.now()): void {
+  const { lastSeenVersionCode, updatedNotice } = useAppUpdate.getState();
+  const upgraded = completedUpdate(lastSeenVersionCode, installed);
   useAppUpdate.setState({
+    installed,
     lastSeenVersionCode: installed.versionCode,
-    completed: completedUpdate(lastSeenVersionCode, installed) ? installed : null,
+    completed: upgraded ? installed : null,
+    updatedNotice: upgraded ? { build: installed, at: now } : updatedNotice,
   });
+}
+
+/**
+ * The newer release waiting for this phone, or `null`. Drives the Alerts card,
+ * which stays after "Later" — the sheet steps aside, the fact does not.
+ */
+export function selectAvailableUpdate(
+  state: Pick<AppUpdateState, "installed" | "latest">,
+): LatestRelease | null {
+  const { installed, latest } = state;
+  if (!installed || !latest) return null;
+  return latest.versionCode > installed.versionCode ? latest : null;
+}
+
+/**
+ * The "Updated to" card, only while this phone still runs that build: a
+ * notice about a build it has moved on from would be a lie.
+ */
+export function selectUpdatedNotice(
+  state: Pick<AppUpdateState, "installed" | "updatedNotice">,
+): UpdatedNotice | null {
+  const { installed, updatedNotice } = state;
+  if (!installed || !updatedNotice) return null;
+  return updatedNotice.build.versionCode === installed.versionCode ? updatedNotice : null;
+}
+
+export function dismissUpdatedNotice(): void {
+  useAppUpdate.setState({ updatedNotice: null });
 }
 
 /** Ask GitHub, and queue the offer when there is a newer build worth offering. */
@@ -138,6 +191,7 @@ export async function checkForUpdate(
     useAppUpdate.setState({ checking: false });
   }
   if (!latest) return;
+  useAppUpdate.setState({ latest });
 
   const { snooze, offer } = useAppUpdate.getState();
   const today = toDayKey(now);

@@ -2,6 +2,7 @@ import { useReadVersion } from "@/hooks/useReadVersion";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { usePhotoLinkRefresh } from "@/hooks/usePhotoLinkRefresh";
 import { useUser } from "@clerk/expo";
+import { useTourAutoStart, useTourScreen } from "@/hooks/useTourScreen";
 import { useCallback, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
@@ -116,6 +117,14 @@ export default function HomeScreen() {
   const headline = homeHeadline(jobs);
   const obligations = buildObligations(jobs);
   const [first, ...rest] = obligations;
+  /*
+    The first-run tour starts here, once, for a shop with no job on its books
+    (`lib/tour.ts`). A shop still with Operations has none by definition. Its
+    Home step lights the Jobs tab, so the floor only has to have arrived.
+  */
+  useTourScreen("home", waitingOnOps || !firstLoad);
+  useTourAutoStart(waitingOnOps || (loaded && !error && jobs.length === 0));
+
   const board = boardOpen ? boardPrompt(listings, services, !waitingOnOps) : null;
   const needsBoardWork = board != null && board.kind !== "ready";
 

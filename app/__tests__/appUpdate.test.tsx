@@ -10,6 +10,16 @@ jest.mock("expo-router", () => ({
   useNavigation: () => mockNavigation,
 }));
 
+// The history this build carries, as a fixture: never the repository's own
+// WHATS_NEW.md, which CI rewrites on every release.
+const mockBundled = [
+  { version: "1.0.84", kind: "feature" as const, notes: ["Take the tour again from Account"] },
+];
+jest.mock("@/store/whatsNewHistory", () => ({
+  ...jest.requireActual("@/store/whatsNewHistory"),
+  bundledHistory: () => mockBundled,
+}));
+
 import { router } from "expo-router";
 
 import AppUpdateSheet from "@/app/app-update";
@@ -18,6 +28,9 @@ import {
   checkForUpdate,
   closeUpdateSheet,
   recordLaunch,
+  selectAvailableUpdate,
+  selectUpdatedNotice,
+  snoozeOffer,
   useAppUpdate,
 } from "@/store/appUpdate";
 
@@ -27,6 +40,7 @@ const latest: LatestRelease = {
   versionName: "1.0.84",
   publishedAt: "2026-09-23T13:15:55Z",
   apkBytes: 130409988,
+  whatsNew: ["Update notes in the prompt", "A tour for new shops"],
 };
 const morning = new Date(2026, 8, 24, 9, 0);
 
@@ -43,6 +57,9 @@ beforeEach(() => {
   useAppUpdate.setState({
     lastSeenVersionCode: null,
     snooze: null,
+    latest: null,
+    updatedNotice: null,
+    installed: null,
     hydrated: true,
     lastCheckedAt: null,
     checking: false,
@@ -171,6 +188,40 @@ describe("the first launch after an upgrade", () => {
   });
 });
 
+describe("what the Alerts card reads", () => {
+  it("keeps the newer release after Later puts the sheet away", async () => {
+    recordLaunch(installed);
+    await checkForUpdate(installed, "launch", morning, answered);
+    snoozeOffer(morning);
+
+    const state = useAppUpdate.getState();
+    expect(state.offer).toBeNull();
+    expect(selectAvailableUpdate(state)?.whatsNew).toEqual(latest.whatsNew);
+  });
+
+  it("has nothing once the phone runs that release", () => {
+    useAppUpdate.setState({ latest, installed: { versionCode: 84, versionName: "1.0.84" } });
+    expect(selectAvailableUpdate(useAppUpdate.getState())).toBeNull();
+  });
+
+  it("writes the Updated card once, and drops it when the phone moves on", () => {
+    useAppUpdate.setState({ lastSeenVersionCode: 80 });
+    recordLaunch({ versionCode: 84, versionName: "1.0.84" }, 1_000);
+    expect(selectUpdatedNotice(useAppUpdate.getState())).toEqual({
+      build: { versionCode: 84, versionName: "1.0.84" },
+      at: 1_000,
+    });
+
+    // A relaunch of the same build keeps it, unchanged.
+    recordLaunch({ versionCode: 84, versionName: "1.0.84" }, 2_000);
+    expect(selectUpdatedNotice(useAppUpdate.getState())?.at).toBe(1_000);
+
+    // The next build replaces it with its own.
+    recordLaunch({ versionCode: 90, versionName: "1.0.90" }, 3_000);
+    expect(selectUpdatedNotice(useAppUpdate.getState())?.build.versionName).toBe("1.0.90");
+  });
+});
+
 describe("App update sheet", () => {
   it("names both versions and the download size", async () => {
     useAppUpdate.setState({ offer: { installed, latest } });
@@ -214,6 +265,31 @@ describe("App update sheet", () => {
 
     expect(useAppUpdate.getState().snooze?.versionCode).toBe(84);
     expect(router.back).toHaveBeenCalled();
+  });
+
+  it("shows the release's What's new under the versions", async () => {
+    useAppUpdate.setState({ offer: { installed, latest } });
+    await render(<AppUpdateSheet />);
+
+    expect(screen.getByText("What's new in 1.0.84")).toBeTruthy();
+    expect(screen.getByText("Update notes in the prompt")).toBeTruthy();
+    expect(screen.getByText("A tour for new shops")).toBeTruthy();
+  });
+
+  it("looks as it did before notes when a release has none", async () => {
+    useAppUpdate.setState({ offer: { installed, latest: { ...latest, whatsNew: [] } } });
+    await render(<AppUpdateSheet />);
+
+    expect(screen.queryByText(/What's new/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Update now" })).toBeTruthy();
+  });
+
+  it("says what the installed version brought, from the notes it carries", async () => {
+    useAppUpdate.setState({ completed: { versionCode: 84, versionName: "1.0.84" } });
+    await render(<AppUpdateSheet />);
+
+    expect(screen.getByText("What's new in 1.0.84")).toBeTruthy();
+    expect(screen.getByText("Take the tour again from Account")).toBeTruthy();
   });
 
   it("confirms a completed update", async () => {

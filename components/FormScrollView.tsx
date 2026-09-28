@@ -1,6 +1,9 @@
-import type { ReactElement, ReactNode } from "react";
+import type { ReactElement, ReactNode, Ref } from "react";
 import { Platform, View, type RefreshControlProps } from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import {
+  KeyboardAwareScrollView,
+  type KeyboardAwareScrollViewRef,
+} from "react-native-keyboard-controller";
 
 import { spacing } from "@/constants/theme";
 
@@ -14,6 +17,8 @@ type Props = {
   bottomOffset?: number;
   /** Pull to refresh, for a screen that is a list as well as a form. */
   refreshControl?: ReactElement<RefreshControlProps>;
+  /** For a screen that scrolls a section into view itself (the tour). */
+  scrollRef?: Ref<KeyboardAwareScrollViewRef>;
 };
 
 /**
@@ -52,9 +57,11 @@ export function FormScrollView({
   fillHeight,
   bottomOffset,
   refreshControl,
+  scrollRef,
 }: Props) {
   return (
     <KeyboardAwareScrollView
+      ref={scrollRef}
       style={{ flex: 1 }}
       contentContainerStyle={fillHeight ? { flexGrow: 1 } : undefined}
       bottomOffset={bottomOffset ?? spacing.xl}

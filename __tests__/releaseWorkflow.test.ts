@@ -280,3 +280,30 @@ describe("a pull request never produces a signed release build", () => {
     expect(check).not.toMatch(/secrets\./);
   });
 });
+
+describe("the release carries its What's new notes", () => {
+  it("checks the notes on every pull request", () => {
+    expect(jobBody("check")).toContain("node scripts/whats-new.js check");
+  });
+
+  it("writes the pending notes and their label into the release the app reads", () => {
+    const release = apkSteps.find((step) => step.includes("gh release create"));
+    expect(release).toContain("node scripts/whats-new.js notes");
+    expect(release).toContain('--notes "$notes"');
+  });
+
+  it("files those notes under the version only after the latest release is out", () => {
+    const record = apkSteps.findIndex((step) => step.includes("scripts/whats-new.js record"));
+    const githubRelease = apkSteps.findIndex((step) => step.includes("gh release create"));
+    expect(record).toBeGreaterThan(githubRelease);
+    const step = apkSteps[record];
+    // A manual dispatch publishes a not-latest release; its notes stay pending.
+    expect(step).toMatch(/if:\s*github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
+    expect(step).not.toMatch(/always\(\)|failure\(\)|!cancelled\(\)/);
+    expect(step).toContain("git push origin HEAD:main");
+  });
+
+  it("can push that record with the job's own token", () => {
+    expect(apk).toMatch(/permissions:\s*\n\s+contents:\s*write/);
+  });
+});

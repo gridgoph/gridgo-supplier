@@ -67,6 +67,10 @@ export const colors = {
     overlayHover: "rgba(0, 0, 0, 0.04)",
     overlayPressed: "rgba(0, 0, 0, 0.08)",
     scrim: "rgba(0, 0, 0, 0.4)",
+    /** The tour's dim around the lit control (`components/TourOverlay`). */
+    tourScrim: "rgba(0, 0, 0, 0.55)",
+    /** The edge of the tour's cut-out. */
+    tourRing: "#FFFFFF",
   },
   dark: {
     canvas: "#000000",
@@ -100,6 +104,8 @@ export const colors = {
     overlayHover: "rgba(255, 255, 255, 0.04)",
     overlayPressed: "rgba(255, 255, 255, 0.08)",
     scrim: "rgba(0, 0, 0, 0.6)",
+    tourScrim: "rgba(0, 0, 0, 0.72)",
+    tourRing: "#F0F0F0",
   },
 } as const;
 

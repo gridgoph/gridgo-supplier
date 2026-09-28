@@ -14,6 +14,8 @@ import { ChatButton } from "@/components/ChatButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SectionHeader } from "@/components/SectionHeader";
 import { SkeletonList } from "@/components/Skeleton";
+import { TourTarget } from "@/components/TourTarget";
+import { useTourScreen } from "@/hooks/useTourScreen";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import {
@@ -84,6 +86,8 @@ export default function JobsScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const firstLoad = loading && !loaded;
+  // The tour lights where jobs land, so it waits for the list to arrive.
+  useTourScreen("jobs", !firstLoad);
 
   return (
     <View className="gg-screen">
@@ -121,76 +125,79 @@ export default function JobsScreen() {
           <SkeletonList label="Loading your assignments" count={3} sectioned />
         ) : null}
 
-        {error && !loaded ? (
-          <EmptyState
-            title="Jobs are not reachable"
-            body={error}
-            actionLabel="Try again"
-            onAction={() => void reload()}
-          />
-        ) : error ? (
-          <View className="mb-6">
-            <ErrorNotice message={error} onRetry={() => void reload()} />
-          </View>
-        ) : null}
-
-        {loaded && !error && !jobs.length ? (
-          <EmptyState
-            title="No assignments yet"
-            body="When GRIDGO matches a job to your shop, it lands here for accept or decline. Make sure the services you offer are up to date so the right work reaches you."
-            actionLabel="Check your services"
-            onAction={() => router.push("/services")}
-            secondaryLabel="Set capacity"
-            onSecondary={() => router.push("/capacity")}
-          />
-        ) : null}
-
-        {emptyCopy ? (
-          <EmptyState
-            title={emptyCopy.title}
-            body={emptyCopy.body}
-            actionLabel="Show all jobs"
-            onAction={() => setQuery(DEFAULT_JOB_BOARD_QUERY)}
-          />
-        ) : null}
-
-        {waiting.length ? (
-          <View className="gap-3">
-            <SectionHeader title="NEEDS YOU" count={waiting.length} />
-            {waiting.map((job) => (
-              <JobCard
-                key={job.id}
-                job={job}
-                onPress={() => router.push({ pathname: "/job/[id]", params: { id: job.id } })}
-              />
-            ))}
-          </View>
-        ) : null}
-
-        {running.length ? (
-          <View className={waiting.length ? "mt-8 gap-3" : "gap-3"}>
-            <SectionHeader
-              title="IN FLIGHT"
-              count={running.length}
-              hint="Nothing to do on these until someone else moves."
+        {/* Where a matched job lands: what the tour lights on this tab. */}
+        <TourTarget step="jobs.list">
+          {error && !loaded ? (
+            <EmptyState
+              title="Jobs are not reachable"
+              body={error}
+              actionLabel="Try again"
+              onAction={() => void reload()}
             />
-            {running.map((job) => (
-              <JobCard
-                key={job.id}
-                job={job}
-                showSpec={false}
-                onPress={() => router.push({ pathname: "/job/[id]", params: { id: job.id } })}
-              />
-            ))}
-          </View>
-        ) : null}
+          ) : error ? (
+            <View className="mb-6">
+              <ErrorNotice message={error} onRetry={() => void reload()} />
+            </View>
+          ) : null}
 
-        {loaded && !error && jobs.length > 0 && !waiting.length && !narrowed ? (
-          <Text className="mt-6 text-caption text-text-muted">
-            Every job here is waiting on the client, GRIDGO, or a rider. You will see a new
-            one the moment it needs your shop.
-          </Text>
-        ) : null}
+          {loaded && !error && !jobs.length ? (
+            <EmptyState
+              title="No assignments yet"
+              body="When GRIDGO matches a job to your shop, it lands here for accept or decline. Make sure the services you offer are up to date so the right work reaches you."
+              actionLabel="Check your services"
+              onAction={() => router.push("/services")}
+              secondaryLabel="Set capacity"
+              onSecondary={() => router.push("/capacity")}
+            />
+          ) : null}
+
+          {emptyCopy ? (
+            <EmptyState
+              title={emptyCopy.title}
+              body={emptyCopy.body}
+              actionLabel="Show all jobs"
+              onAction={() => setQuery(DEFAULT_JOB_BOARD_QUERY)}
+            />
+          ) : null}
+
+          {waiting.length ? (
+            <View className="gap-3">
+              <SectionHeader title="NEEDS YOU" count={waiting.length} />
+              {waiting.map((job) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  onPress={() => router.push({ pathname: "/job/[id]", params: { id: job.id } })}
+                />
+              ))}
+            </View>
+          ) : null}
+
+          {running.length ? (
+            <View className={waiting.length ? "mt-8 gap-3" : "gap-3"}>
+              <SectionHeader
+                title="IN FLIGHT"
+                count={running.length}
+                hint="Nothing to do on these until someone else moves."
+              />
+              {running.map((job) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  showSpec={false}
+                  onPress={() => router.push({ pathname: "/job/[id]", params: { id: job.id } })}
+                />
+              ))}
+            </View>
+          ) : null}
+
+          {loaded && !error && jobs.length > 0 && !waiting.length && !narrowed ? (
+            <Text className="mt-6 text-caption text-text-muted">
+              Every job here is waiting on the client, GRIDGO, or a rider. You will see a new
+              one the moment it needs your shop.
+            </Text>
+          ) : null}
+        </TourTarget>
       </FormScrollView>
     </View>
   );

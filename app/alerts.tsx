@@ -5,6 +5,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { router, useFocusEffect, useNavigation } from "expo-router";
 
 import { AlertCard } from "@/components/AlertCard";
+import { AppUpdateNotices } from "@/components/AppUpdateNotices";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { PushEnableCard } from "@/components/PushEnableCard";
@@ -278,6 +279,12 @@ export default function NotificationsScreen() {
           there is something to offer — see `pushOffer`.
         */}
         <PushEnableCard spacing="below" />
+
+        {/*
+          This phone's own news: a newer GRIDGO and what it brings, or the
+          build that just landed. Local, so it never reaches the unread count.
+        */}
+        <AppUpdateNotices />
 
         {firstLoad ? (
           <SkeletonList label="Loading your alerts" count={3} sectioned />

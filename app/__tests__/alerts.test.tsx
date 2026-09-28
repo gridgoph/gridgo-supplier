@@ -5,6 +5,7 @@ import AlertsScreen from "@/app/alerts";
 import type { Notification } from "@/lib/api";
 import { askConfirm } from "@/store/sheets";
 import { useAlertsStore } from "@/store/alerts";
+import { useAppUpdate } from "@/store/appUpdate";
 
 const mockSetOptions = jest.fn();
 
@@ -177,4 +178,43 @@ it("rewrites a refund notice for the shop and opens its job", async () => {
   fireEvent.press(body);
   await waitFor(() => expect(router.push).toHaveBeenCalled());
   expect(JSON.stringify(router.push.mock.calls[0][0])).toContain("ord_refunded");
+});
+
+describe("Alerts screen — app updates", () => {
+  beforeEach(() => {
+    api.listNotifications.mockReset();
+    api.listJobs.mockReset();
+    api.listNotifications.mockResolvedValue([offer]);
+    api.listJobs.mockResolvedValue([]);
+    useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, localOnly: false });
+  });
+
+  afterEach(() => {
+    useAppUpdate.setState({ installed: null, latest: null, updatedNotice: null });
+  });
+
+  it("puts a newer version and its What's new above the job notices", async () => {
+    useAppUpdate.setState({
+      installed: { versionCode: 84, versionName: "1.0.84" },
+      latest: {
+        versionCode: 90,
+        versionName: "1.0.90",
+        publishedAt: null,
+        apkBytes: null,
+        whatsNew: ["A guided tour for new shops"],
+      },
+    });
+    await render(<AlertsScreen />);
+
+    expect(await screen.findByText("New job offered")).toBeTruthy();
+    expect(screen.getByText("Version 1.0.90 is ready")).toBeTruthy();
+    expect(screen.getByText("What's new in 1.0.90")).toBeTruthy();
+    expect(screen.getByText("A guided tour for new shops")).toBeTruthy();
+  });
+
+  it("shows no update card on a phone that is current", async () => {
+    await render(<AlertsScreen />);
+    expect(await screen.findByText("New job offered")).toBeTruthy();
+    expect(screen.queryByTestId("app-update-notices")).toBeNull();
+  });
 });
