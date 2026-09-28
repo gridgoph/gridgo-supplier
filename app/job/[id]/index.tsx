@@ -112,7 +112,8 @@ export default function JobWorkspaceScreen() {
   const actions = actionsForJob(job);
   const primary = actions.find((a) => a.primary) ?? null;
   const secondary = actions.filter((a) => !a.primary);
-  const urgency = deadlineUrgency(job.promisedDate || job.deadline);
+  // A job stopped or closed by a refund is not due anywhere.
+  const urgency = deadlineUrgency(refundStanding(job) === "none" ? job.promisedDate || job.deadline : null);
   const waiting = waitingOn(job.state, payoutPlanOf(job));
   // A refund stops the job and speaks over whose move it is.
   const refund = refundNotice(job, keptAfterSettlement(job));

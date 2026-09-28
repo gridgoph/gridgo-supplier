@@ -398,7 +398,7 @@ describe("job workspace after a client refund", () => {
     expect(screen.getByText("Paused for refund")).toBeTruthy();
     expect(screen.queryByTestId("job-action-bar")).toBeNull();
     expect(screen.queryByText("Add start-of-production proof")).toBeNull();
-    expect(screen.getAllByText("Held").length).toBe(3);
+    expect(screen.getAllByText("Paused").length).toBe(3);
   });
 
   it("shows replaced stages as not paid, and the settlement payout with its transfer evidence", async () => {

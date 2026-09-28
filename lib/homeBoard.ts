@@ -73,7 +73,7 @@ export function homeHeadline(jobs: Order[]): HomeHeadline {
     };
   }
 
-  const withGridgo = payout.awaitingReleaseMinor + payout.heldMinor;
+  const withGridgo = payout.awaitingReleaseMinor + payout.heldMinor + payout.pausedMinor;
   if (withGridgo > 0) {
     return {
       amountMinor: withGridgo,

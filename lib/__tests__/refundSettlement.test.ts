@@ -226,8 +226,10 @@ describe("a refund request before settlement", () => {
   it("holds every unpaid stage and says why", () => {
     const views = milestoneViews(paused());
     expect(views.map((view) => view.stage)).toEqual(["held", "held", "held"]);
-    expect(views[0].detail).toMatch(/asked for a refund/);
+    expect(views[0].statusLabel).toBe("Paused");
+    expect(views[0].detail).toMatch(/settles the client's refund with you/);
     expect(earningsSplit(paused()).held).toBe(true);
+    expect(earningsSplit(paused())).toMatchObject({ pausedMinor: 100000, heldMinor: 0 });
   });
 
   it("offers no step at all, proof included", () => {
@@ -260,7 +262,7 @@ describe("the job lists", () => {
   });
 
   it("sums a settled job as what the shop keeps", () => {
-    expect(earningsSummary(order())).toBe("₱600.00 agreed in settlement · ₱400.00 released");
+    expect(earningsSummary(order())).toBe("₱400.00 of ₱600.00 · settled");
     const released = settlementPayout({ status: "released", releasedAt: "2026-09-28T06:00:00.000Z" });
     expect(earningsSummary(order({ supplierSettlementPayouts: [released] }))).toBe("₱600.00 · settled and released");
     expect(
@@ -341,5 +343,11 @@ describe("refund notices and errors", () => {
       message: "This order is stopped for a refund. Resolve the refund before continuing.",
     });
     expect(humanizeApiError(error, "fallback")).toMatch(/asked for a refund, so this job is paused/);
+  });
+});
+
+describe("the earnings row while paused", () => {
+  it("says paused for refund rather than on hold", () => {
+    expect(earningsSummary(paused())).toBe("₱1,000.00 · paused for refund");
   });
 });

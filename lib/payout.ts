@@ -34,6 +34,8 @@ export type PayoutRow = {
   settlementPayouts: SettlementPayoutView[];
   /** A claim or a refund request is holding whatever has not been released. */
   held: boolean;
+  /** Which one: a claim is "Held", a refund request is "Paused". */
+  holdReason: "claim" | "refund" | null;
   /** When the client's window to report a problem closes, if it is open. */
   issueWindowExpiresAt: string | null;
 };
@@ -52,6 +54,7 @@ export function derivePayoutRow(order: Order): PayoutRow {
     milestones: milestoneViews(order),
     settlementPayouts: settlementPayoutViews(order),
     held: payoutHoldReason(order) !== null,
+    holdReason: payoutHoldReason(order),
     issueWindowExpiresAt: order.issueWindowExpiresAt ?? null,
   };
 }
@@ -97,7 +100,11 @@ export function summarizePayouts(jobs: Order[]): EarningsSplit & { jobCount: num
 /** Everything not yet in the shop's hands, however it is stuck. */
 export function unreleasedMinor(split: EarningsSplit): number {
   return (
-    split.needsProofMinor + split.awaitingReleaseMinor + split.heldMinor + split.laterMinor
+    split.needsProofMinor +
+    split.awaitingReleaseMinor +
+    split.heldMinor +
+    split.pausedMinor +
+    split.laterMinor
   );
 }
 

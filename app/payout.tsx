@@ -151,10 +151,20 @@ export default function PayoutScreen() {
               <>
                 <View className="gg-divider" />
                 <SplitRow
-                  label="Held by a client report or refund"
+                  label="Held by a client report"
                   amountMinor={total.heldMinor}
-                  hint="Operations settles it with you before this moves."
+                  hint="Operations settles the report before this moves."
                   tone="error"
+                />
+              </>
+            ) : null}
+            {total.pausedMinor > 0 ? (
+              <>
+                <View className="gg-divider" />
+                <SplitRow
+                  label="Paused for a refund review"
+                  amountMinor={total.pausedMinor}
+                  hint="Operations agrees with you what you keep. Money already released stays yours."
                 />
               </>
             ) : null}
@@ -321,7 +331,9 @@ export default function PayoutScreen() {
                       : `${api.formatPhp(row.split.releasedMinor)} of ${api.formatPhp(row.split.totalMinor)} released`}
                   </Text>
                 </View>
-                {row.held ? (
+                {row.holdReason === "refund" ? (
+                  <StatusChip tone="warning" label="Paused" icon="clock" />
+                ) : row.held ? (
                   <StatusChip tone="error" label="Held" icon="triangle-alert" />
                 ) : (
                   <ChevronRight

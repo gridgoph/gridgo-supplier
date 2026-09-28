@@ -298,8 +298,21 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
       statusLabel: "Replaced by settlement",
       tone: "neutral",
       icon: "circle-x",
-      detail:
-        "Not paid. The client's refund was settled before this part was due, and the agreed settlement payout replaces it.",
+      detail: "Not paid. The client's refund was settled first, and the agreed settlement payout replaces this part.",
+      canAddProof: false,
+    };
+  }
+
+  // A refund pause is calmer than a claim: nobody has found fault with the
+  // shop's work, and Operations will agree what it keeps.
+  if (hold === "refund") {
+    return {
+      ...base,
+      stage: "held",
+      statusLabel: "Paused",
+      tone: "warning",
+      icon: "clock",
+      detail: "Paused while Operations settles the client's refund with you.",
       canAddProof: false,
     };
   }
@@ -312,9 +325,7 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
       tone: "error",
       icon: "triangle-alert",
       detail:
-        hold === "refund"
-          ? "The client asked for a refund, so GRIDGO is holding what is left of your earnings until Operations settles it with you."
-          : "The client has reported a problem with this job, so GRIDGO is holding what is left of your earnings until it is settled.",
+        "The client has reported a problem with this job, so GRIDGO is holding what is left of your earnings until it is settled.",
       canAddProof: false,
     };
   }
@@ -465,7 +476,10 @@ export type EarningsSplit = {
   needsProofMinor: number;
   /** Not reached yet, or the rider's to evidence. Nothing for the shop to do. */
   laterMinor: number;
+  /** Held by a claim: a client's report on the job. */
   heldMinor: number;
+  /** Paused by a client's refund request, until Operations settles it with the shop. */
+  pausedMinor: number;
   /**
    * Original parts a refund settlement replaced. Never paid, and outside
    * `totalMinor`: once settled, the total is what the shop keeps.
@@ -483,9 +497,11 @@ export function earningsSplit(order: Order): EarningsSplit {
     needsProofMinor: 0,
     laterMinor: 0,
     heldMinor: 0,
+    pausedMinor: 0,
     supersededMinor: 0,
     held: payoutHoldReason(order) !== null,
   };
+  const paused = payoutHoldReason(order) === "refund";
 
   for (const view of milestoneViews(order)) {
     if (view.stage === "superseded") {
@@ -494,6 +510,7 @@ export function earningsSplit(order: Order): EarningsSplit {
     }
     split.totalMinor += view.amountMinor;
     if (view.stage === "released") split.releasedMinor += view.amountMinor;
+    else if (view.stage === "held" && paused) split.pausedMinor += view.amountMinor;
     else if (view.stage === "held") split.heldMinor += view.amountMinor;
     else if (view.stage === "awaiting_release") split.awaitingReleaseMinor += view.amountMinor;
     else if (view.stage === "needs_shop_proof") split.needsProofMinor += view.amountMinor;
@@ -522,6 +539,7 @@ export function addSplits(splits: EarningsSplit[]): EarningsSplit {
       needsProofMinor: sum.needsProofMinor + s.needsProofMinor,
       laterMinor: sum.laterMinor + s.laterMinor,
       heldMinor: sum.heldMinor + s.heldMinor,
+      pausedMinor: sum.pausedMinor + s.pausedMinor,
       supersededMinor: sum.supersededMinor + s.supersededMinor,
       held: sum.held || s.held,
     }),
@@ -532,6 +550,7 @@ export function addSplits(splits: EarningsSplit[]): EarningsSplit {
       needsProofMinor: 0,
       laterMinor: 0,
       heldMinor: 0,
+      pausedMinor: 0,
       supersededMinor: 0,
       held: false,
     },
@@ -614,7 +633,7 @@ export function viewSettlementPayout(
     statusLabel: "With GRIDGO",
     tone: "info",
     icon: "clock",
-    detail: "Agreed with you when the refund was settled. Operations sends it to your receiving account. Nothing for you to file.",
+    detail: "Operations sends it to your receiving account. Nothing for you to file.",
   };
 }
 

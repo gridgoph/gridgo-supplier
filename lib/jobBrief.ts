@@ -146,10 +146,14 @@ export function earningsSummary(order: BriefOrder): string {
   if (split.supersededMinor > 0) {
     if (split.totalMinor === 0) return "Settled · no payout due";
     if (split.releasedMinor >= split.totalMinor) return `${formatPhp(split.totalMinor)} · settled and released`;
-    return `${formatPhp(split.totalMinor)} agreed in settlement · ${formatPhp(split.releasedMinor)} released`;
+    return `${formatPhp(split.releasedMinor)} of ${formatPhp(split.totalMinor)} · settled`;
   }
   if (split.totalMinor > 0) {
-    if (split.held) return `${formatPhp(split.totalMinor)} · on hold`;
+    if (split.held) {
+      return refundStanding(order) === "paused"
+        ? `${formatPhp(split.totalMinor)} · paused for refund`
+        : `${formatPhp(split.totalMinor)} · on hold`;
+    }
     if (split.needsProofMinor > 0) return `${formatPhp(split.needsProofMinor)} waiting on your proof`;
     if (split.releasedMinor >= split.totalMinor) return `${formatPhp(split.totalMinor)} · paid in full`;
     if (split.releasedMinor > 0) {
