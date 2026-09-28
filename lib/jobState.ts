@@ -2,6 +2,7 @@ import type { MilestoneCode, Order, PayoutPlanVersion } from "@/lib/api";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 import { CURRENT_PAYOUT_PLAN, nextShopProof } from "@/lib/milestones";
 import { counterCheck, presentCheckCodes } from "@/lib/pickupCheck";
+import { needsProductionPhoto } from "@/lib/productionPhoto";
 import { presentRefundTimelineNote, refundStanding, refundStatus } from "@/lib/refund";
 
 /**
@@ -20,6 +21,7 @@ export type SupplierActionKind =
   | "decline"
   | "start_production"
   | "ready_for_pickup"
+  | "add_production_photo"
   | "add_proof";
 
 export type SupplierAction = {
@@ -131,19 +133,21 @@ export function presentJobStatus(
  * A refund request stops everything, proof included: GRIDGO refuses the next
  * step with `refund_fulfillment_stopped`, and a settlement closes the job.
  */
-export function actionsForJob(
-  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold" | "refundHold" | "refundDisposition">,
-): SupplierAction[] {
+export function actionsForJob(order: JobActionOrder): SupplierAction[] {
   if (refundStanding(order) !== "none") return [];
   const state = order.state;
   const owed = nextShopProof(order as Order);
+  // Packing waits on a photo, and a proof filed as a picture is one.
+  const photoOwed = needsProductionPhoto(order);
   const proofStep: SupplierAction | null = owed
     ? {
         kind: "add_proof",
         label: `Add ${owed.proofName} proof`,
         targetState: null,
         primary: true,
-        consequence: `GRIDGO releases ${percentText(owed.sharePercent)} of your earnings on this job once it has your evidence for ${owed.label.toLowerCase()}.`,
+        consequence:
+          `GRIDGO releases ${percentText(owed.sharePercent)} of your earnings on this job once it has your evidence for ${owed.label.toLowerCase()}.` +
+          (photoOwed ? " A photo also counts as the production photo you need before packing." : ""),
         resultLabel: "Proof filed",
         milestoneCode: owed.code,
       }
@@ -190,6 +194,19 @@ export function actionsForJob(
     case "production":
     // Older clients may still leave a job at this state.
     case "supplier_self_qc":
+      // GRIDGO will not let the job be packed without a photo of the work, so
+      // the step that would be refused is replaced by the one that opens it.
+      if (photoOwed) {
+        return demote(proofStep, {
+          kind: "add_production_photo",
+          label: "Add a production photo",
+          targetState: null,
+          primary: true,
+          consequence:
+            "GRIDGO needs one photo of this job on your floor before it can be packaged. The client sees it on their order.",
+          resultLabel: "Photo on the job",
+        });
+      }
       return demote(proofStep, {
         kind: "ready_for_pickup",
         label: "Package for pickup",
@@ -204,6 +221,12 @@ export function actionsForJob(
       return proofStep ? [proofStep] : [];
   }
 }
+
+/** What `actionsForJob` reads. Every field but the state may be absent on an older API. */
+export type JobActionOrder = Pick<
+  Order,
+  "state" | "payoutMilestones" | "payoutHold" | "refundHold" | "refundDisposition" | "productionProgress"
+>;
 
 /** Put the outstanding proof first and hand the forward step the quiet slot. */
 function demote(proof: SupplierAction | null, forward: SupplierAction): SupplierAction[] {
@@ -221,7 +244,8 @@ export type SupplierActionRoute =
   | "/job/[id]/decline"
   | "/job/[id]/fulfilment"
   | "/job/[id]/advance"
-  | "/job/[id]/handoff";
+  | "/job/[id]/handoff"
+  | "/job/[id]/progress-photo";
 
 /** The flow screen an action opens. Nothing state-changing is a bare row tap. */
 export function routeForAction(kind: SupplierActionKind): SupplierActionRoute {
@@ -234,13 +258,15 @@ export function routeForAction(kind: SupplierActionKind): SupplierActionRoute {
       return "/job/[id]/fulfilment";
     case "ready_for_pickup":
       return "/job/[id]/handoff";
+    case "add_production_photo":
+      return "/job/[id]/progress-photo";
     default:
       return "/job/[id]/advance";
   }
 }
 
 export function findAction(
-  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold" | "refundHold" | "refundDisposition">,
+  order: JobActionOrder,
   kind: string,
 ): SupplierAction | null {
   return actionsForJob(order).find((a) => a.kind === kind) ?? null;
@@ -277,7 +303,7 @@ export function journeyIndex(state: string): number {
 }
 
 export function primaryAction(
-  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold" | "refundHold" | "refundDisposition">,
+  order: JobActionOrder,
 ): SupplierAction | null {
   return actionsForJob(order).find((a) => a.primary) ?? null;
 }
@@ -298,7 +324,7 @@ export function isInProductionPipeline(order: Pick<Order, "state">): boolean {
 
 /** Jobs that still need a supplier action on this device. */
 export function needsSupplierAction(
-  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold" | "refundHold" | "refundDisposition">,
+  order: JobActionOrder,
 ): boolean {
   return actionsForJob(order).some((a) => a.primary);
 }

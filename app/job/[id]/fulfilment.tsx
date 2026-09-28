@@ -13,6 +13,7 @@ import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { probeStorage, storedUploads, type UploadItem, type StorageAvailability } from "@/lib/files";
 import { findMilestoneView, milestoneDefinition, nextShopProof, type MilestoneView } from "@/lib/milestones";
+import { needsProductionPhoto } from "@/lib/productionPhoto";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { useJob } from "@/hooks/useJob";
 import { askConfirm } from "@/store/sheets";
@@ -60,6 +61,10 @@ export default function FulfilmentProofScreen() {
   const target = job ? (named?.proofOwner === "shop" ? named : nextShopProof(job)) : null;
   const milestone = target ? job?.payoutMilestones?.find((m) => m.code === target.code) : undefined;
   const definition = target ? milestoneDefinition(target.code, milestone) : null;
+  // A picture filed here also opens packing; a PDF earns the share but not that.
+  const photoCounts =
+    Boolean(job && target && needsProductionPhoto(job)) &&
+    ["production_started", "printing", "packaging_qc"].includes(target?.code ?? "");
   const ready = storedUploads(upload.items);
   const latest = ready[ready.length - 1] ?? null;
 
@@ -131,7 +136,10 @@ export default function FulfilmentProofScreen() {
       subject={job?.title}
       lede={
         target
-          ? `GRIDGO releases ${target.sharePercent}% of what you earn on this job — ${api.formatPhp(target.amountMinor)} — once it has your evidence for this part. A JPEG, PNG, WebP or PDF is fine.`
+          ? `GRIDGO releases ${target.sharePercent}% of what you earn on this job — ${api.formatPhp(target.amountMinor)} — once it has your evidence for this part. ` +
+            (photoCounts
+              ? "Send a photo: it also counts as the production photo you need before packing. A PDF is accepted here, but does not."
+              : "A JPEG, PNG, WebP or PDF is fine.")
           : "Every part of this job's payout already has its evidence, or is waiting on the rider."
       }
       actionError={fileError}

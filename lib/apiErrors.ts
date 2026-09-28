@@ -36,6 +36,19 @@ export function isUnmappedIdentity(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401 && apiErrorCode(error) === "unmapped_identity";
 }
 
+/**
+ * GRIDGO refused to let the job be packed because no production photo is on
+ * it. The caller turns this into the photo step rather than a dead end.
+ */
+export function isProductionPhotoRequired(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "production_photo_required";
+}
+
+/** The job left production while a photo was on its way; reload it. */
+export function isProductionPhotoUploadNotAllowed(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "production_photo_upload_not_allowed";
+}
+
 /** Mapped GRIDGO identity that is not a shop. */
 export function isNonSupplierIdentity(error: unknown): boolean {
   if (!(error instanceof ApiError) || error.status !== 403) return false;
@@ -109,6 +122,10 @@ const MESSAGES: Record<string, string> = {
   milestone_not_found:
     "That part of the job is no longer there. Pull down to refresh and try again.",
   pof_required: "GRIDGO needs your evidence for this part before it can release it.",
+  production_photo_required:
+    "Add a photo of this job first. GRIDGO needs one before it can be packaged — your start-of-production photo counts, a PDF does not.",
+  production_photo_upload_not_allowed:
+    "This job has moved past production, so it no longer takes progress photos. Its latest step is on the job.",
   milestone_not_reached:
     "The job has not reached this part yet. Take the step it shows and file your evidence then.",
   payment_method_not_allowed:

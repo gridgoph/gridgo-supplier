@@ -1,4 +1,4 @@
-/* global jest, beforeEach, afterEach, it, expect */
+/* global jest, beforeEach, afterEach, describe, it, expect */
 const React = require("react");
 const { act, create } = require("react-test-renderer");
 const HandoffScreen = require("@/app/job/[id]/handoff").default;
@@ -7,6 +7,8 @@ const mockRun = jest.fn();
 const mockConfirm = jest.fn();
 const mockClear = jest.fn();
 const mockReplace = jest.fn();
+const mockPush = jest.fn();
+let mockFailure = null;
 
 jest.mock("react-native", () => ({
   Pressable: "Pressable",
@@ -15,7 +17,7 @@ jest.mock("react-native", () => ({
   Platform: { OS: "ios", select: (options) => options.ios ?? options.native ?? options.default },
 }));
 jest.mock("expo-router", () => ({
-  router: { replace: (...args) => mockReplace(...args), back: jest.fn() },
+  router: { replace: (...args) => mockReplace(...args), push: (...args) => mockPush(...args), back: jest.fn() },
   useLocalSearchParams: () => ({ id: "job" }),
   useFocusEffect: jest.fn(),
 }));
@@ -37,7 +39,7 @@ jest.mock("@/hooks/useJob", () => ({
   }),
 }));
 jest.mock("@/hooks/useJobAction", () => ({
-  useJobAction: () => ({ run: (...args) => mockRun(...args), busy: false, error: null }),
+  useJobAction: () => ({ run: (...args) => mockRun(...args), busy: false, error: null, failure: mockFailure }),
 }));
 jest.mock("@/store/jobDrafts", () => ({
   useJobDrafts: (select) => select({ clearDraft: mockClear }),
@@ -50,6 +52,7 @@ beforeEach(async () => {
   jest.clearAllMocks();
   mockJobState = "production";
   mockPlan = {};
+  mockFailure = null;
   mockConfirm.mockResolvedValue(true);
   mockRun.mockResolvedValue({ id: "job", state: "ready_for_dispatch" });
   await act(async () => { rendered = create(React.createElement(HandoffScreen)); });
@@ -139,3 +142,39 @@ it.each(["production", "ready_for_dispatch", "rider_assigned"])(
     expect(texts()).toContain("No invoice or receipt in the package");
   },
 );
+
+describe("the production photo comes before packing", () => {
+  it("turns the screen into the photo step when GRIDGO counts no photo", async () => {
+    mockPlan = { productionProgress: { status: "waiting_for_photo", photos: [] } };
+    await act(async () => rendered.update(React.createElement(HandoffScreen)));
+    const primary = rendered.root.findByType("PrimaryButton");
+    expect(primary.props.label).toBe("Add a production photo");
+    expect(texts()).toContain(
+      "One photo of this job on your floor, so the client can see it was made. If you filed your start-of-production proof as a photo, it already counts. A PDF does not.",
+    );
+    await act(async () => primary.props.onPress());
+    expect(mockPush).toHaveBeenCalledWith({ pathname: "/job/[id]/progress-photo", params: { id: "job" } });
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it("offers the photo step when an older GRIDGO refuses packing for want of one", async () => {
+    const { ApiError } = jest.requireActual("@/lib/apiErrors");
+    mockFailure = new ApiError(409, { error: "production_photo_required" });
+    await act(async () => rendered.update(React.createElement(HandoffScreen)));
+    const primary = rendered.root.findByType("PrimaryButton");
+    expect(primary.props.label).toBe("Add a production photo");
+    await act(async () => primary.props.onPress());
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/job/[id]/progress-photo",
+      params: { id: "job", required: "1" },
+    });
+  });
+
+  it("packs as before once a photo is on the job, and says how many", async () => {
+    mockPlan = { productionProgress: { status: "photos_available", photos: [{ fileId: "start" }] } };
+    await act(async () => rendered.update(React.createElement(HandoffScreen)));
+    expect(rendered.root.findByType("PrimaryButton").props.label).toBe("Mark package ready");
+    const rows = rendered.root.findAllByType("SpecRow").map((row) => [row.props.label, row.props.value]);
+    expect(rows).toContainEqual(["Production photo", "1 on the job"]);
+  });
+});

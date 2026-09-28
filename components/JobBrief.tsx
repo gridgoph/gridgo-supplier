@@ -7,6 +7,7 @@ import { ArtworkPanel } from "@/components/ArtworkPanel";
 import { CountLedger } from "@/components/CounterCheckPanel";
 import { JobTimeline } from "@/components/JobTimeline";
 import { MilestoneList } from "@/components/MilestoneList";
+import { ProgressPhotoStrip } from "@/components/ProgressPhotoStrip";
 import { SettlementPayoutList } from "@/components/SettlementPayoutList";
 import { SpecRow } from "@/components/SpecRow";
 import { StatusChip } from "@/components/StatusChip";
@@ -25,6 +26,7 @@ import {
 } from "@/lib/jobBrief";
 import { orderArtwork } from "@/lib/orderArtwork";
 import { counterCheck } from "@/lib/pickupCheck";
+import { progressPhotoViews } from "@/lib/productionPhoto";
 import { orderProductionItems, productionSpecRows } from "@/lib/productionSpecs";
 
 type Props = {
@@ -251,6 +253,15 @@ function SectionBody({
         </View>
       );
     }
+    case "progress":
+      return (
+        <View className="gap-2">
+          <ProgressPhotoStrip photos={progressPhotoViews(order)} />
+          <Text className="text-caption text-text-muted">
+            The client sees these on their order. Tap one to see it full size.
+          </Text>
+        </View>
+      );
     case "handoff": {
       const custody = custodyForOrder(order);
       // Once the rider has taken it, the check it passed is the handoff's record.

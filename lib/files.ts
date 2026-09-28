@@ -98,17 +98,20 @@ export function proofDocumentKind(item: { mimeType: string | null; fileName: str
   return "File";
 }
 
-/** One line saying where an upload has actually got to. */
-export function uploadStageLabel(item: UploadItem): string {
+/**
+ * One line saying where an upload has actually got to. A proof is *filed*
+ * against a part of the payout; a progress photo is only *sent* to the job.
+ */
+export function uploadStageLabel(item: UploadItem, wording: "proof" | "photo" = "proof"): string {
   switch (item.stage) {
     case "uploading":
       return `Sending ${Math.round(item.progress * 100)}%`;
     case "processing":
       return "Sent — GRIDGO is still saving it";
     case "stored":
-      return "Saved. Ready to file";
+      return wording === "photo" ? "Saved. Ready to send to the job" : "Saved. Ready to file";
     case "attached":
-      return "Filed with GRIDGO";
+      return wording === "photo" ? "On the job" : "Filed with GRIDGO";
     case "failed":
       return item.error ?? "Not saved";
     default:
@@ -153,6 +156,16 @@ const UPLOAD_MESSAGES: Record<string, string> = {
     "GRIDGO's file storage is not responding. Nothing was lost — try sending the file again in a moment.",
   storage_initializing:
     "GRIDGO's file storage is still starting up. Wait a few seconds and send the file again.",
+  production_photo_upload_not_allowed:
+    "This job has moved past production, so it no longer takes progress photos. Its latest step is on the job.",
+};
+
+/** A progress photo is a picture: the proof wording offers a PDF it would refuse. */
+const PHOTO_ONLY_MESSAGES: Record<string, string> = {
+  content_type_not_allowed:
+    "A progress photo has to be a JPEG, PNG or WebP picture. Take the photo again, or choose one from your gallery.",
+  purpose_media_type_not_allowed:
+    "A progress photo has to be a JPEG, PNG or WebP picture — a PDF does not count. Take a photo of the work instead.",
 };
 
 export type UploadResult =
@@ -239,7 +252,7 @@ export async function uploadFile(
 
     return {
       ok: false,
-      error: messageFor(body, response.status),
+      error: messageFor(body, response.status, purpose),
       code: typeof body?.error === "string" ? body.error : undefined,
     };
   } catch {
@@ -301,7 +314,7 @@ async function uploadFileOnWeb(
     }
     return {
       ok: false,
-      error: messageFor(parsed, body.status),
+      error: messageFor(parsed, body.status, purpose),
       code: typeof parsed?.error === "string" ? parsed.error : undefined,
     };
   } catch {
@@ -313,9 +326,13 @@ async function uploadFileOnWeb(
 }
 
 /** Turn a file-route failure into a sentence naming the fix. */
-export function messageFor(body: Record<string, unknown> | null, status: number): string {
+export function messageFor(
+  body: Record<string, unknown> | null,
+  status: number,
+  purpose?: api.StoredFile["purpose"],
+): string {
   const code = typeof body?.error === "string" ? body.error : "";
-  const known = UPLOAD_MESSAGES[code];
+  const known = (purpose === "production_photo" ? PHOTO_ONLY_MESSAGES[code] : undefined) ?? UPLOAD_MESSAGES[code];
   if (known) return known;
   if (status === 401) return "Your session ended. Sign in again to send this file.";
   if (status >= 500) return "GRIDGO could not handle this file. Try again in a moment.";

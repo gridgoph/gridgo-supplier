@@ -6,6 +6,7 @@ import { primaryAction } from "@/lib/jobState";
 import { linkOnlySummary, orderDesignLinks } from "@/lib/designLink";
 import { earningsSplit, milestoneViews, nextShopProof, payoutPlanCopy } from "@/lib/milestones";
 import { orderArtwork } from "@/lib/orderArtwork";
+import { progressPhotoSummary, showsProgressPhotos } from "@/lib/productionPhoto";
 import { refundStanding } from "@/lib/refund";
 import { unreleasedMinor } from "@/lib/payout";
 import { orderProductionItems, readableSpec } from "@/lib/productionSpecs";
@@ -31,6 +32,7 @@ export type JobBriefSectionId =
   | "mockup"
   | "delivery"
   | "earnings"
+  | "progress"
   | "handoff"
   | "history";
 
@@ -80,6 +82,7 @@ type BriefOrder = Pick<
   | "timeline"
   | "pickupChecklist"
   | "pickupCountItems"
+  | "productionProgress"
 >;
 
 function plural(count: number, one: string, many: string): string {
@@ -192,6 +195,7 @@ export function jobBriefSections(
     mockup: { id: "mockup", title: "How it should look", ...mockupSummary(order) },
     delivery: { id: "delivery", title: "Where and when", summary: deliverySummary(order) },
     earnings: { id: "earnings", title: "Your earnings", summary: earningsSummary(order) },
+    progress: { id: "progress", title: "Production photos", ...progressPhotoSummary(order) },
     handoff: { id: "handoff", title: "Pickup", summary: handoffSummary(order) },
     history: { id: "history", title: "What happened so far", ...historySummary(order) },
   };
@@ -210,6 +214,8 @@ export function workspaceBriefSections(order: BriefOrder): JobBriefSectionId[] {
     "mockup",
     "delivery",
     "earnings",
+    // What the client sees of the work; only once GRIDGO keeps a count of it.
+    ...(showsProgressPhotos(order) ? (["progress"] as const) : []),
     ...(hasHandoff(order) ? (["handoff"] as const) : []),
     "history",
   ];
@@ -231,6 +237,13 @@ export function defaultBriefSection(order: BriefOrder): JobBriefSectionId {
   if (hasHandoff(order)) return "handoff";
   if (nextShopProof(order as Order)) return "earnings";
   const step = primaryAction(order)?.kind;
-  if (step === "accept" || step === "start_production" || step === "ready_for_pickup") return "make";
+  if (
+    step === "accept" ||
+    step === "start_production" ||
+    step === "ready_for_pickup" ||
+    step === "add_production_photo"
+  ) {
+    return "make";
+  }
   return milestoneViews(order as Order).length ? "earnings" : "make";
 }
