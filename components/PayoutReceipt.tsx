@@ -5,6 +5,7 @@ import { Image, Pressable, Text, View } from "react-native";
 
 import { SkeletonBlock } from "@/components/Skeleton";
 import * as api from "@/lib/api";
+import { useSignedLink } from "@/hooks/useSignedLink";
 import { useThemeColors } from "@/hooks/useTheme";
 
 type Props = {
@@ -25,30 +26,24 @@ type Props = {
  * reference are enough to match against the wallet on the shop's own phone -
  * and opens full size on a tap, through a fresh signed link so an old one is
  * never handed to the browser.
+ *
+ * The thumbnail's link lives five minutes, and this screen can sit in the
+ * background far longer: `useSignedLink` renews an expired one once and on
+ * resume, so coming back to the app is a brief sweep, not "will not load".
  */
 export function PayoutReceipt({ fileId, reference, label }: Props) {
   const colors = useThemeColors();
-  const [uri, setUri] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  const picture = useSignedLink(fileId);
+  const [openFailed, setOpenFailed] = useState(false);
   const [opening, setOpening] = useState(false);
   const mounted = useRef(true);
 
   useEffect(() => {
     mounted.current = true;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const link = await api.getDownloadUrl(fileId);
-        if (!cancelled) setUri(link.url);
-      } catch {
-        if (!cancelled) setFailed(true);
-      }
-    })();
     return () => {
-      cancelled = true;
       mounted.current = false;
     };
-  }, [fileId]);
+  }, []);
 
   async function open() {
     if (opening) return;
@@ -57,7 +52,7 @@ export function PayoutReceipt({ fileId, reference, label }: Props) {
       const link = await api.getDownloadUrl(fileId);
       if (mounted.current) await WebBrowser.openBrowserAsync(link.url);
     } catch {
-      if (mounted.current) setFailed(true);
+      if (mounted.current) setOpenFailed(true);
     } finally {
       if (mounted.current) setOpening(false);
     }
@@ -75,14 +70,16 @@ export function PayoutReceipt({ fileId, reference, label }: Props) {
         className="h-16 w-12 overflow-hidden rounded-field bg-white"
         aria-hidden
       >
-        {uri && !failed ? (
+        {picture.uri ? (
           <Image
-            source={{ uri }}
+            testID="payout-receipt-image"
+            source={{ uri: picture.uri }}
             resizeMode="cover"
             style={{ width: "100%", height: "100%" }}
-            onError={() => setFailed(true)}
+            onLoad={picture.onLoad}
+            onError={picture.onError}
           />
-        ) : failed ? (
+        ) : picture.failed ? (
           <View className="flex-1 items-center justify-center">
             <ImageOff size={18} color={colors.textMuted} strokeWidth={2} />
           </View>
@@ -97,7 +94,7 @@ export function PayoutReceipt({ fileId, reference, label }: Props) {
         </View>
         <Text className="text-caption text-text-muted" numberOfLines={1}>
           {reference ? `Reference ${reference}` : "No reference recorded"}
-          {failed ? " · picture will not load" : ""}
+          {picture.failed || openFailed ? " · picture will not load" : ""}
         </Text>
       </View>
       <ChevronRight size={20} color={colors.textMuted} aria-hidden />
