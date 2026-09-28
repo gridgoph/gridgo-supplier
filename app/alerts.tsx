@@ -268,7 +268,7 @@ export default function NotificationsScreen() {
           />
         }
       >
-        <Text className="text-body text-text-secondary">
+        <Text className="mb-4 text-body text-text-secondary">
           New work, production news, and what your jobs have paid.
         </Text>
 
