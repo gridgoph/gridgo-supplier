@@ -59,7 +59,7 @@ describe("MilestoneList", () => {
         showDetail
       />,
     );
-    expect(await screen.findByLabelText("Open the wallet receipt for Printing")).toBeTruthy();
+    expect(await screen.findByLabelText("Open the wallet transfer evidence for Printing")).toBeTruthy();
     expect(screen.getByText("Reference GCASH-777")).toBeTruthy();
   });
 
@@ -69,7 +69,7 @@ describe("MilestoneList", () => {
         milestones={[view({ stage: "released", receiptFileId: "file_receipt", reference: "GCASH-777" })]}
       />,
     );
-    expect(screen.queryByLabelText("Open the wallet receipt for Printing")).toBeNull();
+    expect(screen.queryByLabelText("Open the wallet transfer evidence for Printing")).toBeNull();
   });
 
   it("shows filed shop proof photographs on the job", async () => {

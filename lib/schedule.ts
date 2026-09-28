@@ -51,6 +51,8 @@ export function isAgendaEligible(job: Pick<Order, "state">): boolean {
     "proof_approval",
     "approved_for_matching",
     "supplier_assigned",
+    // Cancelled — by Operations, or when a client's refund was settled.
+    "cancelled",
   ]);
   return !blocked.has(job.state);
 }

@@ -7,6 +7,14 @@
  * as centavos.
  */
 
+/** Format PHP minor units (centavos) for display. */
+export function formatPhp(minor: number): string {
+  return `₱${(minor / 100).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 /** Digits, at most one decimal point, at most two decimal places. */
 export function sanitizeMoneyInput(text: string): string {
   const cleaned = text.replace(/[^0-9.]/g, "");

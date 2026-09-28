@@ -52,7 +52,17 @@ export function MilestoneList({ milestones, showDetail = false, proofReloadVersi
                 </Text>
               </View>
               <View className="items-end gap-1.5">
-                <Text className="text-body-lg font-medium text-text-primary">
+                {/*
+                  A replaced part keeps its amount, struck through: the shop can
+                  still see what it was, and nobody reads it as money that came.
+                */}
+                <Text
+                  className={
+                    milestone.stage === "superseded"
+                      ? "text-body-lg font-medium text-text-muted line-through"
+                      : "text-body-lg font-medium text-text-primary"
+                  }
+                >
                   {formatPhp(milestone.amountMinor)}
                 </Text>
                 <StatusChip

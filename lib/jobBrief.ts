@@ -6,6 +6,7 @@ import { primaryAction } from "@/lib/jobState";
 import { linkOnlySummary, orderDesignLinks } from "@/lib/designLink";
 import { earningsSplit, milestoneViews, nextShopProof, payoutPlanCopy } from "@/lib/milestones";
 import { orderArtwork } from "@/lib/orderArtwork";
+import { refundStanding } from "@/lib/refund";
 import { unreleasedMinor } from "@/lib/payout";
 import { orderProductionItems, readableSpec } from "@/lib/productionSpecs";
 
@@ -58,6 +59,9 @@ type BriefOrder = Pick<
   | "payoutMilestones"
   | "payoutPlanVersion"
   | "payoutHold"
+  | "refundHold"
+  | "refundDisposition"
+  | "supplierSettlementPayouts"
   | "id"
   | "title"
   | "quantity"
@@ -137,8 +141,19 @@ export function distanceLabel(meters: number | null | undefined): string | null 
  */
 export function earningsSummary(order: BriefOrder): string {
   const split = earningsSplit(order as Order);
+  // Settled: the total is what the shop keeps now, and "paid in full" would
+  // be read against the original price.
+  if (split.supersededMinor > 0) {
+    if (split.totalMinor === 0) return "Settled · no payout due";
+    if (split.releasedMinor >= split.totalMinor) return `${formatPhp(split.totalMinor)} · settled and released`;
+    return `${formatPhp(split.releasedMinor)} of ${formatPhp(split.totalMinor)} · settled`;
+  }
   if (split.totalMinor > 0) {
-    if (split.held) return `${formatPhp(split.totalMinor)} · on hold`;
+    if (split.held) {
+      return refundStanding(order) === "paused"
+        ? `${formatPhp(split.totalMinor)} · paused for refund`
+        : `${formatPhp(split.totalMinor)} · on hold`;
+    }
     if (split.needsProofMinor > 0) return `${formatPhp(split.needsProofMinor)} waiting on your proof`;
     if (split.releasedMinor >= split.totalMinor) return `${formatPhp(split.totalMinor)} · paid in full`;
     if (split.releasedMinor > 0) {
@@ -209,6 +224,8 @@ export function workspaceBriefSections(order: BriefOrder): JobBriefSectionId[] {
  * shop is fixing the work against the specification. Nothing else opens itself.
  */
 export function defaultBriefSection(order: BriefOrder): JobBriefSectionId {
+  // A refund stops the work; what the shop keeps is the question left.
+  if (refundStanding(order) !== "none") return "earnings";
   // A stopped pickup has its own panel; fixing it starts from the specification.
   if (custodyForOrder(order).state === "pickup_blocked") return "make";
   if (hasHandoff(order)) return "handoff";

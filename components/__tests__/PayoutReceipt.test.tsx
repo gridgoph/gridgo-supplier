@@ -33,7 +33,7 @@ it("names the reference and opens the receipt through a fresh link", async () =>
   expect(await screen.findByText("Reference GCASH-777")).toBeTruthy();
   await waitFor(() => expect(getDownloadUrl).toHaveBeenCalledTimes(1));
 
-  await fireEvent.press(screen.getByLabelText("Open the wallet receipt for Printing on Staff polos"));
+  await fireEvent.press(screen.getByLabelText("Open the wallet transfer evidence for Printing on Staff polos"));
   await waitFor(() => expect(openBrowserAsync).toHaveBeenCalledWith("https://files.test/receipt-2"));
   await view.unmount();
 });
