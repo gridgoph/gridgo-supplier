@@ -28,6 +28,7 @@ export default function JobLayout() {
       <Stack.Screen name="accept" options={{ title: "Accept job" }} />
       <Stack.Screen name="decline" options={{ title: "Decline job" }} />
       <Stack.Screen name="fulfilment" options={{ title: "Proof of fulfilment" }} />
+      <Stack.Screen name="progress-photo" options={{ title: "Production photo" }} />
       <Stack.Screen
         name="advance"
         options={{

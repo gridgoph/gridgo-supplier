@@ -121,3 +121,16 @@ it("offers nothing to file on a plan-2 job once the start is filed", async () =>
   expect(screen.queryByLabelText("File this evidence")).toBeNull();
   await view.unmount();
 });
+
+it("asks for a photo, not a PDF, when the start proof would also open packing", async () => {
+  (api.getOrder as jest.Mock).mockResolvedValue({
+    ...orderWith([
+      { code: "production_started", label: "Start of production", releaseRequires: "shop_proof", sharePercent: 40, amountMinor: 40000, status: "pending_pof", pofFileIds: [], releasedAt: null },
+    ]),
+    payoutPlanVersion: 2,
+    productionProgress: { status: "waiting_for_photo", photos: [] },
+  });
+  const view = await render(<FulfilmentProofScreen />);
+  expect(await screen.findByText(/Send a photo: it also counts as the production photo you need before packing/)).toBeTruthy();
+  await view.unmount();
+});

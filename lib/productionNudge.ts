@@ -12,7 +12,7 @@ import { findMilestoneView, payoutPlanOf } from "@/lib/milestones";
  */
 export function owedProductionMove(
   order:
-    | Pick<Order, "state" | "payoutMilestones" | "payoutHold" | "payoutPlanVersion">
+    | Pick<Order, "state" | "payoutMilestones" | "payoutHold" | "payoutPlanVersion" | "productionProgress">
     | null
     | undefined,
   fallbackState?: string | null,
@@ -24,6 +24,7 @@ export function owedProductionMove(
       const owed = findMilestoneView(order as Order, proof.milestoneCode);
       return `Update the press or file ${owed?.proofName ?? "your"} proof`;
     }
+    if (proof?.kind === "add_production_photo") return "Photograph the job so it can be packed";
     if (order.state === "payment_authorized") return "Start production";
     const legacy = payoutPlanOf(order) === 1;
     if (order.state === "supplier_self_qc") {

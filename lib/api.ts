@@ -269,6 +269,13 @@ export type Order = {
   artworkFileIds?: string[];
   /** Every Proof of Fulfilment on this job, from this shop and the rider. */
   fulfilmentProofFileIds?: string[];
+  /** Progress photos attached as `production_photo`. They move no money. */
+  productionPhotoFileIds?: string[];
+  /**
+   * The photos that let this job be packed, as GRIDGO counts them. Absent
+   * from an API older than the rule; read through `lib/productionPhoto.ts`.
+   */
+  productionProgress?: ProductionProgress | null;
   deliveryPhotoFileIds?: string[];
   /** The rider's latest counter check. Absent until a rider has checked it. */
   pickupChecklist?: PickupChecklist | null;
@@ -282,6 +289,25 @@ export type Order = {
     /** Present on evidence entries. */
     fileId?: string;
   }[];
+};
+
+/**
+ * GRIDGO's own count of the photos that show this job in production
+ * (gridgo-api `docs/OPERATIONAL_MODEL_V2_API.md#production-progress-photos`).
+ * A start-of-production proof that is a picture counts; a PDF never does.
+ */
+export type ProductionProgress = {
+  status: "waiting_for_photo" | "photos_available";
+  photos: ProductionProgressPhoto[];
+};
+
+export type ProductionProgressPhoto = {
+  fileId: string;
+  contentType?: string | null;
+  at?: string | null;
+  /** Five-minute signed link. Missing when signing failed; read one by file id. */
+  downloadUrl?: string | null;
+  downloadUrlExpiresAt?: string | null;
 };
 
 /** A client's report against a delivered job. It is what holds a payout. */
@@ -311,6 +337,8 @@ export type StoredFile = {
     | "artwork"
     | "mockup"
     | "fulfilment_proof"
+    /** A progress photo of the job on the floor. Records progress, moves no money. */
+    | "production_photo"
     | "delivery_photo"
     | "service_image"
     | "verification_document"
@@ -1138,6 +1166,20 @@ export async function attachFulfilmentProof(
   return request(`/files/${fileId}/attach`, {
     method: "POST",
     body: JSON.stringify({ orderId, milestoneCode }),
+  });
+}
+
+/**
+ * Put a stored `production_photo` on the job. Only while the job is in
+ * production or being packed; it releases no part of the payout.
+ */
+export async function attachProductionPhoto(
+  fileId: string,
+  orderId: string,
+): Promise<{ file: StoredFile; order?: Order }> {
+  return request(`/files/${fileId}/attach`, {
+    method: "POST",
+    body: JSON.stringify({ orderId }),
   });
 }
 
