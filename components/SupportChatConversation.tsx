@@ -1,6 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { HeaderHeightContext } from "expo-router/react-navigation";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
 import { Send } from "lucide-react-native";
 
 import { EmptyState } from "@/components/EmptyState";
@@ -9,6 +19,7 @@ import { Screen } from "@/components/Screen";
 import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import { isAtChatEnd, shouldRepinOnResize } from "@/lib/chatScroll";
 import { openSupportChatStream } from "@/lib/supportChatStream";
 import { useSupportChatStore } from "@/store/supportChat";
 
@@ -20,6 +31,15 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
   const colors = useThemeColors();
   const setUnreadCount = useSupportChatStore((s) => s.setUnreadCount);
   const listRef = useRef<ScrollView>(null);
+  // The keyboard pads this screen from its bottom edge, but the view's own
+  // layout starts below the stack header — `onLayout` reports y = 0 here. The
+  // header's height is that missing distance; without it the padding came up
+  // one header short and the composer sat under the keyboard
+  // (gridgoph/gridgo-client#128). Outside a stack (tests) there is no header, so 0.
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
+  // Whether the shop is looking at the newest message. See lib/chatScroll.ts.
+  const followingEnd = useRef(true);
+  const viewportHeight = useRef<number | null>(null);
   const [activeId, setActiveId] = useState<string | undefined>(threadId);
   const [messages, setMessages] = useState<api.SupportChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,6 +105,27 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
     return () => stream.close();
   }, [activeId, setUnreadCount]);
 
+  const trackEnd = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    followingEnd.current = isAtChatEnd({
+      offsetY: contentOffset.y,
+      viewportHeight: layoutMeasurement.height,
+      contentHeight: contentSize.height,
+    });
+  }, []);
+
+  // The keyboard opening (or the composer growing a line) shrinks the
+  // transcript from the bottom while its offset stays put, which pushed the
+  // newest messages out of sight. Keep them in view — unless the shop had
+  // scrolled up into history.
+  const keepEndInView = useCallback((event: LayoutChangeEvent) => {
+    const next = event.nativeEvent.layout.height;
+    if (shouldRepinOnResize(viewportHeight.current, next, followingEnd.current)) {
+      listRef.current?.scrollToEnd({ animated: false });
+    }
+    viewportHeight.current = next;
+  }, []);
+
   const send = useCallback(async () => {
     const body = draft.trim();
     if (!body || sending) return;
@@ -107,7 +148,11 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
 
   return (
     <Screen edges={["bottom"]}>
-      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+      <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={headerHeight}
+        style={{ flex: 1 }}
+      >
         <View className="gg-page flex-1 gap-3 pb-3 pt-4">
           <View className="gap-1">
             <Text className="text-h2 text-text-primary">Operations</Text>
@@ -124,9 +169,13 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
           ) : null}
           <ScrollView
             ref={listRef}
+            testID="support-chat-transcript"
             className="flex-1"
             contentContainerClassName="grow justify-end gap-3 pb-2"
             keyboardShouldPersistTaps="handled"
+            onScroll={trackEnd}
+            scrollEventThrottle={32}
+            onLayout={keepEndInView}
           >
             {!loading && messages.length === 0 ? (
               <EmptyState
