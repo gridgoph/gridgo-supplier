@@ -351,3 +351,111 @@ describe("job workspace after a failed counter check", () => {
     });
   });
 });
+
+describe("job workspace after a client refund", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  function escrowStages(
+    status: Record<string, PayoutMilestone["status"]>,
+  ): PayoutMilestone[] {
+    return [
+      { code: "production_started", label: "Start of production", releaseRequires: "shop_proof", sharePercent: 40 },
+      { code: "delivered", label: "Delivered", releaseRequires: "delivery_proof", sharePercent: 35 },
+      { code: "issue_window", label: "Issue window closed", releaseRequires: "issue_window_closed", sharePercent: 25 },
+    ].map((stage) => ({
+      ...stage,
+      releaseRequires: stage.releaseRequires as PayoutMilestone["releaseRequires"],
+      amountMinor: stage.sharePercent * 1000,
+      status: status[stage.code],
+      pofFileIds: stage.code === "production_started" ? ["file_start"] : [],
+      releasedAt: status[stage.code] === "released" ? "2026-09-26T02:00:00.000Z" : null,
+      receiptFileId: status[stage.code] === "released" ? "file_stage_receipt" : null,
+      reference: status[stage.code] === "released" ? "GC-400" : null,
+    }));
+  }
+
+  it("stops the job while a refund is requested, with no step to take", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        state: "production",
+        payoutPlanVersion: 2,
+        payoutMilestones: escrowStages({
+          production_started: "pending_pof",
+          delivered: "pending_pof",
+          issue_window: "pending_pof",
+        }),
+        refundHold: true,
+        refundDisposition: null,
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    const panel = await screen.findByTestId("refund-notice");
+    expect(within(panel).getByText("Work is paused for a refund review")).toBeTruthy();
+    expect(screen.getByText("Paused for refund")).toBeTruthy();
+    expect(screen.queryByTestId("job-action-bar")).toBeNull();
+    expect(screen.queryByText("Add start-of-production proof")).toBeNull();
+    expect(screen.getAllByText("Held").length).toBe(3);
+  });
+
+  it("shows replaced stages as not paid, and the settlement payout with its transfer evidence", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        state: "cancelled",
+        payoutPlanVersion: 2,
+        payoutMilestones: escrowStages({
+          production_started: "released",
+          delivered: "superseded",
+          issue_window: "superseded",
+        }),
+        refundHold: false,
+        refundDisposition: "cancelled",
+        supplierSettlementPayouts: [
+          {
+            id: "rspay_1",
+            settlementId: "rsettle_1",
+            orderId: "ord_1",
+            amountMinor: 20000,
+            status: "released",
+            reference: "SHOP-200",
+            receiptFileId: "file_payout_receipt",
+            releasedAt: "2026-09-28T06:00:00.000Z",
+            createdAt: "2026-09-28T04:20:00.000Z",
+            code: "refund_settlement",
+            label: "Agreed refund settlement payout",
+          },
+        ],
+        timeline: [
+          {
+            at: "2026-09-28T04:20:00.000Z",
+            state: "cancelled",
+            by: "user_ops",
+            note: "Refund settlement approved; no client transfer recorded yet.",
+          },
+        ],
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    const panel = await screen.findByTestId("refund-notice");
+    expect(within(panel).getByText("Settled and closed")).toBeTruthy();
+    expect(within(panel).getByText(/You keep ₱600\.00 in total/)).toBeTruthy();
+    expect(screen.getByText("Cancelled and settled")).toBeTruthy();
+    expect(screen.queryByTestId("job-action-bar")).toBeNull();
+
+    const earnings = screen.getByTestId("job-brief-earnings");
+    expect(within(earnings).getAllByText("Replaced by settlement")).toHaveLength(2);
+    expect(within(earnings).getByText("Agreed refund settlement payout")).toBeTruthy();
+    expect(within(earnings).getByText(/Agreed in the refund settlement, out of your original ₱1,000\.00/)).toBeTruthy();
+    expect(
+      await within(earnings).findByLabelText("Open the wallet transfer evidence for Agreed refund settlement payout"),
+    ).toBeTruthy();
+    expect(within(earnings).getByText("Reference SHOP-200")).toBeTruthy();
+    // Nothing about the client's own refund reaches the shop.
+    expect(screen.queryByText(/₱710|receiving QR|client transfer/)).toBeNull();
+  });
+});

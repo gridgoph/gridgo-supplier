@@ -4,8 +4,11 @@ import {
   earningsSplit,
   milestoneDefinition,
   milestoneViews,
+  payoutHoldReason,
+  settlementPayoutViews,
   type EarningsSplit,
   type MilestoneView,
+  type SettlementPayoutView,
 } from "@/lib/milestones";
 
 /**
@@ -27,15 +30,17 @@ export type PayoutRow = {
   state: string;
   split: EarningsSplit;
   milestones: MilestoneView[];
-  /** A claim is holding whatever has not been released yet. */
+  /** The agreed refund settlement payouts, drawn beside the stages they replaced. */
+  settlementPayouts: SettlementPayoutView[];
+  /** A claim or a refund request is holding whatever has not been released. */
   held: boolean;
   /** When the client's window to report a problem closes, if it is open. */
   issueWindowExpiresAt: string | null;
 };
 
 /** Jobs with money attached: a price agreed means milestones exist. */
-export function isPayoutRelevant(order: Pick<Order, "payoutMilestones">): boolean {
-  return (order.payoutMilestones?.length ?? 0) > 0;
+export function isPayoutRelevant(order: Pick<Order, "payoutMilestones" | "supplierSettlementPayouts">): boolean {
+  return (order.payoutMilestones?.length ?? 0) > 0 || (order.supplierSettlementPayouts?.length ?? 0) > 0;
 }
 
 export function derivePayoutRow(order: Order): PayoutRow {
@@ -45,7 +50,8 @@ export function derivePayoutRow(order: Order): PayoutRow {
     state: order.state,
     split: earningsSplit(order),
     milestones: milestoneViews(order),
-    held: order.payoutHold === true,
+    settlementPayouts: settlementPayoutViews(order),
+    held: payoutHoldReason(order) !== null,
     issueWindowExpiresAt: order.issueWindowExpiresAt ?? null,
   };
 }
@@ -107,8 +113,11 @@ export function unreleasedMinor(split: EarningsSplit): number {
  * shop reads its bank by date, not by job.
  */
 export type StatementLine = {
+  /** Unique across the statement: a stage code, or a settlement payout's id. */
+  key: string;
   orderId: string;
   title: string;
+  /** The stage code, or `refund_settlement` for an agreed settlement payout. */
   code: MilestoneCode;
   /** What the shop calls this part. */
   label: string;
@@ -127,6 +136,7 @@ export function statementLines(jobs: Order[]): StatementLine[] {
     for (const milestone of job.payoutMilestones ?? []) {
       if (milestone.status !== "released" || !milestone.releasedAt) continue;
       lines.push({
+        key: `${job.id}-${milestone.code}`,
         orderId: job.id,
         title: job.title,
         code: milestone.code,
@@ -135,6 +145,22 @@ export function statementLines(jobs: Order[]): StatementLine[] {
         releasedAt: milestone.releasedAt,
         reference: milestone.reference ?? null,
         receiptFileId: milestone.receiptFileId ?? null,
+      });
+    }
+    // A settlement payout is money GRIDGO sent like any stage, so it belongs
+    // in the month it landed and in the month's total.
+    for (const payout of settlementPayoutViews(job)) {
+      if (payout.stage !== "released" || !payout.releasedAt) continue;
+      lines.push({
+        key: `${job.id}-${payout.id}`,
+        orderId: job.id,
+        title: job.title,
+        code: "refund_settlement",
+        label: payout.label,
+        amountMinor: payout.amountMinor,
+        releasedAt: payout.releasedAt,
+        reference: payout.reference,
+        receiptFileId: payout.receiptFileId,
       });
     }
   }

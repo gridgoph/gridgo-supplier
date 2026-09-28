@@ -152,3 +152,29 @@ it("opens the job from a pickup-issue notice, in the shop's words, even before t
   await waitFor(() => expect(router.push).toHaveBeenCalled());
   expect(JSON.stringify(router.push.mock.calls[0][0])).toContain("ord_blocked");
 });
+
+it("rewrites a refund notice for the shop and opens its job", async () => {
+  useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, localOnly: false });
+  const { router } = jest.requireMock("expo-router") as { router: { push: jest.Mock } };
+  router.push.mockClear();
+  api.listNotifications.mockResolvedValue([{
+    id: "ntf_refund",
+    userId: "user_supplier",
+    type: "refund_attempt",
+    orderId: "ord_refunded",
+    title: "Client refund",
+    body: "A manual refund payment is reserved.",
+    read: false,
+    at: "2026-09-28T04:25:00.000Z",
+  }]);
+  api.listJobs.mockResolvedValue([]);
+
+  await render(<AlertsScreen />);
+
+  expect(await screen.findByText("Client refund update")).toBeTruthy();
+  const body = screen.getByText("Operations is handling the client's side of the refund. Nothing changes for your shop.");
+  expect(screen.queryByText(/reserved/)).toBeNull();
+  fireEvent.press(body);
+  await waitFor(() => expect(router.push).toHaveBeenCalled());
+  expect(JSON.stringify(router.push.mock.calls[0][0])).toContain("ord_refunded");
+});

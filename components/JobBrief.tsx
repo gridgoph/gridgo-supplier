@@ -7,6 +7,7 @@ import { ArtworkPanel } from "@/components/ArtworkPanel";
 import { CountLedger } from "@/components/CounterCheckPanel";
 import { JobTimeline } from "@/components/JobTimeline";
 import { MilestoneList } from "@/components/MilestoneList";
+import { SettlementPayoutList } from "@/components/SettlementPayoutList";
 import { SpecRow } from "@/components/SpecRow";
 import { StatusChip } from "@/components/StatusChip";
 import { motion } from "@/constants/theme";
@@ -14,7 +15,7 @@ import { useThemeColors } from "@/hooks/useTheme";
 import { formatPhp, type Order } from "@/lib/api";
 import { formatDeadlineFull, formatTimelineAt } from "@/lib/dates";
 import { custodyForOrder } from "@/lib/handoff";
-import { earningsSplit, milestoneViews, payoutPlanCopy } from "@/lib/milestones";
+import { earningsSplit, milestoneViews, payoutPlanCopy, settlementPayoutViews } from "@/lib/milestones";
 import { unreleasedMinor } from "@/lib/payout";
 import {
   DEFAULT_BRIEF_SECTIONS,
@@ -194,7 +195,8 @@ function SectionBody({
         somebody else's money and none of them belong on a supplier's screen.
       */
       const milestones = milestoneViews(order);
-      if (milestones.length) {
+      const settlementPayouts = settlementPayoutViews(order);
+      if (milestones.length || settlementPayouts.length) {
         const split = earningsSplit(order);
         return (
           <View className="gap-4">
@@ -207,10 +209,24 @@ function SectionBody({
                   {formatPhp(split.releasedMinor > 0 ? split.releasedMinor : unreleasedMinor(split))}
                 </Text>
               </View>
-              <Text className="text-caption text-text-muted">of {formatPhp(split.totalMinor)}</Text>
+              <Text className="text-caption text-text-muted">
+                of {formatPhp(split.totalMinor)}
+                {split.supersededMinor > 0 ? " agreed" : ""}
+              </Text>
             </View>
+            {/*
+              After a refund settlement the total is what the shop keeps, not
+              its original price, so the original is named once beside it.
+            */}
+            {split.supersededMinor > 0 ? (
+              <Text className="text-caption text-text-muted">
+                Agreed in the refund settlement, out of your original{" "}
+                {formatPhp(milestones.reduce((sum, stage) => sum + stage.amountMinor, 0))}.
+              </Text>
+            ) : null}
             <View className="gg-divider" />
             <MilestoneList milestones={milestones} showDetail proofReloadVersion={proofReloadVersion} />
+            <SettlementPayoutList payouts={settlementPayouts} showDetail />
           </View>
         );
       }

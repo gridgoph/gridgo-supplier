@@ -100,15 +100,54 @@ export type PayoutMilestone = {
   sharePercent: number;
   /** The shop's own earnings for this part. Withheld from client and rider. */
   amountMinor: number;
-  status: "pending_pof" | "pof_attached" | "released";
+  /**
+   * `superseded`: a client refund was settled before this part was paid, and
+   * the agreed settlement payout replaced it. It was never paid and never
+   * will be — read it through `lib/milestones.ts`, which never calls it paid.
+   */
+  status: "pending_pof" | "pof_attached" | "released" | "superseded";
   /** Proof of Fulfilment files backing this part. */
   pofFileIds: string[];
   releasedAt: string | null;
+  /** When a refund settlement replaced this unpaid part. */
+  supersededAt?: string | null;
+  supersededBySettlementId?: string | null;
   /** The wallet receipt Operations kept when this part was sent. Only after release. */
   receiptFileId?: string | null;
   /** The wallet's reference number for that transfer. Only after release. */
   reference?: string | null;
 };
+
+/**
+ * What Operations agreed to pay the shop for work already done when a client
+ * refund was settled (gridgo-api `docs/REFUNDS_API.md#supplier-settlement-payout`).
+ * It stands beside the original stages, which the settlement marks
+ * `superseded`. `superseded` here means a later settlement replaced this
+ * unpaid item. Transfer fields stay null until Operations records the payment.
+ * Read it through `lib/milestones.ts`.
+ */
+export type SupplierSettlementPayout = {
+  id: string;
+  settlementId: string;
+  orderId: string;
+  amountMinor: number;
+  status: "pending" | "released" | "superseded";
+  /** The wallet's reference for the transfer. */
+  reference: string | null;
+  /** The wallet transfer evidence Operations kept. */
+  receiptFileId: string | null;
+  releasedAt: string | null;
+  createdAt: string;
+  code?: string;
+  /** GRIDGO's name for the item: "Agreed refund settlement payout". */
+  label?: string;
+};
+
+/**
+ * How a refund settlement closed the job. `cancelled`: before the client had
+ * it. `fulfilled_with_refund`: after handover, with part of the money returned.
+ */
+export type RefundDisposition = "cancelled" | "fulfilled_with_refund";
 
 export type ProductionItem = {
   id: string;
@@ -208,6 +247,16 @@ export type Order = {
   payoutMilestones?: PayoutMilestone[];
   /** True while a claim holds every unreleased part of this payout. */
   payoutHold?: boolean;
+  /**
+   * True while a client refund request is open on this job. GRIDGO stops the
+   * work and the unpaid stages until Operations settles it. The request itself
+   * is the client's and never reaches this app. Read through `lib/refund.ts`.
+   */
+  refundHold?: boolean;
+  /** Set once Operations has settled a refund on this job; null before. */
+  refundDisposition?: RefundDisposition | null;
+  /** The shop's settlement payouts, beside `payoutMilestones`. */
+  supplierSettlementPayouts?: SupplierSettlementPayout[];
   issueWindowOpenedAt?: string | null;
   issueWindowExpiresAt?: string | null;
   promisedDate: string | null;
@@ -1675,13 +1724,8 @@ export async function removePayoutAccount(version: number): Promise<void> {
   });
 }
 
-/** Format PHP minor units (centavos) for display. */
-export function formatPhp(minor: number): string {
-  return `₱${(minor / 100).toLocaleString("en-PH", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
+/** Lives in `lib/money.ts` so pure modules can format without loading this client. */
+export { formatPhp } from "@/lib/money";
 
 export type SupportChatPartyRole = "client" | "supplier" | "rider";
 export type SupportChatSenderRole = SupportChatPartyRole | "ops_admin" | "super_admin";

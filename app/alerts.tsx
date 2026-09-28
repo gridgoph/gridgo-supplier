@@ -15,8 +15,9 @@ import { spacing, touchTarget, typography } from "@/constants/theme";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { localOnlyCaveat } from "@/lib/alertsApi";
-import { PICKUP_ISSUE_ALERT, stageForAlert } from "@/lib/alertStages";
+import { PICKUP_ISSUE_ALERT, presentAlertTitle, stageForAlert } from "@/lib/alertStages";
 import { jobScreenHref } from "@/lib/productionNudge";
+import { isRefundAlert } from "@/lib/refund";
 import { isAlertUnread, useAlertsStore, visibleAlerts } from "@/store/alerts";
 import { askConfirm } from "@/store/sheets";
 import { useViewing } from "@/store/toasts";
@@ -171,7 +172,7 @@ export default function NotificationsScreen() {
    */
   async function confirmDelete(alert: api.Notification) {
     const confirmed = await askConfirm({
-      question: `Delete “${alert.title}”?`,
+      question: `Delete “${presentAlertTitle(alert)}”?`,
       consequence:
         "It goes for good, and GRIDGO will not send it again. The job it is about is not affected — you can still open it from Jobs.",
       confirmLabel: "Delete alert",
@@ -238,7 +239,11 @@ export default function NotificationsScreen() {
         job={job}
         onOpen={
           // A notice asking the shop to act opens its job even before the list has it.
-          alert.orderId && (job || alert.type === "shop_production_inactive" || alert.type === PICKUP_ISSUE_ALERT)
+          alert.orderId &&
+          (job ||
+            alert.type === "shop_production_inactive" ||
+            alert.type === PICKUP_ISSUE_ALERT ||
+            isRefundAlert(alert.type))
             ? () => router.push(jobScreenHref(alert.orderId as string))
             : undefined
         }

@@ -66,7 +66,11 @@ const MESSAGES: Record<string, string> = {
   supplier_not_approved:
     "Your shop's accreditation is still with Operations, so services cannot be verified yet. They will let you know when it clears.",
   payout_held:
-    "The client has reported a problem with this job, so GRIDGO is holding what is left of your earnings until Operations settles it.",
+    "A client report or refund request is open on this job, so GRIDGO is holding what is left of your earnings until Operations settles it.",
+  refund_fulfillment_stopped:
+    "The client asked for a refund, so this job is paused. Do not continue it until Operations settles the refund with you.",
+  refund_settlement_payout_hold:
+    "A refund settlement replaced the rest of this job's payout. Operations sends the agreed settlement instead.",
 
   // Opening an account.
   email_already_registered:

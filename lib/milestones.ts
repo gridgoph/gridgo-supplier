@@ -4,8 +4,10 @@ import type {
   PayoutMilestone,
   PayoutPlanVersion,
   PayoutReleaseRequirement,
+  SupplierSettlementPayout,
 } from "@/lib/api";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
+import { refundStanding, type KeptAmounts } from "@/lib/refund";
 
 /**
  * The parts a shop is paid in, and the evidence each one waits on.
@@ -30,6 +32,13 @@ import type { StatusIconName, StatusTone } from "@/components/StatusChip";
  * `label`, and who owes the evidence comes from `releaseRequires` — the table
  * below only supplies proof wording and a fallback for an older API that sent
  * neither. A code it does not know is never borrowed from another stage.
+ *
+ * A settled client refund adds a third rule (gridgo-api
+ * `docs/REFUNDS_API.md#supplier-settlement-payout`): stages not yet paid are
+ * **superseded** — never paid, and never to be called paid — and the shop's
+ * agreed remainder arrives as one separately labelled settlement payout,
+ * read here too (`settlementPayoutViews`) so there is still one payout
+ * vocabulary.
  */
 
 /**
@@ -180,6 +189,8 @@ export function isShopProof(milestone: Pick<PayoutMilestone, "code" | "label" | 
  */
 export type MilestoneStage =
   | "released"
+  /** A refund settlement replaced this part before it was paid. Not paid. */
+  | "superseded"
   | "held"
   | "awaiting_release"
   | "needs_shop_proof"
@@ -235,9 +246,20 @@ const WINDOW_OPEN = new Set(["delivered", "issue_window_open"]);
 /** The window has closed with nothing held: Operations may release the last part. */
 const WINDOW_CLOSED = new Set(["completed", "payout_released"]);
 
+/**
+ * Why the unpaid parts are held, or null when they are not: a client's report
+ * (a claim), or a client's refund request that has stopped the job. Both hold
+ * every part not yet released.
+ */
+export function payoutHoldReason(order: Pick<Order, "payoutHold" | "refundHold" | "refundDisposition">): "claim" | "refund" | null {
+  if (order.payoutHold === true) return "claim";
+  if (refundStanding(order) === "paused") return "refund";
+  return null;
+}
+
 export function viewMilestone(order: Order, milestone: PayoutMilestone): MilestoneView {
   const definition = milestoneDefinition(milestone.code, milestone);
-  const held = order.payoutHold === true;
+  const hold = payoutHoldReason(order);
   const pofFileIds = milestone.pofFileIds ?? [];
   const proofCount = pofFileIds.length;
   const owner = definition.proofOwner;
@@ -267,7 +289,22 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
     };
   }
 
-  if (held) {
+  // Never "Released", never a zero: the amount stands as the part it was, and
+  // the words say it was not paid. The settlement payout carries the money.
+  if (milestone.status === "superseded") {
+    return {
+      ...base,
+      stage: "superseded",
+      statusLabel: "Replaced by settlement",
+      tone: "neutral",
+      icon: "circle-x",
+      detail:
+        "Not paid. The client's refund was settled before this part was due, and the agreed settlement payout replaces it.",
+      canAddProof: false,
+    };
+  }
+
+  if (hold) {
     return {
       ...base,
       stage: "held",
@@ -275,7 +312,9 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
       tone: "error",
       icon: "triangle-alert",
       detail:
-        "The client has reported a problem with this job, so GRIDGO is holding what is left of your earnings until it is settled.",
+        hold === "refund"
+          ? "The client asked for a refund, so GRIDGO is holding what is left of your earnings until Operations settles it with you."
+          : "The client has reported a problem with this job, so GRIDGO is holding what is left of your earnings until it is settled.",
       canAddProof: false,
     };
   }
@@ -427,7 +466,12 @@ export type EarningsSplit = {
   /** Not reached yet, or the rider's to evidence. Nothing for the shop to do. */
   laterMinor: number;
   heldMinor: number;
-  /** True when a claim is holding whatever has not been released. */
+  /**
+   * Original parts a refund settlement replaced. Never paid, and outside
+   * `totalMinor`: once settled, the total is what the shop keeps.
+   */
+  supersededMinor: number;
+  /** True when a claim or a refund request is holding whatever has not been released. */
   held: boolean;
 };
 
@@ -439,16 +483,31 @@ export function earningsSplit(order: Order): EarningsSplit {
     needsProofMinor: 0,
     laterMinor: 0,
     heldMinor: 0,
-    held: order.payoutHold === true,
+    supersededMinor: 0,
+    held: payoutHoldReason(order) !== null,
   };
 
   for (const view of milestoneViews(order)) {
+    if (view.stage === "superseded") {
+      split.supersededMinor += view.amountMinor;
+      continue;
+    }
     split.totalMinor += view.amountMinor;
     if (view.stage === "released") split.releasedMinor += view.amountMinor;
     else if (view.stage === "held") split.heldMinor += view.amountMinor;
     else if (view.stage === "awaiting_release") split.awaitingReleaseMinor += view.amountMinor;
     else if (view.stage === "needs_shop_proof") split.needsProofMinor += view.amountMinor;
     else split.laterMinor += view.amountMinor;
+  }
+
+  // The agreed settlement is the shop's money like any stage: in the total,
+  // and in whichever bucket its own status puts it.
+  for (const view of settlementPayoutViews(order)) {
+    if (view.stage === "superseded") continue;
+    split.totalMinor += view.amountMinor;
+    if (view.stage === "released") split.releasedMinor += view.amountMinor;
+    else if (view.stage === "held") split.heldMinor += view.amountMinor;
+    else split.awaitingReleaseMinor += view.amountMinor;
   }
 
   return split;
@@ -463,6 +522,7 @@ export function addSplits(splits: EarningsSplit[]): EarningsSplit {
       needsProofMinor: sum.needsProofMinor + s.needsProofMinor,
       laterMinor: sum.laterMinor + s.laterMinor,
       heldMinor: sum.heldMinor + s.heldMinor,
+      supersededMinor: sum.supersededMinor + s.supersededMinor,
       held: sum.held || s.held,
     }),
     {
@@ -472,7 +532,105 @@ export function addSplits(splits: EarningsSplit[]): EarningsSplit {
       needsProofMinor: 0,
       laterMinor: 0,
       heldMinor: 0,
+      supersededMinor: 0,
       held: false,
     },
   );
+}
+
+// ---------------------------------------------------------------------------
+// The settlement payout
+// ---------------------------------------------------------------------------
+
+/** GRIDGO's name for the item, when an older API sent none. */
+export const SETTLEMENT_PAYOUT_LABEL = "Agreed refund settlement payout";
+
+export type SettlementPayoutView = {
+  id: string;
+  label: string;
+  amountMinor: number;
+  stage: "released" | "held" | "awaiting_release" | "superseded";
+  statusLabel: string;
+  tone: StatusTone;
+  icon: StatusIconName;
+  detail: string;
+  /** The wallet transfer evidence Operations kept. Null until sent. */
+  receiptFileId: string | null;
+  reference: string | null;
+  releasedAt: string | null;
+};
+
+/**
+ * What Operations agreed to pay the shop when a client's refund was settled,
+ * beside the stages it replaced. Only a **claim** holds it: the client's own
+ * refund transfer is a separate payment and does not wait on the shop's, or
+ * the shop's on it.
+ */
+export function viewSettlementPayout(
+  order: Pick<Order, "payoutHold">,
+  payout: SupplierSettlementPayout,
+): SettlementPayoutView {
+  const base = {
+    id: payout.id,
+    label: payout.label?.trim() || SETTLEMENT_PAYOUT_LABEL,
+    amountMinor: payout.amountMinor,
+    receiptFileId: payout.status === "released" ? (payout.receiptFileId ?? null) : null,
+    reference: payout.status === "released" ? (payout.reference ?? null) : null,
+    releasedAt: payout.status === "released" ? (payout.releasedAt ?? null) : null,
+  };
+  if (payout.status === "released") {
+    return {
+      ...base,
+      stage: "released",
+      statusLabel: "Released",
+      tone: "success",
+      icon: "circle-check",
+      detail: "Operations sent this to your receiving account. Match it against your wallet with the transfer evidence.",
+    };
+  }
+  if (payout.status === "superseded") {
+    return {
+      ...base,
+      stage: "superseded",
+      statusLabel: "Replaced by settlement",
+      tone: "neutral",
+      icon: "circle-x",
+      detail: "Not paid. A later settlement on this job replaced this amount.",
+    };
+  }
+  if (order.payoutHold === true) {
+    return {
+      ...base,
+      stage: "held",
+      statusLabel: "Held",
+      tone: "error",
+      icon: "triangle-alert",
+      detail: "A client report on this job is still open, so Operations sends this once it is settled.",
+    };
+  }
+  return {
+    ...base,
+    stage: "awaiting_release",
+    statusLabel: "With GRIDGO",
+    tone: "info",
+    icon: "clock",
+    detail: "Agreed with you when the refund was settled. Operations sends it to your receiving account. Nothing for you to file.",
+  };
+}
+
+export function settlementPayoutViews(
+  order: Pick<Order, "payoutHold" | "supplierSettlementPayouts">,
+): SettlementPayoutView[] {
+  return (order.supplierSettlementPayouts ?? []).map((payout) => viewSettlementPayout(order, payout));
+}
+
+/** What the shop keeps after a settlement: released stages plus the standing settlement items. */
+export function keptAfterSettlement(order: Order): KeptAmounts {
+  const releasedMinor = milestoneViews(order)
+    .filter((view) => view.stage === "released")
+    .reduce((sum, view) => sum + view.amountMinor, 0);
+  const settlementMinor = settlementPayoutViews(order)
+    .filter((view) => view.stage !== "superseded")
+    .reduce((sum, view) => sum + view.amountMinor, 0);
+  return { releasedMinor, settlementMinor };
 }

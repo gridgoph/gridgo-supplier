@@ -9,6 +9,7 @@ import { JobBrief } from "@/components/JobBrief";
 import { JourneyTrack } from "@/components/JourneyTrack";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { PushEnableCard } from "@/components/PushEnableCard";
+import { RefundNoticePanel } from "@/components/RefundNoticePanel";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { StatusChip } from "@/components/StatusChip";
@@ -21,7 +22,8 @@ import {
   waitingOn,
   type SupplierAction,
 } from "@/lib/jobState";
-import { payoutPlanOf } from "@/lib/milestones";
+import { keptAfterSettlement, payoutPlanOf } from "@/lib/milestones";
+import { refundNotice, refundStanding } from "@/lib/refund";
 import { counterCheck } from "@/lib/pickupCheck";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useViewing } from "@/store/toasts";
@@ -112,11 +114,14 @@ export default function JobWorkspaceScreen() {
   const secondary = actions.filter((a) => !a.primary);
   const urgency = deadlineUrgency(job.promisedDate || job.deadline);
   const waiting = waitingOn(job.state, payoutPlanOf(job));
-  const handoff = hasHandoff(job);
+  // A refund stops the job and speaks over whose move it is.
+  const refund = refundNotice(job, keptAfterSettlement(job));
+  const handoff = hasHandoff(job) && refundStanding(job) === "none";
   const hasSteps = Boolean(primary) || secondary.length > 0 || handoff;
   // A counter check that stopped the pickup, or is waiting to be repeated.
   const check = job.state === "rider_assigned" ? counterCheck(job) : null;
-  const counterIssue = check && check.stage !== "passed" ? check : null;
+  // A refund outranks it: the pickup is not happening while the job is stopped.
+  const counterIssue = check && check.stage !== "passed" && refundStanding(job) === "none" ? check : null;
 
   function messageOperations() {
     router.push({ pathname: "/report", params: { orderId: job!.id, title: job!.title } });
@@ -193,6 +198,10 @@ export default function JobWorkspaceScreen() {
         {counterIssue ? (
           <View className="mt-6">
             <CounterCheckPanel check={counterIssue} onMessageOperations={messageOperations} />
+          </View>
+        ) : refund ? (
+          <View className="mt-6">
+            <RefundNoticePanel notice={refund} />
           </View>
         ) : !primary ? (
           <View className="gg-panel mt-6 gap-1">
