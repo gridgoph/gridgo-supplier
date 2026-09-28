@@ -7,7 +7,7 @@ import ReanimatedSwipeable, {
 } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { AlertStageTrack } from "@/components/AlertStageTrack";
-import { presentAlertBody } from "@/lib/alertStages";
+import { presentAlertBody, presentAlertTitle } from "@/lib/alertStages";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { StatusChip } from "@/components/StatusChip";
 import { notificationImageUrl, type Notification, type Order } from "@/lib/api";
@@ -93,7 +93,7 @@ export function AlertCard({
       <Pressable
         onPress={openJob}
         accessibilityRole="button"
-        accessibilityLabel={`${unread ? "Unread. " : ""}${alert.title}. ${presentAlertBody(alert)}`}
+        accessibilityLabel={`${unread ? "Unread. " : ""}${presentAlertTitle(alert)}. ${presentAlertBody(alert)}`}
         accessibilityHint={onOpen ? "Opens the job and marks this read" : "Marks this read"}
         // Published so a screen reader reaches both without the swipe.
         accessibilityActions={[
@@ -119,7 +119,7 @@ export function AlertCard({
                 : "text-body font-medium text-text-secondary"
             }
           >
-            {alert.title}
+            {presentAlertTitle(alert)}
           </Text>
           <Text
             className={unread ? "text-body text-text-secondary" : "text-body text-text-muted"}
@@ -160,7 +160,7 @@ export function AlertCard({
         <Pressable
           onPress={onDelete}
           accessibilityRole="button"
-          accessibilityLabel={`Delete the alert: ${alert.title}`}
+          accessibilityLabel={`Delete the alert: ${presentAlertTitle(alert)}`}
           className="gg-touch items-center justify-center"
           style={({ pressed }) => (pressed ? { opacity: 0.6 } : undefined)}
         >
@@ -197,7 +197,7 @@ export function AlertCard({
             <SwipeAction
               label="Read"
               onPress={() => runFromRow(onMarkRead)}
-              accessibilityLabel={`Mark read: ${alert.title}`}
+              accessibilityLabel={`Mark read: ${presentAlertTitle(alert)}`}
             >
               <Check size={20} color={colors.textSecondary} strokeWidth={2} />
             </SwipeAction>
@@ -206,7 +206,7 @@ export function AlertCard({
             label="Delete"
             tone="error"
             onPress={() => runFromRow(onDelete)}
-            accessibilityLabel={`Delete the alert: ${alert.title}`}
+            accessibilityLabel={`Delete the alert: ${presentAlertTitle(alert)}`}
           >
             <Trash2 size={20} color={colors.error} strokeWidth={2} />
           </SwipeAction>

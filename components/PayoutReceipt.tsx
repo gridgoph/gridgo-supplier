@@ -18,7 +18,11 @@ type Props = {
 };
 
 /**
- * The receipt behind one release.
+ * The wallet transfer evidence behind one release.
+ *
+ * Called "transfer evidence" on screen, never a receipt: it is a screenshot of
+ * the wallet's confirmation, not an official receipt, and GRIDGO issues none
+ * in the pilot (gridgo-supplier#64).
  *
  * When Operations sends a part of a job, the wallet shows a confirmation with a
  * reference number, and that screenshot is the shop's proof the money left
@@ -62,7 +66,7 @@ export function PayoutReceipt({ fileId, reference, label }: Props) {
     <Pressable
       onPress={() => void open()}
       accessibilityRole="button"
-      accessibilityLabel={`Open the wallet receipt for ${label}`}
+      accessibilityLabel={`Open the wallet transfer evidence for ${label}`}
       className="gg-touch flex-row items-center gap-3 rounded-field border border-outline bg-surface p-2"
       style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
     >
@@ -90,7 +94,7 @@ export function PayoutReceipt({ fileId, reference, label }: Props) {
       <View className="min-w-0 flex-1 gap-0.5">
         <View className="flex-row items-center gap-1.5">
           <Receipt size={16} color={colors.textMuted} strokeWidth={2} aria-hidden />
-          <Text className="text-body text-text-primary">Wallet receipt</Text>
+          <Text className="text-body text-text-primary">Wallet transfer evidence</Text>
         </View>
         <Text className="text-caption text-text-muted" numberOfLines={1}>
           {reference ? `Reference ${reference}` : "No reference recorded"}

@@ -73,13 +73,13 @@ export function homeHeadline(jobs: Order[]): HomeHeadline {
     };
   }
 
-  const withGridgo = payout.awaitingReleaseMinor + payout.heldMinor;
+  const withGridgo = payout.awaitingReleaseMinor + payout.heldMinor + payout.pausedMinor;
   if (withGridgo > 0) {
     return {
       amountMinor: withGridgo,
-      label: payout.held ? "Held while a report is settled" : "With GRIDGO to release",
+      label: payout.held ? "Held while a report or refund is settled" : "With GRIDGO to release",
       detail: payout.held
-        ? "A client has reported a problem, so GRIDGO is holding what is left until it is settled. Operations will tell you what they need."
+        ? "A client has reported a problem or asked for a refund, so GRIDGO is holding what is left until it is settled. Money already released to you stays yours."
         : "Every proof you owe is filed. Operations reviews the evidence and releases each part.",
       tone: "with_gridgo",
     };

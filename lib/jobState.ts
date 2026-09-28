@@ -2,6 +2,7 @@ import type { MilestoneCode, Order, PayoutPlanVersion } from "@/lib/api";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 import { CURRENT_PAYOUT_PLAN, nextShopProof } from "@/lib/milestones";
 import { counterCheck, presentCheckCodes } from "@/lib/pickupCheck";
+import { presentRefundTimelineNote, refundStanding, refundStatus } from "@/lib/refund";
 
 /**
  * Supplier-facing order state: plain labels, tones, and the steps the mobile
@@ -87,6 +88,8 @@ export function presentOrderState(state: string): StatePresentation {
       return { label: "Paid in full", tone: "success", icon: "circle-check" };
     case "approved_for_matching":
       return { label: "Returned for rematch", tone: "neutral", icon: "circle-x" };
+    case "cancelled":
+      return { label: "Cancelled", tone: "neutral", icon: "circle-x" };
     default:
       return { label: "In progress", tone: "neutral", icon: "clock" };
   }
@@ -95,11 +98,17 @@ export function presentOrderState(state: string): StatePresentation {
 /**
  * The chip for one job. The state alone says "Rider assigned" while a failed
  * counter check has the package stuck at the shop, so a check that is holding
- * the pickup speaks over it.
+ * the pickup speaks over it. A refund speaks over both: the state still reads
+ * "In production" while GRIDGO has stopped the work.
  */
 export function presentJobStatus(
-  order: Pick<Order, "state" | "title" | "timeline" | "pickupChecklist" | "pickupCountItems">,
+  order: Pick<
+    Order,
+    "state" | "title" | "timeline" | "pickupChecklist" | "pickupCountItems" | "refundHold" | "refundDisposition"
+  >,
 ): StatePresentation {
+  const refund = refundStatus(order);
+  if (refund) return refund;
   if (order.state === "rider_assigned") {
     const check = counterCheck(order);
     if (check && check.stage !== "passed") {
@@ -118,8 +127,14 @@ export function presentJobStatus(
  * that walks the job forward without it has quietly worked for nothing. The
  * forward step stays available underneath — the platform lets a job move
  * without its proof, so this app warns rather than blocks.
+ *
+ * A refund request stops everything, proof included: GRIDGO refuses the next
+ * step with `refund_fulfillment_stopped`, and a settlement closes the job.
  */
-export function actionsForJob(order: Pick<Order, "state" | "payoutMilestones" | "payoutHold">): SupplierAction[] {
+export function actionsForJob(
+  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold" | "refundHold" | "refundDisposition">,
+): SupplierAction[] {
+  if (refundStanding(order) !== "none") return [];
   const state = order.state;
   const owed = nextShopProof(order as Order);
   const proofStep: SupplierAction | null = owed
@@ -225,7 +240,7 @@ export function routeForAction(kind: SupplierActionKind): SupplierActionRoute {
 }
 
 export function findAction(
-  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold">,
+  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold" | "refundHold" | "refundDisposition">,
   kind: string,
 ): SupplierAction | null {
   return actionsForJob(order).find((a) => a.kind === kind) ?? null;
@@ -262,7 +277,7 @@ export function journeyIndex(state: string): number {
 }
 
 export function primaryAction(
-  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold">,
+  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold" | "refundHold" | "refundDisposition">,
 ): SupplierAction | null {
   return actionsForJob(order).find((a) => a.primary) ?? null;
 }
@@ -283,7 +298,7 @@ export function isInProductionPipeline(order: Pick<Order, "state">): boolean {
 
 /** Jobs that still need a supplier action on this device. */
 export function needsSupplierAction(
-  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold">,
+  order: Pick<Order, "state" | "payoutMilestones" | "payoutHold" | "refundHold" | "refundDisposition">,
 ): boolean {
   return actionsForJob(order).some((a) => a.primary);
 }
@@ -379,5 +394,5 @@ export function presentTimelineState(state: string): string {
  * escalated: visible_defects" — and those are the ones a shop cannot read.
  */
 export function presentTimelineNote(note: string): string {
-  return presentCheckCodes(note);
+  return presentRefundTimelineNote(presentCheckCodes(note));
 }

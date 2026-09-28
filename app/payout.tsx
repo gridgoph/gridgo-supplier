@@ -7,6 +7,7 @@ import { router, useFocusEffect } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";
 import { MilestoneList } from "@/components/MilestoneList";
+import { SettlementPayoutList } from "@/components/SettlementPayoutList";
 import { PayoutReceipt } from "@/components/PayoutReceipt";
 import { SkeletonList } from "@/components/Skeleton";
 import { StatusChip } from "@/components/StatusChip";
@@ -157,6 +158,16 @@ export default function PayoutScreen() {
                 />
               </>
             ) : null}
+            {total.pausedMinor > 0 ? (
+              <>
+                <View className="gg-divider" />
+                <SplitRow
+                  label="Paused for a refund review"
+                  amountMinor={total.pausedMinor}
+                  hint="Operations agrees with you what you keep. Money already released stays yours."
+                />
+              </>
+            ) : null}
             {total.laterMinor > 0 ? (
               <>
                 <View className="gg-divider" />
@@ -212,7 +223,7 @@ export default function PayoutScreen() {
             <Text className="text-overline text-text-muted">EVERY RELEASE</Text>
             <View className="gg-card gap-3">
               {lines.slice(0, LINES_SHOWN).map((line, index) => (
-                <View key={`${line.orderId}-${line.code}`}>
+                <View key={line.key}>
                   {index > 0 ? <View className="gg-divider mb-3" /> : null}
                   <View className="flex-row items-baseline justify-between gap-3">
                     <View className="min-w-0 flex-1 gap-0.5">
@@ -315,11 +326,14 @@ export default function PayoutScreen() {
                 <View className="min-w-0 flex-1 gap-0.5">
                   <Text className="text-body font-medium text-text-primary">{row.title}</Text>
                   <Text className="text-caption text-text-muted">
-                    {api.formatPhp(row.split.releasedMinor)} of{" "}
-                    {api.formatPhp(row.split.totalMinor)} released
+                    {row.split.supersededMinor > 0
+                      ? `${api.formatPhp(row.split.releasedMinor)} released of ${api.formatPhp(row.split.totalMinor)} agreed in settlement`
+                      : `${api.formatPhp(row.split.releasedMinor)} of ${api.formatPhp(row.split.totalMinor)} released`}
                   </Text>
                 </View>
-                {row.held ? (
+                {row.holdReason === "refund" ? (
+                  <StatusChip tone="warning" label="Paused" icon="clock" />
+                ) : row.held ? (
                   <StatusChip tone="error" label="Held" icon="triangle-alert" />
                 ) : (
                   <ChevronRight
@@ -332,6 +346,7 @@ export default function PayoutScreen() {
 
               <View className="gg-divider" />
               <MilestoneList milestones={row.milestones} />
+              <SettlementPayoutList payouts={row.settlementPayouts} />
             </Pressable>
           ))}
         </View>

@@ -1,15 +1,25 @@
 import type { Notification, Order } from "@/lib/api";
 import { presentPickupIssueNotice } from "@/lib/pickupCheck";
+import { presentRefundAlert } from "@/lib/refund";
 
 /** The alert type a failed or resolved counter check reaches the shop as. */
 export const PICKUP_ISSUE_ALERT = "shop_pickup_issue_changed";
 
 /**
  * An alert's body in the shop's words. A failed counter check arrives with
- * the platform's check codes, which must not reach a shop's screen.
+ * the platform's check codes, which must not reach a shop's screen, and a
+ * client refund notice arrives in words written for the client and Operations
+ * (`lib/refund.ts`).
  */
 export function presentAlertBody(alert: Pick<Notification, "type" | "body">): string {
+  const refund = presentRefundAlert(alert);
+  if (refund) return refund.body;
   return alert.type === PICKUP_ISSUE_ALERT ? presentPickupIssueNotice(alert.body) : alert.body;
+}
+
+/** An alert's title in the shop's words. Only refund notices are rewritten. */
+export function presentAlertTitle(alert: Pick<Notification, "type" | "title">): string {
+  return presentRefundAlert(alert)?.title ?? alert.title;
 }
 
 /**
