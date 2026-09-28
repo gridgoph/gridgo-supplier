@@ -6,10 +6,12 @@ import { Pressable, Text, View } from "react-native";
 
 import { DesignLinks } from "@/components/DesignLinks";
 import { SkeletonBlock } from "@/components/Skeleton";
+import { useSignedLink } from "@/hooks/useSignedLink";
 import { useThemeColors } from "@/hooks/useTheme";
 import { getFile, getDownloadUrl, type Order, type StoredFile } from "@/lib/api";
 import { orderDesignLinks } from "@/lib/designLink";
 import { describeArtwork, isArtworkImage, readOrderArtwork, orderArtwork, type ArtworkReference } from "@/lib/orderArtwork";
+import { signedLink } from "@/lib/signedLinks";
 
 type Props = {
   order: Order;
@@ -74,11 +76,21 @@ type FileState =
   | { kind: "error"; message: string }
   | { kind: "ready"; file: StoredFile; previewUrl: string | null };
 
+/**
+ * The preview's link, read fresh on every load and kept in the shared link
+ * memory so `useSignedLink` draws it without a second request. It is asked for
+ * only after `readOrderArtwork` has confirmed the file is this order's artwork.
+ */
+async function previewLink(fileId: string): Promise<{ url: string }> {
+  const link = await signedLink(fileId, { force: true });
+  if (!link) throw new Error("preview_link_refused");
+  return link;
+}
+
 function ArtworkFile({ orderId, reference }: { orderId: string; reference: ArtworkReference }) {
   const colors = useThemeColors();
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<FileState>({ kind: "loading" });
-  const [previewFailed, setPreviewFailed] = useState(false);
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
   const openingRef = useRef(false);
@@ -94,7 +106,7 @@ function ArtworkFile({ orderId, reference }: { orderId: string; reference: Artwo
     let current = true;
     async function load() {
       try {
-        const loaded = await readOrderArtwork({ fileId, kind }, orderId, { getFile, getDownloadUrl });
+        const loaded = await readOrderArtwork({ fileId, kind }, orderId, { getFile, getDownloadUrl: previewLink });
         if (current) setState({ kind: "ready", ...loaded });
       } catch {
         if (current) setState({ kind: "error", message: "This attachment could not load. Retry, or ask Operations to check file access." });
@@ -106,7 +118,6 @@ function ArtworkFile({ orderId, reference }: { orderId: string; reference: Artwo
 
   function retry() {
     setState({ kind: "loading" });
-    setPreviewFailed(false);
     setOpenError(null);
     setAttempt((value) => value + 1);
   }
@@ -128,21 +139,28 @@ function ArtworkFile({ orderId, reference }: { orderId: string; reference: Artwo
     }
   }
 
+  // The preview link lives five minutes and a job can sit open in the
+  // background far longer: an expired link is read again once, and on resume,
+  // rather than latching "Preview unavailable" behind a manual Retry.
+  const preview = useSignedLink(fileId, state.kind === "ready" && Boolean(state.previewUrl));
+  const previewFailed = preview.failed;
   const file = state.kind === "ready" ? state.file : null;
   const image = Boolean(file && isArtworkImage(file));
   return (
     <View className="overflow-hidden rounded-card border border-outline bg-surface">
       <View className="h-44 items-center justify-center bg-surface-variant">
-        {state.kind === "loading" ? <SkeletonBlock /> : state.kind === "ready" && state.previewUrl && !previewFailed ? (
+        {state.kind === "loading" || (state.kind === "ready" && state.previewUrl && !preview.uri && !preview.failed) ? <SkeletonBlock /> : state.kind === "ready" && preview.uri ? (
           <Image
-            source={{ uri: state.previewUrl }}
+            testID="artwork-preview-image"
+            source={{ uri: preview.uri }}
             // Third-party Image does not receive NativeWind's RN import transform.
             style={{ width: "100%", height: "100%" }}
             contentFit="contain"
             cachePolicy="none"
             transition={0}
             accessibilityLabel={`${kind === "mockup" ? "Reference mockup" : "Artwork"}: ${state.file.originalFilename}`}
-            onError={() => setPreviewFailed(true)}
+            onLoad={preview.onLoad}
+            onError={preview.onError}
           />
         ) : (
           <View className="items-center gap-2 px-4">

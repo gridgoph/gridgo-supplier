@@ -1,9 +1,9 @@
 import { ImageOff, QrCode } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Image, Text, View } from "react-native";
 
 import { SkeletonBlock } from "@/components/Skeleton";
-import * as api from "@/lib/api";
+import { useSignedLink } from "@/hooks/useSignedLink";
 import { useThemeColors } from "@/hooks/useTheme";
 
 type Props = {
@@ -27,6 +27,10 @@ type Props = {
  *
  * Square, because every wallet's plate is. No crop marks: those mean "print
  * sample" everywhere else in this app, and this is not a sample of anything.
+ *
+ * GRIDGO's copy is drawn through `useSignedLink`: the link lives five minutes,
+ * and a shop that leaves this screen in the background comes back to its plate,
+ * not to "This picture will not load".
  */
 export function PayoutQrPlate(props: Props) {
   // A replacement source owns fresh loading state before it is painted.
@@ -35,24 +39,12 @@ export function PayoutQrPlate(props: Props) {
 
 function Plate({ fileId, localUri, sending, caption }: Props) {
   const colors = useThemeColors();
-  const [uri, setUri] = useState<string | null>(localUri ?? null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (localUri || !fileId) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const link = await api.getDownloadUrl(fileId);
-        if (!cancelled) setUri(link.url);
-      } catch {
-        if (!cancelled) setFailed(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [fileId, localUri]);
+  const [localRefused, setLocalRefused] = useState(false);
+  // The plate as just photographed wins until GRIDGO's own copy is asked for.
+  const drawLocal = Boolean(localUri) && !localRefused;
+  const stored = useSignedLink(fileId, !localUri);
+  const uri = drawLocal ? localUri! : stored.uri;
+  const failed = localUri ? localRefused : stored.failed;
 
   const empty = !fileId && !localUri;
 
@@ -66,10 +58,12 @@ function Plate({ fileId, localUri, sending, caption }: Props) {
       >
         {uri && !failed ? (
           <Image
+            testID="payout-qr-image"
             source={{ uri }}
             resizeMode="contain"
             style={{ width: "100%", height: "100%" }}
-            onError={() => setFailed(true)}
+            onLoad={drawLocal ? undefined : stored.onLoad}
+            onError={drawLocal ? () => setLocalRefused(true) : stored.onError}
           />
         ) : empty ? (
           <View className="flex-1 items-center justify-center gap-2 p-4">
