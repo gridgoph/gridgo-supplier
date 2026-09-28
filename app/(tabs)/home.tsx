@@ -1,5 +1,6 @@
 import { useReadVersion } from "@/hooks/useReadVersion";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
+import { usePhotoLinkRefresh } from "@/hooks/usePhotoLinkRefresh";
 import { useUser } from "@clerk/expo";
 import { useCallback, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
@@ -98,6 +99,10 @@ export default function HomeScreen() {
   }, [beginRead, loadBoardQuietly, refresh, refreshAlerts, waitingOnOps]);
 
   useLiveRefresh(["jobs", "orders", "payouts", "identity", "approvals", "catalog", "services", "availability"], reload);
+  // The board strip's photo links expire in five minutes; a resume re-reads
+  // only the board, not the floor.
+  const beginBoardRead = useReadVersion();
+  usePhotoLinkRefresh(boardOpen ? listings : null, () => loadBoardQuietly(beginBoardRead()));
 
   useFocusEffect(
     useCallback(() => {

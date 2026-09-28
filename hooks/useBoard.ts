@@ -1,6 +1,7 @@
 import { useReadVersion } from "@/hooks/useReadVersion";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { usePhotoLinkRefresh } from "@/hooks/usePhotoLinkRefresh";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
 import * as api from "@/lib/api";
@@ -169,6 +170,7 @@ export function useBoard(
   }, []);
 
   useLiveRefresh(["catalog", "services", "availability"], reload);
+  usePhotoLinkRefresh(loaded ? listings : null, reload);
 
   useFocusEffect(
     useCallback(() => {
@@ -280,6 +282,8 @@ export function useListing(
   }, [itemId, nextRead]);
 
   useLiveRefresh(["catalog", "services"], () => { if (!hold.current?.()) return reload(true); });
+  const held = useMemo(() => (listing ? [listing] : null), [listing]);
+  usePhotoLinkRefresh(held, () => { if (!hold.current?.()) return reload(true); });
 
   useFocusEffect(
     useCallback(() => {
