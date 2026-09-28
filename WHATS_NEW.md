@@ -20,3 +20,7 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 - It moves them below, under that version's heading.
 
 <!-- CI adds each release below this line. -->
+
+## 1.0.126 (New feature)
+
+- See what changed in each update, and take a short tour of jobs, your schedule and your catalogue.
