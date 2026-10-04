@@ -6,6 +6,7 @@ import {
   type CatalogCoverage,
   type ServiceCatalog,
 } from "@/lib/taxonomy";
+import { listingOwnSteps, type ListingReadiness } from "@/lib/readiness";
 
 /**
  * The shop's board — what clients see.
@@ -28,10 +29,12 @@ import {
  *   before it can go on the board", never a disabled button with no reason. A
  *   control that refuses without saying why is how a shop learns to stop
  *   pressing things.
- * - **The wall's standing comes from GRIDGO's `blockers`.** `boardStanding`
- *   reads that array (and `active`, service state, shop approval). The phone's
- *   fuller checklist (`boardBlockers` / `editorGuidance`) is editor guidance
- *   only — it must not decide the chip.
+ * - **The wall's standing comes from GRIDGO.** When `/me/supplier-readiness`
+ *   reports a listing (`lib/readiness.ts`), that matching verdict decides the
+ *   chip outright. Otherwise `boardStanding` reads the listing's `blockers`
+ *   (and `active`, service state, shop approval). The phone's fuller
+ *   checklist (`boardBlockers` / `editorGuidance`) is editor guidance only —
+ *   it must not decide the chip.
  *
  * The caps are the platform's (8 photos, 6 steps, 20 options each) and are
  * repeated here so a screen can stop a shop before GRIDGO has to.
@@ -940,7 +943,9 @@ export function boardStanding(
   listing: Listing,
   context: BoardContext,
   shopApproved: boolean,
+  readiness?: ListingReadiness | null,
 ): BoardStanding {
+  if (readiness) return standingFromReadiness(readiness);
   const needs = gridgoNeeds(listing, context);
 
   if (needs.length) {
@@ -985,6 +990,66 @@ export function boardStanding(
     tone: "success",
     icon: "circle-check",
     note: null,
+  };
+}
+
+/**
+ * The chip from GRIDGO's matching verdict (`operational.listings[]`).
+ *
+ * When GRIDGO reports a listing, its verdict wins over everything the phone
+ * can work out: a listing GRIDGO matches is Live, full stop, and one it does
+ * not match names the first step it lacks. This is what stops a listing that
+ * is reaching clients from reading "Not ready yet" because of a check the
+ * phone made on its own.
+ */
+function standingFromReadiness(entry: ListingReadiness): BoardStanding {
+  if (entry.ready) {
+    return {
+      kind: "live",
+      label: BOARD_STANDING_LABEL.live,
+      tone: "success",
+      icon: "circle-check",
+      note: null,
+    };
+  }
+  const own = listingOwnSteps(entry);
+  const work = own.filter((step) => step.code !== "item_inactive");
+  if (work.length) {
+    return {
+      kind: "not_ready",
+      label: BOARD_STANDING_LABEL.not_ready,
+      tone: "warning",
+      icon: "triangle-alert",
+      note: work[0].message,
+    };
+  }
+  if (own.length) {
+    return {
+      kind: "hidden",
+      label: BOARD_STANDING_LABEL.hidden,
+      tone: "neutral",
+      icon: "square-pen",
+      note: "Ready to go up. Clients cannot see it while it is hidden.",
+    };
+  }
+  // Only shop gates hold it. Anything the shop can fix comes before approval,
+  // which is a wait.
+  const shopStep = entry.missing.find((step) => step.code !== "supplier_not_approved");
+  if (shopStep) {
+    return {
+      kind: "not_ready",
+      label: BOARD_STANDING_LABEL.not_ready,
+      tone: "warning",
+      icon: "triangle-alert",
+      note: shopStep.message,
+    };
+  }
+  return {
+    kind: "waiting_approval",
+    label: BOARD_STANDING_LABEL.waiting_approval,
+    tone: "info",
+    icon: "clock",
+    note: WAITING_NOTE,
   };
 }
 

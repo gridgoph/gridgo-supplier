@@ -92,6 +92,8 @@ import { parseMoney } from "@/lib/money";
 import { resolveCategoryCode } from "@/lib/taxonomy";
 import { useAcceptedFileFormats } from "@/hooks/useAcceptedFileFormats";
 import { routeId, useListing } from "@/hooks/useBoard";
+import { useReadiness } from "@/hooks/useReadiness";
+import { listingReadinessFor, stepTarget } from "@/lib/readiness";
 import { useThemeColors } from "@/hooks/useTheme";
 import { useListingWizard } from "@/store/listingWizard";
 import { askConfirm } from "@/store/sheets";
@@ -196,7 +198,13 @@ export default function ListingScreen() {
   );
   const blockers = merged && context ? gridgoNeeds(merged, context) : [];
   const extras = merged && context ? editorGuidance(merged, context) : [];
-  const standing = merged && context ? boardStanding(merged, context, approved) : null;
+  // GRIDGO's matching verdict for the saved listing, when this API sends one.
+  const { readiness } = useReadiness();
+  const verdict = id ? listingReadinessFor(readiness, id) : null;
+  const standing = merged && context ? boardStanding(merged, context, approved, verdict) : null;
+  // Hidden is the foot's "Put on the board"; every other step is listed.
+  const verdictSteps =
+    verdict && !verdict.ready ? verdict.missing.filter((step) => step.code !== "item_inactive") : [];
 
   /** Every write goes through here, so one failure sentence has one home. */
   const run = useCallback(
@@ -962,13 +970,50 @@ export default function ListingScreen() {
         {/* 9. On the board */}
         <Section title="ON THE BOARD">
           <Text className="text-body text-text-secondary">
-            {merged.onTheBoard
-              ? approved
-                ? "Clients can see this listing now."
-                : "It is up. Clients see it as soon as Operations approves your shop."
-              : "Hidden. Only your shop can see it."}
+            {verdict?.ready
+              ? "Clients can be matched with this listing now."
+              : !merged.onTheBoard
+                ? "Hidden. Only your shop can see it."
+                : verdict
+                  ? "It is up, but clients cannot be matched with it yet."
+                  : approved
+                    ? "Clients can see this listing now."
+                    : "It is up. Clients see it as soon as Operations approves your shop."}
           </Text>
-          {blockers.length ? (
+          {verdictSteps.length ? (
+            /*
+              GRIDGO's own list, in its words, for the listing as saved. A step
+              fixed on this screen gets no button — the field is right above —
+              and one fixed elsewhere (photos, a service line, approval) opens it.
+            */
+            <View className="gg-panel gap-3">
+              <Text className="text-body font-medium text-text-primary">
+                {verdictSteps.length === 1
+                  ? "One step before clients can be matched with it"
+                  : `${verdictSteps.length} steps before clients can be matched with it`}
+              </Text>
+              {verdictSteps.map((step, index) => {
+                const target = stepTarget(step, { catalogItemId: id ?? undefined });
+                const elsewhere =
+                  target &&
+                  !(typeof target.href === "object" && target.href.pathname === "/shop/[id]");
+                return (
+                  <View key={`${step.code}-${index}`} className="gap-2">
+                    <Text className="text-body text-text-secondary">{step.message}</Text>
+                    {elsewhere ? (
+                      <View className="flex-row">
+                        <SecondaryButton
+                          label={target.label}
+                          onPress={() => void persistThen(() => router.push(target.href))}
+                        />
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+          {!verdict && blockers.length ? (
             <View className="gg-panel gap-2">
               <Text className="text-body font-medium text-text-primary">
                 {blockers.length === 1
