@@ -93,7 +93,7 @@ export default function LateProductionScreen() {
             the client agreed to move it — to the moment you mark the job ready.
           </Text>
           <View className="gg-card gap-4">
-            <LatenessScale rates={policy?.rates ?? null} />
+            <LatenessScale />
             <View className="gg-divider" />
             {LATENESS_TIERS.map((definition) => (
               <View key={definition.tier} className="gap-0.5">

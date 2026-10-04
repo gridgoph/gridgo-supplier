@@ -2,13 +2,11 @@ import { Clock, TriangleAlert } from "lucide-react-native";
 import { Text, View } from "react-native";
 
 import { useThemeColors } from "@/hooks/useTheme";
-import { formatRate, LATENESS_TIERS, tierDefinition, type LapseTier } from "@/lib/productionLapse";
+import { LATENESS_TIERS, tierDefinition, type LapseTier } from "@/lib/productionLapse";
 
 type Props = {
   /** The tier this job reached. Absent: the scale explains every tier equally. */
   current?: LapseTier | null;
-  /** The current policy's rates, when GRIDGO sent them. */
-  rates?: Record<LapseTier, number> | null;
 };
 
 const SHORT_RANGE: Record<LapseTier, string> = {
@@ -31,13 +29,11 @@ const TONE_CLASS = {
  * tier carries an icon and its label in the tier's colour, so it still reads
  * in grayscale. Never yellow: nothing here is pressed.
  */
-export function LatenessScale({ current = null, rates = null }: Props) {
+export function LatenessScale({ current = null }: Props) {
   const colors = useThemeColors();
   const reached = current ? LATENESS_TIERS.findIndex((t) => t.tier === current) : -1;
   const tone = current ? TONE_CLASS[tierDefinition(current).tone === "error" ? "error" : "warning"] : null;
-  const summary = LATENESS_TIERS.map(
-    (t) => `${t.label}, ${t.range.toLowerCase()}${rates ? `, ${formatRate(rates[t.tier])}` : ""}`,
-  ).join(". ");
+  const summary = LATENESS_TIERS.map((t) => `${t.label}, ${t.range.toLowerCase()}`).join(". ");
 
   return (
     <View
@@ -73,9 +69,6 @@ export function LatenessScale({ current = null, rates = null }: Props) {
                 </Text>
               </View>
               <Text className="text-caption text-text-muted">{SHORT_RANGE[definition.tier]}</Text>
-              {rates ? (
-                <Text className="text-caption text-text-muted">{formatRate(rates[definition.tier])} off</Text>
-              ) : null}
             </View>
           </View>
         );
