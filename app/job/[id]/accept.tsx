@@ -12,6 +12,7 @@ import { toDayKey } from "@/lib/day";
 import { formatDeadlineFull } from "@/lib/dates";
 import { findAction } from "@/lib/jobState";
 import { payoutPlanCopy } from "@/lib/milestones";
+import { NO_SUBCONTRACTING_ACCEPT_LINE } from "@/lib/supplierTerms";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
 import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
@@ -120,6 +121,7 @@ export default function AcceptJobScreen() {
               sections={["make", "artwork", "mockup", "delivery"]}
               defaultOpen={null}
             />
+            <Text className="text-body text-text-secondary">{NO_SUBCONTRACTING_ACCEPT_LINE}</Text>
           </View>
 
           {/*
