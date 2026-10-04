@@ -65,6 +65,7 @@ import { seedStarterSample } from "@/lib/starterSample";
 import { useAcceptedFileFormats } from "@/hooks/useAcceptedFileFormats";
 import { useBoard, useListing } from "@/hooks/useBoard";
 import { isMatchable, useSession } from "@/store/session";
+import { endPhotoPolicySubmission, ensurePhotoPolicy } from "@/store/photoPolicy";
 import { askConfirm } from "@/store/sheets";
 import { useListingWizard } from "@/store/listingWizard";
 
@@ -477,11 +478,22 @@ export default function NewListingScreen() {
 
   async function placeOnBoard() {
     if (!merged || !context || blockers.length) return;
+    // Photo policies: once per submission, so a shop that confirmed at the
+    // photo step goes straight up. "Check my photos" opens them, not a wall.
+    const policy = await ensurePhotoPolicy(merged, "submit");
+    if (policy === "check_photos") {
+      void persistThen(() =>
+        router.push({ pathname: "/shop/[id]/photos", params: { id: merged.id } }),
+      );
+      return;
+    }
+    if (policy !== "confirmed") return;
     placingRef.current = true;
     if (!(await persist(true))) {
       placingRef.current = false;
       return;
     }
+    endPhotoPolicySubmission(merged.id);
     useListingWizard.getState().clear();
     router.replace("/(tabs)/catalogues");
   }

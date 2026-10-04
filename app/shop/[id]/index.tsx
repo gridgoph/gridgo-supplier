@@ -94,6 +94,7 @@ import { useAcceptedFileFormats } from "@/hooks/useAcceptedFileFormats";
 import { routeId, useListing } from "@/hooks/useBoard";
 import { useThemeColors } from "@/hooks/useTheme";
 import { useListingWizard } from "@/store/listingWizard";
+import { endPhotoPolicySubmission, ensurePhotoPolicy } from "@/store/photoPolicy";
 import { askConfirm } from "@/store/sheets";
 import { isMatchable, useSession } from "@/store/session";
 
@@ -286,6 +287,18 @@ export default function ListingScreen() {
     },
     [persist],
   );
+
+  /** Put it up, after the photo policies if this submission has not passed them. */
+  async function putOnBoard() {
+    if (!listing) return;
+    const policy = await ensurePhotoPolicy(listing, "submit");
+    if (policy === "check_photos") {
+      void persistThen(() => router.push({ pathname: "/shop/[id]/photos", params: { id: listing.id } }));
+      return;
+    }
+    if (policy !== "confirmed") return;
+    if (await persist(true)) endPhotoPolicySubmission(listing.id);
+  }
 
   async function takeOff() {
     if (!listing) return;
@@ -1050,7 +1063,7 @@ export default function ListingScreen() {
             <PrimaryButton
               label={busy ? "Saving…" : "Put on the board"}
               disabled={busy || blockers.length > 0}
-              onPress={() => void persist(true)}
+              onPress={() => void putOnBoard()}
             />
             {blockers.length ? (
               <Text className="text-caption text-text-muted">{blockers[0]}</Text>

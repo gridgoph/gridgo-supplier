@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 jest.mock("expo-router", () => ({
   router: { replace: jest.fn(), push: jest.fn(), back: jest.fn() },
@@ -38,6 +38,8 @@ import { useBoard, useListing } from "@/hooks/useBoard";
 import type { Listing } from "@/lib/listings";
 import { addGroup, loadStarters, saveListing, setFileFormats } from "@/lib/listingsApi";
 import { useListingWizard } from "@/store/listingWizard";
+import { usePhotoPolicy } from "@/store/photoPolicy";
+import { settlePhotoPolicy, useSheets } from "@/store/sheets";
 import type { ServiceCatalog } from "@/lib/taxonomy";
 
 const catalog: ServiceCatalog = {
@@ -113,9 +115,18 @@ function openAt(step: "about" | "price" | "speed" | "steps" | "artwork" | "revie
   useListingWizard.setState({ listingId: listing.id, step, furthest: step });
 }
 
+/** The photo policies sheet is a route; on a bench, answer it from the store. */
+async function answerPhotoPolicy(answer: "confirmed" | "check_photos" | "declined") {
+  await waitFor(() => expect(useSheets.getState().photoPolicy?.settled).toBe(false));
+  expect(router.push).toHaveBeenCalledWith("/shop/photo-policy");
+  await act(async () => settlePhotoPolicy(answer));
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockListing = listingWith();
+  usePhotoPolicy.setState({ confirmed: [] });
+  useSheets.setState({ photoPolicy: null });
   useListingWizard.setState({ listingId: null, step: "pick", furthest: "pick" });
   (useBoard as jest.Mock).mockReturnValue({
     catalog,
@@ -409,6 +420,7 @@ describe("Add a listing — later steps", () => {
     await render(<NewListingScreen />);
 
     await fireEvent.press(await screen.findByRole("button", { name: "Place on Board" }));
+    await answerPhotoPolicy("confirmed");
 
     await waitFor(() => {
       expect(saveListing).toHaveBeenCalledWith(
@@ -441,5 +453,78 @@ describe("Add a listing — later steps", () => {
     const patch = (saveListing as jest.Mock).mock.calls[0][1];
     expect(patch.active).toBeUndefined();
     expect(screen.getByText("Describe your product")).toBeTruthy();
+  });
+});
+
+describe("Add a listing — photo policies checkpoint", () => {
+  const complete = () =>
+    listingWith({
+      name: "Event flyers",
+      description: "A5 handouts",
+      photos: [{ fileId: "file_1", sortOrder: 0, altText: null }],
+      basePriceMinor: 45000,
+    });
+
+  it("does not place the listing until the shop confirms its photos follow the rules", async () => {
+    openAt("review", complete());
+    await render(<NewListingScreen />);
+
+    await fireEvent.press(await screen.findByRole("button", { name: "Place on Board" }));
+    await waitFor(() => expect(useSheets.getState().photoPolicy?.request.moment).toBe("submit"));
+    expect(saveListing).not.toHaveBeenCalled();
+
+    await answerPhotoPolicy("confirmed");
+    await waitFor(() =>
+      expect(saveListing).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "item_1" }),
+        expect.objectContaining({ active: true }),
+      ),
+    );
+    // The submission is over, so the next one asks again.
+    expect(usePhotoPolicy.getState().confirmed).toEqual([]);
+  });
+
+  it("keeps the listing hidden when the checkpoint is dismissed", async () => {
+    openAt("review", complete());
+    await render(<NewListingScreen />);
+
+    await fireEvent.press(await screen.findByRole("button", { name: "Place on Board" }));
+    await answerPhotoPolicy("declined");
+
+    expect(saveListing).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Place on Board" })).toBeTruthy();
+  });
+
+  it("opens the photos instead of placing when the shop wants to check them", async () => {
+    openAt("review", complete());
+    await render(<NewListingScreen />);
+
+    await fireEvent.press(await screen.findByRole("button", { name: "Place on Board" }));
+    await answerPhotoPolicy("check_photos");
+
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith({
+        pathname: "/shop/[id]/photos",
+        params: { id: "item_1" },
+      }),
+    );
+    expect(saveListing).not.toHaveBeenCalled();
+  });
+
+  it("does not ask twice in one submission once the photo step was confirmed", async () => {
+    usePhotoPolicy.setState({ confirmed: ["item_1"] });
+    openAt("review", complete());
+    await render(<NewListingScreen />);
+
+    await fireEvent.press(await screen.findByRole("button", { name: "Place on Board" }));
+
+    await waitFor(() =>
+      expect(saveListing).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "item_1" }),
+        expect.objectContaining({ active: true }),
+      ),
+    );
+    expect(router.push).not.toHaveBeenCalledWith("/shop/photo-policy");
   });
 });
