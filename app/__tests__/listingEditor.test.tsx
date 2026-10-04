@@ -12,6 +12,8 @@ import {
   saveListing,
 } from "@/lib/listingsApi";
 import { useSession } from "@/store/session";
+import { usePhotoPolicy } from "@/store/photoPolicy";
+import { settlePhotoPolicy, useSheets } from "@/store/sheets";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), back: jest.fn() },
@@ -84,6 +86,8 @@ describe("the listing editor", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    usePhotoPolicy.setState({ confirmed: [] });
+    useSheets.setState({ photoPolicy: null });
     (saveListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith() });
     (loadPrepSteps as jest.Mock).mockResolvedValue({ status: "ok", value: [] });
     (addGroup as jest.Mock).mockResolvedValue({ status: "ok", value: null });
@@ -311,6 +315,10 @@ describe("the listing editor", () => {
     });
 
     await fireEvent.press(screen.getByRole("button", { name: "Put on the board" }));
+    // Photo policies first: nothing goes up until the shop confirms.
+    await waitFor(() => expect(useSheets.getState().photoPolicy?.request.moment).toBe("submit"));
+    expect(saveListing).not.toHaveBeenCalled();
+    await act(async () => settlePhotoPolicy("confirmed"));
     await waitFor(() =>
       expect(saveListing).toHaveBeenCalledWith(
         expect.objectContaining({ id: "sci_1" }),

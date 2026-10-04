@@ -13,6 +13,7 @@ import {
   type Listing,
   type ServiceLine,
 } from "@/lib/listings";
+import type { ListingReadiness } from "@/lib/readiness";
 import type { ServiceCatalog } from "@/lib/taxonomy";
 
 type Props = {
@@ -20,6 +21,8 @@ type Props = {
   catalog: ServiceCatalog | null;
   services: ServiceLine[];
   shopApproved: boolean;
+  /** GRIDGO's matching verdict for this listing; decides the chip when known. */
+  readiness?: ListingReadiness | null;
   onPress: () => void;
   /** Press and hold. Absent while another tile is being removed. */
   onRemove?: () => void;
@@ -53,12 +56,13 @@ export function ListingCard({
   catalog,
   services,
   shopApproved,
+  readiness,
   onPress,
   onRemove,
   hunt,
 }: Props) {
   const context = boardContextFor(listing, services);
-  const standing = boardStanding(listing, context, shopApproved);
+  const standing = boardStanding(listing, context, shopApproved, readiness);
   const first = listing.photos[0];
   const cap = printerCapLine(listing);
 
@@ -103,6 +107,12 @@ export function ListingCard({
           <View className="mt-1 flex-row flex-wrap">
             <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
           </View>
+          {/* The exact step it lacks, so the chip is never a dead end. */}
+          {standing.kind === "not_ready" && standing.note ? (
+            <Text className="text-caption text-text-secondary" numberOfLines={3}>
+              {standing.note}
+            </Text>
+          ) : null}
         </View>
       </Pressable>
     </View>

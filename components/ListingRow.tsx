@@ -18,6 +18,7 @@ import {
   type Listing,
   type ServiceLine,
 } from "@/lib/listings";
+import type { ListingReadiness } from "@/lib/readiness";
 import type { ServiceCatalog } from "@/lib/taxonomy";
 
 type Props = {
@@ -25,6 +26,8 @@ type Props = {
   catalog: ServiceCatalog | null;
   services: ServiceLine[];
   shopApproved: boolean;
+  /** GRIDGO's matching verdict for this listing; decides the chip when known. */
+  readiness?: ListingReadiness | null;
   onPress: () => void;
   onRemove?: () => void;
   /** The hunt this strip came back for, so the matching run can be marked. */
@@ -44,12 +47,13 @@ export function ListingRow({
   catalog,
   services,
   shopApproved,
+  readiness,
   onPress,
   onRemove,
   hunt,
 }: Props) {
   const context = boardContextFor(listing, services);
-  const standing = boardStanding(listing, context, shopApproved);
+  const standing = boardStanding(listing, context, shopApproved, readiness);
   const hours = effectiveTurnaroundHours(listing, context.inheritedTurnaroundHours);
   const first = listing.photos[0];
   const money = formatPhp(fromPriceMinor(listing));
@@ -97,6 +101,12 @@ export function ListingRow({
           <View className="mt-0.5 flex-row flex-wrap">
             <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
           </View>
+          {/* The exact step it lacks, so the chip is never a dead end. */}
+          {standing.kind === "not_ready" && standing.note ? (
+            <Text className="text-caption text-text-secondary" numberOfLines={3}>
+              {standing.note}
+            </Text>
+          ) : null}
         </View>
         <View className="max-w-[42%] shrink-0 items-end gap-0.5 py-3">
           <Text className="text-body font-medium text-text-primary" numberOfLines={1}>

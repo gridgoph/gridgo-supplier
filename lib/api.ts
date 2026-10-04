@@ -1277,6 +1277,14 @@ export async function listCatalogItems(query: CatalogListQuery = {}): Promise<un
   return request<unknown>(`/me/catalog-items${search ? `?${search}` : ""}`);
 }
 
+/**
+ * Whether clients can be matched with this shop, and what is missing.
+ * Read only through `normalizeReadiness` in `lib/readiness.ts`.
+ */
+export async function getSupplierReadiness(): Promise<unknown> {
+  return request<unknown>("/me/supplier-readiness");
+}
+
 export async function getCatalogItem(itemId: string): Promise<unknown> {
   return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}`);
 }

@@ -32,6 +32,7 @@ export default function ShopLayout() {
         on the phone. This is the same sheet, presented on the listing.
       */}
       <Stack.Screen name="confirm" options={sheetScreenOptions(scheme)} />
+      <Stack.Screen name="photo-policy" options={sheetScreenOptions(scheme)} />
     </Stack>
   );
 }

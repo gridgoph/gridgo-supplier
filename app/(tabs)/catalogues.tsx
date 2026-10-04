@@ -37,6 +37,8 @@ import {
 import { ARCHIVED_SENTENCE, BOARD_NOT_OPEN_YET, removeListing } from "@/lib/listingsApi";
 import { motion } from "@/constants/theme";
 import { useBoard } from "@/hooks/useBoard";
+import { useReadiness } from "@/hooks/useReadiness";
+import { listingReadinessFor, type Readiness } from "@/lib/readiness";
 import { useCatalogueView } from "@/hooks/useCatalogueView";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -109,7 +111,12 @@ export default function BoardScreen() {
     reload,
     dropListing,
   } = useBoard(listQuery, { trackKinds: true });
-  const { refreshing, onRefresh } = usePullToRefresh(reload);
+  const { readiness, reload: reloadReadiness } = useReadiness();
+  const reloadAll = useCallback(
+    () => Promise.all([reload(), reloadReadiness()]).then(() => undefined),
+    [reload, reloadReadiness],
+  );
+  const { refreshing, onRefresh } = usePullToRefresh(reloadAll);
 
   /** Any new question is a new first page; a cursor from the old one is junk. */
   const ask = useCallback((next: Partial<BoardQuery>) => {
@@ -379,6 +386,7 @@ export default function BoardScreen() {
                       catalog={catalog}
                       services={services}
                       shopApproved={approved}
+                      readiness={readiness}
                       onRemove={removing ? undefined : remove}
                     />
                   </TourTarget>
@@ -416,6 +424,7 @@ function Wall({
   catalog,
   services,
   shopApproved,
+  readiness,
   onRemove,
 }: {
   listings: Listing[];
@@ -424,6 +433,7 @@ function Wall({
   catalog: ReturnType<typeof useBoard>["catalog"];
   services: ReturnType<typeof useBoard>["services"];
   shopApproved: boolean;
+  readiness: Readiness | null;
   onRemove?: (listing: Listing) => void;
 }) {
   if (view === "list") {
@@ -436,6 +446,7 @@ function Wall({
             catalog={catalog}
             services={services}
             shopApproved={shopApproved}
+            readiness={listingReadinessFor(readiness, listing.id)}
             hunt={hunt}
             onPress={() =>
               router.push({
@@ -459,6 +470,7 @@ function Wall({
             catalog={catalog}
             services={services}
             shopApproved={shopApproved}
+            readiness={listingReadinessFor(readiness, listing.id)}
             hunt={hunt}
             onPress={() =>
               router.push({

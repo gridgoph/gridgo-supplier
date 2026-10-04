@@ -12,6 +12,7 @@ import { SkeletonBlock } from "@/components/Skeleton";
 import { UploadList } from "@/components/UploadList";
 import { LISTING_CAPS, photoViewUrl } from "@/lib/listings";
 import { attachPhoto, BOARD_NOT_OPEN_YET, removePhoto, setPhotoOrder } from "@/lib/listingsApi";
+import { endPhotoPolicySubmission, ensurePhotoPolicy } from "@/store/photoPolicy";
 import { askConfirm } from "@/store/sheets";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { routeId, useListing } from "@/hooks/useBoard";
@@ -33,6 +34,10 @@ import { useThemeColors } from "@/hooks/useTheme";
  *
  * A sample comes off by sending the photos that stay. Replace still swaps
  * one in place when the shop wants a different picture in the same slot.
+ *
+ * Adding or replacing a sample first passes the photo policies checkpoint
+ * (`lib/photoPolicy.ts`), once per submission. A listing already on the board
+ * has no wizard walk to belong to, so each visit here is its own submission.
  */
 export default function SamplePhotosScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
@@ -49,6 +54,25 @@ export default function SamplePhotosScreen() {
   const photos = useMemo(() => listing?.photos ?? [], [listing]);
   const full = photos.length >= LISTING_CAPS.photos;
   const { items, markAttached, remove: dropUpload } = uploads;
+
+  const { takePhoto, pickImage } = uploads;
+
+  const liveId = listing?.onTheBoard ? listing.id : null;
+  useEffect(() => {
+    if (!liveId) return;
+    return () => endPhotoPolicySubmission(liveId);
+  }, [liveId]);
+
+  /** Pass the photo policies, then open the camera or the library. */
+  const choose = useCallback(
+    async (source: "camera" | "library", slot: number | null) => {
+      if (!listing) return;
+      if ((await ensurePhotoPolicy(listing, "photos")) !== "confirmed") return;
+      setReplacing(slot);
+      await (source === "camera" ? takePhoto() : pickImage());
+    },
+    [listing, takePhoto, pickImage],
+  );
 
   /**
    * A stored upload is only half a sample: GRIDGO has the bytes, and the
@@ -222,10 +246,7 @@ export default function SamplePhotosScreen() {
                     <SecondaryButton
                       label={replacing === index ? "Choosing…" : "Replace"}
                       disabled={picking}
-                      onPress={() => {
-                        setReplacing(index);
-                        void uploads.pickImage();
-                      }}
+                      onPress={() => void choose("library", index)}
                     />
                     <SecondaryButton
                       label="Remove"
@@ -268,28 +289,22 @@ export default function SamplePhotosScreen() {
                 <SecondaryButton
                   label="Take a photo"
                   disabled={picking}
-                  onPress={() => {
-                    setReplacing(null);
-                    void uploads.takePhoto();
-                  }}
+                  onPress={() => void choose("camera", null)}
                 />
               </View>
               <View className="flex-1">
                 <SecondaryButton
                   label="Choose a photo"
                   disabled={picking}
-                  onPress={() => {
-                    setReplacing(null);
-                    void uploads.pickImage();
-                  }}
+                  onPress={() => void choose("library", null)}
                 />
               </View>
             </View>
           )}
           <Text className="text-caption text-text-muted">
             JPEG, PNG or WebP. Shoot it in daylight against a plain wall — that is what makes a
-            board look like a shop rather than a listing site. Remove a sample you do not want,
-            or put another in its place.
+            board look like a shop rather than a listing site. No watermark, logo or shop name
+            on the picture. Remove a sample you do not want, or put another in its place.
           </Text>
         </View>
       </ScrollView>

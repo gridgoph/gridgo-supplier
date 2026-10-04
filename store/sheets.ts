@@ -2,6 +2,8 @@ import { router, type Href } from "expo-router";
 import { InteractionManager } from "react-native";
 import { create } from "zustand";
 
+import type { PhotoPolicyAnswer, PhotoPolicyMoment } from "@/lib/photoPolicy";
+
 /**
  * Sheets the app asks for and waits on.
  *
@@ -61,16 +63,22 @@ export type PickRequest = {
   cancelLabel?: string;
 };
 
+export type PhotoPolicyRequest = {
+  moment: PhotoPolicyMoment;
+};
+
 type SheetState = {
   confirm: Pending<ConfirmRequest, boolean>;
   date: Pending<DateRequest, string | null>;
   pick: Pending<PickRequest, string | null>;
+  photoPolicy: Pending<PhotoPolicyRequest, PhotoPolicyAnswer>;
 };
 
 export const useSheets = create<SheetState>(() => ({
   confirm: null,
   date: null,
   pick: null,
+  photoPolicy: null,
 }));
 
 /**
@@ -154,4 +162,29 @@ export function settlePick(value: string | null): void {
   if (!pending || pending.settled) return;
   useSheets.setState({ pick: { ...pending, settled: true } });
   pending.resolve(value);
+}
+
+/**
+ * Show the photo policies and wait for the shop's answer.
+ *
+ * The sheet lives in the shop stack, where every caller already is. Any
+ * dismissal resolves as "declined"; only the confirm button says "confirmed".
+ * Callers should go through `ensurePhotoPolicy` in `store/photoPolicy.ts`,
+ * which remembers the answer for the submission.
+ */
+export function askPhotoPolicy(request: PhotoPolicyRequest): Promise<PhotoPolicyAnswer> {
+  return new Promise<PhotoPolicyAnswer>((resolve) => {
+    useSheets.setState({ photoPolicy: { request, resolve, settled: false } });
+    router.push("/shop/photo-policy");
+  }).then(async (answer) => {
+    await afterNativePresentation();
+    return answer;
+  });
+}
+
+export function settlePhotoPolicy(answer: PhotoPolicyAnswer): void {
+  const pending = useSheets.getState().photoPolicy;
+  if (!pending || pending.settled) return;
+  useSheets.setState({ photoPolicy: { ...pending, settled: true } });
+  pending.resolve(answer);
 }
