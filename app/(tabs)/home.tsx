@@ -17,6 +17,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { PushEnableCard } from "@/components/PushEnableCard";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
+import { ShopNotReadyCard, ShopReadyLine, ShopSetupGaps } from "@/components/ShopReadiness";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { StatusChip } from "@/components/StatusChip";
 import * as api from "@/lib/api";
@@ -28,6 +29,8 @@ import { loadBoard } from "@/lib/listingsApi";
 import { useAlertsStore } from "@/store/alerts";
 import { isMatchable, useSession } from "@/store/session";
 import { loadServiceLines } from "@/hooks/useBoard";
+import { loadReadiness } from "@/hooks/useReadiness";
+import type { Readiness } from "@/lib/readiness";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 
@@ -50,6 +53,10 @@ export default function HomeScreen() {
   const [jobs, setJobs] = useState<api.Order[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [services, setServices] = useState<ServiceLine[]>([]);
+  const [boardTotal, setBoardTotal] = useState<number | undefined>(undefined);
+  // GRIDGO's matching verdict. Null on an API that predates it: Home then
+  // draws exactly what it drew before.
+  const [readiness, setReadiness] = useState<Readiness | null>(null);
   // False while GRIDGO has no board routes: nothing to nag a shop about.
   const [boardOpen, setBoardOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -66,11 +73,18 @@ export default function HomeScreen() {
    * error on a screen about work.
    */
   const loadBoardQuietly = useCallback(async (current: () => boolean) => {
-    const [board, lines] = await Promise.all([loadBoard(), loadServiceLines()]);
+    const [board, lines, verdict] = await Promise.all([
+      loadBoard(),
+      loadServiceLines(),
+      loadReadiness(),
+    ]);
     if (!current()) return;
     setServices(lines);
     setListings(board.status === "ok" ? board.value.listings : []);
+    setBoardTotal(board.status === "ok" ? board.value.total : undefined);
     setBoardOpen(board.status === "ok");
+    // Keep the last verdict through a failed read rather than blanking it.
+    if (verdict) setReadiness(verdict);
   }, []);
 
   const beginRead = useReadVersion();
@@ -127,6 +141,13 @@ export default function HomeScreen() {
 
   const board = boardOpen ? boardPrompt(listings, services, !waitingOnOps) : null;
   const needsBoardWork = board != null && board.kind !== "ready";
+  /*
+    Ready or not is GRIDGO's matching verdict and nothing else — never the
+    approval checklist, never setup completion. A shop whose listings match
+    must not read "Not ready" (gridgoph/gridgo-supplier#100).
+  */
+  const notReady = readiness != null && !readiness.ready;
+  const listingNames = Object.fromEntries(listings.map((l) => [l.id, l.name]));
 
   function open(obligation: Obligation) {
     router.push({
@@ -179,7 +200,27 @@ export default function HomeScreen() {
           action, two rows — so the floor does not grow under the shop's thumb
           the moment it lands.
         */}
-        {waitingOnOps ? (
+        {waitingOnOps && notReady && readiness ? (
+          <View className="mt-2">
+            {/*
+              A shop with Operations sees its whole list, approval included,
+              instead of a single "being reviewed": what it can do while it
+              waits is usually a listing, and the list says which one.
+            */}
+            <ShopNotReadyCard
+              readiness={readiness}
+              listingNames={listingNames}
+              listingCount={boardTotal}
+              takesYellow
+            />
+            <View className="mt-4">
+              <ShopSetupGaps readiness={readiness} />
+            </View>
+            <PushEnableCard spacing="above" />
+          </View>
+        ) : null}
+
+        {waitingOnOps && !notReady ? (
           <View className="mt-2">
             <EmptyState
               title="Operations is reviewing your shop"
@@ -239,6 +280,21 @@ export default function HomeScreen() {
 
         {!waitingOnOps && !firstLoad && !(error && !loaded) ? (
           <>
+            {/*
+              Above the figure: a shop GRIDGO cannot match is not getting new
+              work, which outranks how much money is waiting. The yellow stays
+              with the day's work when there is any.
+            */}
+            {notReady && readiness ? (
+              <View className="mb-6">
+                <ShopNotReadyCard
+                  readiness={readiness}
+                  listingNames={listingNames}
+                  listingCount={boardTotal}
+                  takesYellow={!first}
+                />
+              </View>
+            ) : null}
             {/* One figure, in the same place every day. */}
             <Pressable
               onPress={() => router.push("/payout")}
@@ -297,7 +353,7 @@ export default function HomeScreen() {
                 <EmptyState
                   title="Nothing owed today"
                   body="No job is waiting on a decision, a proof or a handover from you. Check Schedule for what is coming, or Jobs when GRIDGO matches new work."
-                  {...(needsBoardWork
+                  {...(needsBoardWork || notReady
                     ? {
                         secondaryLabel: "Open schedule",
                         onSecondary: () => router.push("/(tabs)/schedule"),
@@ -320,11 +376,18 @@ export default function HomeScreen() {
             {board ? (
               <View className="mt-8 gap-2">
                 <Text className="text-overline text-text-muted">YOUR BOARD</Text>
+                {readiness?.ready ? <ShopReadyLine readiness={readiness} /> : null}
                 {board.kind === "ready" ? (
                   <SampleStrip listings={listings} />
                 ) : (
-                  <BoardCard prompt={board} quiet={Boolean(first)} />
+                  <BoardCard prompt={board} quiet={Boolean(first) || notReady} />
                 )}
+              </View>
+            ) : null}
+
+            {readiness ? (
+              <View className="mt-6">
+                <ShopSetupGaps readiness={readiness} />
               </View>
             ) : null}
 

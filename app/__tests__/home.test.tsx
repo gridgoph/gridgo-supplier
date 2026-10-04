@@ -24,6 +24,8 @@ jest.mock("@/lib/api", () => ({
   ...jest.requireActual("@/lib/api"),
   listJobs: jest.fn(async () => []),
   listNotifications: jest.fn(async () => []),
+  // An API from before operational readiness: Home draws what it always drew.
+  getSupplierReadiness: jest.fn(async () => ({ readyForApproval: false, missing: [] })),
   getDownloadUrl: jest.fn(async () => ({
     url: "https://example.test/sample.jpg",
     expiresInSeconds: 300,
