@@ -1,5 +1,6 @@
 import type { Notification, Order } from "@/lib/api";
 import { presentPickupIssueNotice } from "@/lib/pickupCheck";
+import { presentLapseAlert } from "@/lib/productionLapse";
 import { presentRefundAlert } from "@/lib/refund";
 
 /** The alert type a failed or resolved counter check reaches the shop as. */
@@ -9,17 +10,18 @@ export const PICKUP_ISSUE_ALERT = "shop_pickup_issue_changed";
  * An alert's body in the shop's words. A failed counter check arrives with
  * the platform's check codes, which must not reach a shop's screen, and a
  * client refund notice arrives in words written for the client and Operations
- * (`lib/refund.ts`).
+ * (`lib/refund.ts`). A late-production notice carries a raw timestamp
+ * (`lib/productionLapse.ts`).
  */
 export function presentAlertBody(alert: Pick<Notification, "type" | "body">): string {
-  const refund = presentRefundAlert(alert);
+  const refund = presentRefundAlert(alert) ?? presentLapseAlert(alert);
   if (refund) return refund.body;
   return alert.type === PICKUP_ISSUE_ALERT ? presentPickupIssueNotice(alert.body) : alert.body;
 }
 
-/** An alert's title in the shop's words. Only refund notices are rewritten. */
-export function presentAlertTitle(alert: Pick<Notification, "type" | "title">): string {
-  return presentRefundAlert(alert)?.title ?? alert.title;
+/** An alert's title in the shop's words. Refund and late-production notices are rewritten. */
+export function presentAlertTitle(alert: Pick<Notification, "type" | "title" | "body">): string {
+  return presentRefundAlert(alert)?.title ?? presentLapseAlert(alert)?.title ?? alert.title;
 }
 
 /**

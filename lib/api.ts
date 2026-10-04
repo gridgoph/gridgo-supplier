@@ -98,8 +98,18 @@ export type PayoutMilestone = {
   /** Absent from an API older than the escrow plan. */
   releaseRequires?: PayoutReleaseRequirement | null;
   sharePercent: number;
-  /** The shop's own earnings for this part. Withheld from client and rider. */
+  /**
+   * The shop's own earnings for this part, **net** of any late-production
+   * deduction. Withheld from client and rider.
+   */
   amountMinor: number;
+  /**
+   * What a late-production deduction took off this part (gridgo-api
+   * `docs/PRODUCTION_PENALTIES_API.md`). `amountMinor` plus this is the part's
+   * original share. Absent or zero: nothing was taken. Read through
+   * `lib/milestones.ts`.
+   */
+  productionDeductionMinor?: number;
   /**
    * `superseded`: a client refund was settled before this part was paid, and
    * the agreed settlement payout replaced it. It was never paid and never
@@ -231,6 +241,8 @@ export type Order = {
    * the job starts.
    */
   readyBy?: string | null;
+  /** When the shop marked the job ready. Late production is measured to this. */
+  readyAt?: string | null;
   /** Client-visible print subtotal. Includes commission the shop cannot see. */
   subtotalMinor?: number;
   totalMinor: number;
@@ -257,6 +269,12 @@ export type Order = {
   refundDisposition?: RefundDisposition | null;
   /** The shop's settlement payouts, beside `payoutMilestones`. */
   supplierSettlementPayouts?: SupplierSettlementPayout[];
+  /**
+   * True once the job is more than a day past its ready-by time: Operations
+   * may review handing it to another shop. It reassigns nothing by itself.
+   * Read through `lib/productionLapse.ts`.
+   */
+  productionReassignmentEligible?: boolean;
   issueWindowOpenedAt?: string | null;
   issueWindowExpiresAt?: string | null;
   promisedDate: string | null;
@@ -327,6 +345,13 @@ export type Issue = {
 export type Settings = {
   issueWindowHours: number;
   deliveryFeeBands: { maxDistanceMeters: number | null; feeMinor: number }[];
+  /** Late-production deduction rates. Absent from an API older than penalties. */
+  productionPenalty?: {
+    deductionsEnabled: boolean;
+    minorBps: number;
+    moderateBps: number;
+    severeBps: number;
+  };
 };
 
 /** Stored file metadata. `fileId` is the only durable identity a client keeps. */
@@ -1275,6 +1300,15 @@ export async function listCatalogItems(query: CatalogListQuery = {}): Promise<un
   if (query.cursor) params.set("cursor", query.cursor);
   const search = params.toString();
   return request<unknown>(`/me/catalog-items${search ? `?${search}` : ""}`);
+}
+
+/**
+ * The shop's own late-production records, newest first (gridgo-api
+ * `docs/PRODUCTION_PENALTIES_API.md`). Read only through
+ * `normalizeLapses` in `lib/productionLapse.ts`.
+ */
+export async function getMyProductionLapses(): Promise<unknown> {
+  return request<unknown>("/me/production-lapses");
 }
 
 /**

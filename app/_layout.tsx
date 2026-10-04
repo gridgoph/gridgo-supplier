@@ -408,6 +408,13 @@ function RootStack({ introDone }: { introDone: boolean }) {
           }}
         />
         <Stack.Screen
+          name="late-production"
+          options={{
+            title: "Late production",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        <Stack.Screen
           name="capacity"
           options={{
             title: "Capacity & closures",

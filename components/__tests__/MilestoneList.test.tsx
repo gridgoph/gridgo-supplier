@@ -25,6 +25,7 @@ function view(partial: Partial<MilestoneView> = {}): MilestoneView {
     label: "Printing",
     sharePercent: 50,
     amountMinor: 50000,
+    lateDeductionMinor: 0,
     stage: "awaiting_release",
     statusLabel: "With GRIDGO",
     tone: "info",

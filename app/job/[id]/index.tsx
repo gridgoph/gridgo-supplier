@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { JobActionBar } from "@/components/JobActionBar";
 import { JobBrief } from "@/components/JobBrief";
 import { JourneyTrack } from "@/components/JourneyTrack";
+import { LatenessPanel } from "@/components/LatenessPanel";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { PushEnableCard } from "@/components/PushEnableCard";
 import { RefundNoticePanel } from "@/components/RefundNoticePanel";
@@ -23,11 +24,13 @@ import {
   type SupplierAction,
 } from "@/lib/jobState";
 import { keptAfterSettlement, payoutPlanOf } from "@/lib/milestones";
+import { lapseForOrder, lapseNotice } from "@/lib/productionLapse";
 import { refundNotice, refundStanding } from "@/lib/refund";
 import { counterCheck } from "@/lib/pickupCheck";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useViewing } from "@/store/toasts";
 import { useJob } from "@/hooks/useJob";
+import { useProductionLapses } from "@/hooks/useProductionLapses";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 
@@ -40,11 +43,13 @@ export default function JobWorkspaceScreen() {
   const navigation = useNavigation();
   const colors = useThemeColors();
   const { job, loading, error, reload } = useJob(id);
+  const lapses = useProductionLapses();
   const [proofReloadVersion, setProofReloadVersion] = useState(0);
+  const reloadLapses = lapses.reload;
   const { refreshing, onRefresh } = usePullToRefresh(useCallback(async () => {
-    await reload();
+    await Promise.all([reload(), reloadLapses()]);
     setProofReloadVersion((version) => version + 1);
-  }, [reload]));
+  }, [reload, reloadLapses]));
 
   // Coming back from a flow screen must show the state the flow produced.
   useFocusEffect(
@@ -123,6 +128,9 @@ export default function JobWorkspaceScreen() {
   const check = job.state === "rider_assigned" ? counterCheck(job) : null;
   // A refund outranks it: the pickup is not happening while the job is stopped.
   const counterIssue = check && check.stage !== "passed" && refundStanding(job) === "none" ? check : null;
+  // GRIDGO's late-production record for this job, if it has one.
+  const lapse = lapseForOrder(lapses.lapses, job.id);
+  const lateness = lapse ? lapseNotice(lapse, job) : null;
 
   function messageOperations() {
     router.push({ pathname: "/report", params: { orderId: job!.id, title: job!.title } });
@@ -208,6 +216,17 @@ export default function JobWorkspaceScreen() {
           <View className="gg-panel mt-6 gap-1">
             <Text className="text-body font-medium text-text-primary">{waiting.title}</Text>
             <Text className="text-body text-text-secondary">{waiting.body}</Text>
+          </View>
+        ) : null}
+
+        {/*
+          A late job, beside whose move it is rather than instead of it: the
+          next step still belongs to the job, and the warning says what the
+          lateness means for the shop's money and record.
+        */}
+        {lateness && lapse ? (
+          <View className="mt-6">
+            <LatenessPanel notice={lateness} closed={lapse.status === "closed"} />
           </View>
         ) : null}
 

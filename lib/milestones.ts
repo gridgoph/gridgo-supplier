@@ -204,7 +204,10 @@ export type MilestoneView = {
   code: MilestoneCode;
   label: string;
   sharePercent: number;
+  /** Net of any late-production deduction: what this part pays. */
   amountMinor: number;
+  /** What a late-production deduction took off this part. Zero when none. */
+  lateDeductionMinor: number;
   stage: MilestoneStage;
   statusLabel: string;
   tone: StatusTone;
@@ -269,6 +272,10 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
     label: definition.label,
     sharePercent: milestone.sharePercent,
     amountMinor: milestone.amountMinor,
+    lateDeductionMinor:
+      typeof milestone.productionDeductionMinor === "number" && milestone.productionDeductionMinor > 0
+        ? milestone.productionDeductionMinor
+        : 0,
     proofOwner: owner,
     proofName: definition.proofName,
     proofCount,
@@ -485,6 +492,12 @@ export type EarningsSplit = {
    * `totalMinor`: once settled, the total is what the shop keeps.
    */
   supersededMinor: number;
+  /**
+   * What late-production deductions took off the parts still standing.
+   * Already outside every figure above — stage amounts are net — so this is
+   * said beside them, never subtracted again.
+   */
+  lateDeductionMinor: number;
   /** True when a claim or a refund request is holding whatever has not been released. */
   held: boolean;
 };
@@ -499,6 +512,7 @@ export function earningsSplit(order: Order): EarningsSplit {
     heldMinor: 0,
     pausedMinor: 0,
     supersededMinor: 0,
+    lateDeductionMinor: 0,
     held: payoutHoldReason(order) !== null,
   };
   const paused = payoutHoldReason(order) === "refund";
@@ -509,6 +523,7 @@ export function earningsSplit(order: Order): EarningsSplit {
       continue;
     }
     split.totalMinor += view.amountMinor;
+    split.lateDeductionMinor += view.lateDeductionMinor;
     if (view.stage === "released") split.releasedMinor += view.amountMinor;
     else if (view.stage === "held" && paused) split.pausedMinor += view.amountMinor;
     else if (view.stage === "held") split.heldMinor += view.amountMinor;
@@ -541,6 +556,7 @@ export function addSplits(splits: EarningsSplit[]): EarningsSplit {
       heldMinor: sum.heldMinor + s.heldMinor,
       pausedMinor: sum.pausedMinor + s.pausedMinor,
       supersededMinor: sum.supersededMinor + s.supersededMinor,
+      lateDeductionMinor: sum.lateDeductionMinor + s.lateDeductionMinor,
       held: sum.held || s.held,
     }),
     {
@@ -552,6 +568,7 @@ export function addSplits(splits: EarningsSplit[]): EarningsSplit {
       heldMinor: 0,
       pausedMinor: 0,
       supersededMinor: 0,
+      lateDeductionMinor: 0,
       held: false,
     },
   );
