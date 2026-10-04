@@ -5,7 +5,7 @@ import {
   productNames,
   productsToggleLabel,
 } from "@/lib/inHouse";
-import { NO_SUBCONTRACTING_TERM, supplierTerms } from "@/lib/supplierTerms";
+import { NO_SUBCONTRACTING_ACCEPT_LINE, NO_SUBCONTRACTING_TERM, supplierTerms } from "@/lib/supplierTerms";
 
 function category(code: string) {
   const found = PUBLISHED_CATALOG.find((entry) => entry.code === code);
@@ -52,9 +52,17 @@ describe("the in-house instruction", () => {
 });
 
 describe("the no-subcontracting term", () => {
-  it("is not shown until its wording is approved", () => {
-    expect(NO_SUBCONTRACTING_TERM).toBeNull();
-    expect(supplierTerms()).toEqual([]);
+  it("states the approved wording where the shop sends its application", () => {
+    expect(NO_SUBCONTRACTING_TERM).toBe(
+      "You make every order you accept in your own shop, with your own equipment. Decline any order you cannot make in-house, whether you lack the materials, the equipment or the skill, and never pass an accepted order to another shop.",
+    );
+    expect(supplierTerms()).toEqual([NO_SUBCONTRACTING_TERM]);
+  });
+
+  it("is one short line on the Accept screen", () => {
+    expect(NO_SUBCONTRACTING_ACCEPT_LINE).toMatch(/your own shop, with your own equipment/);
+    expect(NO_SUBCONTRACTING_ACCEPT_LINE).toMatch(/never pass it to another shop/);
+    expect(NO_SUBCONTRACTING_ACCEPT_LINE).not.toMatch(/\n/);
   });
 
   it("is shown once there is approved text, and blank text never counts", () => {

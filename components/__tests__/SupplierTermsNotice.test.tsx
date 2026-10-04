@@ -1,16 +1,17 @@
 import { render, screen } from "@testing-library/react-native";
 
 import { SupplierTermsNotice } from "@/components/SupplierTermsNotice";
+import { NO_SUBCONTRACTING_TERM } from "@/lib/supplierTerms";
 
 describe("SupplierTermsNotice", () => {
-  it("draws nothing while no term is approved", async () => {
+  it("states the approved no-subcontracting term where the shop sends its application", async () => {
     await render(<SupplierTermsNotice />);
-    expect(screen.queryByText("What you agree to by sending this")).toBeNull();
+    expect(screen.getByText("What you agree to by sending this")).toBeTruthy();
+    expect(screen.getByText(NO_SUBCONTRACTING_TERM as string)).toBeTruthy();
   });
 
-  it("states an approved term where the shop sends its application", async () => {
-    await render(<SupplierTermsNotice terms={["You make every order in your own shop."]} />);
-    expect(screen.getByText("What you agree to by sending this")).toBeTruthy();
-    expect(screen.getByText("You make every order in your own shop.")).toBeTruthy();
+  it("draws nothing when no term is live", async () => {
+    await render(<SupplierTermsNotice terms={[]} />);
+    expect(screen.queryByText("What you agree to by sending this")).toBeNull();
   });
 });

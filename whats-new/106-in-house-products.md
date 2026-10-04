@@ -1,2 +1,2 @@
 Kind: improvement
-- Signing up shows the products in each category, and says to pick only what you make in your own shop.
+- Signing up shows each category's products. You make only what your own shop produces, and never pass a job on.
