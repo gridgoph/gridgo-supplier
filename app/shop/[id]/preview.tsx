@@ -83,7 +83,9 @@ export default function ListingPreviewScreen() {
                 ? `No client can see this yet. ${standing.note ?? standing.label}`
                 : standing.kind === "hidden"
                   ? "No client can see this yet — it is hidden. This is how it would read once it is up."
-                  : "Operations has not approved your shop yet, so no client can see this. This is how it will read once they do."}
+                  : standing.kind === "suspended"
+                    ? `GRIDGO took this listing down. ${standing.note ?? ""}`.trim()
+                    : "Operations has not approved your shop yet, so no client can see this. This is how it will read once they do."}
           </Text>
         </View>
 

@@ -239,14 +239,20 @@ export default function NotificationsScreen() {
         onDelete={() => void confirmDelete(alert)}
         job={job}
         onOpen={
-          // A notice asking the shop to act opens its job even before the list has it.
-          alert.orderId &&
-          (job ||
-            alert.type === "shop_production_inactive" ||
-            alert.type === PICKUP_ISSUE_ALERT ||
-            isRefundAlert(alert.type))
-            ? () => router.push(jobScreenHref(alert.orderId as string))
-            : undefined
+          alert.type === "listing_suspended" && alert.catalogItemId
+            ? () =>
+                router.push({
+                  pathname: "/shop/[id]",
+                  params: { id: alert.catalogItemId as string },
+                })
+            : // A notice asking the shop to act opens its job even before the list has it.
+              alert.orderId &&
+                (job ||
+                  alert.type === "shop_production_inactive" ||
+                  alert.type === PICKUP_ISSUE_ALERT ||
+                  isRefundAlert(alert.type))
+              ? () => router.push(jobScreenHref(alert.orderId as string))
+              : undefined
         }
       />
     );

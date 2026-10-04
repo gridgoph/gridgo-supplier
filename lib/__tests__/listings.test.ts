@@ -339,6 +339,17 @@ describe("what stops a listing going on the board", () => {
 });
 
 describe("where a listing stands", () => {
+  it("shows a Super Admin take-down, and the reason, ahead of the shop's own switch", () => {
+    const standing = boardStanding(
+      { ...READY, onTheBoard: false, suspendReason: "Blurry sample" },
+      NOTHING_INHERITED,
+      true,
+    );
+    expect(standing.kind).toBe("suspended");
+    expect(standing.label).toBe("Taken down");
+    expect(standing.note).toBe("Blurry sample");
+  });
+
   it("tells a waiting shop its finished listing is not visible yet", () => {
     const standing = boardStanding(READY, NOTHING_INHERITED, false);
     expect(standing.label).toBe("Waiting for shop approval");
