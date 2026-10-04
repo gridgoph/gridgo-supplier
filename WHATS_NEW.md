@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.137 (New feature)
+
+- Before a listing goes up, a quick check shows that sample photos must have no watermark, logo or shop name.
+- Home now says whether clients can be matched with your shop, and lists each missing step with a button to fix it.
+
 ## 1.0.126 (New feature)
 
 - See what changed in each update, and take a short tour of jobs, your schedule and your catalogue.
