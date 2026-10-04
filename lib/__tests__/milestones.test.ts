@@ -231,3 +231,35 @@ describe("payoutPlanCopy", () => {
     expect(copy.howItReachesYou).toMatch(/retention part/);
   });
 });
+
+describe("late-production deductions", () => {
+  /** GRIDGO takes from the last unpaid stages first; amounts arrive net. */
+  function deducted(): PayoutMilestone[] {
+    return escrow({ production_started: "released" }).map((stage) =>
+      stage.code === "issue_window"
+        ? { ...stage, amountMinor: 25000 - 9000, productionDeductionMinor: 9000 }
+        : stage,
+    );
+  }
+
+  it("names what came off each part, beside its net amount", () => {
+    const views = milestoneViews(order({ payoutMilestones: deducted() }));
+    expect(views.map((v) => [v.code, v.amountMinor, v.lateDeductionMinor])).toEqual([
+      ["production_started", 40000, 0],
+      ["delivered", 35000, 0],
+      ["issue_window", 16000, 9000],
+    ]);
+  });
+
+  it("totals the deduction beside the split without subtracting it twice", () => {
+    const split = earningsSplit(order({ payoutMilestones: deducted() }));
+    expect(split.lateDeductionMinor).toBe(9000);
+    expect(split.totalMinor).toBe(40000 + 35000 + 16000);
+    expect(split.releasedMinor).toBe(40000);
+  });
+
+  it("reads a stage without the field as nothing taken", () => {
+    expect(earningsSplit(order()).lateDeductionMinor).toBe(0);
+    expect(milestoneViews(order())[0].lateDeductionMinor).toBe(0);
+  });
+});

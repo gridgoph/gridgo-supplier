@@ -18,6 +18,7 @@ import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { localOnlyCaveat } from "@/lib/alertsApi";
 import { PICKUP_ISSUE_ALERT, presentAlertTitle, stageForAlert } from "@/lib/alertStages";
 import { jobScreenHref } from "@/lib/productionNudge";
+import { isLapseAlert } from "@/lib/productionLapse";
 import { isRefundAlert } from "@/lib/refund";
 import { isAlertUnread, useAlertsStore, visibleAlerts } from "@/store/alerts";
 import { askConfirm } from "@/store/sheets";
@@ -244,7 +245,8 @@ export default function NotificationsScreen() {
           (job ||
             alert.type === "shop_production_inactive" ||
             alert.type === PICKUP_ISSUE_ALERT ||
-            isRefundAlert(alert.type))
+            isRefundAlert(alert.type) ||
+            isLapseAlert(alert.type))
             ? () => router.push(jobScreenHref(alert.orderId as string))
             : undefined
         }
