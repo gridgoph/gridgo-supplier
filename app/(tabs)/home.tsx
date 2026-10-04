@@ -373,14 +373,21 @@ export default function HomeScreen() {
             */}
             <PushEnableCard spacing="above" />
 
-            {board ? (
+            {/*
+              While "Clients cannot be matched with your shop yet" is up, it
+              already names every listing that needs work and the button for
+              each, in GRIDGO's words. The older board card would say the same
+              thing again below it from the phone's own checklist, so it is
+              left out until the shop can be matched.
+            */}
+            {board && !(notReady && board.kind !== "ready") ? (
               <View className="mt-8 gap-2">
                 <Text className="text-overline text-text-muted">YOUR BOARD</Text>
                 {readiness?.ready ? <ShopReadyLine readiness={readiness} /> : null}
                 {board.kind === "ready" ? (
                   <SampleStrip listings={listings} />
                 ) : (
-                  <BoardCard prompt={board} quiet={Boolean(first) || notReady} />
+                  <BoardCard prompt={board} quiet={Boolean(first)} />
                 )}
               </View>
             ) : null}

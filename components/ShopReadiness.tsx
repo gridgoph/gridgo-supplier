@@ -12,8 +12,8 @@ import {
   listingOwnSteps,
   listingsNeedingWork,
   liveListingCount,
+  notReadyCountLine,
   setupGaps,
-  stepsLeftLine,
   stepTarget,
   type Readiness,
   type ReadinessStep,
@@ -92,7 +92,7 @@ export function ShopNotReadyCard({
       <View className="gap-2">
         <View className="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <StatusChip tone="warning" icon="triangle-alert" label="Not ready" />
-          <Text className="text-caption text-text-muted">{stepsLeftLine(steps.length)}</Text>
+          <Text className="text-caption text-text-muted">{notReadyCountLine(readiness)}</Text>
         </View>
         <Text className="text-h3 text-text-primary">
           Clients cannot be matched with your shop yet
