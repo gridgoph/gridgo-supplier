@@ -190,6 +190,17 @@ describe("Add a listing — Pick", () => {
     );
   });
 
+  it("tells the shop to list only work it makes in its own shop", async () => {
+    await render(<NewListingScreen />);
+
+    expect(await screen.findByText("WHAT KIND OF WORK")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Pick only work you make in your own shop. You don't need a listing for everything in this category.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("loads the GRIDGO starter for Flyers and selects it", async () => {
     await render(<NewListingScreen />);
 

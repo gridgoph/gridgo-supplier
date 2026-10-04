@@ -9,6 +9,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { JobTicketCode } from "@/components/JobTicketCode";
 import { OnboardingStep } from "@/components/OnboardingStep";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { SupplierTermsNotice } from "@/components/SupplierTermsNotice";
 import { PUBLISHED_CATALOG } from "@/data/serviceCatalog";
 import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";
@@ -270,6 +271,8 @@ export default function ReviewStep() {
             lines={draft.categoryCodes.map((code, index) => `${index + 1}. ${categoryName(code)}`)}
             missing={draft.categoryCodes.length === 0}
           />
+
+          <SupplierTermsNotice />
 
           <View className="gg-panel gap-2">
             <Text className="text-body font-medium text-text-primary">
