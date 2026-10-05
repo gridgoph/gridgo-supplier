@@ -466,6 +466,8 @@ export type Notification = {
   type?: string;
   /** Set when the alert is about a job. */
   orderId?: string;
+  /** Set when a Super Admin took one listing down. */
+  catalogItemId?: string;
   title: string;
   body: string;
   /** Current job title, when the alert is about a job the caller can see. */

@@ -1090,7 +1090,18 @@ export default function ListingScreen() {
         className="gg-page border-t border-outline bg-surface pt-3"
         style={{ paddingBottom: insets.bottom + spacing.md }}
       >
-        {merged.onTheBoard ? (
+        {merged.suspendReason ? (
+          <View className="gap-3">
+            <Text className="text-body text-text-primary">
+              GRIDGO took this listing down: {merged.suspendReason}
+            </Text>
+            <SecondaryButton
+              label={busy ? "Saving…" : dirty ? "Save changes" : "Saved"}
+              disabled={busy || !dirty}
+              onPress={() => void persist()}
+            />
+          </View>
+        ) : merged.onTheBoard ? (
           <View className="gap-3">
             <PrimaryButton
               label={busy ? "Saving…" : dirty ? "Save changes" : "Saved"}

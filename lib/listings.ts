@@ -266,6 +266,8 @@ export type Listing = {
   formatCodes: string[];
   /** The platform's `active`. Said in the shop's words everywhere else. */
   onTheBoard: boolean;
+  /** Super Admin take-down. The shop reads this and cannot put the listing back. */
+  suspendReason?: string | null;
   sortOrder: number;
   photos: SamplePhoto[];
   groups: SpecGroup[];
@@ -514,6 +516,7 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
       pick(raw, "formatCodes", "format_codes", "fileFormats", "acceptedFormats"),
     ),
     onTheBoard: pick(raw, "active") !== false,
+    suspendReason: str(pick(raw, "suspendReason", "suspend_reason")),
     sortOrder: num(pick(raw, "sortOrder", "sort_order")) ?? index,
     photos: readPhotos(pick(raw, "photos", "samplePhotos")),
     groups: asArray(pick(raw, "optionGroups", "option_groups", "groups"))
@@ -915,6 +918,7 @@ export const BOARD_STANDING_LABEL = {
   hidden: "Hidden",
   not_ready: "Not ready yet",
   waiting_approval: "Waiting for shop approval",
+  suspended: "Taken down",
 } as const;
 
 export type BoardStandingKind = keyof typeof BOARD_STANDING_LABEL;
@@ -945,6 +949,15 @@ export function boardStanding(
   shopApproved: boolean,
   readiness?: ListingReadiness | null,
 ): BoardStanding {
+  if (listing.suspendReason) {
+    return {
+      kind: "suspended",
+      label: BOARD_STANDING_LABEL.suspended,
+      tone: "warning",
+      icon: "triangle-alert",
+      note: listing.suspendReason,
+    };
+  }
   if (readiness) return standingFromReadiness(readiness);
   const needs = gridgoNeeds(listing, context);
 
