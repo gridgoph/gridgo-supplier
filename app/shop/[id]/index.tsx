@@ -1126,7 +1126,7 @@ export default function ListingScreen() {
         {foot.kind === "taken_down" ? (
           <View className="gap-3">
             <Text className="text-caption text-text-muted">
-              Taken down by GRIDGO. Your changes still save; only GRIDGO can put it back on the board.
+              Your changes still save while GRIDGO has it taken down.
             </Text>
             <SecondaryButton
               label={busy ? "Saving…" : dirty ? "Save changes" : "Saved"}

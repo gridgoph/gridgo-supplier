@@ -1111,11 +1111,16 @@ function firstReviewStanding(
       since: listing.reviewedAt ?? null,
     };
   }
-  const work = readiness
-    ? listingOwnSteps(readiness)
-        .filter((step) => !REVIEW_CODES.has(step.code))
-        .map((step) => step.message)
-    : gridgoNeeds(listing, context);
+  // The draft is what Operations will review, so the phone's own check of it
+  // counts beside GRIDGO's verdict, which may have been read before an edit.
+  const work = [
+    ...gridgoNeeds(listing, context),
+    ...(readiness
+      ? listingOwnSteps(readiness)
+          .filter((step) => !REVIEW_CODES.has(step.code))
+          .map((step) => step.message)
+      : []),
+  ];
   if (!hasRequiredSpec(listing)) work.push(SPECS_NEEDED);
   if (work.length) {
     return {
@@ -1455,7 +1460,7 @@ export function boardPrompt(
       title: EMPTY_BOARD_TITLE,
       body: shopApproved
         ? "Clients pick a shop by looking at its work. Put up one listing with a photo, a price and how fast you turn it round."
-        : "Operations wants at least one finished listing before they accredit you. Build it now and it goes live with your shop.",
+        : "Operations wants at least one finished listing before they accredit you. Build it now and they review it with your shop.",
       actionLabel: "Put something on the board",
     };
   }

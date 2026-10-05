@@ -661,7 +661,7 @@ describe("listing review", () => {
   });
 
   it("ignores GRIDGO's not-approved step and names the real one for a new listing", () => {
-    const standing = boardStanding({ ...NEW, photos: [] }, NOTHING_INHERITED, true, {
+    const standing = boardStanding(NEW, NOTHING_INHERITED, true, {
       catalogItemId: NEW.id,
       ready: false,
       missing: [
@@ -671,6 +671,16 @@ describe("listing review", () => {
     });
     expect(standing.label).toBe("Not ready yet");
     expect(standing.note).toBe("Attach at least one fully uploaded listing photo.");
+  });
+
+  it("still names the draft's own gap when GRIDGO's verdict was read before the edit", () => {
+    const standing = boardStanding({ ...NEW, photos: [] }, NOTHING_INHERITED, true, {
+      catalogItemId: NEW.id,
+      ready: true,
+      missing: [],
+    });
+    expect(standing.label).toBe("Not ready yet");
+    expect(standing.note).toBe(PHOTO_NEEDED);
   });
 
   it("keeps an approved listing Live while an edit waits for review, and says so beside it", () => {
