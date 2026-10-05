@@ -9,9 +9,11 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonList } from "@/components/Skeleton";
 import { StatusChip } from "@/components/StatusChip";
 import { useProductionLapses } from "@/hooks/useProductionLapses";
+import { useShopRecord, type RecordRead } from "@/hooks/useShopRecord";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";
+import type { RescheduleRequest } from "@/lib/api";
 import { formatDeadlineFull } from "@/lib/dates";
 import {
   formatRate,
@@ -23,6 +25,14 @@ import {
   type PenaltyRates,
   type ProductionLapse,
 } from "@/lib/productionLapse";
+import { orderReference } from "@/lib/orderReference";
+import { rescheduleNotice } from "@/lib/reschedule";
+import {
+  FAILURE_LABELS,
+  failureReason,
+  failureStageLabel,
+  type ShopFailure,
+} from "@/lib/shopRecovery";
 
 /** What each tier adds beyond its share, in the shop's words. */
 const TIER_CONSEQUENCE: Record<LapseTier, string> = {
@@ -46,6 +56,8 @@ const TIER_CONSEQUENCE: Record<LapseTier, string> = {
 export default function LateProductionScreen() {
   const colors = useThemeColors();
   const { read, reload: reloadLapses } = useProductionLapses();
+  const record = useShopRecord();
+  const reloadRecord = record.reload;
   const [policy, setPolicy] = useState<PenaltyRates | null>(null);
   const [titles, setTitles] = useState<Record<string, string>>({});
 
@@ -64,8 +76,8 @@ export default function LateProductionScreen() {
   );
   const { refreshing, onRefresh } = usePullToRefresh(
     useCallback(async () => {
-      await Promise.all([loadContext(), reloadLapses()]);
-    }, [loadContext, reloadLapses]),
+      await Promise.all([loadContext(), reloadLapses(), reloadRecord()]);
+    }, [loadContext, reloadLapses, reloadRecord]),
   );
 
   return (
@@ -137,10 +149,32 @@ export default function LateProductionScreen() {
           <LapseRecord read={read} titles={titles} onRetry={() => void reloadLapses()} />
         </View>
 
+        {/*
+          The rest of the record, beside the late jobs because Operations reads
+          them together: a job not answered, passed on or given back is the
+          same question — could the client count on this shop?
+        */}
+        <View className="mt-8 gap-3">
+          <Text className="text-overline text-text-muted">JOBS YOU LET GO</Text>
+          <Text className="text-body text-text-secondary">
+            Jobs not answered within the hour, passed on, or cancelled after accepting. Each one is
+            kept with the stage it reached. No money is taken for them.
+          </Text>
+          <FailureRecord read={record.failures} titles={titles} onRetry={() => void reloadRecord()} />
+        </View>
+
+        <View className="mt-8 gap-3">
+          <Text className="text-overline text-text-muted">DEADLINE REQUESTS</Text>
+          <Text className="text-body text-text-secondary">
+            One request per job. Every request stays on your record, whatever the client answered.
+          </Text>
+          <RequestRecord read={record.requests} titles={titles} onRetry={() => void reloadRecord()} />
+        </View>
+
         <View className="mt-8 gap-3">
           <Text className="text-body text-text-secondary">
-            If something outside your shop is holding a job up, tell Operations before the ready-by
-            time. They can review the deadline with you.
+            If something outside your shop is holding a job up, ask the client for a new deadline
+            from the job while it is in production, or tell Operations before the ready-by time.
           </Text>
           <SecondaryButton label="Message Operations" onPress={() => router.push("/report" as Href)} />
         </View>
@@ -213,6 +247,138 @@ function LapseRow({ lapse, title }: { lapse: ProductionLapse; title?: string }) 
         </View>
         <Text className="text-body text-text-secondary">{lapseStandingLine(lapse)}</Text>
         {formal ? <Text className="text-caption text-text-secondary">Formal warning on your record</Text> : null}
+      </View>
+      <ChevronRight size={20} color={colors.textMuted} aria-hidden />
+    </Pressable>
+  );
+}
+
+function FailureRecord({
+  read,
+  titles,
+  onRetry,
+}: {
+  read: RecordRead<ShopFailure[]> | null;
+  titles: Record<string, string>;
+  onRetry: () => void;
+}) {
+  if (!read) return <SkeletonList label="Loading the jobs you let go" count={1} variant="row" />;
+  if (read.status === "failed") {
+    return <ErrorNotice message="This part of your record did not load. Check the connection and try again." onRetry={onRetry} />;
+  }
+  if (read.status === "not_open_yet") {
+    return (
+      <Text className="text-body text-text-muted">
+        GRIDGO is not showing this part of the record to shops on this connection yet.
+      </Text>
+    );
+  }
+  if (!read.value.length) {
+    return (
+      <View className="gg-panel gap-1">
+        <Text className="text-body font-medium text-text-primary">None</Text>
+        <Text className="text-body text-text-secondary">Every job offered to your shop was answered and kept.</Text>
+      </View>
+    );
+  }
+  return (
+    <View className="gap-3">
+      {read.value.map((failure) => (
+        <FailureRow key={failure.id} failure={failure} title={titles[failure.orderId]} />
+      ))}
+    </View>
+  );
+}
+
+function FailureRow({ failure, title }: { failure: ShopFailure; title?: string }) {
+  const reason = failureReason(failure);
+  const name = title || `Order ${orderReference(failure.orderId) ?? failure.orderId}`;
+  return (
+    <View
+      className="gg-card gap-2"
+      accessible
+      accessibilityLabel={`${name}. ${FAILURE_LABELS[failure.kind]}, ${failureStageLabel(failure.stage)}.`}
+    >
+      <View className="flex-row">
+        <StatusChip tone="neutral" label={FAILURE_LABELS[failure.kind]} icon="circle-x" />
+      </View>
+      <View className="gap-0.5">
+        <Text className="text-body font-medium text-text-primary" numberOfLines={2}>
+          {name}
+        </Text>
+        <Text className="text-caption text-text-muted">
+          {failureStageLabel(failure.stage)}, {formatDeadlineFull(failure.at)}
+        </Text>
+      </View>
+      {reason ? <Text className="text-body text-text-secondary">{reason}</Text> : null}
+    </View>
+  );
+}
+
+function RequestRecord({
+  read,
+  titles,
+  onRetry,
+}: {
+  read: RecordRead<{ total: number; requests: RescheduleRequest[] }> | null;
+  titles: Record<string, string>;
+  onRetry: () => void;
+}) {
+  if (!read) return <SkeletonList label="Loading your deadline requests" count={1} variant="row" />;
+  if (read.status === "failed") {
+    return <ErrorNotice message="Your deadline requests did not load. Check the connection and try again." onRetry={onRetry} />;
+  }
+  if (read.status === "not_open_yet") {
+    return (
+      <Text className="text-body text-text-muted">
+        GRIDGO is not taking deadline requests on this connection yet.
+      </Text>
+    );
+  }
+  if (!read.value.requests.length) {
+    return (
+      <View className="gg-panel gap-1">
+        <Text className="text-body font-medium text-text-primary">None</Text>
+        <Text className="text-body text-text-secondary">You have not asked a client to move a deadline.</Text>
+      </View>
+    );
+  }
+  return (
+    <View className="gap-3">
+      {read.value.requests.map((request) => (
+        <RequestRow key={request.id} request={request} title={titles[request.orderId]} />
+      ))}
+    </View>
+  );
+}
+
+function RequestRow({ request, title }: { request: RescheduleRequest; title?: string }) {
+  const colors = useThemeColors();
+  const notice = rescheduleNotice(request);
+  const name = title || `Order ${orderReference(request.orderId) ?? request.orderId}`;
+  return (
+    <Pressable
+      onPress={() => router.push({ pathname: "/job/[id]", params: { id: request.orderId } })}
+      accessibilityRole="button"
+      accessibilityLabel={`${name}. Deadline request: ${notice.chip.label}.`}
+      className="gg-touch gg-card flex-row items-center gap-3"
+      style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+    >
+      <View className="min-w-0 flex-1 gap-2">
+        <View className="flex-row">
+          <StatusChip tone={notice.chip.tone} label={notice.chip.label} icon={notice.chip.icon} />
+        </View>
+        <View className="gap-0.5">
+          <Text className="text-body font-medium text-text-primary" numberOfLines={2}>
+            {name}
+          </Text>
+          <Text className="text-caption text-text-muted">
+            Asked {formatDeadlineFull(request.requestedAt)}
+          </Text>
+        </View>
+        <Text className="text-body text-text-secondary">
+          {formatDeadlineFull(request.originalReadyBy)} to {formatDeadlineFull(request.proposedReadyBy)}
+        </Text>
       </View>
       <ChevronRight size={20} color={colors.textMuted} aria-hidden />
     </Pressable>

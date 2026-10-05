@@ -254,6 +254,15 @@ const WINDOW_CLOSED = new Set(["completed", "payout_released"]);
  * (a claim), or a client's refund request that has stopped the job. Both hold
  * every part not yet released.
  */
+/**
+ * True once Operations has sent the shop any part of this job. A job in that
+ * state cannot simply move to another shop, so cancelling it goes to
+ * Operations rather than straight to the client.
+ */
+export function hasReleasedShare(order: Pick<Order, "payoutMilestones">): boolean {
+  return (order.payoutMilestones ?? []).some((stage) => stage.status === "released");
+}
+
 export function payoutHoldReason(order: Pick<Order, "payoutHold" | "refundHold" | "refundDisposition">): "claim" | "refund" | null {
   if (order.payoutHold === true) return "claim";
   if (refundStanding(order) === "paused") return "refund";

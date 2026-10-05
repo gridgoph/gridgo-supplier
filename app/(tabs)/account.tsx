@@ -229,8 +229,8 @@ export default function AccountScreen() {
               onPress={() => router.push("/payout")}
             />
             <DestinationRow
-              title="Late jobs & warnings"
-              detail="Jobs ready after their ready-by time, and any deduction"
+              title="Your shop's record"
+              detail="Late jobs, jobs you let go, and deadline requests"
               onPress={() => router.push("/late-production" as Href)}
             />
             <DestinationRow

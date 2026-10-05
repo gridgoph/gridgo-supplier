@@ -8,6 +8,7 @@ import { LATE_PRODUCTION_HREF } from "@/components/LatenessPanel";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import * as api from "@/lib/api";
+import { acceptWindow, acceptWindowLine, acceptWindowTickMs } from "@/lib/acceptWindow";
 import { blackoutOnDay, blackoutReasonLabel } from "@/lib/blackouts";
 import { toDayKey } from "@/lib/day";
 import { formatDeadlineFull } from "@/lib/dates";
@@ -16,6 +17,7 @@ import { payoutPlanCopy } from "@/lib/milestones";
 import { NO_SUBCONTRACTING_ACCEPT_LINE } from "@/lib/supplierTerms";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
+import { useNow } from "@/hooks/useNow";
 import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
 import { useShopPlan } from "@/store/shopPlan";
 
@@ -48,6 +50,9 @@ export default function AcceptJobScreen() {
   const clearDraft = useJobDrafts((s) => s.clearDraft);
   const blackouts = useShopPlan((s) => s.blackouts);
   const [showErrors, setShowErrors] = useState(false);
+  // The hour to answer, said once more where the shop commits.
+  const now = useNow(job ? acceptWindowTickMs(acceptWindow(job)) : null);
+  const answerLine = job ? acceptWindowLine(acceptWindow(job, now), now) : null;
 
   // The date the shop is held to, read from the job rather than chosen here.
   const readyAt = useMemo(() => {
@@ -107,6 +112,11 @@ export default function AcceptJobScreen() {
     >
       {job ? (
         <>
+          {answerLine ? (
+            <Text className="text-body font-medium text-warning" testID="accept-window-line">
+              {answerLine}
+            </Text>
+          ) : null}
           {/*
             The same docket the workspace showed, folded: the shop has just read
             it, and this screen is for the commitment, not a second read. Every

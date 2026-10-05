@@ -410,7 +410,7 @@ function RootStack({ introDone }: { introDone: boolean }) {
         <Stack.Screen
           name="late-production"
           options={{
-            title: "Late production",
+            title: "Your shop's record",
             headerBackButtonDisplayMode: "minimal",
           }}
         />

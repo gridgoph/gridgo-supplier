@@ -10,6 +10,8 @@ import {
 import { nextShopProof } from "@/lib/milestones";
 import { summarizePayouts, unreleasedMinor } from "@/lib/payout";
 import { deadlineUrgency, type UrgencyLevel } from "@/lib/urgency";
+import { acceptWindow, acceptWindowLine } from "@/lib/acceptWindow";
+import { shopRelease } from "@/lib/shopRecovery";
 
 /**
  * What a shop opens this app to find out.
@@ -155,9 +157,11 @@ export function buildObligations(jobs: Order[], now: Date = new Date()): Obligat
   const out: Obligation[] = [];
 
   for (const job of jobs) {
+    // A job the shop let go is GRIDGO's until the client chooses; nothing on it is the shop's.
+    if (shopRelease(job)) continue;
     const urgency = deadlineUrgency(job.promisedDate || job.deadline, now);
     const status = presentOrderState(job.state);
-    const action = primaryAction(job);
+    const action = primaryAction(job, now);
 
     if (action?.kind === "add_proof") {
       out.push({
@@ -182,10 +186,11 @@ export function buildObligations(jobs: Order[], now: Date = new Date()): Obligat
         orderId: job.id,
         kind: "decide",
         title: job.title,
-        detail:
-          urgency.level === "undated"
-            ? "GRIDGO has offered you this job. Name your price to take it."
-            : `${urgency.label} — GRIDGO has offered you this job. Name your price to take it.`,
+        detail: decideDetail(
+          // The hour to answer is the sooner clock; an API without it leaves the job's own date.
+          acceptWindowLine(acceptWindow(job, now), now) ??
+            (urgency.level === "undated" ? null : urgency.label),
+        ),
         actionLabel: action.label,
         route: routeForAction(action.kind),
         actionKind: action.kind,
@@ -235,6 +240,11 @@ export function buildObligations(jobs: Order[], now: Date = new Date()): Obligat
       when(byId(jobs, a.orderId)) - when(byId(jobs, b.orderId)) ||
       a.title.localeCompare(b.title),
   );
+}
+
+function decideDetail(clock: string | null): string {
+  const offer = "GRIDGO has offered you this job at your price. Accept or decline it.";
+  return clock ? `${clock} — ${offer}` : offer;
 }
 
 function byId(jobs: Order[], id: string): Order {

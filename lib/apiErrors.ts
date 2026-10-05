@@ -85,6 +85,29 @@ const MESSAGES: Record<string, string> = {
   refund_settlement_payout_hold:
     "A refund settlement replaced the rest of this job's payout. Operations sends the agreed settlement instead.",
 
+  // Letting a job go, and asking for more time.
+  shop_acceptance_expired:
+    "The hour to answer this job has run out, so GRIDGO is passing it to another shop. It goes on your record as not answered in time.",
+  decline_not_available:
+    "This job is already accepted, so it cannot be declined. To give it back, cancel it from the job.",
+  shop_cancel_reason_required: "Say why, in a sentence, then try again.",
+  shop_cancel_not_available:
+    "This job has left your counter, so it can no longer be cancelled here. Report a problem from the job instead.",
+  shop_recovery_pending:
+    "GRIDGO is already finding the client another shop for this job. Nothing more is needed from you.",
+  reschedule_already_requested:
+    "This job already has its one deadline request. Where it stands is on the job.",
+  reschedule_not_available:
+    "A new deadline can only be asked for while the job is in production, before it is marked ready.",
+  reschedule_dates_missing:
+    "GRIDGO has no ready-by on this job to move. Ask Operations to set it first.",
+  invalid_reschedule_date: "Choose a time later than both now and your current ready-by.",
+  invalid_reschedule_reason: "Tell the client why the job needs more time, in under 2,000 characters.",
+  reschedule_fulfillment_stopped:
+    "The client declined your new deadline, so this job is paused while GRIDGO sorts out the next step.",
+  reschedule_operations_required:
+    "Operations is deciding the next step on this job. Wait for them to contact you.",
+
   // Opening an account.
   email_already_registered:
     "That email already has a GRIDGO account. Sign in with it instead, or use a different address.",
@@ -169,6 +192,15 @@ const MESSAGES: Record<string, string> = {
   email_not_editable:
     "Your email belongs to your GRIDGO sign-in, so it cannot be changed here. Change it where you sign in and it changes here too.",
 };
+
+/**
+ * A route this deployment does not have yet — distinct from a missing job.
+ * Screens built ahead of the platform say so instead of reading as broken.
+ */
+export function isRouteNotOpen(error: unknown): boolean {
+  if (!(error instanceof ApiError) || (error.status !== 404 && error.status !== 405)) return false;
+  return apiErrorCode(error) !== "order_not_found";
+}
 
 export function humanizeApiError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
