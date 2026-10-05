@@ -3,17 +3,23 @@ import { Text, View } from "react-native";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { StarterChoice } from "@/components/StarterChoice";
 import { SkeletonBlock } from "@/components/Skeleton";
-import { OptionList } from "@/components/controls/OptionList";
 import { ListingSection } from "@/components/listing/ListingSection";
 import { PrinterCapField } from "@/components/listing/PrinterCapField";
+import { ProductTypeGrid } from "@/components/listing/ProductTypeGrid";
 import { IN_HOUSE_LISTING } from "@/lib/inHouse";
-import { needsPrinterCap, type BoardTarget, type ListingStarter } from "@/lib/listings";
+import { needsPrinterCap, type ListingStarter } from "@/lib/listings";
+import type { ProductTypeChoice } from "@/lib/productTypes";
 
 export const BLANK_STARTER = "__blank__";
 
 type Props = {
-  targets: BoardTarget[];
-  categoryCode: string | null;
+  choices: ProductTypeChoice[];
+  categoryNames: Record<string, string>;
+  typesLoading: boolean;
+  typesError: string | null;
+  onRetryTypes: () => void;
+  query: string;
+  onQuery: (value: string) => void;
   subcategoryCode: string | null;
   printerMaxWidthFeet: number | null;
   starterId: string;
@@ -21,16 +27,28 @@ type Props = {
   startersLoading: boolean;
   starterError: string | null;
   created: boolean;
-  onCategory: (code: string) => void;
-  onSubcategory: (code: string) => void;
+  onType: (choice: ProductTypeChoice) => void;
+  onRequestType: (name: string) => void;
   onPrinterCap: (feet: number | null) => void;
   onStarter: (id: string) => void;
   onRetryStarters: () => void;
 };
 
+/**
+ * Pick: which product type this listing is, from a grid of real samples.
+ *
+ * Choosing a type files the listing under the shop's own category line for
+ * it; it never claims the whole category or widens what the shop is
+ * accredited for. Anything missing goes to Operations as a request.
+ */
 export function PickStep({
-  targets,
-  categoryCode,
+  choices,
+  categoryNames,
+  typesLoading,
+  typesError,
+  onRetryTypes,
+  query,
+  onQuery,
   subcategoryCode,
   printerMaxWidthFeet,
   starterId,
@@ -38,45 +56,27 @@ export function PickStep({
   startersLoading,
   starterError,
   created,
-  onCategory,
-  onSubcategory,
+  onType,
+  onRequestType,
   onPrinterCap,
   onStarter,
   onRetryStarters,
 }: Props) {
-  const target = targets.find((entry) => entry.category.code === categoryCode) ?? null;
-
   return (
     <View>
-      {targets.length > 1 ? (
-        <ListingSection title="WHICH OF YOUR CATEGORIES">
-          <OptionList
-            options={targets.map((entry) => ({
-              value: entry.category.code,
-              label: entry.category.name,
-              detail: entry.category.bestFor,
-            }))}
-            value={categoryCode}
-            onChange={onCategory}
-            accessibilityLabel="Which category this listing sits under"
-          />
-        </ListingSection>
-      ) : null}
-
-      {target ? (
-        <ListingSection title="WHAT KIND OF WORK" hint={IN_HOUSE_LISTING}>
-          <OptionList
-            options={target.covers.map((cover) => ({
-              value: cover.code,
-              label: cover.name,
-              detail: cover.examples,
-            }))}
-            value={subcategoryCode}
-            onChange={onSubcategory}
-            accessibilityLabel="What kind of work this listing is"
-          />
-        </ListingSection>
-      ) : null}
+      <ListingSection title="WHAT ARE YOU LISTING" hint={IN_HOUSE_LISTING}>
+        {typesError ? <ErrorNotice message={typesError} onRetry={onRetryTypes} /> : null}
+        <ProductTypeGrid
+          choices={choices}
+          categoryNames={categoryNames}
+          loading={typesLoading}
+          query={query}
+          onQuery={onQuery}
+          selected={subcategoryCode}
+          onSelect={onType}
+          onRequest={created ? undefined : onRequestType}
+        />
+      </ListingSection>
 
       {subcategoryCode && needsPrinterCap(subcategoryCode) ? (
         <ListingSection title="MAX PRINTER WIDTH">

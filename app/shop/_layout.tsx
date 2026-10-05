@@ -8,8 +8,8 @@ import { useThemeName } from "@/hooks/useTheme";
  * Everything that opens on top of Catalogues.
  *
  * The board itself is a tab. This stack is what a shop pushes from it — adding
- * a listing, and one listing's own editor with its samples and its client's-eye
- * view. They are their own stack rather than tab content because each is a
+ * a listing, one listing's own editor with its samples and its client's-eye
+ * view, and asking Operations for a product type GRIDGO does not list. They are their own stack rather than tab content because each is a
  * commitment a shop backs out of, and the platform's own back chevron is how
  * that is done.
  *
@@ -26,6 +26,7 @@ export default function ShopLayout() {
       <Stack.Screen name="[id]/index" options={{ title: "Listing" }} />
       <Stack.Screen name="[id]/photos" options={{ title: "Sample photos" }} />
       <Stack.Screen name="[id]/preview" options={{ title: "What clients see" }} />
+      <Stack.Screen name="request-type" options={{ title: "Request a product type" }} />
       {/*
         The listing editor is this stack, not the root. A root formSheet has
         no card here to present over, so Remove this listing opened nothing

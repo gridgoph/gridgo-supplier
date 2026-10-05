@@ -16,6 +16,7 @@ import { spacing, touchTarget, typography } from "@/constants/theme";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { localOnlyCaveat } from "@/lib/alertsApi";
+import { listingAlertHref } from "@/lib/listingReview";
 import { PICKUP_ISSUE_ALERT, presentAlertTitle, stageForAlert } from "@/lib/alertStages";
 import { jobScreenHref } from "@/lib/productionNudge";
 import { isLapseAlert } from "@/lib/productionLapse";
@@ -230,6 +231,7 @@ export default function NotificationsScreen() {
   // so clearing one is visibly acknowledged where it sits.
   const renderAlert = (alert: api.Notification) => {
     const job = alert.orderId ? jobs.find((candidate) => candidate.id === alert.orderId) : null;
+    const listingHref = listingAlertHref(alert);
     return (
       <AlertCard
         key={alert.id}
@@ -240,12 +242,8 @@ export default function NotificationsScreen() {
         onDelete={() => void confirmDelete(alert)}
         job={job}
         onOpen={
-          alert.type === "listing_suspended" && alert.catalogItemId
-            ? () =>
-                router.push({
-                  pathname: "/shop/[id]",
-                  params: { id: alert.catalogItemId as string },
-                })
+          listingHref
+            ? () => router.push(listingHref)
             : // A notice asking the shop to act opens its job even before the list has it.
               alert.orderId &&
                 (job ||

@@ -276,7 +276,7 @@ describe("the shop's board", () => {
     expect(await screen.findByText("Tarpaulin, 13oz")).toBeTruthy();
     expect(screen.getByText("Hidden cards")).toBeTruthy();
     (loadBoard as jest.Mock).mockResolvedValue(page([listing]));
-    await fireEvent.press(screen.getByRole("radio", { name: "Live" }));
+    await fireEvent.press(screen.getByRole("radio", { name: "On the board" }));
     await waitFor(() => expect(lastAsk().active).toBe(true));
     await waitFor(() => expect(screen.queryByText("Hidden cards")).toBeNull());
     expect(screen.getByText("Tarpaulin, 13oz")).toBeTruthy();
@@ -512,7 +512,7 @@ describe("hunting the board", () => {
     expect(screen.getByLabelText("Sort: Default")).toBeTruthy();
 
     (loadBoard as jest.Mock).mockResolvedValue(page([listing]));
-    await fireEvent.press(screen.getByRole("radio", { name: "Hidden" }));
+    await fireEvent.press(screen.getByRole("radio", { name: "Off the board" }));
     await waitFor(() => expect(lastAsk().active).toBe(false));
     await hunt("tarp");
 

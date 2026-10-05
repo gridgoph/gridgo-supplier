@@ -327,7 +327,7 @@ describe("boardStanding with GRIDGO's verdict", () => {
     expect(
       boardStanding(item, boardContextFor(item, services), true, listingReadinessFor(readiness, "item_hidden"))
         .label,
-    ).toBe("Hidden");
+    ).toBe("Hidden by you");
   });
 
   it("waits on approval when approval is the only thing holding it", () => {

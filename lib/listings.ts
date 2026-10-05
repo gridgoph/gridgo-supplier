@@ -99,6 +99,10 @@ export type FileFormatMode = "inherit" | "override";
 /** A step the customer walks, or an extra they can add. Same table, one word each. */
 export type GroupKind = "spec" | "addon";
 
+/** Operations' review of a listing's current draft. */
+export type ReviewStatus = "pending" | "approved" | "needs_revision";
+const REVIEW_STATUSES: readonly ReviewStatus[] = ["pending", "approved", "needs_revision"];
+
 export const LISTING_CAPS = {
   photos: 8,
   specGroups: 6,
@@ -268,6 +272,21 @@ export type Listing = {
   onTheBoard: boolean;
   /** Super Admin take-down. The shop reads this and cannot put the listing back. */
   suspendReason?: string | null;
+  /** When GRIDGO took it down. Null when there is no take-down. */
+  suspendedAt?: string | null;
+  /**
+   * Operations' review of the shop's current draft. Null on a GRIDGO that has
+   * no listing review yet, which behaves as it always did: approved.
+   */
+  reviewStatus?: ReviewStatus | null;
+  /** Why Operations sent it back. Shown to the shop as written. */
+  reviewReason?: string | null;
+  reviewedAt?: string | null;
+  /**
+   * Whether an approved version exists. While a revision is with Operations,
+   * clients keep seeing that version, so a live listing stays live.
+   */
+  hasApprovedVersion?: boolean;
   sortOrder: number;
   photos: SamplePhoto[];
   groups: SpecGroup[];
@@ -433,7 +452,7 @@ function readPhoto(raw: Raw, index: number): SamplePhoto | null {
 }
 
 /** Photos may arrive as records or as bare file ids. Both are read. */
-function readPhotos(value: unknown): SamplePhoto[] {
+export function readPhotos(value: unknown): SamplePhoto[] {
   if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
     return (value as string[]).map((fileId, index) => ({
       fileId,
@@ -463,6 +482,30 @@ function readFormatCodes(value: unknown): string[] {
     if (code && !codes.includes(code)) codes.push(code);
   }
   return codes;
+}
+
+/**
+ * The review fields. A payload without `reviewStatus` comes from a GRIDGO
+ * that has no review, and its listings read as approved, as they always did.
+ */
+function readReview(raw: Raw): Pick<
+  Listing,
+  "reviewStatus" | "reviewReason" | "reviewedAt" | "hasApprovedVersion"
+> {
+  const declared = str(pick(raw, "reviewStatus", "review_status"));
+  const reviewStatus = REVIEW_STATUSES.includes(declared as ReviewStatus)
+    ? (declared as ReviewStatus)
+    : null;
+  const approvedFlag = pick(raw, "hasApprovedVersion", "has_approved_version");
+  return {
+    reviewStatus,
+    reviewReason: str(pick(raw, "reviewReason", "review_reason")),
+    reviewedAt: str(pick(raw, "reviewedAt", "reviewed_at")),
+    hasApprovedVersion:
+      typeof approvedFlag === "boolean"
+        ? approvedFlag
+        : reviewStatus == null || reviewStatus === "approved",
+  };
 }
 
 /** GRIDGO's completeness codes, or null when the payload did not send them. */
@@ -517,6 +560,8 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     ),
     onTheBoard: pick(raw, "active") !== false,
     suspendReason: str(pick(raw, "suspendReason", "suspend_reason")),
+    suspendedAt: str(pick(raw, "suspendedAt", "suspended_at")),
+    ...readReview(raw),
     sortOrder: num(pick(raw, "sortOrder", "sort_order")) ?? index,
     photos: readPhotos(pick(raw, "photos", "samplePhotos")),
     groups: asArray(pick(raw, "optionGroups", "option_groups", "groups"))
@@ -782,6 +827,8 @@ export const PRICE_NEEDED = "Set your price before it can go on the board.";
 const KIND_NEEDED = "Choose the kind of work this listing is.";
 const PRINTER_CAP_NEEDED = "Set your max printer width in feet before it can go on the board.";
 export const FORMATS_NEEDED = "Say which artwork files you accept for this listing.";
+export const SPECS_NEEDED =
+  "Add at least one required choice a client must pick, such as size or paper, with an option under it.";
 const SERVICE_NEEDED = "This listing has no accredited category to sit under.";
 const SERVICE_NOT_LIVE = "This kind of work is not live yet.";
 
@@ -794,6 +841,7 @@ const GRIDGO_BLOCKER_COPY: Record<string, string> = {
   accepted_file_formats: FORMATS_NEEDED,
   photo: PHOTO_NEEDED,
   owning_service: SERVICE_NEEDED,
+  specs_required: SPECS_NEEDED,
 };
 
 function emptyGroupSentence(group: SpecGroup): string {
@@ -802,7 +850,7 @@ function emptyGroupSentence(group: SpecGroup): string {
     : `Add at least one option under “${group.name}”, or remove that step.`;
 }
 
-function presentGridgoCode(code: string, listing: Listing): string {
+export function presentGridgoCode(code: string, listing: Listing): string {
   if (code.startsWith("option_group:")) {
     const id = code.slice("option_group:".length);
     const group = listing.groups.find((candidate) => candidate.id === id);
@@ -913,35 +961,113 @@ export function isComplete(listing: Listing, context: BoardContext): boolean {
   return gridgoNeeds(listing, context).length === 0;
 }
 
+/**
+ * Every state a listing can be in, in the one set of words the board, the
+ * editor, the preview and the alerts all use. A listing GRIDGO took down is
+ * never just "Hidden" — the shop did not hide it and cannot undo it.
+ */
 export const BOARD_STANDING_LABEL = {
   live: "Live",
-  hidden: "Hidden",
+  pending_review: "Pending review",
+  needs_changes: "Needs changes",
+  hidden: "Hidden by you",
+  suspended: "Taken down by GRIDGO",
   not_ready: "Not ready yet",
   waiting_approval: "Waiting for shop approval",
-  suspended: "Taken down",
 } as const;
 
 export type BoardStandingKind = keyof typeof BOARD_STANDING_LABEL;
 
+export type StandingTone = "success" | "warning" | "error" | "neutral" | "info";
+export type StandingIcon =
+  | "circle-check"
+  | "triangle-alert"
+  | "square-pen"
+  | "clock"
+  | "circle-x"
+  | "circle-pause";
+
+/**
+ * Operations' review of edits to a listing that already has an approved
+ * version. Clients keep seeing the approved version meanwhile, so this rides
+ * beside the main state rather than replacing it.
+ */
+export type RevisionStanding = {
+  kind: "pending_review" | "needs_changes";
+  label: string;
+  tone: StandingTone;
+  icon: StandingIcon;
+  note: string;
+  /** Operations' reason when it sent the changes back. */
+  reason: string | null;
+};
+
 export type BoardStanding = {
   kind: BoardStandingKind;
-  /** Live / Hidden / Not ready yet / Waiting for shop approval. */
+  /** One of `BOARD_STANDING_LABEL`. */
   label: string;
-  tone: "success" | "warning" | "neutral" | "info";
-  icon: "circle-check" | "triangle-alert" | "square-pen" | "clock";
+  tone: StandingTone;
+  icon: StandingIcon;
   /** One line under it, or null when the label says everything. */
   note: string | null;
+  /** Operations' reason, or GRIDGO's take-down reason, as written. */
+  reason?: string | null;
+  /** When it was taken down or sent back. */
+  since?: string | null;
+  /** A pending or sent-back revision of an approved listing. */
+  revision?: RevisionStanding | null;
 };
 
 const WAITING_NOTE = "Clients will see it as soon as Operations approves your shop.";
+const HIDDEN_NOTE = "Ready to go up. Clients cannot see it while it is hidden.";
+export const TAKEN_DOWN_NOTE = "Only GRIDGO can put it back on the board.";
+const SENT_BACK_NOTE = "Fix what Operations asked for, then submit it for review again.";
+/** Readiness codes the review states already say in their own words. */
+const REVIEW_CODES = new Set(["item_inactive", "listing_not_approved", "listing_suspended"]);
+
+/** Whether GRIDGO reviews listings at all. Older deployments send no review fields. */
+export function reviewsListings(listing: Pick<Listing, "reviewStatus">): boolean {
+  return listing.reviewStatus != null;
+}
+
+/** A listing GRIDGO took down. The shop's own switch cannot undo it. */
+export function isTakenDown(listing: Pick<Listing, "suspendReason" | "suspendedAt">): boolean {
+  return Boolean(listing.suspendReason || listing.suspendedAt);
+}
+
+/** A listing no client has ever been shown, which goes through review first. */
+export function awaitsFirstApproval(listing: Listing): boolean {
+  return reviewsListings(listing) && listing.hasApprovedVersion === false;
+}
+
+/** At least one required step with a named option — what review asks for as specs. */
+export function hasRequiredSpec(listing: Listing): boolean {
+  return listing.groups.some(
+    (group) =>
+      group.kind === "spec" &&
+      group.required &&
+      group.options.some((option) => option.active && option.label.trim().length > 0),
+  );
+}
 
 /**
- * Where this listing stands, said once — wall, list, and editor header.
+ * What a listing still needs before Operations will review it: GRIDGO's
+ * completeness rule plus a required spec. Same order as `gridgoNeeds`.
+ */
+export function reviewNeeds(listing: Listing, context: BoardContext): string[] {
+  const needs = gridgoNeeds(listing, context);
+  if (!hasRequiredSpec(listing) && !needs.includes(SPECS_NEEDED)) needs.push(SPECS_NEEDED);
+  return needs;
+}
+
+/**
+ * Where this listing stands, said once: wall, list, editor header, preview.
  *
- * GRIDGO's decision, not the phone's editor checklist. A shop that is still
- * with Operations may build and finish a listing; nothing is shown to a client
- * until GRIDGO approves the shop. Saying that here is the difference between a
- * wait a shop understands and a screen that looks broken.
+ * In order: a GRIDGO take-down, then a listing still waiting for its first
+ * approval (needs changes, not ready, hidden by the shop, pending review), then
+ * GRIDGO's matching verdict or the phone's own check for a listing that has an
+ * approved version. That last one may carry a `revision` — edits that are with
+ * Operations while clients keep seeing the approved version.
  */
 export function boardStanding(
   listing: Listing,
@@ -949,16 +1075,108 @@ export function boardStanding(
   shopApproved: boolean,
   readiness?: ListingReadiness | null,
 ): BoardStanding {
-  if (listing.suspendReason) {
+  if (isTakenDown(listing)) {
     return {
       kind: "suspended",
       label: BOARD_STANDING_LABEL.suspended,
-      tone: "warning",
-      icon: "triangle-alert",
-      note: listing.suspendReason,
+      tone: "error",
+      icon: "circle-x",
+      note: TAKEN_DOWN_NOTE,
+      reason: listing.suspendReason ?? null,
+      since: listing.suspendedAt ?? null,
     };
   }
-  if (readiness) return standingFromReadiness(readiness);
+  if (awaitsFirstApproval(listing)) return firstReviewStanding(listing, context, shopApproved, readiness);
+
+  const base = readiness
+    ? standingFromReadiness(readiness)
+    : localStanding(listing, context, shopApproved);
+  return { ...base, revision: revisionStanding(listing) };
+}
+
+function firstReviewStanding(
+  listing: Listing,
+  context: BoardContext,
+  shopApproved: boolean,
+  readiness?: ListingReadiness | null,
+): BoardStanding {
+  if (listing.reviewStatus === "needs_revision") {
+    return {
+      kind: "needs_changes",
+      label: BOARD_STANDING_LABEL.needs_changes,
+      tone: "warning",
+      icon: "square-pen",
+      note: SENT_BACK_NOTE,
+      reason: listing.reviewReason ?? null,
+      since: listing.reviewedAt ?? null,
+    };
+  }
+  const work = readiness
+    ? listingOwnSteps(readiness)
+        .filter((step) => !REVIEW_CODES.has(step.code))
+        .map((step) => step.message)
+    : gridgoNeeds(listing, context);
+  if (!hasRequiredSpec(listing)) work.push(SPECS_NEEDED);
+  if (work.length) {
+    return {
+      kind: "not_ready",
+      label: BOARD_STANDING_LABEL.not_ready,
+      tone: "warning",
+      icon: "triangle-alert",
+      note: work[0],
+    };
+  }
+  if (!listing.onTheBoard) {
+    return {
+      kind: "hidden",
+      label: BOARD_STANDING_LABEL.hidden,
+      tone: "neutral",
+      icon: "circle-pause",
+      note: "Ready to send. Submit it for review when you want clients to see it.",
+    };
+  }
+  return {
+    kind: "pending_review",
+    label: BOARD_STANDING_LABEL.pending_review,
+    tone: "info",
+    icon: "clock",
+    note: shopApproved
+      ? "Operations is checking it. Clients see it once it is approved."
+      : "Operations is checking it. Clients see it once your shop and this listing are approved.",
+  };
+}
+
+function revisionStanding(listing: Listing): RevisionStanding | null {
+  if (!reviewsListings(listing)) return null;
+  if (listing.reviewStatus === "pending") {
+    return {
+      kind: "pending_review",
+      label: BOARD_STANDING_LABEL.pending_review,
+      tone: "info",
+      icon: "clock",
+      note: "Your latest changes are with Operations. Clients see the approved version until then.",
+      reason: null,
+    };
+  }
+  if (listing.reviewStatus === "needs_revision") {
+    return {
+      kind: "needs_changes",
+      label: BOARD_STANDING_LABEL.needs_changes,
+      tone: "warning",
+      icon: "square-pen",
+      note: "Clients still see the approved version. Fix what Operations asked for, then submit it again.",
+      reason: listing.reviewReason ?? null,
+    };
+  }
+  return null;
+}
+
+/** The phone's own check, for a listing with an approved version and no verdict. */
+function localStanding(
+  listing: Listing,
+  context: BoardContext,
+  shopApproved: boolean,
+): BoardStanding {
   const needs = gridgoNeeds(listing, context);
 
   if (needs.length) {
@@ -975,8 +1193,8 @@ export function boardStanding(
       kind: "hidden",
       label: BOARD_STANDING_LABEL.hidden,
       tone: "neutral",
-      icon: "square-pen",
-      note: "Ready to go up. Clients cannot see it while it is hidden.",
+      icon: "circle-pause",
+      note: HIDDEN_NOTE,
     };
   }
   if (!shopApproved) {
@@ -1026,7 +1244,7 @@ function standingFromReadiness(entry: ListingReadiness): BoardStanding {
     };
   }
   const own = listingOwnSteps(entry);
-  const work = own.filter((step) => step.code !== "item_inactive");
+  const work = own.filter((step) => !REVIEW_CODES.has(step.code));
   if (work.length) {
     return {
       kind: "not_ready",
@@ -1036,13 +1254,13 @@ function standingFromReadiness(entry: ListingReadiness): BoardStanding {
       note: work[0].message,
     };
   }
-  if (own.length) {
+  if (own.some((step) => step.code === "item_inactive")) {
     return {
       kind: "hidden",
       label: BOARD_STANDING_LABEL.hidden,
       tone: "neutral",
-      icon: "square-pen",
-      note: "Ready to go up. Clients cannot see it while it is hidden.",
+      icon: "circle-pause",
+      note: HIDDEN_NOTE,
     };
   }
   // Only shop gates hold it. Anything the shop can fix comes before approval,
