@@ -31,10 +31,15 @@ export type CatalogueSort = "board" | "name" | "price_low" | "price_high" | "fas
 
 export const PAGE_SIZE = 8;
 
+/**
+ * The shop's own switch, not the listing's state: "On the board" still holds a
+ * listing waiting for Operations, and "Off the board" one GRIDGO took down. So
+ * the filter does not borrow the chips' "Live" and "Hidden by you".
+ */
 export const ON_BOARD_OPTIONS: readonly { value: OnBoardFilter; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "on_the_board", label: "Live" },
-  { value: "hidden", label: "Hidden" },
+  { value: "on_the_board", label: "On the board" },
+  { value: "hidden", label: "Off the board" },
 ];
 
 export const CATALOGUE_SORTS: readonly {

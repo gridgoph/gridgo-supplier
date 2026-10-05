@@ -8,6 +8,9 @@ import { formatDeadlineFull } from "@/lib/dates";
 import { formatPhp, type Order } from "@/lib/api";
 import { presentJobStatus } from "@/lib/jobState";
 import { deadlineUrgency } from "@/lib/urgency";
+import { acceptWindow, acceptWindowLine } from "@/lib/acceptWindow";
+import { shopRelease } from "@/lib/shopRecovery";
+import { useNow } from "@/hooks/useNow";
 
 type Props = {
   job: Order;
@@ -32,7 +35,13 @@ type Props = {
  */
 export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
   const status = presentJobStatus(job);
-  const urgency = deadlineUrgency(job.promisedDate || job.deadline);
+  // A new job's clock replaces its due date on the card: it is the sooner of the two.
+  const ticking = acceptWindow(job).kind !== "none";
+  const now = useNow(ticking ? 30_000 : null);
+  const window = acceptWindow(job, now);
+  const answerLine = acceptWindowLine(window, now);
+  // A job the shop let go is not due anywhere.
+  const urgency = deadlineUrgency(shopRelease(job) ? null : job.promisedDate || job.deadline, now);
   const spec = [
     `${job.quantity} × ${job.size || "size not set"}`,
     job.material || null,
@@ -57,6 +66,17 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
       </View>
 
       <View className="gap-0.5">
+        {answerLine ? (
+          <Text
+            className={
+              window.kind === "expired" || (window.kind === "running" && window.closing)
+                ? "text-body font-medium text-error"
+                : "text-body font-medium text-warning"
+            }
+          >
+            {answerLine}
+          </Text>
+        ) : null}
         <Text
           className={
             urgency.level === "overdue"

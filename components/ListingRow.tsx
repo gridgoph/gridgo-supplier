@@ -2,7 +2,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { HuntedName } from "@/components/HuntedName";
 import { SamplePhoto } from "@/components/SamplePhoto";
-import { StatusChip } from "@/components/StatusChip";
+import { StandingChips, standingCaption } from "@/components/listing/StandingChips";
 import { formatPhp } from "@/lib/api";
 import {
   boardContextFor,
@@ -54,6 +54,7 @@ export function ListingRow({
 }: Props) {
   const context = boardContextFor(listing, services);
   const standing = boardStanding(listing, context, shopApproved, readiness);
+  const caption = standingCaption(standing);
   const hours = effectiveTurnaroundHours(listing, context.inheritedTurnaroundHours);
   const first = listing.photos[0];
   const money = formatPhp(fromPriceMinor(listing));
@@ -76,7 +77,7 @@ export function ListingRow({
         onPress={onPress}
         onLongPress={onRemove}
         accessibilityRole="button"
-        accessibilityLabel={`${listing.name || "Untitled listing"}. ${priceLine(listing)}. ${standing.label}.`}
+        accessibilityLabel={`${listing.name || "Untitled listing"}. ${priceLine(listing)}. ${standing.label}.${standing.revision ? ` ${standing.revision.label}.` : ""}`}
         accessibilityHint={onRemove ? "Press and hold to remove this listing." : undefined}
         accessibilityActions={onRemove ? [{ name: "remove", label: "Remove this listing" }] : undefined}
         onAccessibilityAction={(event) => {
@@ -98,13 +99,13 @@ export function ListingRow({
           <Text className="text-caption text-text-muted" numberOfLines={1}>
             {readyInLine(hours, listing.minimumTurnaroundHours)}
           </Text>
-          <View className="mt-0.5 flex-row flex-wrap">
-            <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
+          <View className="mt-0.5">
+            <StandingChips standing={standing} />
           </View>
-          {/* The exact step it lacks, so the chip is never a dead end. */}
-          {standing.kind === "not_ready" && standing.note ? (
+          {/* The exact step it lacks, or GRIDGO's reason, so the chip is never a dead end. */}
+          {caption ? (
             <Text className="text-caption text-text-secondary" numberOfLines={3}>
-              {standing.note}
+              {caption}
             </Text>
           ) : null}
         </View>

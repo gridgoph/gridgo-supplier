@@ -21,6 +21,8 @@ jest.mock("@/hooks/useBoard", () => ({
 jest.mock("@/lib/listingsApi", () => ({
   ...jest.requireActual("@/lib/listingsApi"),
   loadStarters: jest.fn(),
+  loadProductTypes: jest.fn(),
+  submitForReview: jest.fn(),
   createListing: jest.fn(),
   saveListing: jest.fn(),
   setFileFormats: jest.fn(),
@@ -39,10 +41,17 @@ import { router } from "expo-router";
 
 import NewListingScreen from "@/app/shop/new";
 import { useBoard, useListing } from "@/hooks/useBoard";
-import type { Listing } from "@/lib/listings";
-import { createListing, loadStarters, saveListing } from "@/lib/listingsApi";
+import { SPECS_NEEDED, type Listing } from "@/lib/listings";
+import {
+  createListing,
+  loadProductTypes,
+  loadStarters,
+  saveListing,
+  submitForReview,
+} from "@/lib/listingsApi";
 import { seedStarterSample } from "@/lib/starterSample";
 import { useListingWizard } from "@/store/listingWizard";
+import { usePhotoPolicy } from "@/store/photoPolicy";
 import type { ServiceCatalog } from "@/lib/taxonomy";
 
 const catalog: ServiceCatalog = {
@@ -160,6 +169,8 @@ beforeEach(() => {
     reload: jest.fn(async () => {}),
   }));
   (loadStarters as jest.Mock).mockResolvedValue({ status: "ok", value: [flyersStarter] });
+  // No picker route: the chart's own coverage stands in, as on an older GRIDGO.
+  (loadProductTypes as jest.Mock).mockResolvedValue({ status: "not_open_yet" });
   (createListing as jest.Mock).mockImplementation(async (input: { name: string; subcategoryCode: string }) => {
     mockListing = createdListing({
       name: input.name,
@@ -193,7 +204,7 @@ describe("Add a listing — Pick", () => {
   it("tells the shop to list only work it makes in its own shop", async () => {
     await render(<NewListingScreen />);
 
-    expect(await screen.findByText("WHAT KIND OF WORK")).toBeTruthy();
+    expect(await screen.findByText("WHAT ARE YOU LISTING")).toBeTruthy();
     expect(
       screen.getByText(
         "Pick only work you make in your own shop. You don't need a listing for everything in this category.",
@@ -367,8 +378,110 @@ describe("Add a listing — Pick", () => {
 
     await render(<NewListingScreen />);
 
-    expect(await screen.findByText("Pick printing category")).toBeTruthy();
+    expect(await screen.findByText("Pick a product type")).toBeTruthy();
     expect(screen.queryByText("Your board is not open yet")).toBeNull();
     expect(useListingWizard.getState().listingId).toBeNull();
+  });
+});
+
+describe("Add a listing — product types and review", () => {
+  const sample = {
+    fileId: "file_flyers",
+    sortOrder: 0,
+    altText: "Flyers",
+    downloadUrl: "https://example.test/flyers.jpg",
+    downloadUrlExpiresAt: "2999-01-01T00:00:00.000Z",
+  };
+
+  beforeEach(() => {
+    (loadProductTypes as jest.Mock).mockResolvedValue({
+      status: "ok",
+      value: [
+        { code: "flyers", name: "Flyers", categoryCode: "marketing_promotional", imageUrl: null, photo: sample, examples: "" },
+        { code: "brochures", name: "Brochures", categoryCode: "marketing_promotional", imageUrl: null, photo: null, examples: "" },
+        { code: "plaques_trophies", name: "Plaques & Trophies", categoryCode: "recognition", imageUrl: null, photo: null, examples: "" },
+      ],
+    });
+  });
+
+  it("offers only the product types inside the shop's own categories", async () => {
+    await render(<NewListingScreen />);
+
+    expect(await screen.findByRole("radio", { name: "Flyers" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Brochures" })).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: "Plaques & Trophies" })).toBeNull();
+    // A type nobody has listed yet gets its initials, not a broken picture.
+    expect(screen.getByText("B")).toBeTruthy();
+  });
+
+  it("filters as the shop types, and offers to request a type it cannot find", async () => {
+    await render(<NewListingScreen />);
+
+    await fireEvent.changeText(await screen.findByLabelText("Search product types"), "broch");
+    expect(screen.queryByRole("radio", { name: "Flyers" })).toBeNull();
+    expect(screen.getByRole("radio", { name: "Brochures" })).toBeTruthy();
+
+    await fireEvent.changeText(screen.getByLabelText("Search product types"), "keychains");
+    expect(screen.getByText("No product type matches “keychains”.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Request it as a new type" }));
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: "/shop/request-type",
+      params: { name: "keychains" },
+    });
+  });
+
+  it("will not leave Steps without a required choice", async () => {
+    mockListing = createdListing({
+      basePriceMinor: 40000,
+      photos: [{ fileId: "file_1", sortOrder: 0, altText: null, downloadUrl: null, downloadUrlExpiresAt: null }],
+      reviewStatus: "pending",
+      hasApprovedVersion: false,
+    });
+    useListingWizard.setState({ listingId: "item_1", step: "steps", furthest: "steps" });
+
+    await render(<NewListingScreen />);
+
+    await fireEvent.press(await screen.findByRole("button", { name: "Proceed" }));
+
+    expect(await screen.findByText(SPECS_NEEDED)).toBeTruthy();
+    expect(useListingWizard.getState().step).toBe("steps");
+  });
+
+  it("ends in Submit for review, which puts it up and sends it to Operations", async () => {
+    mockListing = createdListing({
+      basePriceMinor: 40000,
+      photos: [{ fileId: "file_1", sortOrder: 0, altText: null, downloadUrl: null, downloadUrlExpiresAt: null }],
+      groups: [
+        {
+          id: "grp_1",
+          name: "Size",
+          kind: "spec",
+          required: true,
+          helpText: null,
+          sortOrder: 0,
+          version: 1,
+          options: [
+            { id: "opt_1", label: "A5", priceModifierMinor: 0, priceMultiplierBps: null, active: true, sortOrder: 0 },
+          ],
+        },
+      ],
+      reviewStatus: "pending",
+      hasApprovedVersion: false,
+    });
+    usePhotoPolicy.setState({ confirmed: ["item_1"] });
+    useListingWizard.setState({ listingId: "item_1", step: "review", furthest: "review" });
+    (submitForReview as jest.Mock).mockResolvedValue({ status: "ok", value: mockListing });
+
+    await render(<NewListingScreen />);
+
+    expect(await screen.findByText("Operations checks every new listing before clients see it")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Submit for review" }));
+
+    await waitFor(() => expect(submitForReview).toHaveBeenCalled());
+    expect(saveListing).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "item_1" }),
+      expect.objectContaining({ active: true }),
+    );
+    expect(router.replace).toHaveBeenCalledWith("/(tabs)/catalogues");
   });
 });

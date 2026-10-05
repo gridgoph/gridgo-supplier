@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 
+import { AcceptWindowPanel } from "@/components/AcceptWindowPanel";
 import { CounterCheckPanel } from "@/components/CounterCheckPanel";
+import { DangerButton } from "@/components/DangerButton";
+import { DeadlineRequestPanel } from "@/components/DeadlineRequestPanel";
 import { EmptyState } from "@/components/EmptyState";
 import { JobActionBar } from "@/components/JobActionBar";
 import { JobBrief } from "@/components/JobBrief";
@@ -13,7 +16,9 @@ import { PushEnableCard } from "@/components/PushEnableCard";
 import { RefundNoticePanel } from "@/components/RefundNoticePanel";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { SecondaryButton } from "@/components/SecondaryButton";
+import { ShopReleasePanel } from "@/components/ShopReleasePanel";
 import { StatusChip } from "@/components/StatusChip";
+import { acceptWindow } from "@/lib/acceptWindow";
 import { formatDeadlineFull } from "@/lib/dates";
 import { defaultBriefSection, hasHandoff, workspaceBriefSections } from "@/lib/jobBrief";
 import {
@@ -26,6 +31,8 @@ import {
 import { keptAfterSettlement, payoutPlanOf } from "@/lib/milestones";
 import { lapseForOrder, lapseNotice } from "@/lib/productionLapse";
 import { refundNotice, refundStanding } from "@/lib/refund";
+import { canRequestNewDeadline, rescheduleNotice } from "@/lib/reschedule";
+import { canCancelJob, shopRelease } from "@/lib/shopRecovery";
 import { counterCheck } from "@/lib/pickupCheck";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useViewing } from "@/store/toasts";
@@ -45,6 +52,9 @@ export default function JobWorkspaceScreen() {
   const { job, loading, error, reload } = useJob(id);
   const lapses = useProductionLapses();
   const [proofReloadVersion, setProofReloadVersion] = useState(0);
+  // Bumped when the hour to answer runs out on screen, so the steps go with it.
+  const [, setExpiredAt] = useState(0);
+  const onAnswerExpired = useCallback(() => setExpiredAt(Date.now()), []);
   const reloadLapses = lapses.reload;
   const { refreshing, onRefresh } = usePullToRefresh(useCallback(async () => {
     await Promise.all([reload(), reloadLapses()]);
@@ -117,12 +127,18 @@ export default function JobWorkspaceScreen() {
   const actions = actionsForJob(job);
   const primary = actions.find((a) => a.primary) ?? null;
   const secondary = actions.filter((a) => !a.primary);
-  // A job stopped or closed by a refund is not due anywhere.
-  const urgency = deadlineUrgency(refundStanding(job) === "none" ? job.promisedDate || job.deadline : null);
+  // A job the shop let go keeps its state while the client chooses; it is not the shop's any more.
+  const release = shopRelease(job);
+  const deadlineRequest = job.rescheduleRequest ?? null;
+  const requestStopped = deadlineRequest ? rescheduleNotice(deadlineRequest).stopped : false;
+  // A job stopped or closed by a refund, let go, or paused by a declined deadline is not due anywhere.
+  const urgency = deadlineUrgency(
+    refundStanding(job) === "none" && !release && !requestStopped ? job.promisedDate || job.deadline : null,
+  );
   const waiting = waitingOn(job.state, payoutPlanOf(job));
   // A refund stops the job and speaks over whose move it is.
   const refund = refundNotice(job, keptAfterSettlement(job));
-  const handoff = hasHandoff(job) && refundStanding(job) === "none";
+  const handoff = hasHandoff(job) && refundStanding(job) === "none" && !release && !requestStopped;
   const hasSteps = Boolean(primary) || secondary.length > 0 || handoff;
   // A counter check that stopped the pickup, or is waiting to be repeated.
   const check = job.state === "rider_assigned" ? counterCheck(job) : null;
@@ -130,7 +146,11 @@ export default function JobWorkspaceScreen() {
   const counterIssue = check && check.stage !== "passed" && refundStanding(job) === "none" ? check : null;
   // GRIDGO's late-production record for this job, if it has one.
   const lapse = lapseForOrder(lapses.lapses, job.id);
-  const lateness = lapse ? lapseNotice(lapse, job) : null;
+  // A held job's late card yields its next step to the hold; a job the shop let go has no late card here.
+  const lateness = lapse && !release ? lapseNotice(lapse, job, undefined, requestStopped || refundStanding(job) !== "none") : null;
+
+  const canAskForTime = canRequestNewDeadline(job);
+  const canCancel = canCancelJob(job);
 
   function messageOperations() {
     router.push({ pathname: "/report", params: { orderId: job!.id, title: job!.title } });
@@ -193,6 +213,16 @@ export default function JobWorkspaceScreen() {
           ) : null}
         </View>
 
+        {/*
+          A new job's clock, above everything else on it: the one thing here
+          that costs the shop if it is missed.
+        */}
+        {acceptWindow(job).kind !== "none" ? (
+          <View className="mt-6">
+            <AcceptWindowPanel order={job} onExpire={onAnswerExpired} />
+          </View>
+        ) : null}
+
         <View className="mt-6">
           <JourneyTrack state={job.state} />
         </View>
@@ -212,6 +242,14 @@ export default function JobWorkspaceScreen() {
           <View className="mt-6">
             <RefundNoticePanel notice={refund} />
           </View>
+        ) : release ? (
+          <View className="mt-6">
+            <ShopReleasePanel release={release} />
+          </View>
+        ) : deadlineRequest && requestStopped ? (
+          <View className="mt-6">
+            <DeadlineRequestPanel request={deadlineRequest} />
+          </View>
         ) : !primary ? (
           <View className="gg-panel mt-6 gap-1">
             <Text className="text-body font-medium text-text-primary">{waiting.title}</Text>
@@ -227,6 +265,13 @@ export default function JobWorkspaceScreen() {
         {lateness && lapse ? (
           <View className="mt-6">
             <LatenessPanel notice={lateness} closed={lapse.status === "closed"} />
+          </View>
+        ) : null}
+
+        {/* The job's one deadline request, while the job carries on. */}
+        {deadlineRequest && !requestStopped && !release ? (
+          <View className="mt-6">
+            <DeadlineRequestPanel request={deadlineRequest} />
           </View>
         ) : null}
 
@@ -261,9 +306,29 @@ export default function JobWorkspaceScreen() {
           Last, and charcoal: the way out when the job itself is what is wrong.
           The report carries this job's reference, so Operations starts from it.
         */}
-        {counterIssue ? null : (
-          <View className="mt-8">
+        {counterIssue || release ? null : (
+          <View className="mt-8 gap-3">
+            {canAskForTime || canCancel ? (
+              <Text className="text-overline text-text-muted">RUNNING INTO TROUBLE?</Text>
+            ) : null}
+            {canAskForTime ? (
+              <View className="gap-1">
+                <SecondaryButton
+                  label="Request a new deadline"
+                  onPress={() => router.push({ pathname: "/job/[id]/reschedule", params: { id: job.id } })}
+                />
+                <Text className="text-caption text-text-muted">
+                  You can ask the client once on this job. Nothing changes until they agree.
+                </Text>
+              </View>
+            ) : null}
             <SecondaryButton label="Report a problem with this job" onPress={messageOperations} />
+            {canCancel ? (
+              <DangerButton
+                label="Cancel this job"
+                onPress={() => router.push({ pathname: "/job/[id]/cancel", params: { id: job.id } })}
+              />
+            ) : null}
           </View>
         )}
       </ScrollView>

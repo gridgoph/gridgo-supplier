@@ -218,3 +218,53 @@ describe("Alerts screen — app updates", () => {
     expect(screen.queryByTestId("app-update-notices")).toBeNull();
   });
 });
+
+it("says a take-down is GRIDGO's, with the reason, and opens that listing", async () => {
+  useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, localOnly: false });
+  const { router } = jest.requireMock("expo-router") as { router: { push: jest.Mock } };
+  router.push.mockClear();
+  api.listNotifications.mockResolvedValue([{
+    id: "ntf_takedown",
+    userId: "user_supplier",
+    type: "listing_suspended",
+    catalogItemId: "sci_taken",
+    title: "A listing was taken down",
+    body: "The sample carries a shop logo",
+    read: false,
+    at: "2026-10-05T13:55:00.000Z",
+  }]);
+  api.listJobs.mockResolvedValue([]);
+
+  await render(<AlertsScreen />);
+
+  const title = await screen.findByText("Taken down by GRIDGO");
+  expect(
+    screen.getByText("Reason: The sample carries a shop logo. Only GRIDGO can put it back on the board."),
+  ).toBeTruthy();
+  fireEvent.press(title);
+  await waitFor(() => expect(router.push).toHaveBeenCalledWith({
+    pathname: "/shop/[id]",
+    params: { id: "sci_taken" },
+  }));
+});
+
+it("opens the board from a review decision that names no listing", async () => {
+  useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, localOnly: false });
+  const { router } = jest.requireMock("expo-router") as { router: { push: jest.Mock } };
+  router.push.mockClear();
+  api.listNotifications.mockResolvedValue([{
+    id: "ntf_review",
+    userId: "user_supplier",
+    type: "catalog_review_decided",
+    title: "Listing review updated",
+    body: "Photo has a watermark",
+    read: false,
+    at: "2026-10-05T14:00:00.000Z",
+  }]);
+  api.listJobs.mockResolvedValue([]);
+
+  await render(<AlertsScreen />);
+
+  fireEvent.press(await screen.findByText("Operations asked for changes"));
+  await waitFor(() => expect(router.push).toHaveBeenCalledWith("/(tabs)/catalogues"));
+});

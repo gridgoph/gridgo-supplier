@@ -2,7 +2,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { HuntedName } from "@/components/HuntedName";
 import { SamplePhoto } from "@/components/SamplePhoto";
-import { StatusChip } from "@/components/StatusChip";
+import { StandingChips, standingCaption } from "@/components/listing/StandingChips";
 import {
   boardContextFor,
   boardStanding,
@@ -40,8 +40,9 @@ type Props = {
  * its own board: what it is called, and what it costs. How fast it goes out
  * lives on the list and inside the listing.
  *
- * Every tile carries its standing chip — Live, Hidden, Not ready yet, or
- * Waiting for shop approval — so a wall of samples still says what GRIDGO
+ * Every tile carries its standing chip — Live, Pending review, Needs changes,
+ * Hidden by you, Taken down by GRIDGO, Not ready yet or Waiting for shop
+ * approval — so a wall of samples still says what GRIDGO
  * decided. The chip sits under the price so a long label wraps the chip row,
  * not the peso line.
  *
@@ -63,6 +64,7 @@ export function ListingCard({
 }: Props) {
   const context = boardContextFor(listing, services);
   const standing = boardStanding(listing, context, shopApproved, readiness);
+  const caption = standingCaption(standing);
   const first = listing.photos[0];
   const cap = printerCapLine(listing);
 
@@ -78,7 +80,7 @@ export function ListingCard({
         onPress={onPress}
         onLongPress={onRemove}
         accessibilityRole="button"
-        accessibilityLabel={`${listing.name || "Untitled listing"}. ${standing.label}.`}
+        accessibilityLabel={`${listing.name || "Untitled listing"}. ${standing.label}.${standing.revision ? ` ${standing.revision.label}.` : ""}`}
         accessibilityHint={onRemove ? "Press and hold to remove this listing." : undefined}
         accessibilityActions={onRemove ? [{ name: "remove", label: "Remove this listing" }] : undefined}
         onAccessibilityAction={(event) => {
@@ -104,13 +106,13 @@ export function ListingCard({
           <Text className="text-body text-text-primary" numberOfLines={1}>
             {priceLine(listing)}
           </Text>
-          <View className="mt-1 flex-row flex-wrap">
-            <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
+          <View className="mt-1">
+            <StandingChips standing={standing} />
           </View>
-          {/* The exact step it lacks, so the chip is never a dead end. */}
-          {standing.kind === "not_ready" && standing.note ? (
+          {/* The exact step it lacks, or GRIDGO's reason, so the chip is never a dead end. */}
+          {caption ? (
             <Text className="text-caption text-text-secondary" numberOfLines={3}>
-              {standing.note}
+              {caption}
             </Text>
           ) : null}
         </View>

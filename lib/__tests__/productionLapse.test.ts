@@ -161,6 +161,16 @@ describe("lapseNotice: the warning states", () => {
     expect(notice.next).toBe("Nothing more is needed from your shop on this.");
   });
 
+  it("yields the next step to a hold on the job", () => {
+    const notice = lapseNotice(lapse({ tier: "severe", rateBps: 3000, status: "warned" }), unfinished, at(30), true);
+    expect(notice.next).toMatch(/^Work on this job is on hold, so there is nothing to finish for now/);
+    expect(notice.next).not.toMatch(/Finish the job/);
+    // A finished or closed record says the same thing held or not.
+    expect(lapseNotice(lapse({ status: "closed" }), unfinished, at(5), true).next).toBe(
+      "Nothing more is needed from your shop on this.",
+    );
+  });
+
   it("never blames: no fault words in any state", () => {
     const states: Partial<ProductionLapse>[] = [
       {}, { status: "warned" }, { tier: "severe", status: "warned" },

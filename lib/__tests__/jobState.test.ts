@@ -6,6 +6,7 @@ import {
   JOB_JOURNEY,
   journeyIndex,
   needsSupplierAction,
+  presentJobStatus,
   presentOrderState,
   presentTimelineActor,
   presentTimelineNote,
@@ -397,5 +398,76 @@ describe("waitingOn", () => {
       expect(result.title).not.toMatch(/_/);
       expect(result.body).not.toMatch(/_/);
     }
+  });
+});
+
+describe("jobs the shop let go or that wait on a deadline answer", () => {
+  const window = {
+    assignedAt: "2026-10-05T06:00:00.000Z",
+    deadlineAt: "2026-10-05T07:00:00.000Z",
+    workingMinutes: 60,
+    status: "pending" as const,
+  };
+
+  it("keeps Accept and Decline while the hour to answer runs", () => {
+    const order = job({ id: "o1", state: "supplier_assigned", shopAcceptance: window });
+    expect(actionsForJob(order, new Date("2026-10-05T06:30:00.000Z")).map((a) => a.kind)).toEqual([
+      "accept",
+      "decline",
+    ]);
+  });
+
+  it("offers nothing once the hour has run out", () => {
+    const order = job({ id: "o1", state: "supplier_assigned", shopAcceptance: window });
+    expect(actionsForJob(order, new Date("2026-10-05T07:00:01.000Z"))).toEqual([]);
+  });
+
+  it("offers nothing on a job the shop let go, whatever its old state", () => {
+    const order = job({
+      id: "o1",
+      state: "production",
+      shopAcceptance: { ...window, status: "cancelled" },
+      shopRecovery: { id: "shop_event_1", status: "awaiting_client" },
+      payoutMilestones: milestones(),
+    });
+    expect(actionsForJob(order)).toEqual([]);
+    expect(presentJobStatus(order)).toMatchObject({ label: "Cancelled by you", icon: "circle-x" });
+  });
+
+  it("treats a job the client moved to this shop as this shop's own", () => {
+    const order = job({
+      id: "o1",
+      state: "supplier_assigned",
+      shopAcceptance: { ...window, deadlineAt: "2099-01-01T00:00:00.000Z" },
+      shopRecovery: { id: "shop_event_1", status: "accepted" },
+    });
+    expect(actionsForJob(order).map((a) => a.kind)).toEqual(["accept", "decline"]);
+  });
+
+  it("pauses the job while a declined deadline request is being sorted out", () => {
+    const order = job({
+      id: "o1",
+      state: "production",
+      rescheduleRequest: {
+        id: "resched_1",
+        orderId: "o1",
+        reason: "Laminator",
+        status: "declined",
+        requestedAt: "2026-10-05T06:00:00.000Z",
+        expiresAt: "2026-10-06T06:00:00.000Z",
+        answeredAt: "2026-10-05T08:00:00.000Z",
+        resolution: "rematch_offered",
+        workHeld: true,
+        originalReadyBy: "2026-10-07T09:00:00.000Z",
+        proposedReadyBy: "2026-10-09T09:00:00.000Z",
+      },
+    });
+    expect(actionsForJob(order)).toEqual([]);
+    expect(presentJobStatus(order).label).toBe("Paused");
+  });
+
+  it("declines through its own route, with a reason, not a transition", () => {
+    const order = job({ id: "o1", state: "supplier_assigned" });
+    expect(findAction(order, "decline")?.targetState).toBeNull();
   });
 });

@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ListingPreviewBody } from "@/components/listing/ListingPreviewBody";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { boardContextFor, boardStanding } from "@/lib/listings";
+import { previewLine } from "@/lib/listingReview";
 import { BOARD_NOT_OPEN_YET } from "@/lib/listingsApi";
 import { routeId, useListing } from "@/hooks/useBoard";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -63,7 +64,6 @@ export default function ListingPreviewScreen() {
 
   const context = boardContextFor(listing, services);
   const standing = boardStanding(listing, context, approved);
-  const visible = standing.kind === "live";
 
   return (
     <View className="gg-screen">
@@ -77,13 +77,7 @@ export default function ListingPreviewScreen() {
             <Eye size={16} color={colors.textMuted} strokeWidth={2} />
           </View>
           <Text className="min-w-0 flex-1 text-caption text-text-secondary">
-            {visible
-              ? "This is what a client sees today."
-              : standing.kind === "not_ready"
-                ? `No client can see this yet. ${standing.note ?? standing.label}`
-                : standing.kind === "hidden"
-                  ? "No client can see this yet — it is hidden. This is how it would read once it is up."
-                  : "Operations has not approved your shop yet, so no client can see this. This is how it will read once they do."}
+            {previewLine(standing)}
           </Text>
         </View>
 

@@ -6,17 +6,22 @@ import {
   boardStanding,
   boardTargets,
   fromPriceMinor,
+  hasRequiredSpec,
   measurementKind,
   multiplierLabel,
   needsPrinterCap,
   normalizeListing,
   normalizeListings,
   normalizeStarters,
+  PHOTO_NEEDED,
   photoViewUrl,
   priceLine,
   printerCapLine,
   printerMaxWidthFeetForPayload,
   readyInLine,
+  reviewNeeds,
+  reviewsListings,
+  SPECS_NEEDED,
   toMultiplierBps,
   unitLine,
   type Listing,
@@ -339,6 +344,45 @@ describe("what stops a listing going on the board", () => {
 });
 
 describe("where a listing stands", () => {
+  it("shows a Super Admin take-down, the reason and when, ahead of the shop's own switch", () => {
+    const standing = boardStanding(
+      {
+        ...READY,
+        onTheBoard: false,
+        suspendReason: "Blurry sample",
+        suspendedAt: "2026-10-05T13:55:00.000Z",
+      },
+      NOTHING_INHERITED,
+      true,
+    );
+    expect(standing.kind).toBe("suspended");
+    expect(standing.label).toBe("Taken down by GRIDGO");
+    expect(standing.tone).toBe("error");
+    expect(standing.reason).toBe("Blurry sample");
+    expect(standing.since).toBe("2026-10-05T13:55:00.000Z");
+    expect(standing.note).toBe("Only GRIDGO can put it back on the board.");
+  });
+
+  it("never calls a taken-down listing Hidden, even when GRIDGO's verdict says inactive", () => {
+    const standing = boardStanding(
+      { ...READY, onTheBoard: false, suspendReason: "Logo on the sample" },
+      NOTHING_INHERITED,
+      true,
+      {
+        catalogItemId: READY.id,
+        ready: false,
+        missing: [{ code: "item_inactive", message: "This listing is hidden.", action: "activate_listing" }],
+      },
+    );
+    expect(standing.label).toBe("Taken down by GRIDGO");
+  });
+
+  it("calls a listing the shop switched off Hidden by you", () => {
+    const standing = boardStanding({ ...READY, onTheBoard: false }, NOTHING_INHERITED, true);
+    expect(standing.kind).toBe("hidden");
+    expect(standing.label).toBe("Hidden by you");
+  });
+
   it("tells a waiting shop its finished listing is not visible yet", () => {
     const standing = boardStanding(READY, NOTHING_INHERITED, false);
     expect(standing.label).toBe("Waiting for shop approval");
@@ -530,5 +574,141 @@ describe("an extra priced as a multiple", () => {
   it("says it back the way a shop wrote it", () => {
     expect(multiplierLabel(20_000)).toBe("x2");
     expect(multiplierLabel(15_000)).toBe("x1.5");
+  });
+});
+
+describe("listing review", () => {
+  const SPEC: Listing["groups"][number] = {
+    id: "grp_size",
+    name: "Size",
+    kind: "spec",
+    required: true,
+    helpText: null,
+    sortOrder: 0,
+    version: 1,
+    options: [
+      {
+        id: "opt_2x3",
+        label: "2 x 3 ft",
+        priceModifierMinor: 0,
+        priceMultiplierBps: null,
+        active: true,
+        sortOrder: 0,
+      },
+    ],
+  };
+  const NEW: Listing = {
+    ...READY,
+    groups: [SPEC],
+    reviewStatus: "pending",
+    reviewReason: null,
+    reviewedAt: null,
+    hasApprovedVersion: false,
+  };
+
+  it("reads the review fields, and treats a GRIDGO without review as approved", () => {
+    const reviewed = normalizeListing({
+      id: "item_r",
+      active: true,
+      reviewStatus: "needs_revision",
+      reviewReason: "Crop the sample",
+      reviewedAt: "2026-10-05T01:00:00.000Z",
+      hasApprovedVersion: false,
+      suspendedAt: null,
+    });
+    expect(reviewed?.reviewStatus).toBe("needs_revision");
+    expect(reviewed?.reviewReason).toBe("Crop the sample");
+    expect(reviewed?.hasApprovedVersion).toBe(false);
+
+    const older = normalizeListing({ id: "item_o", active: true });
+    expect(older?.reviewStatus).toBeNull();
+    expect(older?.hasApprovedVersion).toBe(true);
+    expect(reviewsListings(older!)).toBe(false);
+  });
+
+  it("is Pending review once a finished new listing is sent, and never Live before approval", () => {
+    const standing = boardStanding(NEW, NOTHING_INHERITED, true);
+    expect(standing.kind).toBe("pending_review");
+    expect(standing.label).toBe("Pending review");
+    expect(standing.note).toContain("Operations");
+  });
+
+  it("is Not ready yet with the step while the new listing is unfinished", () => {
+    const standing = boardStanding({ ...NEW, photos: [] }, NOTHING_INHERITED, true);
+    expect(standing.label).toBe("Not ready yet");
+    expect(standing.note).toBe(PHOTO_NEEDED);
+  });
+
+  it("asks for a required spec before a new listing can be reviewed", () => {
+    const standing = boardStanding({ ...NEW, groups: [] }, NOTHING_INHERITED, true);
+    expect(standing.label).toBe("Not ready yet");
+    expect(standing.note).toBe(SPECS_NEEDED);
+    expect(reviewNeeds({ ...NEW, groups: [] }, NOTHING_INHERITED)).toContain(SPECS_NEEDED);
+    expect(hasRequiredSpec({ ...NEW, groups: [{ ...SPEC, required: false }] })).toBe(false);
+    expect(hasRequiredSpec(NEW)).toBe(true);
+  });
+
+  it("is Needs changes with Operations' reason when a new listing is sent back", () => {
+    const standing = boardStanding(
+      { ...NEW, reviewStatus: "needs_revision", reviewReason: "Sample shows a logo", reviewedAt: "2026-10-05T02:00:00.000Z" },
+      NOTHING_INHERITED,
+      true,
+    );
+    expect(standing.kind).toBe("needs_changes");
+    expect(standing.label).toBe("Needs changes");
+    expect(standing.reason).toBe("Sample shows a logo");
+    expect(standing.since).toBe("2026-10-05T02:00:00.000Z");
+  });
+
+  it("ignores GRIDGO's not-approved step and names the real one for a new listing", () => {
+    const standing = boardStanding(NEW, NOTHING_INHERITED, true, {
+      catalogItemId: NEW.id,
+      ready: false,
+      missing: [
+        { code: "listing_not_approved", message: "Operations must approve this listing.", action: "view_listing_review" },
+        { code: "photo", message: "Attach at least one fully uploaded listing photo.", action: "upload_listing_photo" },
+      ],
+    });
+    expect(standing.label).toBe("Not ready yet");
+    expect(standing.note).toBe("Attach at least one fully uploaded listing photo.");
+  });
+
+  it("still names the draft's own gap when GRIDGO's verdict was read before the edit", () => {
+    const standing = boardStanding({ ...NEW, photos: [] }, NOTHING_INHERITED, true, {
+      catalogItemId: NEW.id,
+      ready: true,
+      missing: [],
+    });
+    expect(standing.label).toBe("Not ready yet");
+    expect(standing.note).toBe(PHOTO_NEEDED);
+  });
+
+  it("keeps an approved listing Live while an edit waits for review, and says so beside it", () => {
+    const standing = boardStanding(
+      { ...NEW, hasApprovedVersion: true, reviewStatus: "pending" },
+      NOTHING_INHERITED,
+      true,
+      { catalogItemId: NEW.id, ready: true, missing: [] },
+    );
+    expect(standing.label).toBe("Live");
+    expect(standing.revision?.label).toBe("Pending review");
+    expect(standing.revision?.note).toContain("approved version");
+  });
+
+  it("keeps an approved listing Live when its changes are sent back, with the reason", () => {
+    const standing = boardStanding(
+      { ...NEW, hasApprovedVersion: true, reviewStatus: "needs_revision", reviewReason: "Price is per piece" },
+      NOTHING_INHERITED,
+      true,
+    );
+    expect(standing.label).toBe("Live");
+    expect(standing.revision?.label).toBe("Needs changes");
+    expect(standing.revision?.reason).toBe("Price is per piece");
+  });
+
+  it("draws no revision on an approved listing with nothing pending", () => {
+    const standing = boardStanding({ ...NEW, hasApprovedVersion: true, reviewStatus: "approved" }, NOTHING_INHERITED, true);
+    expect(standing.label).toBe("Live");
+    expect(standing.revision).toBeNull();
   });
 });

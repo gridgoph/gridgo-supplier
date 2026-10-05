@@ -188,7 +188,8 @@ it("lists every missing step with a button to its fix", async () => {
   const view = await render(<HomeScreen />);
 
   expect(await screen.findByText("Not ready")).toBeTruthy();
-  expect(screen.getByText("2 steps left")).toBeTruthy();
+  // The board step opens into one listing, so the count names it.
+  expect(screen.getByText("1 step and 1 listing left")).toBeTruthy();
   expect(screen.getByText(CLOSED.message)).toBeTruthy();
   expect(screen.getByText(NO_LISTING.message)).toBeTruthy();
   // The board step opens into the listing that needs work, by name.
@@ -237,5 +238,59 @@ it("falls back to today's Home when the API has no operational verdict", async (
   expect(screen.queryByText("Not ready")).toBeNull();
   expect(screen.queryByText("Open for new work")).toBeNull();
   expect(screen.queryByText("Finish your shop setup")).toBeNull();
+  await view.unmount();
+});
+
+it("counts listings in the chip and does not repeat them in the older board card", async () => {
+  signIn(approvedShop);
+  const unfinished = (id: string, name: string) => ({ ...listing(id, name), photos: [] });
+  (loadBoard as jest.Mock).mockResolvedValue({
+    status: "ok",
+    value: {
+      listings: [unfinished("item_a", "Flyers A5"), unfinished("item_b", "Calling cards"), unfinished("item_c", "Stickers")],
+      total: 3,
+      nextCursor: null,
+    },
+  });
+  (api.getSupplierReadiness as jest.Mock).mockResolvedValue({
+    operational: {
+      ready: false,
+      missing: [NO_LISTING],
+      listings: ["item_a", "item_b", "item_c"].map((catalogItemId) => ({
+        catalogItemId,
+        ready: false,
+        missing: [PHOTO],
+      })),
+    },
+    profileCompletion: { complete: true, missing: [], services: [] },
+  });
+
+  const view = await render(<HomeScreen />);
+
+  expect(await screen.findByText("Clients cannot be matched with your shop yet")).toBeTruthy();
+  expect(screen.getByText("3 listings need work")).toBeTruthy();
+  expect(screen.queryByText("1 step left")).toBeNull();
+  expect(screen.queryByText("3 listings are not finished")).toBeNull();
+  expect(screen.queryByText("Finish your board")).toBeNull();
+  expect(screen.queryByText("YOUR BOARD")).toBeNull();
+  await view.unmount();
+});
+
+it("keeps the board card when GRIDGO sends no verdict to draw instead", async () => {
+  signIn(approvedShop);
+  (loadBoard as jest.Mock).mockResolvedValue({
+    status: "ok",
+    value: { listings: [{ ...listing("item_a", "Flyers A5"), photos: [] }], total: 1, nextCursor: null },
+  });
+  (api.getSupplierReadiness as jest.Mock).mockResolvedValue({
+    readyForApproval: false,
+    missing: [],
+  });
+
+  const view = await render(<HomeScreen />);
+
+  expect(await screen.findByText("One listing is not finished")).toBeTruthy();
+  expect(screen.getByText("Finish your board")).toBeTruthy();
+  expect(screen.queryByText("Clients cannot be matched with your shop yet")).toBeNull();
   await view.unmount();
 });

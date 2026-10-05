@@ -1,10 +1,14 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Pressable, ScrollView, Text, View, type LayoutRectangle } from "react-native";
 
 import {
   WIZARD_STEPS,
   wizardStepIndex,
   type WizardStepId,
 } from "@/lib/listingWizard";
+
+/** The rail's own side padding (`px-2`), kept clear when scrolling to a step. */
+const RAIL_GUTTER = 8;
 
 type Props = {
   current: WizardStepId;
@@ -23,6 +27,11 @@ type Props = {
  * Current step takes the yellow underline — the one yellow the rail is allowed.
  * Completed steps go back. Future steps stay visible and only the next one
  * unlocks once this step's proceed rules pass.
+ *
+ * Seven labels fit across a 390pt phone. On a narrower one, or with larger
+ * text, the rail scrolls — so it keeps the current step and the one after it
+ * in view itself, rather than leaving "Review" clipped at the edge of the step
+ * the shop is standing on.
  */
 export function ListingWizardRail({
   current,
@@ -33,16 +42,31 @@ export function ListingWizardRail({
 }: Props) {
   const currentIndex = wizardStepIndex(current);
   const furthestIndex = wizardStepIndex(furthest);
+  const scrollRef = useRef<ScrollView>(null);
+  const [railWidth, setRailWidth] = useState(0);
+  const [frames, setFrames] = useState<Partial<Record<WizardStepId, LayoutRectangle>>>({});
+
+  useEffect(() => {
+    const here = frames[current];
+    if (!here || !railWidth) return;
+    const next = frames[WIZARD_STEPS[currentIndex + 1]?.id ?? current] ?? here;
+    // Bring the right edge of the next step (or this one, on Review) into view;
+    // never scroll past the start of the current one.
+    const x = Math.min(here.x, next.x + next.width - railWidth + RAIL_GUTTER);
+    scrollRef.current?.scrollTo({ x: Math.max(0, x), animated: true });
+  }, [current, currentIndex, frames, railWidth]);
 
   return (
     <View className="border-b border-outline-subtle bg-surface">
       <ScrollView
+        ref={scrollRef}
+        onLayout={(event) => setRailWidth(event.nativeEvent.layout.width)}
         horizontal
         showsHorizontalScrollIndicator={false}
         accessibilityRole="tablist"
         accessibilityLabel="Add a listing steps"
       >
-        <View className="flex-row px-4">
+        <View className="flex-row px-2">
           {WIZARD_STEPS.map((step, index) => {
             const selected = step.id === current;
             const completed = committed && index < currentIndex;
@@ -64,7 +88,11 @@ export function ListingWizardRail({
                 accessibilityRole="tab"
                 accessibilityState={{ selected, disabled: !tappable || selected }}
                 accessibilityLabel={step.label}
-                className="gg-touch items-center justify-center px-3"
+                onLayout={(event) => {
+                  const frame = event.nativeEvent.layout;
+                  setFrames((known) => ({ ...known, [step.id]: frame }));
+                }}
+                className="gg-touch items-center justify-center px-2"
               >
                 <Text className={labelClass}>{step.label}</Text>
                 <View

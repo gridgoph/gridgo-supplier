@@ -10,6 +10,7 @@ import {
   loadPrepSteps,
   reorderPrepSteps,
   saveListing,
+  submitForReview,
 } from "@/lib/listingsApi";
 import { useSession } from "@/store/session";
 import { usePhotoPolicy } from "@/store/photoPolicy";
@@ -47,6 +48,7 @@ jest.mock("@/lib/listingsApi", () => ({
   addGroup: jest.fn(),
   addPrepStep: jest.fn(),
   reorderPrepSteps: jest.fn(),
+  submitForReview: jest.fn(),
 }));
 
 function listingWith(overrides: Partial<Listing> = {}): Listing {
@@ -426,4 +428,152 @@ describe("the listing editor", () => {
     expect(saveListing).toHaveBeenCalledWith(expect.objectContaining({ version: 7 }), expect.objectContaining({ basePriceMinor: 15000 }));
   });
 
+});
+
+/** A finished listing: everything review asks for, including a required spec. */
+function finishedListing(overrides: Partial<Listing> = {}): Listing {
+  return listingWith({
+    subcategoryCode: "flyers",
+    basePriceMinor: 40000,
+    fileFormatMode: "override",
+    formatCodes: ["pdf"],
+    photos: [{ fileId: "file_1", sortOrder: 0, altText: null, downloadUrl: null, downloadUrlExpiresAt: null }],
+    groups: [
+      {
+        id: "grp_1",
+        name: "Size",
+        kind: "spec",
+        required: true,
+        helpText: null,
+        sortOrder: 0,
+        version: 1,
+        options: [
+          { id: "opt_1", label: "A5", priceModifierMinor: 0, priceMultiplierBps: null, active: true, sortOrder: 0 },
+        ],
+      },
+    ],
+    reviewStatus: "pending",
+    reviewReason: null,
+    reviewedAt: null,
+    hasApprovedVersion: false,
+    ...overrides,
+  });
+}
+
+describe("the listing editor under review and take-down", () => {
+  let view: Awaited<ReturnType<typeof render>> | undefined;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // The photo policies were already confirmed for this listing.
+    usePhotoPolicy.setState({ confirmed: ["sci_1"] });
+    useSheets.setState({ photoPolicy: null });
+    (loadPrepSteps as jest.Mock).mockResolvedValue({ status: "ok", value: [] });
+    useSession.setState({
+      user: {
+        id: "u1",
+        email: "shop@example.com",
+        name: "Ben",
+        role: "supplier",
+        supplierName: "PrintRight",
+        verificationStatus: "approved",
+      },
+      loading: false,
+      error: null,
+      authSource: "clerk",
+      identity: { kind: "supplier" },
+    });
+  });
+
+  afterEach(async () => {
+    await view?.unmount();
+    view = undefined;
+  });
+
+  it("shows a take-down as Taken down by GRIDGO, with the reason and when, and no way back up", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({
+      status: "ok",
+      value: finishedListing({
+        hasApprovedVersion: true,
+        reviewStatus: "approved",
+        suspendReason: "The sample carries a shop logo",
+        suspendedAt: "2026-10-05T13:55:00.000Z",
+      }),
+    });
+
+    view = await render(<ListingScreen />);
+
+    expect(await screen.findByText("Taken down by GRIDGO")).toBeTruthy();
+    expect(screen.getByText("The sample carries a shop logo")).toBeTruthy();
+    expect(screen.getByText(/^Taken down Oct 5, 2026/)).toBeTruthy();
+    expect(screen.queryByText("Hidden by you")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Put on the board" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Submit for review" })).toBeNull();
+  });
+
+  it("submits a sent-back listing again, putting it up in the same save", async () => {
+    const sentBack = finishedListing({
+      reviewStatus: "needs_revision",
+      reviewReason: "Show the flyer without your logo",
+      reviewedAt: "2026-10-05T02:00:00.000Z",
+    });
+    (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: sentBack });
+    (saveListing as jest.Mock).mockResolvedValue({ status: "ok", value: { ...sentBack, onTheBoard: true } });
+    (submitForReview as jest.Mock).mockResolvedValue({
+      status: "ok",
+      value: { ...sentBack, onTheBoard: true, reviewStatus: "pending", reviewReason: null },
+    });
+
+    view = await render(<ListingScreen />);
+
+    expect(await screen.findByText("Needs changes")).toBeTruthy();
+    expect(screen.getByText("What Operations asked for")).toBeTruthy();
+    expect(screen.getByText("Show the flyer without your logo")).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Submit for review" }));
+
+    await waitFor(() => expect(submitForReview).toHaveBeenCalled());
+    expect(saveListing).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "sci_1" }),
+      expect.objectContaining({ active: true }),
+    );
+    expect(await screen.findByText(/^Sent to Operations for review/)).toBeTruthy();
+  });
+
+  it("names the missing spec instead of offering a submission that would be refused", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: finishedListing({ groups: [] }) });
+
+    view = await render(<ListingScreen />);
+
+    expect(await screen.findByText("Not ready yet")).toBeTruthy();
+    const submit = screen.getByRole("button", { name: "Submit for review" });
+    expect(submit.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
+  });
+
+  it("reads Pending review once a new listing is with Operations, and only saves", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({
+      status: "ok",
+      value: finishedListing({ onTheBoard: true }),
+    });
+
+    view = await render(<ListingScreen />);
+
+    expect(await screen.findByText("Pending review")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Submit for review" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Saved" })).toBeTruthy();
+  });
+
+  it("keeps an approved listing Live while its edits wait for review", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({
+      status: "ok",
+      value: finishedListing({ onTheBoard: true, hasApprovedVersion: true, reviewStatus: "pending" }),
+    });
+
+    view = await render(<ListingScreen />);
+
+    expect(await screen.findByText("Live")).toBeTruthy();
+    expect(screen.getByText("Pending review")).toBeTruthy();
+    expect(screen.getByText(/Clients see the approved version until then/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Take it off the board" })).toBeTruthy();
+  });
 });

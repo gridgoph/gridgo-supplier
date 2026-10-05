@@ -252,6 +252,7 @@ export function stepTarget(
     case "edit_listing":
     case "edit_listing_formats":
     case "edit_listing_options":
+    case "view_listing_review":
       return listingTarget("Open this listing", catalogItemId);
     case "activate_listing":
       return listingTarget("Put it on the board", catalogItemId);
@@ -327,4 +328,25 @@ export function setupGaps(readiness: Readiness): SetupGap[] {
 /** "2 steps left", "1 step left". */
 export function stepsLeftLine(count: number): string {
   return count === 1 ? "1 step left" : `${count} steps left`;
+}
+
+function listingsWord(count: number): string {
+  return count === 1 ? "1 listing" : `${count} listings`;
+}
+
+/**
+ * The count beside "Not ready", in the same units as the card under it.
+ *
+ * When listings need work, "no listing is eligible" is not one step — the card
+ * opens it into every listing that needs fixing, so the count names those:
+ * "8 listings need work", never "1 step left" over a list of eight. Other shop
+ * steps are counted beside them ("1 step and 8 listings left"). With nothing
+ * on the listing side, it is the plain step count.
+ */
+export function notReadyCountLine(readiness: Readiness): string {
+  const listings = listingsNeedingWork(readiness).length;
+  if (!listings) return stepsLeftLine(readiness.missing.length);
+  const steps = readiness.missing.filter((step) => step.code !== NO_MATCHABLE_LISTING).length;
+  if (!steps) return listings === 1 ? "1 listing needs work" : `${listings} listings need work`;
+  return `${steps === 1 ? "1 step" : `${steps} steps`} and ${listingsWord(listings)} left`;
 }
