@@ -94,7 +94,7 @@ export function AlertCard({
         onPress={openJob}
         accessibilityRole="button"
         accessibilityLabel={`${unread ? "Unread. " : ""}${presentAlertTitle(alert)}. ${presentAlertBody(alert)}`}
-        accessibilityHint={onOpen ? "Opens the job and marks this read" : "Marks this read"}
+        accessibilityHint={onOpen ? "Opens it and marks this read" : "Marks this read"}
         // Published so a screen reader reaches both without the swipe.
         accessibilityActions={[
           ...(unread ? [{ name: "markRead", label: "Mark read" }] : []),

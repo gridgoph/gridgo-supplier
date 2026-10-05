@@ -35,7 +35,7 @@ export type WizardStepId = (typeof WIZARD_STEPS)[number]["id"];
 export const WIZARD_STEP_IDS: readonly WizardStepId[] = WIZARD_STEPS.map((step) => step.id);
 
 export const WIZARD_TITLES: Record<WizardStepId, string> = {
-  pick: "Pick printing category",
+  pick: "Pick a product type",
   about: "Describe your product",
   price: "Set your product price",
   speed: "Set your capacity & speed",

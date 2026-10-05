@@ -37,11 +37,20 @@ import {
   boardContextFor,
   boardTargets,
   gridgoNeeds,
+  hasRequiredSpec,
   needsPrinterCap,
+  reviewNeeds,
+  reviewsListings,
+  SPECS_NEEDED,
   subcategoryName,
   type Listing,
   type ListingStarter,
 } from "@/lib/listings";
+import {
+  productTypeChoices,
+  type ProductType,
+  type ProductTypeChoice,
+} from "@/lib/productTypes";
 import {
   addGroup,
   addOption,
@@ -49,6 +58,7 @@ import {
   BOARD_NOT_OPEN_YET,
   PREP_STEPS_NOT_OPEN_YET,
   createListing,
+  loadProductTypes,
   loadStarters,
   removeGroup,
   removeOption,
@@ -58,6 +68,7 @@ import {
   saveGroup,
   saveListing,
   setFileFormats,
+  submitForReview,
   type BoardOutcome,
 } from "@/lib/listingsApi";
 import { parseMoney } from "@/lib/money";
@@ -73,8 +84,10 @@ import { useListingWizard } from "@/store/listingWizard";
  * Putting something new on the board — Pick through Review.
  *
  * A new listing is always created hidden. Nothing goes up until Review →
- * Place on Board. The live editor stays one screen; this wizard is only
- * for a listing that has not been pinned yet.
+ * Submit for review, and then only once Operations approves it (a GRIDGO
+ * without listing review keeps the older Place on Board). The live editor
+ * stays one screen; this wizard is only for a listing that has not been
+ * pinned yet.
  */
 export default function NewListingScreen() {
   const { catalog, services, loading, notOpenYet, error, reload: reloadBoard } = useBoard();
@@ -91,6 +104,10 @@ export default function NewListingScreen() {
   const [starterError, setStarterError] = useState<string | null>(null);
   const [startersFor, setStartersFor] = useState<string | null>(null);
   const [printerMaxWidthFeet, setPrinterMaxWidthFeet] = useState<number | null>(null);
+  const [productTypes, setProductTypes] = useState<ProductType[] | null>(null);
+  const [typesLoading, setTypesLoading] = useState(true);
+  const [typesError, setTypesError] = useState<string | null>(null);
+  const [typeQuery, setTypeQuery] = useState("");
 
   const [listingId, setListingId] = useState<string | null>(session.listingId);
   const [step, setStep] = useState<WizardStepId>(session.listingId ? session.step : "pick");
@@ -146,7 +163,47 @@ export default function NewListingScreen() {
     () => (merged ? boardContextFor(merged, boardServices) : null),
     [merged, boardServices],
   );
-  const blockers = merged && context ? gridgoNeeds(merged, context) : [];
+  const reviewed = Boolean(merged && reviewsListings(merged));
+  // Operations reviews every new listing, and review also asks for a required spec.
+  const blockers =
+    merged && context ? (reviewed ? reviewNeeds(merged, context) : gridgoNeeds(merged, context)) : [];
+
+  const takeTypes = useCallback((result: BoardOutcome<ProductType[]>) => {
+    setTypesLoading(false);
+    if (result.status === "ok") {
+      setProductTypes(result.value);
+      setTypesError(null);
+      return;
+    }
+    // No picker on this GRIDGO yet: the chart's own coverage stands in.
+    setProductTypes(null);
+    setTypesError(result.status === "failed" ? result.message : null);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    void loadProductTypes().then((result) => {
+      if (!cancelled) takeTypes(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [takeTypes]);
+  function loadTypes() {
+    setTypesLoading(true);
+    void loadProductTypes().then(takeTypes);
+  }
+
+  const choices = useMemo(() => {
+    const all = productTypeChoices(productTypes, targets, catalog);
+    // Once the listing exists its category line is fixed; only its type may change.
+    return listingId && categoryCode
+      ? all.filter((choice) => choice.targetCategoryCode === categoryCode)
+      : all;
+  }, [catalog, categoryCode, listingId, productTypes, targets]);
+  const categoryNames = useMemo(
+    () => Object.fromEntries(targets.map((entry) => [entry.category.code, entry.category.name])),
+    [targets],
+  );
 
   useEffect(() => {
     if (!session.listingId || listingId) return;
@@ -453,6 +510,10 @@ export default function NewListingScreen() {
       return;
     }
     if (step === "steps") {
+      if (!hasRequiredSpec(merged)) {
+        setActionError(SPECS_NEEDED);
+        return;
+      }
       goTo("artwork");
       return;
     }
@@ -492,6 +553,18 @@ export default function NewListingScreen() {
     if (!(await persist(true))) {
       placingRef.current = false;
       return;
+    }
+    if (reviewed) {
+      setBusy(true);
+      const sent = await submitForReview(merged);
+      setBusy(false);
+      if (sent.status !== "ok") {
+        placingRef.current = false;
+        await reload();
+        if (sent.status === "not_open_yet") setNotOpenOnSave(BOARD_NOT_OPEN_YET);
+        else setActionError(sent.message);
+        return;
+      }
     }
     endPhotoPolicySubmission(merged.id);
     useListingWizard.getState().clear();
@@ -535,7 +608,7 @@ export default function NewListingScreen() {
     if (step === "about") return aboutBlocker(listing, working.name) == null;
     if (step === "price") return priceReady(working.price);
     if (step === "speed") return speedReady(listing, working, context);
-    if (step === "steps") return true;
+    if (step === "steps") return merged ? hasRequiredSpec(merged) : false;
     if (step === "artwork") return artworkBlocker(listing, working, context) == null;
     return blockers.length === 0;
   })();
@@ -638,7 +711,9 @@ export default function NewListingScreen() {
         : "Draft saved";
   const rightLabel =
     step === "review"
-      ? "Place on Board"
+      ? reviewed
+        ? "Submit for review"
+        : "Place on Board"
       : creating
         ? "Opening…"
         : "Proceed";
@@ -671,7 +746,13 @@ export default function NewListingScreen() {
       onRight={() => void (step === "review" ? placeOnBoard() : proceed())}
       footNote={step === "review" && blockers.length ? blockers[0] : null}
       busy={busy || creating}
-      busyLabel={creating ? "Opening your listing…" : "Saving your listing…"}
+      busyLabel={
+        creating
+          ? "Opening your listing…"
+          : step === "review" && reviewed
+            ? "Sending it to Operations…"
+            : "Saving your listing…"
+      }
       preview={
         showPreview && merged ? (
           <ClientPreviewCard
@@ -688,8 +769,13 @@ export default function NewListingScreen() {
     >
       {step === "pick" ? (
         <PickStep
-          targets={targets}
-          categoryCode={categoryCode}
+          choices={choices}
+          categoryNames={categoryNames}
+          typesLoading={typesLoading}
+          typesError={typesError}
+          onRetryTypes={loadTypes}
+          query={typeQuery}
+          onQuery={setTypeQuery}
           subcategoryCode={subcategoryCode}
           printerMaxWidthFeet={
             listingId && working ? working.printerMaxWidthFeet : printerMaxWidthFeet
@@ -699,26 +785,22 @@ export default function NewListingScreen() {
           startersLoading={startersLoading}
           starterError={starterError}
           created={committed}
-          onCategory={(value) => {
-            if (listingId) return;
-            setCategoryCode(value);
-            setSubcategoryCode(null);
-            setPrinterMaxWidthFeet(null);
-            setStarterId(BLANK_STARTER);
-            setStarters([]);
-            setStarterError(null);
-          }}
-          onSubcategory={(value) => {
-            setSubcategoryCode(value);
+          onType={(choice: ProductTypeChoice) => {
+            if (listingId && choice.targetCategoryCode !== categoryCode) return;
+            if (!listingId) setCategoryCode(choice.targetCategoryCode);
+            setSubcategoryCode(choice.code);
             setPrinterMaxWidthFeet(null);
             if (working) {
               setDraft({
                 ...working,
-                subcategoryCode: value,
-                printerMaxWidthFeet: needsPrinterCap(value) ? working.printerMaxWidthFeet : null,
+                subcategoryCode: choice.code,
+                printerMaxWidthFeet: needsPrinterCap(choice.code) ? working.printerMaxWidthFeet : null,
               });
             }
           }}
+          onRequestType={(name) =>
+            router.push({ pathname: "/shop/request-type", params: name ? { name } : {} })
+          }
           onPrinterCap={(value) => {
             setPrinterMaxWidthFeet(value);
             if (working) setDraft({ ...working, printerMaxWidthFeet: value });
@@ -834,6 +916,7 @@ export default function NewListingScreen() {
 
       {step === "review" && listing && merged && context ? (
         <ReviewStep
+          reviewed={reviewed}
           listing={merged}
           catalog={boardCatalog}
           services={boardServices}

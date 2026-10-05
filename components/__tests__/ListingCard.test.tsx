@@ -81,7 +81,7 @@ describe("listing standing chips", () => {
     const hiddenView = await render(
       <ListingCard listing={hidden} catalog={null} services={[]} shopApproved onPress={() => undefined} />,
     );
-    expect(screen.getByText("Hidden")).toBeTruthy();
+    expect(screen.getByText("Hidden by you")).toBeTruthy();
     await hiddenView.unmount();
 
     const unfinishedView = await render(
@@ -95,5 +95,81 @@ describe("listing standing chips", () => {
     );
     expect(screen.getByText("Waiting for shop approval")).toBeTruthy();
     await waitingView.unmount();
+  });
+});
+
+describe("review and take-down on the wall", () => {
+  const spec: Listing["groups"][number] = {
+    id: "grp_1",
+    name: "Size",
+    kind: "spec",
+    required: true,
+    helpText: null,
+    sortOrder: 0,
+    version: 1,
+    options: [
+      { id: "opt_1", label: "2 x 3 ft", priceModifierMinor: 0, priceMultiplierBps: null, active: true, sortOrder: 0 },
+    ],
+  };
+  const reviewed: Listing = {
+    ...listing,
+    groups: [spec],
+    reviewStatus: "pending",
+    reviewReason: null,
+    reviewedAt: null,
+    hasApprovedVersion: false,
+  };
+
+  it("draws Taken down by GRIDGO and the reason on the tile, never Hidden", async () => {
+    const view = await render(
+      <ListingCard
+        listing={{ ...reviewed, onTheBoard: false, hasApprovedVersion: true, reviewStatus: "approved", suspendReason: "Logo on the sample" }}
+        catalog={null}
+        services={[]}
+        shopApproved
+        onPress={() => undefined}
+      />,
+    );
+    expect(screen.getByText("Taken down by GRIDGO")).toBeTruthy();
+    expect(screen.getByText("Reason: Logo on the sample")).toBeTruthy();
+    expect(screen.queryByText("Hidden by you")).toBeNull();
+    await view.unmount();
+  });
+
+  it("draws Pending review on a new listing and Needs changes with the reason when sent back", async () => {
+    const pending = await render(
+      <ListingCard listing={reviewed} catalog={null} services={[]} shopApproved onPress={() => undefined} />,
+    );
+    expect(screen.getByText("Pending review")).toBeTruthy();
+    expect(screen.queryByText("Live")).toBeNull();
+    await pending.unmount();
+
+    const sentBack = await render(
+      <ListingRow
+        listing={{ ...reviewed, reviewStatus: "needs_revision", reviewReason: "Crop out the watermark" }}
+        catalog={null}
+        services={[]}
+        shopApproved
+        onPress={() => undefined}
+      />,
+    );
+    expect(screen.getByText("Needs changes")).toBeTruthy();
+    expect(screen.getByText("Reason: Crop out the watermark")).toBeTruthy();
+    await sentBack.unmount();
+  });
+
+  it("keeps an approved listing Live beside its pending changes", async () => {
+    const view = await render(
+      <ListingCard
+        listing={{ ...reviewed, hasApprovedVersion: true }}
+        catalog={null}
+        services={[]}
+        shopApproved
+        onPress={() => undefined}
+      />,
+    );
+    expect(screen.getByText("Live")).toBeTruthy();
+    expect(screen.getByText("Pending review")).toBeTruthy();
+    await view.unmount();
   });
 });

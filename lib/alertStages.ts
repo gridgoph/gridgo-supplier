@@ -1,5 +1,6 @@
 import type { Notification, Order } from "@/lib/api";
 import { presentPickupIssueNotice } from "@/lib/pickupCheck";
+import { presentListingAlert } from "@/lib/listingReview";
 import { presentLapseAlert } from "@/lib/productionLapse";
 import { presentRefundAlert } from "@/lib/refund";
 import { presentRescheduleAlert } from "@/lib/reschedule";
@@ -15,7 +16,8 @@ export const PICKUP_ISSUE_ALERT = "shop_pickup_issue_changed";
  * (`lib/refund.ts`). A late-production notice carries a raw timestamp
  * (`lib/productionLapse.ts`). A job a shop let go and a deadline request both
  * arrive in words written for the client (`lib/shopRecovery.ts`,
- * `lib/reschedule.ts`).
+ * `lib/reschedule.ts`). A listing review or take-down notice is said in the
+ * board's words (`lib/listingReview.ts`).
  */
 export function presentAlertBody(alert: Pick<Notification, "type" | "body">): string {
   const rewritten = rewrite(alert);
@@ -33,7 +35,8 @@ function rewrite(alert: Pick<Notification, "type" | "body">): { title: string; b
     presentRefundAlert(alert) ??
     presentLapseAlert(alert) ??
     presentShopRecoveryAlert(alert) ??
-    presentRescheduleAlert(alert)
+    presentRescheduleAlert(alert) ??
+    presentListingAlert(alert)
   );
 }
 

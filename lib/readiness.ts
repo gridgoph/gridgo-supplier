@@ -252,6 +252,7 @@ export function stepTarget(
     case "edit_listing":
     case "edit_listing_formats":
     case "edit_listing_options":
+    case "view_listing_review":
       return listingTarget("Open this listing", catalogItemId);
     case "activate_listing":
       return listingTarget("Put it on the board", catalogItemId);

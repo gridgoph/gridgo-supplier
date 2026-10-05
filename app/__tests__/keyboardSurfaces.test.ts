@@ -61,6 +61,8 @@ const HANDLED_BY_ITS_CALLERS = [
   "components/listing/wizard/SpeedStep.tsx",
   "components/listing/wizard/StepsStep.tsx",
   "components/listing/wizard/ArtworkStep.tsx",
+  "components/listing/ProductTypeGrid.tsx",
+  "components/listing/wizard/PickStep.tsx",
 ];
 
 /**
@@ -93,6 +95,9 @@ const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
   { component: "SpeedStep", users: /<SpeedStep\b/, least: 1 },
   { component: "StepsStep", users: /<StepsStep\b/, least: 1 },
   { component: "ArtworkStep", users: /<ArtworkStep\b/, least: 1 },
+  // The product-type search sits in the Pick step, inside the wizard shell.
+  { component: "ProductTypeGrid", users: /<ProductTypeGrid\b/, least: 1 },
+  { component: "PickStep", users: /<PickStep\b/, least: 1 },
 ];
 
 describe("every field a shop types into sits in a keyboard-aware surface", () => {

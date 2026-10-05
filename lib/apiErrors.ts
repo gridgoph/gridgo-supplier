@@ -179,6 +179,15 @@ const MESSAGES: Record<string, string> = {
     "A step holds twenty options. Remove one before adding another.",
   catalog_item_in_use:
     "A client has already ordered from this listing, so it is kept for that job's history. Hide it instead of removing it.",
+  listing_suspended:
+    "GRIDGO took this listing down, so it cannot go back on the board from here. Only GRIDGO can put it back. Your other changes still save.",
+  listing_incomplete:
+    "This listing is not finished yet, so Operations cannot review it. The listing screen says what is still missing.",
+  listing_already_approved:
+    "Operations has already approved this listing. Change it and your changes go to Operations by themselves.",
+  name_required: "Name the product type, in 120 characters or fewer.",
+  description_required: "Say what the product type is, in 2,000 characters or fewer.",
+  categoryCode_required: "Choose which of your categories it belongs under.",
 
   // The shop's own details.
   invalid_supplier_profile:
@@ -192,6 +201,18 @@ const MESSAGES: Record<string, string> = {
   email_not_editable:
     "Your email belongs to your GRIDGO sign-in, so it cannot be changed here. Change it where you sign in and it changes here too.",
 };
+
+/**
+ * The completeness codes a refused review submission names
+ * (`409 listing_incomplete` → `blockers`). `lib/listings.ts` says them in words.
+ */
+export function apiErrorBlockers(error: unknown): string[] {
+  if (apiErrorCode(error) !== "listing_incomplete" || !(error instanceof ApiError)) return [];
+  const body = error.body as { blockers?: unknown };
+  return Array.isArray(body.blockers)
+    ? body.blockers.filter((code): code is string => typeof code === "string")
+    : [];
+}
 
 /**
  * A route this deployment does not have yet — distinct from a missing job.

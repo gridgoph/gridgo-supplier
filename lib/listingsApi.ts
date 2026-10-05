@@ -1,5 +1,5 @@
 import * as api from "@/lib/api";
-import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import { apiErrorBlockers, humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { fileFormatName } from "@/data/fileFormats";
 import { invalidate } from "@/lib/live";
 import {
@@ -9,6 +9,7 @@ import {
   normalizeBoardPage,
   normalizePrepSteps,
   normalizeStarters,
+  presentGridgoCode,
   printerMaxWidthFeetForPayload,
   type BoardPage,
   type Listing,
@@ -16,6 +17,13 @@ import {
   type PrepStep,
   type SpecGroup,
 } from "@/lib/listings";
+import {
+  normalizeProductTypeRequest,
+  normalizeProductTypeRequests,
+  normalizeProductTypes,
+  type ProductType,
+  type ProductTypeRequest,
+} from "@/lib/productTypes";
 
 /**
  * The board, against a GRIDGO that may not have every part of it yet.
@@ -569,4 +577,69 @@ export async function loadStarters(
   return attempt("load GRIDGO starters", async () =>
     normalizeStarters(await api.listListingStarters(subcategoryCode)),
   );
+}
+
+/* --------------------------------------------------------------------------
+   Review and product types
+   -------------------------------------------------------------------------- */
+
+/**
+ * Send a listing to Operations for review.
+ *
+ * Read fresh first: the save that comes just before this one moves the
+ * version, and a submission built on the old one would be refused as stale.
+ * A refusal for an unfinished listing names the first thing it lacks, in the
+ * same words the editor uses.
+ */
+export async function submitForReview(listing: Listing): Promise<BoardOutcome<Listing>> {
+  const fresh = await loadListing(listing.id);
+  if (fresh.status !== "ok") return fresh;
+  try {
+    const submitted = normalizeListing(
+      await api.submitCatalogItem(fresh.value.id, fresh.value.version),
+    );
+    invalidate("catalog");
+    return submitted ? { status: "ok", value: submitted } : { status: "failed", message: UNREADABLE_LISTING };
+  } catch (error) {
+    if (isRouteAbsent(error)) return { status: "not_open_yet" };
+    const blockers = apiErrorBlockers(error);
+    if (blockers.length) {
+      return { status: "failed", message: presentGridgoCode(blockers[0], fresh.value) };
+    }
+    return {
+      status: "failed",
+      message: humanizeApiError(error, offlineMessage("send this listing for review")),
+    };
+  }
+}
+
+/** Every product type GRIDGO lists. A missing route means the picker falls back to the chart. */
+export async function loadProductTypes(): Promise<BoardOutcome<ProductType[]>> {
+  return attempt("load product types", async () =>
+    normalizeProductTypes(await api.listProductTypes()),
+  );
+}
+
+export async function loadProductTypeRequests(): Promise<BoardOutcome<ProductTypeRequest[]>> {
+  return attempt("load your requests", async () =>
+    normalizeProductTypeRequests(await api.listProductTypeRequests()),
+  );
+}
+
+export async function requestProductType(input: {
+  categoryCode: string;
+  name: string;
+  description: string;
+}): Promise<BoardOutcome<ProductTypeRequest>> {
+  return attempt("send your request", async () => {
+    const request = normalizeProductTypeRequest(
+      await api.createProductTypeRequest({
+        categoryCode: input.categoryCode,
+        name: input.name.trim(),
+        description: input.description.trim(),
+      }),
+    );
+    if (!request) throw new api.ApiError(502, { error: "unreadable" });
+    return request;
+  });
 }

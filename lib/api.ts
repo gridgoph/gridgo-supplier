@@ -466,6 +466,8 @@ export type Notification = {
   type?: string;
   /** Set when the alert is about a job. */
   orderId?: string;
+  /** Set when a Super Admin took one listing down. */
+  catalogItemId?: string;
   title: string;
   body: string;
   /** Current job title, when the alert is about a job the caller can see. */
@@ -1644,6 +1646,44 @@ export async function listListingStarters(subcategoryCode: string): Promise<unkn
   return request<unknown>(
     `/listing-starters?subcategoryCode=${encodeURIComponent(subcategoryCode)}`,
   );
+}
+
+/*
+  Listing review (gridgo-api `docs/SUPPLIER_CATALOG_API.md#listing-review-and-product-type-picker`).
+  Read only through `lib/productTypes.ts` and `lib/listings.ts`.
+*/
+
+/** Every active product type, with one approved sample and its starters. Answers `{ productTypes }`. */
+export async function listProductTypes(): Promise<unknown> {
+  return request<unknown>("/me/product-types");
+}
+
+/** Send a listing to Operations. Validates completeness; answers `{ item }`. */
+export async function submitCatalogItem(
+  itemId: string,
+  version: number | null,
+): Promise<unknown> {
+  return request<unknown>(`/me/catalog-items/${encodeURIComponent(itemId)}/submit`, {
+    method: "POST",
+    ...versioned(version, {}),
+  });
+}
+
+/** Ask Operations for a product type GRIDGO does not list. Answers `201 { request }`. */
+export async function createProductTypeRequest(body: {
+  categoryCode: string;
+  name: string;
+  description: string;
+}): Promise<unknown> {
+  return request<unknown>("/me/product-type-requests", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** This shop's own product-type requests. Answers `{ requests, nextCursor }`. */
+export async function listProductTypeRequests(): Promise<unknown> {
+  return request<unknown>("/me/product-type-requests");
 }
 
 /* --------------------------------------------------------------------------

@@ -16,13 +16,13 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { AddGroupButton, SpecGroupEditor } from "@/components/SpecGroupEditor";
 import { AddPrepStepButton, PrepStepRow } from "@/components/PrepStepEditor";
-import { StatusChip } from "@/components/StatusChip";
 import { ChipMultiSelect } from "@/components/ChipMultiSelect";
 import { FormatPlusField } from "@/components/FormatPlusField";
 import { MoneyField } from "@/components/controls/MoneyField";
 import { NoteField } from "@/components/controls/NoteField";
 import { OptionList } from "@/components/controls/OptionList";
 import { DestinationRow } from "@/components/listing/DestinationRow";
+import { ListingStandingPanel } from "@/components/listing/ListingStandingPanel";
 import { ListingSection as Section } from "@/components/listing/ListingSection";
 import { PrinterCapField } from "@/components/listing/PrinterCapField";
 import { SampleStrip } from "@/components/listing/SampleStrip";
@@ -52,6 +52,7 @@ import {
 import {
   addOns,
   asksQuantity,
+  awaitsFirstApproval,
   boardContextFor,
   boardStanding,
   editorGuidance,
@@ -65,6 +66,7 @@ import {
   priceLine,
   unitChoiceLabel,
   readyInLine,
+  reviewNeeds,
   specs,
   subcategoryName,
   type Listing,
@@ -85,8 +87,10 @@ import {
   saveGroup,
   saveListing,
   setFileFormats,
+  submitForReview,
   type BoardOutcome,
 } from "@/lib/listingsApi";
+import { listingFoot, SUBMITTED_NOTICE } from "@/lib/listingReview";
 import { linkFileOptions, uploadedFileOptions } from "@/lib/fileFormatResolve";
 import { parseMoney } from "@/lib/money";
 import { resolveCategoryCode } from "@/lib/taxonomy";
@@ -197,15 +201,29 @@ export default function ListingScreen() {
     () => (merged ? boardContextFor(merged, services) : null),
     [merged, services],
   );
-  const blockers = merged && context ? gridgoNeeds(merged, context) : [];
+  // A listing waiting for its first approval also needs a required spec.
+  const blockers =
+    merged && context
+      ? awaitsFirstApproval(merged)
+        ? reviewNeeds(merged, context)
+        : gridgoNeeds(merged, context)
+      : [];
   const extras = merged && context ? editorGuidance(merged, context) : [];
   // GRIDGO's matching verdict for the saved listing, when this API sends one.
   const { readiness } = useReadiness();
   const verdict = id ? listingReadinessFor(readiness, id) : null;
   const standing = merged && context ? boardStanding(merged, context, approved, verdict) : null;
+  const foot = merged && context ? listingFoot(merged, context) : null;
   // Hidden is the foot's "Put on the board"; every other step is listed.
   const verdictSteps =
-    verdict && !verdict.ready ? verdict.missing.filter((step) => step.code !== "item_inactive") : [];
+    verdict && !verdict.ready
+      ? verdict.missing.filter(
+          (step) =>
+            step.code !== "item_inactive" &&
+            step.code !== "listing_not_approved" &&
+            step.code !== "listing_suspended",
+        )
+      : [];
 
   /** Every write goes through here, so one failure sentence has one home. */
   const run = useCallback(
@@ -306,6 +324,35 @@ export default function ListingScreen() {
     }
     if (policy !== "confirmed") return;
     if (await persist(true)) endPhotoPolicySubmission(listing.id);
+  }
+
+  /**
+   * Save, then send it to Operations.
+   *
+   * A listing no client has seen is put up in the same save — submitting is
+   * the shop asking for it to be seen, and Operations' approval is what then
+   * shows it. An approved listing's own switch is left where it is.
+   */
+  async function submit(firstApproval: boolean) {
+    if (!listing) return;
+    const policy = await ensurePhotoPolicy(listing, "submit");
+    if (policy === "check_photos") {
+      void persistThen(() => router.push({ pathname: "/shop/[id]/photos", params: { id: listing.id } }));
+      return;
+    }
+    if (policy !== "confirmed") return;
+    setNotice(null);
+    if (!(await persist(firstApproval ? true : undefined))) return;
+    setBusy(true);
+    const sent = await submitForReview(listing);
+    await reload();
+    setBusy(false);
+    if (sent.status !== "ok") {
+      setActionError(sent.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : sent.message);
+      return;
+    }
+    endPhotoPolicySubmission(listing.id);
+    setNotice(SUBMITTED_NOTICE);
   }
 
   async function takeOff() {
@@ -409,7 +456,7 @@ export default function ListingScreen() {
     );
   }
 
-  if (!listing || !working || !merged || !context || !standing) {
+  if (!listing || !working || !merged || !context || !standing || !foot) {
     return (
       <View className="gg-screen gg-page justify-center">
         <EmptyState
@@ -457,11 +504,11 @@ export default function ListingScreen() {
       >
         <View className="gap-2">
           <Text className="text-body-lg font-medium text-text-primary">{priceLine(merged)}</Text>
-          <View className="flex-row">
-            <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
-          </View>
-          {standing.note ? (
-            <Text className="text-body text-text-secondary">{standing.note}</Text>
+          <ListingStandingPanel standing={standing} />
+          {notice ? (
+            <View className="gg-panel">
+              <Text className="text-body text-text-secondary">{notice}</Text>
+            </View>
           ) : null}
         </View>
 
@@ -983,15 +1030,7 @@ export default function ListingScreen() {
         {/* 9. On the board */}
         <Section title="ON THE BOARD">
           <Text className="text-body text-text-secondary">
-            {verdict?.ready
-              ? "Clients can be matched with this listing now."
-              : !merged.onTheBoard
-                ? "Hidden. Only your shop can see it."
-                : verdict
-                  ? "It is up, but clients cannot be matched with it yet."
-                  : approved
-                    ? "Clients can see this listing now."
-                    : "It is up. Clients see it as soon as Operations approves your shop."}
+            {boardSentence(merged, standing.kind === "suspended", verdict, approved)}
           </Text>
           {verdictSteps.length ? (
             /*
@@ -1063,12 +1102,6 @@ export default function ListingScreen() {
           />
         </Section>
 
-        {notice ? (
-          <View className="gg-panel mt-6">
-            <Text className="text-body text-text-secondary">{notice}</Text>
-          </View>
-        ) : null}
-
         {actionError ? (
           <View className="mt-6">
             <ErrorNotice message={actionError} />
@@ -1090,7 +1123,48 @@ export default function ListingScreen() {
         className="gg-page border-t border-outline bg-surface pt-3"
         style={{ paddingBottom: insets.bottom + spacing.md }}
       >
-        {merged.onTheBoard ? (
+        {foot.kind === "taken_down" ? (
+          <View className="gap-3">
+            <Text className="text-caption text-text-muted">
+              Your changes still save while GRIDGO has it taken down.
+            </Text>
+            <SecondaryButton
+              label={busy ? "Saving…" : dirty ? "Save changes" : "Saved"}
+              disabled={busy || !dirty}
+              onPress={() => void persist()}
+            />
+          </View>
+        ) : foot.kind === "submit" ? (
+          <View className="gap-3">
+            <PrimaryButton
+              label={busy ? "Sending…" : "Submit for review"}
+              disabled={busy || foot.blocker != null}
+              onPress={() => void submit(foot.firstApproval)}
+            />
+            {foot.blocker ? (
+              <Text className="text-caption text-text-muted">{foot.blocker}</Text>
+            ) : null}
+            {foot.onTheBoard && !foot.firstApproval ? (
+              <SecondaryButton
+                label="Take it off the board"
+                disabled={busy}
+                onPress={() => void takeOff()}
+              />
+            ) : (
+              <SecondaryButton
+                label={busy ? "Saving…" : dirty ? "Save draft" : "Draft saved"}
+                disabled={busy || !dirty}
+                onPress={() => void persist()}
+              />
+            )}
+          </View>
+        ) : foot.kind === "in_review" ? (
+          <PrimaryButton
+            label={busy ? "Saving…" : dirty ? "Save changes" : "Saved"}
+            disabled={busy || !dirty}
+            onPress={() => void persist()}
+          />
+        ) : foot.kind === "on_board" ? (
           <View className="gap-3">
             <PrimaryButton
               label={busy ? "Saving…" : dirty ? "Save changes" : "Saved"}
@@ -1128,6 +1202,25 @@ export default function ListingScreen() {
 }
 
 export { sameDraft } from "@/lib/listingDraft";
+
+/** The ON THE BOARD section's first line: who can see this listing, right now. */
+function boardSentence(
+  listing: Listing,
+  takenDown: boolean,
+  verdict: { ready: boolean } | null,
+  shopApproved: boolean,
+): string {
+  if (takenDown) return "Taken down by GRIDGO. Clients cannot see it, and only GRIDGO can put it back.";
+  if (awaitsFirstApproval(listing)) {
+    return "No client has seen it yet. It reaches clients once Operations approves it.";
+  }
+  if (verdict?.ready) return "Clients can be matched with this listing now.";
+  if (!listing.onTheBoard) return "Hidden by you. Only your shop can see it.";
+  if (verdict) return "It is up, but clients cannot be matched with it yet.";
+  return shopApproved
+    ? "Clients can see this listing now."
+    : "It is up. Clients see it as soon as Operations approves your shop.";
+}
 
 function LinkGlyph() {
   const colors = useThemeColors();

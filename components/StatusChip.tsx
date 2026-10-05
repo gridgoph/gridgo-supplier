@@ -43,6 +43,8 @@ type Props = {
   /** Say the state: "Approved", "Blocked", "Updated 3 min ago". */
   label: string;
   icon: StatusIconName;
+  /** Wrap a long label onto a second line instead of cutting it, on a narrow tile. */
+  wrap?: boolean;
 };
 
 const TONE = {
@@ -57,7 +59,7 @@ const TONE = {
  * Colour never carries meaning alone. A status is always icon + label +
  * colour, so the screen stays readable in grayscale and to a screen reader.
  */
-export function StatusChip({ tone, label, icon }: Props) {
+export function StatusChip({ tone, label, icon, wrap = false }: Props) {
   const colors = useThemeColors();
   const style = TONE[tone];
   const Icon = ICONS[icon];
@@ -74,7 +76,7 @@ export function StatusChip({ tone, label, icon }: Props) {
       <View testID="status-chip-icon">
         <Icon size={13} color={colors[style.token]} strokeWidth={2} />
       </View>
-      <Text className={`shrink text-caption ${style.text}`} numberOfLines={1}>
+      <Text className={`shrink text-caption ${style.text}`} numberOfLines={wrap ? 2 : 1}>
         {label}
       </Text>
     </View>
