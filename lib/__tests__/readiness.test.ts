@@ -10,6 +10,7 @@ import {
   listingsNeedingWork,
   liveListingCount,
   normalizeReadiness,
+  notReadyCountLine,
   setupGaps,
   stepTarget,
   type ReadinessStep,
@@ -231,6 +232,43 @@ describe("listings in a not-ready shop", () => {
     const readiness = normalizeReadiness(NOT_READY_SHOP)!;
     const entry = listingReadinessFor(readiness, "item_photo")!;
     expect(listingFixTarget(entry).label).toBe("Add a photo");
+  });
+});
+
+describe("notReadyCountLine", () => {
+  const notReady = (missing: ReadinessStep[], listings: unknown[]) =>
+    normalizeReadiness({ operational: { ready: false, missing, listings } })!;
+  const needsPhoto = (id: string) => ({ catalogItemId: id, ready: false, missing: [PHOTO] });
+
+  it("counts the listings, not one board step, when listings need work", () => {
+    const readiness = notReady(
+      [NO_LISTING],
+      ["a", "b", "c", "d", "e", "f", "g", "h"].map(needsPhoto),
+    );
+    expect(notReadyCountLine(readiness)).toBe("8 listings need work");
+    expect(notReadyCountLine(notReady([NO_LISTING], [needsPhoto("a")]))).toBe(
+      "1 listing needs work",
+    );
+  });
+
+  it("counts shop steps beside the listings", () => {
+    expect(
+      notReadyCountLine(notReady([CLOSED, NO_LISTING], [needsPhoto("a"), needsPhoto("b")])),
+    ).toBe("1 step and 2 listings left");
+    expect(
+      notReadyCountLine(notReady([APPROVAL, CLOSED, NO_LISTING], [needsPhoto("a")])),
+    ).toBe("2 steps and 1 listing left");
+  });
+
+  it("is the plain step count when no listing has work of its own", () => {
+    // No listings yet: the board step is one step, "Add a listing".
+    expect(notReadyCountLine(notReady([NO_LISTING], []))).toBe("1 step left");
+    // Listings held only by a shop gate: the fix is the shop's.
+    expect(
+      notReadyCountLine(
+        notReady([CLOSED], [{ catalogItemId: "a", ready: false, missing: [CLOSED] }]),
+      ),
+    ).toBe("1 step left");
   });
 });
 
