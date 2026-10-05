@@ -6,6 +6,7 @@ import { SkeletonBlock } from "@/components/Skeleton";
 import { OptionList } from "@/components/controls/OptionList";
 import { ListingSection } from "@/components/listing/ListingSection";
 import { PrinterCapField } from "@/components/listing/PrinterCapField";
+import { IN_HOUSE_LISTING } from "@/lib/inHouse";
 import { needsPrinterCap, type BoardTarget, type ListingStarter } from "@/lib/listings";
 
 export const BLANK_STARTER = "__blank__";
@@ -63,7 +64,7 @@ export function PickStep({
       ) : null}
 
       {target ? (
-        <ListingSection title="WHAT KIND OF WORK">
+        <ListingSection title="WHAT KIND OF WORK" hint={IN_HOUSE_LISTING}>
           <OptionList
             options={target.covers.map((cover) => ({
               value: cover.code,

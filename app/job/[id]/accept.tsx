@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { FlowScreen } from "@/components/FlowScreen";
 import { JobBrief } from "@/components/JobBrief";
+import { LATE_PRODUCTION_HREF } from "@/components/LatenessPanel";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import * as api from "@/lib/api";
@@ -12,6 +13,7 @@ import { toDayKey } from "@/lib/day";
 import { formatDeadlineFull } from "@/lib/dates";
 import { findAction } from "@/lib/jobState";
 import { payoutPlanCopy } from "@/lib/milestones";
+import { NO_SUBCONTRACTING_ACCEPT_LINE } from "@/lib/supplierTerms";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
 import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
@@ -120,6 +122,7 @@ export default function AcceptJobScreen() {
               sections={["make", "artwork", "mockup", "delivery"]}
               defaultOpen={null}
             />
+            <Text className="text-body text-text-secondary">{NO_SUBCONTRACTING_ACCEPT_LINE}</Text>
           </View>
 
           {/*
@@ -143,6 +146,25 @@ export default function AcceptJobScreen() {
               {payoutPlanCopy(job).howItReachesYou} You will see what each is worth as soon as you
               accept.
             </Text>
+          </View>
+
+          {/*
+            The one sentence a shop should hear before it commits: the date
+            below is the one it is measured against. Calm, and one tap from
+            the whole policy rather than the whole policy here.
+          */}
+          <View className="gap-1">
+            <Text className="text-body text-text-secondary">
+              Missing the ready-by time leads to a deduction from what GRIDGO still owes you on
+              this job.
+            </Text>
+            <Pressable
+              onPress={() => router.push(LATE_PRODUCTION_HREF)}
+              accessibilityRole="link"
+              className="gg-touch justify-center self-start"
+            >
+              <Text className="text-button text-brand">How late production is handled</Text>
+            </Pressable>
           </View>
 
           {closure ? (

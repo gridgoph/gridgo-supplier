@@ -229,6 +229,11 @@ export default function AccountScreen() {
               onPress={() => router.push("/payout")}
             />
             <DestinationRow
+              title="Late jobs & warnings"
+              detail="Jobs ready after their ready-by time, and any deduction"
+              onPress={() => router.push("/late-production" as Href)}
+            />
+            <DestinationRow
               title="Where you get paid"
               detail="The QR and account Operations pays your jobs to"
               onPress={() => router.push("/payout-account" as Href)}

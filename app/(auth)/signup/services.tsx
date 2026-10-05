@@ -1,11 +1,12 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Text } from "react-native";
+import { Text, View } from "react-native";
 
 import { CategoryRankList } from "@/components/CategoryRankList";
 import { OnboardingStep } from "@/components/OnboardingStep";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { PUBLISHED_CATALOG } from "@/data/serviceCatalog";
+import { IN_HOUSE_ONBOARDING } from "@/lib/inHouse";
 import { hasProblems, servicesStepProblems, stepAt } from "@/lib/onboardingSteps";
 import { promoteCategory, toggleCategory } from "@/lib/signup";
 import { useSignupDraft } from "@/store/signupDraft";
@@ -20,6 +21,10 @@ import { useSignupDraft } from "@/store/signupDraft";
  * The categories come from this app's copy of GRIDGO's published chart, because
  * the live vocabulary is behind sign-in and nobody has signed in yet. The
  * platform re-checks every code and is the authority.
+ *
+ * Each category names its products so a shop can find where its work sits, and
+ * the note above says a category is not a promise to make all of them
+ * (gridgo-supplier#99).
  */
 export default function ServicesStep() {
   const draft = useSignupDraft((s) => s.draft);
@@ -52,16 +57,25 @@ export default function ServicesStep() {
         </>
       }
     >
-      <CategoryRankList
-        categories={PUBLISHED_CATALOG.map((category) => ({
-          code: category.code,
-          name: category.name,
-          bestFor: category.audience,
-        }))}
-        value={draft.categoryCodes}
-        onToggle={(code) => patch({ categoryCodes: toggleCategory(draft.categoryCodes, code) })}
-        onPromote={(code) => patch({ categoryCodes: promoteCategory(draft.categoryCodes, code) })}
-      />
+      <View className="gap-4">
+        <View className="gg-panel gap-1">
+          <Text className="text-body font-medium text-text-primary">
+            {IN_HOUSE_ONBOARDING.title}
+          </Text>
+          <Text className="text-body text-text-secondary">{IN_HOUSE_ONBOARDING.body}</Text>
+        </View>
+        <CategoryRankList
+          categories={PUBLISHED_CATALOG.map((category) => ({
+            code: category.code,
+            name: category.name,
+            bestFor: category.audience,
+            products: category.services,
+          }))}
+          value={draft.categoryCodes}
+          onToggle={(code) => patch({ categoryCodes: toggleCategory(draft.categoryCodes, code) })}
+          onPromote={(code) => patch({ categoryCodes: promoteCategory(draft.categoryCodes, code) })}
+        />
+      </View>
     </OnboardingStep>
   );
 }

@@ -50,6 +50,16 @@ export function MilestoneList({ milestones, showDetail = false, proofReloadVersi
                 <Text className="text-caption text-text-muted">
                   {milestone.sharePercent}% of this job
                 </Text>
+                {/*
+                  The amount beside it is already net. Saying what came off,
+                  here on the part it came off, is what lets a shop see why
+                  this part is smaller than its share.
+                */}
+                {milestone.lateDeductionMinor > 0 ? (
+                  <Text className="text-caption text-text-secondary">
+                    {formatPhp(milestone.lateDeductionMinor)} off for late production
+                  </Text>
+                ) : null}
               </View>
               <View className="items-end gap-1.5">
                 {/*

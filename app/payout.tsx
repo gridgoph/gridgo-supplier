@@ -6,6 +6,7 @@ import { ChevronRight } from "lucide-react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";
+import { LATE_PRODUCTION_HREF } from "@/components/LatenessPanel";
 import { MilestoneList } from "@/components/MilestoneList";
 import { SettlementPayoutList } from "@/components/SettlementPayoutList";
 import { PayoutReceipt } from "@/components/PayoutReceipt";
@@ -187,6 +188,36 @@ export default function PayoutScreen() {
           </View>
         ) : null}
 
+        {/*
+          Said beside the figures, never subtracted from them again: every
+          amount above is already net. It opens the record that explains it.
+        */}
+        {total.lateDeductionMinor > 0 ? (
+          <Pressable
+            onPress={() => router.push(LATE_PRODUCTION_HREF)}
+            accessibilityRole="button"
+            accessibilityLabel="Late production deductions"
+            accessibilityHint="Opens your late jobs and how each deduction was worked out"
+            className="gg-touch gg-card mt-4 flex-row items-center gap-3"
+            style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+          >
+            <View className="min-w-0 flex-1 gap-0.5">
+              <View className="flex-row items-baseline justify-between gap-3">
+                <Text className="min-w-0 flex-1 text-body text-text-secondary">
+                  Taken off for late production
+                </Text>
+                <Text className="text-body-lg font-medium text-text-primary">
+                  −{api.formatPhp(total.lateDeductionMinor)}
+                </Text>
+              </View>
+              <Text className="text-caption text-text-muted">
+                Already out of the figures here. Never more than what was still owed on each job.
+              </Text>
+            </View>
+            <ChevronRight size={20} color={colors.textMuted} aria-hidden />
+          </Pressable>
+        ) : null}
+
         {months.length ? (
           <View className="mt-8 gap-3">
             <Text className="text-overline text-text-muted">WHAT GRIDGO SENT YOU</Text>
@@ -330,6 +361,11 @@ export default function PayoutScreen() {
                       ? `${api.formatPhp(row.split.releasedMinor)} released of ${api.formatPhp(row.split.totalMinor)} agreed in settlement`
                       : `${api.formatPhp(row.split.releasedMinor)} of ${api.formatPhp(row.split.totalMinor)} released`}
                   </Text>
+                  {row.split.lateDeductionMinor > 0 ? (
+                    <Text className="text-caption text-text-secondary">
+                      {api.formatPhp(row.split.lateDeductionMinor)} off for late production
+                    </Text>
+                  ) : null}
                 </View>
                 {row.holdReason === "refund" ? (
                   <StatusChip tone="warning" label="Paused" icon="clock" />

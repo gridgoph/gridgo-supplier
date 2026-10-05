@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 
 import JobWorkspaceScreen from "@/app/job/[id]/index";
 import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
-import { getFile, getOrder } from "@/lib/api";
+import { getFile, getMyProductionLapses, getOrder } from "@/lib/api";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), navigate: jest.fn() },
@@ -17,6 +17,7 @@ jest.mock("expo-router", () => ({
 jest.mock("@/lib/api", () => ({
   ...jest.requireActual("@/lib/api"),
   getOrder: jest.fn(),
+  getMyProductionLapses: jest.fn(async () => ({ lapses: [] })),
   getFile: jest.fn(async (fileId: string) => ({
     fileId,
     originalFilename: `${fileId}.jpg`,
@@ -457,5 +458,47 @@ describe("job workspace after a client refund", () => {
     expect(within(earnings).getByText("Reference SHOP-200")).toBeTruthy();
     // Nothing about the client's own refund reaches the shop.
     expect(screen.queryByText(/₱710|receiving QR|client transfer/)).toBeNull();
+  });
+});
+
+describe("job workspace late production", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("says nothing about lateness for a job with no record", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(job());
+    await render(<JobWorkspaceScreen />);
+    expect(await screen.findByText("Barangay tarpaulin")).toBeTruthy();
+    await waitFor(() => expect(getMyProductionLapses).toHaveBeenCalled());
+    expect(screen.queryByTestId("lateness-notice")).toBeNull();
+  });
+
+  it("draws this job's warning, and only this job's", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(job({ readyBy: "2026-08-10T02:00:00.000Z" }));
+    (getMyProductionLapses as jest.Mock).mockResolvedValueOnce({
+      lapses: [
+        { id: "lapse_other", orderId: "ord_9", tier: "severe", status: "warned", detectedAt: "2026-08-11T00:00:00.000Z" },
+        { id: "lapse_1", orderId: "ord_1", tier: "moderate", rateBps: 1500, status: "warning_only",
+          deadlineAt: "2026-08-10T02:00:00.000Z", detectedAt: "2026-08-10T10:00:00.000Z",
+          warnings: [{ tier: "moderate", at: "2026-08-10T10:00:00.000Z", formal: true, message: "This order missed its ready-by deadline of 2026-08-10T02:00:00.000Z." }] },
+      ],
+    });
+    await render(<JobWorkspaceScreen />);
+    const panel = await screen.findByTestId("lateness-notice");
+    expect(within(panel).getByText("Moderate lateness")).toBeTruthy();
+    expect(within(panel).getByText(/^This is a warning only/)).toBeTruthy();
+    expect(within(panel).queryByText(/T02:00/)).toBeNull();
+    expect(screen.queryByText("Severe lateness")).toBeNull();
+  });
+
+  it("keeps the job readable when GRIDGO has no lapse route", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(job());
+    (getMyProductionLapses as jest.Mock).mockRejectedValueOnce(
+      new (jest.requireActual("@/lib/api").ApiError)(404, { error: "not_found" }),
+    );
+    await render(<JobWorkspaceScreen />);
+    expect(await screen.findByText("Barangay tarpaulin")).toBeTruthy();
+    expect(screen.queryByTestId("lateness-notice")).toBeNull();
   });
 });

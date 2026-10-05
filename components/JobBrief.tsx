@@ -226,6 +226,13 @@ function SectionBody({
                 {formatPhp(milestones.reduce((sum, stage) => sum + stage.amountMinor, 0))}.
               </Text>
             ) : null}
+            {/* The parts are net of a late-production deduction; say so beside the total. */}
+            {split.lateDeductionMinor > 0 ? (
+              <Text className="text-caption text-text-muted">
+                After {formatPhp(split.lateDeductionMinor)} came off for late production, out of your
+                original {formatPhp(split.totalMinor + split.lateDeductionMinor)}.
+              </Text>
+            ) : null}
             <View className="gg-divider" />
             <MilestoneList milestones={milestones} showDetail proofReloadVersion={proofReloadVersion} />
             <SettlementPayoutList payouts={settlementPayouts} showDetail />
