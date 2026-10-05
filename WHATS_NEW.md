@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.142 (New feature)
+
+- Signing up shows each category's products. You make only what your own shop produces, and never pass a job on.
+- A late job now explains its lateness tier and any deduction, and Account lists your late jobs.
+
 ## 1.0.137 (New feature)
 
 - Before a listing goes up, a quick check shows that sample photos must have no watermark, logo or shop name.
