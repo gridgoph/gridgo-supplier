@@ -6,18 +6,20 @@ import type { BoardStanding } from "@/lib/listings";
 /**
  * A listing's state as chips: the state itself, and beside it a revision that
  * is with Operations while clients keep the approved version ("Live" and
- * "Pending review"). Wraps rather than truncates, so a long label never hides
- * the second chip on a narrow tile.
+ * "Pending review"). A long label wraps rather than truncates: on a half-width
+ * tile "Taken down by GRIDGO" cut to "Taken down by G…" no longer says whose
+ * decision it was.
  */
 export function StandingChips({ standing }: { standing: BoardStanding }) {
   return (
     <View className="flex-row flex-wrap gap-1.5">
-      <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} />
+      <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} wrap />
       {standing.revision ? (
         <StatusChip
           tone={standing.revision.tone}
           icon={standing.revision.icon}
           label={standing.revision.label}
+          wrap
         />
       ) : null}
     </View>

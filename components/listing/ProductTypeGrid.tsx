@@ -6,7 +6,6 @@ import { CropMarkFrame } from "@/components/CropMarkFrame";
 import { DestinationRow } from "@/components/listing/DestinationRow";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
-import { singleLineFieldTextStyle } from "@/constants/theme";
 import { useThemeColors } from "@/hooks/useTheme";
 import { notificationImageUrl } from "@/lib/api";
 import { photoViewUrl } from "@/lib/listings";
@@ -87,7 +86,7 @@ export function ProductTypeGrid({
   return (
     <View className="gap-4">
       {locked ? null : (
-        <View className="gg-field flex-row items-center gap-2 px-3">
+        <View className="h-12 flex-row items-center rounded-field border border-outline bg-surface pl-3 pr-3">
           <Search size={18} color={colors.textMuted} strokeWidth={2} aria-hidden />
           <TextInput
             value={query}
@@ -97,8 +96,9 @@ export function ProductTypeGrid({
             accessibilityLabel="Search product types"
             autoCorrect={false}
             returnKeyType="search"
+            autoCapitalize="none"
             className="min-w-0 flex-1 text-body text-text-primary"
-            style={singleLineFieldTextStyle}
+            style={SEARCH_TEXT}
           />
         </View>
       )}
@@ -224,6 +224,15 @@ function TypeTile({
     </Pressable>
   );
 }
+
+/** The board's own search field geometry: the row holds the glyph and the leading padding. */
+const SEARCH_TEXT = {
+  paddingStart: 8,
+  paddingEnd: 0,
+  paddingVertical: 0,
+  includeFontPadding: false,
+  textAlignVertical: "center",
+} as const;
 
 /** "Business & Store Signages" → "BS". The placeholder for a type with no sample yet. */
 export function initials(name: string): string {
