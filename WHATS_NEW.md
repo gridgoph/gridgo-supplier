@@ -21,6 +21,13 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.148 (New feature)
+
+- Home counts the listings that need work and lists them once. The add-a-listing steps keep Review in view.
+- New jobs show your hour to answer, and you can cancel an accepted job or ask the client once for a new deadline.
+- Pick what you list from a grid of product types; new listings go to Operations for review before clients see them.
+- A late job that is on hold no longer tells you to finish it, and a job you let go no longer shows a late card.
+
 ## 1.0.142 (New feature)
 
 - Signing up shows each category's products. You make only what your own shop produces, and never pass a job on.
