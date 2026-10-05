@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react-nativ
 import JobWorkspaceScreen from "@/app/job/[id]/index";
 import RequestDeadlineScreen from "@/app/job/[id]/reschedule";
 import type { Order, RescheduleRequest } from "@/lib/api";
-import { ApiError, getOrder, requestNewDeadline } from "@/lib/api";
+import { ApiError, getMyProductionLapses, getOrder, requestNewDeadline } from "@/lib/api";
 import { askConfirm, askDate } from "@/store/sheets";
 import { router } from "expo-router";
 
@@ -131,6 +131,36 @@ describe("the deadline request on a job", () => {
     expect(screen.getAllByText("Paused").length).toBeGreaterThan(0);
     expect(screen.queryByTestId("job-action-bar")).toBeNull();
     expect(screen.queryByText("Cancel this job")).toBeNull();
+  });
+});
+
+describe("a late job that is held", () => {
+  const severe = {
+    lapses: [
+      { id: "lapse_1", orderId: "ord_1", tier: "severe", rateBps: 3000, status: "warned", deadlineAt: READY_BY,
+        detectedAt: "2099-08-12T01:00:00.000Z", reassignmentEligible: true },
+    ],
+  };
+
+  it("keeps the late card but does not tell a paused shop to finish the job", async () => {
+    (getMyProductionLapses as jest.Mock).mockResolvedValueOnce(severe);
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({ rescheduleRequest: request({ status: "declined", resolution: "rematch_offered", workHeld: true }) }),
+    );
+    await render(<JobWorkspaceScreen />);
+    expect(await screen.findByTestId("lateness-notice")).toBeTruthy();
+    expect(screen.getByText(/^Work on this job is on hold, so there is nothing to finish for now/)).toBeTruthy();
+    expect(screen.queryByText(/Finish the job and mark it ready/)).toBeNull();
+  });
+
+  it("draws no late card on a job the shop let go", async () => {
+    (getMyProductionLapses as jest.Mock).mockResolvedValueOnce(severe);
+    (getOrder as jest.Mock).mockResolvedValue(job({ shopRecovery: { id: "rec_1", status: "awaiting_client" } }));
+    await render(<JobWorkspaceScreen />);
+    await waitFor(() => expect(getMyProductionLapses).toHaveBeenCalled());
+    expect(await screen.findByText(/Leave the job as it is/)).toBeTruthy();
+    expect(screen.queryByTestId("lateness-notice")).toBeNull();
+    expect(screen.queryByText(/Finish the job and mark it ready/)).toBeNull();
   });
 });
 

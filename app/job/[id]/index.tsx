@@ -146,7 +146,8 @@ export default function JobWorkspaceScreen() {
   const counterIssue = check && check.stage !== "passed" && refundStanding(job) === "none" ? check : null;
   // GRIDGO's late-production record for this job, if it has one.
   const lapse = lapseForOrder(lapses.lapses, job.id);
-  const lateness = lapse ? lapseNotice(lapse, job) : null;
+  // A held job's late card yields its next step to the hold; a job the shop let go has no late card here.
+  const lateness = lapse && !release ? lapseNotice(lapse, job, undefined, requestStopped || refundStanding(job) !== "none") : null;
 
   const canAskForTime = canRequestNewDeadline(job);
   const canCancel = canCancelJob(job);

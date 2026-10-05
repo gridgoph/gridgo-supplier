@@ -246,8 +246,17 @@ type LapseOrder = Pick<Order, "readyBy" | "readyAt" | "productionReassignmentEli
  *
  * `now` only matters while the job is unfinished: how late it is keeps
  * growing until the shop marks it ready, and then it is fixed.
+ *
+ * `held` is a job the shop has been told to stop — a declined deadline, a
+ * refund. The record still stands, but "finish the job" would contradict the
+ * hold drawn above it, so the next step yields to it.
  */
-export function lapseNotice(lapse: ProductionLapse, order: LapseOrder, now: Date = new Date()): LapseNotice {
+export function lapseNotice(
+  lapse: ProductionLapse,
+  order: LapseOrder,
+  now: Date = new Date(),
+  held = false,
+): LapseNotice {
   const definition = tierDefinition(lapse.tier);
   const finished = Boolean(order.readyAt);
   const deadline = Date.parse(lapse.deadlineAt);
@@ -333,7 +342,9 @@ export function lapseNotice(lapse: ProductionLapse, order: LapseOrder, now: Date
         ? "Nothing more is needed from your shop on this."
         : finished
           ? "If something outside your shop caused the delay, tell Operations from this job."
-          : "Finish the job and mark it ready. If something outside your shop is holding it up, tell Operations now.",
+          : held
+            ? "Work on this job is on hold, so there is nothing to finish for now. Follow the note above; this record stays as it is."
+            : "Finish the job and mark it ready. If something outside your shop is holding it up, tell Operations now.",
   };
 }
 
