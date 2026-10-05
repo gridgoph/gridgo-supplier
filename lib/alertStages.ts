@@ -2,6 +2,8 @@ import type { Notification, Order } from "@/lib/api";
 import { presentPickupIssueNotice } from "@/lib/pickupCheck";
 import { presentLapseAlert } from "@/lib/productionLapse";
 import { presentRefundAlert } from "@/lib/refund";
+import { presentRescheduleAlert } from "@/lib/reschedule";
+import { presentShopRecoveryAlert } from "@/lib/shopRecovery";
 
 /** The alert type a failed or resolved counter check reaches the shop as. */
 export const PICKUP_ISSUE_ALERT = "shop_pickup_issue_changed";
@@ -11,17 +13,28 @@ export const PICKUP_ISSUE_ALERT = "shop_pickup_issue_changed";
  * the platform's check codes, which must not reach a shop's screen, and a
  * client refund notice arrives in words written for the client and Operations
  * (`lib/refund.ts`). A late-production notice carries a raw timestamp
- * (`lib/productionLapse.ts`).
+ * (`lib/productionLapse.ts`). A job a shop let go and a deadline request both
+ * arrive in words written for the client (`lib/shopRecovery.ts`,
+ * `lib/reschedule.ts`).
  */
 export function presentAlertBody(alert: Pick<Notification, "type" | "body">): string {
-  const refund = presentRefundAlert(alert) ?? presentLapseAlert(alert);
-  if (refund) return refund.body;
+  const rewritten = rewrite(alert);
+  if (rewritten) return rewritten.body;
   return alert.type === PICKUP_ISSUE_ALERT ? presentPickupIssueNotice(alert.body) : alert.body;
 }
 
-/** An alert's title in the shop's words. Refund and late-production notices are rewritten. */
+/** An alert's title in the shop's words. */
 export function presentAlertTitle(alert: Pick<Notification, "type" | "title" | "body">): string {
-  return presentRefundAlert(alert)?.title ?? presentLapseAlert(alert)?.title ?? alert.title;
+  return rewrite(alert)?.title ?? alert.title;
+}
+
+function rewrite(alert: Pick<Notification, "type" | "body">): { title: string; body: string } | null {
+  return (
+    presentRefundAlert(alert) ??
+    presentLapseAlert(alert) ??
+    presentShopRecoveryAlert(alert) ??
+    presentRescheduleAlert(alert)
+  );
 }
 
 /**

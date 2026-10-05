@@ -1,5 +1,6 @@
 import {
   CircleCheck,
+  CirclePause,
   CircleX,
   Clock,
   Sparkles,
@@ -27,6 +28,7 @@ const ICONS = {
   "circle-check": CircleCheck,
   "triangle-alert": TriangleAlert,
   "circle-x": CircleX,
+  "circle-pause": CirclePause,
   clock: Clock,
   "square-pen": SquarePen,
   sparkles: Sparkles,

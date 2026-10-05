@@ -1,4 +1,4 @@
-import { ALERT_STAGES, stageForAlert, stageIndexForState } from "@/lib/alertStages";
+import { ALERT_STAGES, presentAlertBody, presentAlertTitle, stageForAlert, stageIndexForState } from "@/lib/alertStages";
 import type { Notification, Order } from "@/lib/api";
 
 function alert(partial: Partial<Notification> = {}): Notification {
@@ -108,5 +108,27 @@ describe("stageForAlert", () => {
 
   it("draws no track when nothing can place the alert", () => {
     expect(stageForAlert(alert({ orderId: "ord_gone", type: "something_new" }), [])).toBe(-1);
+  });
+});
+
+describe("alerts about jobs let go and deadline requests", () => {
+  it("rewrites the client's recovery words for the shop", () => {
+    const alert = {
+      type: "shop_recovery",
+      title: "Order fulfilment update",
+      body: "The original shop could not fulfil your order. A vetted replacement is available. Accept the revised date or choose a full refund.",
+    };
+    expect(presentAlertTitle(alert)).toBe("Job back with GRIDGO");
+    expect(presentAlertBody(alert)).not.toMatch(/your order/);
+  });
+
+  it("rewrites a deadline request notice", () => {
+    const alert = {
+      type: "order_reschedule_declined",
+      title: "Order deadline request",
+      body: "The client declined the revised deadline. Work and payouts are paused while the next step is resolved.",
+    };
+    expect(presentAlertTitle(alert)).toBe("New deadline declined");
+    expect(presentAlertBody(alert)).toMatch(/Pause work/);
   });
 });

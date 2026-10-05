@@ -1,9 +1,12 @@
 import type { MilestoneCode, Order, PayoutPlanVersion } from "@/lib/api";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
+import { acceptWindow } from "@/lib/acceptWindow";
 import { CURRENT_PAYOUT_PLAN, nextShopProof } from "@/lib/milestones";
 import { counterCheck, presentCheckCodes } from "@/lib/pickupCheck";
 import { needsProductionPhoto } from "@/lib/productionPhoto";
 import { presentRefundTimelineNote, refundStanding, refundStatus } from "@/lib/refund";
+import { rescheduleNotice } from "@/lib/reschedule";
+import { shopRelease } from "@/lib/shopRecovery";
 
 /**
  * Supplier-facing order state: plain labels, tones, and the steps the mobile
@@ -106,11 +109,27 @@ export function presentOrderState(state: string): StatePresentation {
 export function presentJobStatus(
   order: Pick<
     Order,
-    "state" | "title" | "timeline" | "pickupChecklist" | "pickupCountItems" | "refundHold" | "refundDisposition"
+    | "state"
+    | "title"
+    | "timeline"
+    | "pickupChecklist"
+    | "pickupCountItems"
+    | "refundHold"
+    | "refundDisposition"
+    | "shopAcceptance"
+    | "shopRecovery"
+    | "rescheduleRequest"
   >,
 ): StatePresentation {
   const refund = refundStatus(order);
   if (refund) return refund;
+  // A job the shop let go keeps its old state until the client chooses.
+  const released = shopRelease(order);
+  if (released) return released.chip;
+  // So does one the client's decline on a new deadline has stopped.
+  if (order.rescheduleRequest?.workHeld) {
+    return { label: "Paused", tone: "warning", icon: "clock" };
+  }
   if (order.state === "rider_assigned") {
     const check = counterCheck(order);
     if (check && check.stage !== "passed") {
@@ -133,8 +152,14 @@ export function presentJobStatus(
  * A refund request stops everything, proof included: GRIDGO refuses the next
  * step with `refund_fulfillment_stopped`, and a settlement closes the job.
  */
-export function actionsForJob(order: JobActionOrder): SupplierAction[] {
+export function actionsForJob(order: JobActionOrder, now: Date = new Date()): SupplierAction[] {
   if (refundStanding(order) !== "none") return [];
+  // A job the shop let go, or one a declined deadline request stopped, is held
+  // by GRIDGO while the client chooses; it refuses every step.
+  if (shopRelease(order)) return [];
+  if (order.rescheduleRequest && rescheduleNotice(order.rescheduleRequest).stopped) return [];
+  // The hour to answer has run out; GRIDGO would refuse a late acceptance.
+  if (acceptWindow(order, now).kind === "expired") return [];
   const state = order.state;
   const owed = nextShopProof(order as Order);
   // Packing waits on a photo, and a proof filed as a picture is one.
@@ -171,11 +196,12 @@ export function actionsForJob(order: JobActionOrder): SupplierAction[] {
         {
           kind: "decline",
           label: "Decline job",
-          targetState: "approved_for_matching",
+          // Its own route, not a transition: it carries a required reason.
+          targetState: null,
           primary: false,
           destructive: true,
           consequence:
-            "The job returns to GRIDGO for rematching and is not offered to your shop again.",
+            "The job goes back to GRIDGO and is not offered to your shop again. It goes on your shop's record.",
           resultLabel: "Declined",
         },
       ];
@@ -225,7 +251,15 @@ export function actionsForJob(order: JobActionOrder): SupplierAction[] {
 /** What `actionsForJob` reads. Every field but the state may be absent on an older API. */
 export type JobActionOrder = Pick<
   Order,
-  "state" | "payoutMilestones" | "payoutHold" | "refundHold" | "refundDisposition" | "productionProgress"
+  | "state"
+  | "payoutMilestones"
+  | "payoutHold"
+  | "refundHold"
+  | "refundDisposition"
+  | "productionProgress"
+  | "shopAcceptance"
+  | "shopRecovery"
+  | "rescheduleRequest"
 >;
 
 /** Put the outstanding proof first and hand the forward step the quiet slot. */
@@ -304,8 +338,9 @@ export function journeyIndex(state: string): number {
 
 export function primaryAction(
   order: JobActionOrder,
+  now: Date = new Date(),
 ): SupplierAction | null {
-  return actionsForJob(order).find((a) => a.primary) ?? null;
+  return actionsForJob(order, now).find((a) => a.primary) ?? null;
 }
 
 /** Jobs still waiting on the supplier to accept or decline. */

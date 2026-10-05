@@ -299,6 +299,24 @@ export type Order = {
   pickupChecklist?: PickupChecklist | null;
   /** What the rider counts per line; null when GRIDGO cannot establish it. */
   pickupCountItems?: PickupCountItem[] | null;
+  /**
+   * The shop's hour to answer a new job — sixty minutes of its opening time,
+   * not of the clock (gridgo-api `docs/SHOP_RECOVERY_API.md`). Read only
+   * through `lib/acceptWindow.ts`. Absent on an older API.
+   */
+  shopAcceptance?: ShopAcceptance | null;
+  /**
+   * Set once this shop let the job go — the hour ran out, it declined, or it
+   * cancelled. The shop sees only where the client's choice stands. Read
+   * through `lib/shopRecovery.ts`.
+   */
+  shopRecovery?: ShopRecovery | null;
+  /**
+   * The one new-deadline request this job may ever carry (gridgo-api
+   * `docs/ORDER_RESCHEDULE_API.md`). Absent until the shop asks. Read through
+   * `lib/reschedule.ts`.
+   */
+  rescheduleRequest?: RescheduleRequest | null;
   timeline: {
     at: string;
     state: string;
@@ -307,6 +325,57 @@ export type Order = {
     /** Present on evidence entries. */
     fileId?: string;
   }[];
+};
+
+/**
+ * `deadlineAt` is the absolute moment the hour runs out, already walked
+ * through the shop's closed time; `workingMinutes` is how much opening time
+ * that is. `status` is `pending` until the shop answers.
+ */
+export type ShopAcceptance = {
+  assignedAt: string;
+  deadlineAt: string;
+  workingMinutes: number;
+  status: "pending" | "accepted" | ShopFailureKind;
+  acceptedAt?: string | null;
+};
+
+export type ShopFailureKind = "timed_out" | "declined" | "cancelled";
+
+export type ShopRecoveryStatus =
+  | "awaiting_client"
+  | "ops_review"
+  | "refund_requested"
+  | "refunded"
+  | "accepted";
+
+export type ShopRecovery = { id: string; status: ShopRecoveryStatus };
+
+export type RescheduleStatus = "pending" | "accepted" | "declined" | "expired" | "operations_required";
+
+export type RescheduleResolution =
+  | "rematch_offered"
+  | "no_match"
+  | "operations_required"
+  | "rematched"
+  | "refund_requested"
+  | "resolved";
+
+/** The shop's view: its own dates, never the client's padded promise. */
+export type RescheduleRequest = {
+  id: string;
+  orderId: string;
+  reason: string;
+  status: RescheduleStatus;
+  requestedAt: string;
+  /** The client's 24 hours to answer end here. */
+  expiresAt: string;
+  answeredAt: string | null;
+  resolution: RescheduleResolution | null;
+  /** True while the client's decline has stopped the work and the payout. */
+  workHeld: boolean;
+  originalReadyBy: string;
+  proposedReadyBy: string;
 };
 
 /**
@@ -1053,6 +1122,60 @@ export async function listIssues(orderId?: string): Promise<Issue[]> {
   const query = orderId ? `?orderId=${encodeURIComponent(orderId)}` : "";
   const result = await request<{ issues: Issue[] }>(`/issues${query}`);
   return result.issues;
+}
+
+/**
+ * Pass on a newly assigned job. The reason is required and goes on the shop's
+ * record (gridgo-api `docs/SHOP_RECOVERY_API.md`).
+ */
+export async function declineJob(orderId: string, reason: string): Promise<void> {
+  await request(`/orders/${orderId}/decline`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+/**
+ * Give back a job the shop already accepted, at any stage before the rider
+ * collects it. The reason is required and goes on the shop's record.
+ */
+export async function cancelJob(orderId: string, reason: string): Promise<void> {
+  await request(`/orders/${orderId}/shop-cancel`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+/**
+ * Every job this shop let go — no answer in time, declined, or cancelled —
+ * with the stage it was at. Read only through `normalizeShopFailures` in
+ * `lib/shopRecovery.ts`.
+ */
+export async function getMyShopFailures(): Promise<unknown> {
+  return request<unknown>("/me/shop-failures");
+}
+
+/**
+ * Ask the client for a later ready-by time. Once per job, during production.
+ * `proposedReadyBy` carries its timezone. Read the answer through
+ * `normalizeRescheduleRequest` in `lib/reschedule.ts`.
+ */
+export async function requestNewDeadline(
+  orderId: string,
+  body: { reason: string; proposedReadyBy: string },
+): Promise<unknown> {
+  return request<unknown>(`/orders/${orderId}/reschedule-request`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Every deadline request this shop has made, newest first, whatever the
+ * answer. Read only through `normalizeRescheduleRequests` in `lib/reschedule.ts`.
+ */
+export async function getMyRescheduleRequests(): Promise<unknown> {
+  return request<unknown>("/me/reschedule-requests");
 }
 
 /** Platform-wide settings. Read for the issue-window length, never assumed. */
