@@ -1,2 +1,2 @@
 Kind: fix
-- Job history stays open when an update has no actor information.
+- Job history stays open even when an update has missing details.
