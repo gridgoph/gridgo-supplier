@@ -307,3 +307,18 @@ describe("the release carries its What's new notes", () => {
     expect(apk).toMatch(/permissions:\s*\n\s+contents:\s*write/);
   });
 });
+
+
+describe("release push follows both successful publishes", () => {
+  it("announces the released version only on a push to main", () => {
+    const index = apkSteps.findIndex(step => step.includes("scripts/announce-release.mjs"));
+    expect(index).toBeGreaterThan(apkSteps.findIndex(step => step.includes("gh release create")));
+    const step = apkSteps[index];
+    expect(step).toMatch(/if: github.event_name == 'push' && github.ref == 'refs\/heads\/main'/);
+    expect(step).not.toMatch(/always\(\)|failure\(\)|!cancelled\(\)/);
+    expect(step).toContain("continue-on-error: true");
+    expect(step).toContain("secrets.RELEASE_ANNOUNCE_TOKEN");
+    expect(step).toContain("steps.config.outputs.version");
+    expect(step).toContain("RELEASE_APP: supplier");
+  });
+});
