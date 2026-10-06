@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.153 (Fix)
+
+- Job history stays open even when an update has missing details.
+
 ## 1.0.148 (New feature)
 
 - Home counts the listings that need work and lists them once. The add-a-listing steps keep Review in view.
