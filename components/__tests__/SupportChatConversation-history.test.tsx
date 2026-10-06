@@ -19,6 +19,10 @@ import { SupportChatConversation } from "@/components/SupportChatConversation";
 
 const mockAvoidingProps = jest.fn();
 
+jest.mock("expo-router", () => ({
+  useRouter: () => ({ back: jest.fn(), canGoBack: () => true }),
+}));
+
 jest.mock("react-native-keyboard-controller", () => {
   const { View } = require("react-native");
   return {
