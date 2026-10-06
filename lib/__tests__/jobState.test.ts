@@ -259,6 +259,13 @@ describe("job urgency helpers", () => {
 });
 
 describe("timeline presentation", () => {
+  it.each([undefined, null, 42, true, {}, [], "", "   "])(
+    "uses a neutral label when the actor is missing or malformed: %p",
+    (by) => {
+      expect(presentTimelineActor(by)).toBe("GRIDGO");
+    },
+  );
+
   it("names known actors without exposing raw ids as the only label", () => {
     expect(presentTimelineActor("user_supplier")).toBe("You");
     expect(presentTimelineActor("system")).toBe("GRIDGO");

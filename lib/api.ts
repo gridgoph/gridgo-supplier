@@ -320,7 +320,7 @@ export type Order = {
   timeline: {
     at: string;
     state: string;
-    by: string;
+    by?: string | null;
     note: string;
     /** Present on evidence entries. */
     fileId?: string;
