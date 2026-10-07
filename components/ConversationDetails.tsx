@@ -158,7 +158,7 @@ export function ConversationDetails({
             onPress={() => setSearchOpen(true)}
             accessibilityRole="button"
             accessibilityLabel="Search in conversation"
-            className="h-11 w-11 items-center justify-center rounded-full"
+            className="h-11 w-11 items-center justify-center rounded-pill"
             style={{ borderWidth: 1, borderColor: colors.outline, backgroundColor: colors.surface }}
           >
             <Search size={18} color={colors.textPrimary} strokeWidth={2} />
