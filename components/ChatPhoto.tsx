@@ -11,18 +11,23 @@ export function ChatPhoto({
   attachment: SupportChatAttachment;
   fill?: boolean;
 }) {
-  const [uri, setUri] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [result, setResult] = useState<{
+    fileId: string;
+    uri: string | null;
+    failed: boolean;
+  } | null>(null);
+  const current = result?.fileId === attachment.fileId ? result : null;
+  const uri = current?.uri;
+  const failed = current?.failed;
 
   useEffect(() => {
     let cancelled = false;
-    setFailed(false);
     void api.getDownloadUrl(attachment.fileId)
       .then((result) => {
-        if (!cancelled) setUri(result.url);
+        if (!cancelled) setResult({ fileId: attachment.fileId, uri: result.url, failed: false });
       })
       .catch(() => {
-        if (!cancelled) setFailed(true);
+        if (!cancelled) setResult({ fileId: attachment.fileId, uri: null, failed: true });
       });
     return () => {
       cancelled = true;

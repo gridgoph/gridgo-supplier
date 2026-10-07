@@ -55,8 +55,19 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<api.SupportChatMessage[]>([]);
-  const [photos, setPhotos] = useState<api.SupportChatAttachment[]>([]);
+  const [searchResult, setSearchResult] = useState<{
+    threadId: string;
+    query: string;
+    messages: api.SupportChatMessage[];
+  } | null>(null);
+  const [photoResult, setPhotoResult] = useState<{
+    threadId: string;
+    photos: api.SupportChatAttachment[];
+  } | null>(null);
+  const currentThreadId = threadId || activeId;
+  const searchResults = searchResult?.threadId === currentThreadId && searchResult?.query === query.trim()
+    ? searchResult.messages : [];
+  const photos = photoResult?.threadId === currentThreadId ? photoResult?.photos ?? [] : [];
   const [pending, setPending] = useState<Array<{ uri: string; name: string; mimeType: string }>>([]);
 
   const adopt = useCallback((next: api.SupportChatMessage[]) => {
@@ -96,6 +107,7 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
   }, [adopt, setUnreadCount, threadId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- A network read on mount: state updates land after the response.
     void load();
   }, [load]);
 
@@ -170,17 +182,17 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
 
   useEffect(() => {
     const id = threadId || activeId;
-    if (!id) {
-      setPhotos([]);
-      return;
-    }
+    if (!id) return;
     let cancelled = false;
     void api.getSupportChatThread(id, { media: true })
       .then((detail) => {
-        if (!cancelled) setPhotos(detail.messages.flatMap((message) => message.attachments ?? []));
+        if (!cancelled) setPhotoResult({
+          threadId: id,
+          photos: detail.messages.flatMap((message) => message.attachments ?? []),
+        });
       })
       .catch(() => {
-        if (!cancelled) setPhotos([]);
+        if (!cancelled) setPhotoResult({ threadId: id, photos: [] });
       });
     return () => {
       cancelled = true;
@@ -189,17 +201,14 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
 
   useEffect(() => {
     const id = threadId || activeId;
-    if (!id || !searchQuery.trim()) {
-      setSearchResults([]);
-      return;
-    }
+    if (!id || !searchQuery.trim()) return;
     let cancelled = false;
     void api.getSupportChatThread(id, { q: searchQuery })
       .then((detail) => {
-        if (!cancelled) setSearchResults(detail.messages);
+        if (!cancelled) setSearchResult({ threadId: id, query: searchQuery.trim(), messages: detail.messages });
       })
       .catch(() => {
-        if (!cancelled) setSearchResults([]);
+        if (!cancelled) setSearchResult({ threadId: id, query: searchQuery.trim(), messages: [] });
       });
     return () => {
       cancelled = true;
