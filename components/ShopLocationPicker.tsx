@@ -20,6 +20,8 @@ type Props = {
   pin: ShopPin | null;
   /** Fired on every change — a moved pin, a chosen result, a corrected label. */
   onChange: (pin: ShopPin) => void;
+  onSearchFocusChange?: (focused: boolean) => void;
+  searchPlaceholder?: string;
 };
 
 /**
@@ -34,7 +36,12 @@ type Props = {
  * delivery on the distance from the point, so moving the pin rewrites the
  * label, never the other way round.
  */
-export function ShopLocationPicker({ pin, onChange }: Props) {
+export function ShopLocationPicker({
+  pin,
+  onChange,
+  onSearchFocusChange,
+  searchPlaceholder = "Street, barangay or landmark",
+}: Props) {
   const { height } = useWindowDimensions();
   const mapHeight = Math.max(280, Math.min(480, height * 0.45));
   const colors = useThemeColors();
@@ -190,7 +197,9 @@ export function ShopLocationPicker({ pin, onChange }: Props) {
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="Street, barangay or landmark"
+              onFocus={() => onSearchFocusChange?.(true)}
+              onBlur={() => onSearchFocusChange?.(false)}
+              placeholder={searchPlaceholder}
               placeholderTextColor={colors.textMuted}
               accessibilityLabel="Search for your shop's address"
               returnKeyType="search"
