@@ -1,8 +1,16 @@
+import { Alert } from "react-native";
+import { changeShopPortrait, PORTRAIT_FAILED } from "@/lib/clerkIdentity";
+
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 import ShopDetailsScreen from "@/app/shop-details";
 import { ApiError, getSupplierProfile, updateSupplierProfile, type SupplierProfile } from "@/lib/api";
 import { useSession } from "@/store/session";
+
+jest.mock("@/lib/clerkIdentity", () => ({
+  ...jest.requireActual("@/lib/clerkIdentity"),
+  changeShopPortrait: jest.fn(),
+}));
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), back: jest.fn() },
@@ -14,7 +22,7 @@ jest.mock("expo-router", () => ({
 }));
 
 // The portrait and the way into the email change both read the Clerk account.
-// Nothing in these cases touches it, so it is a signed-in shop with no picture.
+// Each case starts as a signed-in shop with no picture.
 const mockClerkUser = {
   imageUrl: null as string | null,
   hasImage: false,
@@ -130,6 +138,43 @@ describe("the shop's own details", () => {
     expect(await screen.findByText("Add a photo")).toBeTruthy();
     expect(updateSupplierProfile).not.toHaveBeenCalled();
     await view.unmount();
+  });
+
+  it("offers camera and gallery, then lets a failed photo be tried again", async () => {
+    load();
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    (changeShopPortrait as jest.Mock).mockResolvedValueOnce({ status: "failed", message: PORTRAIT_FAILED })
+      .mockResolvedValueOnce({ status: "ok" });
+    const view = await render(<ShopDetailsScreen />);
+    await fireEvent.press(await screen.findByText("Add a photo"));
+    const choices = alert.mock.calls[0][2]!;
+    expect(choices.map((choice) => choice.text)).toEqual(["Choose from photos", "Take a photo", "Cancel"]);
+    await act(async () => { choices[1].onPress?.(); });
+    expect(changeShopPortrait).toHaveBeenLastCalledWith(mockClerkUser, "camera");
+    expect(await screen.findByText(PORTRAIT_FAILED)).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Try again"));
+    await act(async () => { alert.mock.calls[1][2]![0].onPress?.(); });
+    expect(changeShopPortrait).toHaveBeenLastCalledWith(mockClerkUser, "library");
+    expect(screen.queryByText(PORTRAIT_FAILED)).toBeNull();
+    expect(updateSupplierProfile).not.toHaveBeenCalled();
+    alert.mockRestore();
+    await view.unmount();
+  });
+
+  it("shows the saved Clerk portrait when the details screen is reopened", async () => {
+    load();
+    mockClerkUser.imageUrl = "https://images.example.test/portrait.jpg";
+    mockClerkUser.hasImage = true;
+    const first = await render(<ShopDetailsScreen />);
+    expect(await screen.findByText("Change photo")).toBeTruthy();
+    expect(screen.getByLabelText(/, shop photo$/)).toBeTruthy();
+    await first.unmount();
+    const reopened = await render(<ShopDetailsScreen />);
+    expect(await screen.findByText("Change photo")).toBeTruthy();
+    expect(screen.getByLabelText(/, shop photo$/)).toBeTruthy();
+    await reopened.unmount();
+    mockClerkUser.imageUrl = null;
+    mockClerkUser.hasImage = false;
   });
 
   // A yellow button with nothing to save is a dead control.

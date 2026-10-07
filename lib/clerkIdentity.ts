@@ -1,3 +1,4 @@
+import { File as DeviceFile } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 
 import { clerkErrorCode, clerkErrorMessage } from "@/lib/clerk";
@@ -49,43 +50,27 @@ export type PortraitOutcome =
 export const PORTRAIT_LIBRARY_REFUSED =
   "GRIDGO needs access to your photos to set a shop picture. Turn it on for this app in your phone's settings.";
 
-const PORTRAIT_FAILED =
-  "That picture could not be saved to your GRIDGO sign-in. Check this phone's connection and try again.";
+export const PORTRAIT_FAILED =
+  "Your shop photo could not be saved. Check your connection and try again.";
+
+export const PORTRAIT_CAMERA_REFUSED =
+  "GRIDGO needs access to your camera to take a shop photo. Turn it on for this app in your phone's settings.";
+
+export type PortraitSource = "library" | "camera";
 
 /**
- * What React Native can actually hand Clerk.
- *
- * Clerk sends a `file` that is a string as the raw request body under
- * `application/octet-stream`, so a `file://` path or a base64 blob of text
- * would be uploaded verbatim and stored as the picture. The other branch builds
- * a `FormData` and appends the value, which is exactly what React Native's own
- * `FormData` understands as `{ uri, name, type }`. So the descriptor is the
- * shape that works, and the cast below is the price of a type written for a
- * browser's `File`.
+ * Expo 57's fetch rejects React Native's plain { uri, name, type } descriptor.
+ * Its File implements Blob and supplies the bytes for Clerk's multipart body.
+ * A browser-picked File already does that and is passed through unchanged.
  */
-export type PortraitFile = { uri: string; name: string; type: string };
-
-export function portraitFile(asset: {
-  uri: string;
-  fileName?: string | null;
-  mimeType?: string | null;
-}): PortraitFile {
-  const type = asset.mimeType || "image/jpeg";
-  // Clerk stores the name it is given; a shop should not find "IMG_0421" is
-  // the only thing naming its own portrait.
-  const suffix = type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg";
-  return { uri: asset.uri, name: asset.fileName || `shop-portrait.${suffix}`, type };
+export function portraitFile(asset: { uri: string }): DeviceFile {
+  return new DeviceFile(asset.uri);
 }
 
-/**
- * Choose a picture and put it on the GRIDGO sign-in.
- *
- * The library, not the camera. A shop portrait is the sign outside or the last
- * good job on the rack — something already taken — and offering a live camera
- * for it would ask a shop to photograph itself while standing inside itself.
- */
+/** Choose a photo and save it in Clerk, where every app reads the portrait. */
 export async function changeShopPortrait(
   user: ClerkPortraitUser,
+  source: PortraitSource = "library",
 ): Promise<PortraitOutcome> {
   if (canPickOnWeb()) {
     let webPicked: Awaited<ReturnType<typeof pickFileOnWeb>>;
@@ -99,14 +84,21 @@ export async function changeShopPortrait(
       await user.setProfileImage({ file: webPicked.file });
       await user.reload?.();
       return { status: "ok" };
-    } catch (error) {
-      return { status: "failed", message: clerkErrorMessage(error, PORTRAIT_FAILED) };
+    } catch {
+      return { status: "failed", message: PORTRAIT_FAILED };
     }
   }
 
   let picked: ImagePicker.ImagePickerResult;
   try {
-    picked = await ImagePicker.launchImageLibraryAsync({
+    if (source === "camera") {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) return { status: "failed", message: PORTRAIT_CAMERA_REFUSED };
+    }
+    const pick = source === "camera"
+      ? ImagePicker.launchCameraAsync
+      : ImagePicker.launchImageLibraryAsync;
+    picked = await pick({
       mediaTypes: ["images"],
       allowsEditing: true,
       // The frame is a circle, so anything else is cropped by the frame rather
@@ -115,7 +107,10 @@ export async function changeShopPortrait(
       quality: 0.8,
     });
   } catch {
-    return { status: "failed", message: PORTRAIT_LIBRARY_REFUSED };
+    return {
+      status: "failed",
+      message: source === "camera" ? PORTRAIT_CAMERA_REFUSED : PORTRAIT_LIBRARY_REFUSED,
+    };
   }
 
   const asset = picked.canceled ? null : picked.assets[0];
@@ -123,14 +118,14 @@ export async function changeShopPortrait(
 
   try {
     await user.setProfileImage({
-      file: portraitFile(asset) as unknown as Blob,
+      file: portraitFile(asset),
     });
     // Clerk's own copy of the user is what every screen reads `imageUrl` from,
     // so it is re-read here rather than leaving the old picture on screen.
     await user.reload?.();
     return { status: "ok" };
-  } catch (error) {
-    return { status: "failed", message: clerkErrorMessage(error, PORTRAIT_FAILED) };
+  } catch {
+    return { status: "failed", message: PORTRAIT_FAILED };
   }
 }
 

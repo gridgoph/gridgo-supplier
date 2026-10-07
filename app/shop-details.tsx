@@ -3,7 +3,7 @@ import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useUser } from "@clerk/expo";
 import { ChevronRight } from "lucide-react-native";
 import { useCallback, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Alert, Platform, Pressable, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { BusyOverlay } from "@/components/BusyOverlay";
@@ -17,7 +17,7 @@ import { SkeletonBlock } from "@/components/Skeleton";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { TextField } from "@/components/controls/TextField";
 import type { SupplierProfile } from "@/lib/api";
-import { changeShopPortrait } from "@/lib/clerkIdentity";
+import { changeShopPortrait, type PortraitSource } from "@/lib/clerkIdentity";
 import {
   draftFromProfile,
   hasShopDetailChanges,
@@ -188,13 +188,26 @@ export default function ShopDetailsScreen() {
     setSaveNotice({ message: outcome.message, reloadable: false });
   }
 
-  async function changePortrait() {
-    if (!clerkUser) return;
+  async function changePortrait(source: PortraitSource = "library") {
+    if (!clerkUser || portraitBusy) return;
     setPortraitBusy(true);
     setPortraitError(null);
-    const outcome = await changeShopPortrait(clerkUser);
+    const outcome = await changeShopPortrait(clerkUser, source);
     setPortraitBusy(false);
     if (outcome.status === "failed") setPortraitError(outcome.message);
+  }
+
+  function choosePortrait() {
+    if (portraitBusy || !clerkUser) return;
+    if (Platform.OS === "web") {
+      void changePortrait();
+      return;
+    }
+    Alert.alert("Shop photo", "Choose a photo or take one now.", [
+      { text: "Choose from photos", onPress: () => void changePortrait("library") },
+      { text: "Take a photo", onPress: () => void changePortrait("camera") },
+      { text: "Cancel", style: "cancel" },
+    ]);
   }
 
   const shopName = draft?.shopName || profile?.shopName || sessionUser?.supplierName || "Your shop";
@@ -222,7 +235,7 @@ export default function ShopDetailsScreen() {
                     : "Add a photo"
               }
               disabled={portraitBusy || !clerkUser}
-              onPress={() => void changePortrait()}
+              onPress={choosePortrait}
             />
           </View>
           <Text className="text-center text-caption text-text-muted">
@@ -233,7 +246,7 @@ export default function ShopDetailsScreen() {
 
         {portraitError ? (
           <View className="mt-4">
-            <ErrorNotice message={portraitError} />
+            <ErrorNotice message={portraitError} onRetry={choosePortrait} />
           </View>
         ) : null}
 
