@@ -97,7 +97,7 @@ export function ListingRow({
           <Text className="text-caption text-text-muted" numberOfLines={1}>
             {subcategoryName(catalog, listing.subcategoryCode)}
           </Text>
-          <Text className="text-caption text-text-muted" numberOfLines={1}>
+          <Text className="text-caption text-text-muted" numberOfLines={2}>
             {readyInLine(days, effectiveMinimumDays(listing))}
           </Text>
           <View className="mt-0.5">
