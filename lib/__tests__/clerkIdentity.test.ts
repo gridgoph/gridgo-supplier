@@ -1,5 +1,23 @@
+jest.mock("expo-file-system", () => ({
+  // The device filesystem is native. Keep its byte-reading contract while
+  // running Expo's real multipart serializer below.
+  File: class {
+    uri: string;
+    constructor(uri: string) { this.uri = uri; }
+    name = "portrait.jpg";
+    type = "image/jpeg";
+    bytes = async () => new Uint8Array([255, 216, 255, 217]);
+  },
+}));
+
+import { File as DeviceFile } from "expo-file-system";
+import { Platform } from "react-native";
+import { TextEncoder } from "util";
+
 jest.mock("expo-image-picker", () => ({
   launchImageLibraryAsync: jest.fn(),
+  launchCameraAsync: jest.fn(),
+  requestCameraPermissionsAsync: jest.fn(),
 }));
 
 import * as ImagePicker from "expo-image-picker";
@@ -15,6 +33,8 @@ import {
   passwordProblems,
   passwordReady,
   portraitFile,
+  PORTRAIT_FAILED,
+  PORTRAIT_CAMERA_REFUSED,
   startEmailChange,
   type ClerkEmailAddress,
 } from "@/lib/clerkIdentity";
@@ -24,69 +44,97 @@ function clerkError(code: string, message = "That email address is taken.") {
   return { errors: [{ code, message, longMessage: message }] };
 }
 
+const { convertFormDataAsync } = jest.requireActual<{
+  convertFormDataAsync: (form: FormData) => Promise<{ body: Uint8Array }>;
+}>("expo/src/winter/fetch/convertFormData");
+const { installFormDataPatch } = jest.requireActual<{
+  installFormDataPatch: (form: typeof FormData) => typeof FormData;
+}>("expo/src/winter/FormData");
+const NativeFormData = installFormDataPatch(
+  jest.requireActual("react-native/Libraries/Network/FormData").default,
+);
+globalThis.TextEncoder ??= TextEncoder;
+
 describe("the shop's portrait", () => {
-  afterEach(() => jest.clearAllMocks());
-
-  /**
-   * Clerk sends a `file` that is a string as the raw request body under
-   * `application/octet-stream`. A `file://` path is not image bytes, so the
-   * string branch would store the path itself as the picture — the descriptor
-   * is the only shape React Native can satisfy.
-   */
-  it("hands Clerk a file React Native can actually send", () => {
-    expect(
-      portraitFile({ uri: "file:///tmp/a.jpg", fileName: "shopfront.jpg", mimeType: "image/jpeg" }),
-    ).toEqual({ uri: "file:///tmp/a.jpg", name: "shopfront.jpg", type: "image/jpeg" });
+  afterEach(() => {
+    jest.clearAllMocks();
+    jest.restoreAllMocks();
   });
 
-  it("names an unnamed picture after the shop rather than after the phone", () => {
-    const file = portraitFile({ uri: "file:///tmp/a.png", mimeType: "image/png" });
-    expect(file).toEqual({
-      uri: "file:///tmp/a.png",
-      name: "shop-portrait.png",
-      type: "image/png",
-    });
+  it("reproduces the old URI descriptor failure in Expo 57's multipart serializer", async () => {
+    const form = new NativeFormData();
+    form.append("file", { uri: "file:///cache/portrait.jpg", name: "portrait.jpg", type: "image/jpeg" } as unknown as Blob);
+    await expect(convertFormDataAsync(form)).rejects.toThrow("Unsupported FormDataPart implementation");
   });
 
-  it("sets the picture on the sign-in and re-reads it", async () => {
-    (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+  it("serializes image bytes from a device File instead of sending the URI", async () => {
+    const file = portraitFile({ uri: "file:///cache/portrait.jpg" });
+    expect(file).toBeInstanceOf(DeviceFile);
+    const form = new NativeFormData();
+    form.append("file", file);
+    const { body } = await convertFormDataAsync(form);
+    expect(Buffer.from(body).includes(Buffer.from([255, 216, 255, 217]))).toBe(true);
+    expect(Buffer.from(body).toString()).toContain('filename="portrait.jpg"');
+    expect(Buffer.from(body).toString()).toContain("image/jpeg");
+    expect(Buffer.from(body).toString()).not.toContain("file://");
+  });
+
+  it.each([
+    ["android", "library"], ["android", "camera"],
+    ["ios", "library"], ["ios", "camera"],
+  ] as const)("saves and reloads a photo on %s from the %s", async (platform, source) => {
+    jest.replaceProperty(Platform, "OS", platform);
+    const picker = source === "camera" ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
+    (ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({ granted: true });
+    (picker as jest.Mock).mockResolvedValue({
       canceled: false,
-      assets: [{ uri: "file:///tmp/a.jpg", fileName: null, mimeType: "image/jpeg" }],
+      assets: [{ uri: "file:///cache/portrait.jpg" }],
     });
     const user = {
-      setProfileImage: jest.fn(async () => undefined),
+      setProfileImage: jest.fn(async ({ file }: { file: Blob | File | string | null }) => {
+        const form = new NativeFormData();
+        form.append("file", file as Blob);
+        await convertFormDataAsync(form);
+      }),
       reload: jest.fn(async () => undefined),
     };
 
-    expect(await changeShopPortrait(user)).toEqual({ status: "ok" });
-    expect(user.setProfileImage).toHaveBeenCalledWith({
-      file: { uri: "file:///tmp/a.jpg", name: "shop-portrait.jpg", type: "image/jpeg" },
-    });
-    expect(user.reload).toHaveBeenCalled();
+    expect(await changeShopPortrait(user, source)).toEqual({ status: "ok" });
+    expect(user.setProfileImage).toHaveBeenCalledWith({ file: expect.any(DeviceFile) });
+    expect(user.reload).toHaveBeenCalledTimes(1);
+    expect(picker).toHaveBeenCalledWith(expect.objectContaining({ mediaTypes: ["images"], allowsEditing: true }));
+    expect(ImagePicker.requestCameraPermissionsAsync).toHaveBeenCalledTimes(source === "camera" ? 1 : 0);
   });
 
-  /** Backing out of the camera roll is not a failure and says nothing. */
-  it("says nothing when the shop closes the picker", async () => {
-    (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({ canceled: true });
-    const user = { setProfileImage: jest.fn(async () => undefined) };
-
-    expect(await changeShopPortrait(user)).toEqual({ status: "cancelled" });
+  it.each(["library", "camera"] as const)("says nothing when the shop cancels the %s", async (source) => {
+    const picker = source === "camera" ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
+    (ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({ granted: true });
+    (picker as jest.Mock).mockResolvedValue({ canceled: true });
+    const user = { setProfileImage: jest.fn() };
+    expect(await changeShopPortrait(user, source)).toEqual({ status: "cancelled" });
     expect(user.setProfileImage).not.toHaveBeenCalled();
   });
 
-  it("turns a refused upload into a sentence, not a stack trace", async () => {
-    (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
-      canceled: false,
-      assets: [{ uri: "file:///tmp/a.jpg" }],
-    });
-    const user = {
-      setProfileImage: jest.fn(async () => {
-        throw clerkError("file_too_large", "That image is larger than 10MB.");
-      }),
-    };
+  it("explains camera permission refusal without opening the camera or uploading", async () => {
+    (ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({ granted: false });
+    const user = { setProfileImage: jest.fn() };
+    expect(await changeShopPortrait(user, "camera")).toEqual({ status: "failed", message: PORTRAIT_CAMERA_REFUSED });
+    expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();
+    expect(user.setProfileImage).not.toHaveBeenCalled();
+  });
 
-    const outcome = await changeShopPortrait(user);
-    expect(outcome).toEqual({ status: "failed", message: "That image is larger than 10MB." });
+  it.each([
+    new Error("ClerkJS: Network error at /v1/me/profile_image: Unsupported FormDataPart implementation"),
+    clerkError("file_too_large", "Raw service response"),
+  ])("keeps upload failures plain and permits another attempt", async (error) => {
+    (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+      canceled: false, assets: [{ uri: "file:///cache/portrait.jpg" }],
+    });
+    const user = { setProfileImage: jest.fn().mockRejectedValueOnce(error).mockResolvedValueOnce(undefined), reload: jest.fn() };
+    expect(await changeShopPortrait(user)).toEqual({ status: "failed", message: PORTRAIT_FAILED });
+    expect(user.reload).not.toHaveBeenCalled();
+    expect(await changeShopPortrait(user)).toEqual({ status: "ok" });
+    expect(user.reload).toHaveBeenCalledTimes(1);
   });
 });
 
