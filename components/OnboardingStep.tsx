@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, type Ref } from "react";
 import { Text, View, type LayoutChangeEvent } from "react-native";
-import { KeyboardStickyView } from "react-native-keyboard-controller";
+import { KeyboardStickyView, type KeyboardAwareScrollViewRef } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FormScrollView } from "@/components/FormScrollView";
@@ -20,6 +20,8 @@ type Props = {
   overlay?: ReactNode;
   /** Set on the map step, whose picker owns its horizontal padding. */
   fill?: boolean;
+  /** Lets a step bring its working area into view on focus. */
+  scrollRef?: Ref<KeyboardAwareScrollViewRef>;
 };
 
 /**
@@ -48,6 +50,7 @@ export function OnboardingStep({
   contentClassName,
   overlay,
   fill,
+  scrollRef,
 }: Props) {
   const insets = useSafeAreaInsets();
   const index = stepIndex(id);
@@ -99,6 +102,7 @@ export function OnboardingStep({
       {fill ? (
         <>
           <FormScrollView
+            scrollRef={scrollRef}
             bottomOffset={Math.max(footerHeight - insets.bottom, 0) + spacing.md}
           >
             {heading}
@@ -113,6 +117,7 @@ export function OnboardingStep({
           <View className="gg-page flex-1">
             {heading}
             <FormScrollView
+              scrollRef={scrollRef}
               contentClassName={contentClassName ?? "pb-4 pt-4"}
               // The footer floats over the last of the content once it rides
               // the keyboard, so the caret has to clear the button too — minus

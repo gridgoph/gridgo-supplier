@@ -1,6 +1,7 @@
 import { router } from "expo-router";
-import { useState } from "react";
-import { Text } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Keyboard, Text, View } from "react-native";
+import type { KeyboardAwareScrollViewRef } from "react-native-keyboard-controller";
 
 import { OnboardingStep } from "@/components/OnboardingStep";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -19,6 +20,19 @@ export default function ShopLocationStep() {
   const draft = useSignupDraft((s) => s.draft);
   const patch = useSignupDraft((s) => s.patch);
   const [showProblem, setShowProblem] = useState(false);
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
+  const pickerTop = useRef(0);
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  useEffect(() => {
+    if (!searchFocused) return;
+    const showMap = () => scrollRef.current?.scrollTo({ y: pickerTop.current, animated: false });
+    showMap();
+    // Before the keyboard opens, the scroll range can be too short to reach
+    // the picker. Repeat once the keyboard has made that room available.
+    const subscription = Keyboard.addListener("keyboardDidShow", showMap);
+    return () => subscription.remove();
+  }, [searchFocused]);
 
   const step = stepAt("location");
   const problems = locationStepProblems(draft);
@@ -37,6 +51,7 @@ export default function ShopLocationStep() {
       title={step.title}
       lede={step.lede}
       fill
+      scrollRef={scrollRef}
       footer={
         <>
           {showProblem && problems.pin ? (
@@ -46,7 +61,19 @@ export default function ShopLocationStep() {
         </>
       }
     >
-      <ShopLocationPicker pin={draft.pin} onChange={(pin) => patch({ pin })} />
+      <View
+        testID="signup-location-picker"
+        onLayout={(event) => {
+          pickerTop.current = event.nativeEvent.layout.y;
+        }}
+      >
+        <ShopLocationPicker
+          pin={draft.pin}
+          onChange={(pin) => patch({ pin })}
+          searchPlaceholder="Search address"
+          onSearchFocusChange={setSearchFocused}
+        />
+      </View>
     </OnboardingStep>
   );
 }
