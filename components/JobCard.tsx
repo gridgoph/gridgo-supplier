@@ -6,7 +6,7 @@ import { orderReferenceSpoken } from "@/lib/orderReference";
 import { StatusChip } from "@/components/StatusChip";
 import { formatDeadlineFull } from "@/lib/dates";
 import { formatPhp, type Order } from "@/lib/api";
-import { presentJobStatus } from "@/lib/jobState";
+import { isFulfilmentFinished, presentJobStatus } from "@/lib/jobState";
 import { deadlineUrgency } from "@/lib/urgency";
 import { acceptWindow, acceptWindowLine } from "@/lib/acceptWindow";
 import { orderSpecSummary } from "@/lib/productionSpecs";
@@ -42,8 +42,8 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
   const window = acceptWindow(job, now);
   const answerLine = acceptWindowLine(window, now);
   const dueAt = job.readyBy || job.promisedDate || job.deadline;
-  // A job the shop let go is not due anywhere.
-  const urgency = deadlineUrgency(shopRelease(job) ? null : dueAt, now);
+  // Keep the recorded date, but finished or released work is no longer due.
+  const urgency = deadlineUrgency(shopRelease(job) || isFulfilmentFinished(job) ? null : dueAt, now);
   const spec = orderSpecSummary(job);
   const price = job.supplierPriceMinor != null
     ? formatPhp(job.supplierPriceMinor)

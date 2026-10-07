@@ -124,6 +124,7 @@ export default function JobWorkspaceScreen() {
   }
 
   const status = presentJobStatus(job);
+  const clientDate = job.promisedDate || job.deadline;
   const actions = actionsForJob(job);
   const primary = actions.find((a) => a.primary) ?? null;
   const secondary = actions.filter((a) => !a.primary);
@@ -194,10 +195,12 @@ export default function JobWorkspaceScreen() {
           </View>
           <Text className="text-h1 text-text-primary">{job.title}</Text>
           <Text className="text-caption text-text-muted">Order {job.id}</Text>
-          <Text className="text-body-lg text-text-secondary">
-            {job.promisedDate ? "Promised" : "Client needs it by"}{" "}
-            {formatDeadlineFull(job.promisedDate || job.deadline)}
-          </Text>
+          {clientDate ? (
+            <Text className="text-body-lg text-text-secondary">
+              {job.promisedDate ? "Promised" : "Client needs it by"}{" "}
+              {formatDeadlineFull(clientDate)}
+            </Text>
+          ) : null}
           {urgency.level !== "undated" ? (
             <Text
               className={
