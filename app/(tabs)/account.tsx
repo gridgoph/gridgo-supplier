@@ -1,3 +1,4 @@
+import { AccountPrivacy } from "@/components/AccountPrivacy";
 import { useUser } from "@clerk/expo";
 import { ChevronRight } from "lucide-react-native";
 import { useCallback, useState } from "react";
@@ -274,6 +275,8 @@ export default function AccountScreen() {
             onPress={() => router.push("/settings" as Href)}
           />
         </View>
+
+        <AccountPrivacy />
 
         <View className="mt-8">
           <SecondaryButton label="Sign out" onPress={() => void signOut()} />

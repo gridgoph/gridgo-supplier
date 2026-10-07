@@ -2090,3 +2090,7 @@ export async function markSupportChatRead(threadId?: string): Promise<{
   }
   return request("/support-chat/me/read", { method: "PATCH", body: JSON.stringify({}) });
 }
+
+export function requestAccountDeletion(): Promise<{ ok: true; message: string }> {
+  return request('/me/account-deletion-request', { method: 'POST', body: JSON.stringify({ confirmed: true }) });
+}
