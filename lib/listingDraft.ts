@@ -6,6 +6,7 @@ import {
 } from "@/lib/listings";
 import type { ListingPatch } from "@/lib/listingsApi";
 import { parseMoney } from "@/lib/money";
+import { listingDaysFields, speedTierDaysField } from "@/lib/productionDays";
 
 /**
  * The words, price and times a shop holds until the foot is pressed.
@@ -35,8 +36,9 @@ export type ListingDraft = {
   priceTiers: Listing["priceTiers"];
   speedTiers: Listing["speedTiers"];
   turnaroundMode: Listing["turnaroundMode"];
-  turnaroundHours: number | null;
-  minimumTurnaroundHours: number | null;
+  /** Whole working days. Null while the listing follows its category line. */
+  turnaroundDays: number | null;
+  minimumTurnaroundDays: number | null;
   subcategoryCode: string;
   fileFormatMode: Listing["fileFormatMode"];
   formatCodes: string[];
@@ -58,8 +60,8 @@ export function draftFrom(listing: Listing): ListingDraft {
     priceTiers: listing.priceTiers,
     speedTiers: listing.speedTiers,
     turnaroundMode: listing.turnaroundMode,
-    turnaroundHours: listing.turnaroundHours,
-    minimumTurnaroundHours: listing.minimumTurnaroundHours ?? null,
+    turnaroundDays: listing.turnaroundDays,
+    minimumTurnaroundDays: listing.minimumTurnaroundDays ?? null,
     subcategoryCode: listing.subcategoryCode,
     fileFormatMode: listing.fileFormatMode,
     formatCodes: listing.formatCodes,
@@ -83,8 +85,8 @@ export function sameDraft(left: ListingDraft, right: ListingDraft): boolean {
     tierKey(left.priceTiers) === tierKey(right.priceTiers) &&
     speedKey(left.speedTiers) === speedKey(right.speedTiers) &&
     left.turnaroundMode === right.turnaroundMode &&
-    left.turnaroundHours === right.turnaroundHours &&
-    left.minimumTurnaroundHours === right.minimumTurnaroundHours &&
+    left.turnaroundDays === right.turnaroundDays &&
+    left.minimumTurnaroundDays === right.minimumTurnaroundDays &&
     left.subcategoryCode === right.subcategoryCode &&
     left.fileFormatMode === right.fileFormatMode &&
     left.formatCodes.join(",") === right.formatCodes.join(",")
@@ -122,9 +124,9 @@ export function applyDraft(listing: Listing, draft: ListingDraft): Listing {
     priceTiers: asksQuantity(draft.pricingUnit) ? draft.priceTiers : [],
     speedTiers: draft.speedTiers,
     turnaroundMode: draft.turnaroundMode,
-    turnaroundHours: draft.turnaroundMode === "override" ? draft.turnaroundHours : null,
-    minimumTurnaroundHours:
-      draft.turnaroundMode === "override" ? draft.minimumTurnaroundHours : null,
+    turnaroundDays: draft.turnaroundMode === "override" ? draft.turnaroundDays : null,
+    minimumTurnaroundDays:
+      draft.turnaroundMode === "override" ? draft.minimumTurnaroundDays : null,
     subcategoryCode: draft.subcategoryCode,
     fileFormatMode: draft.fileFormatMode,
     formatCodes: draft.formatCodes,
@@ -156,11 +158,14 @@ export function listingSavePatch(
     ),
     minimumOrderQuantity: asksQuantity(working.pricingUnit) ? working.minimumOrderQuantity : null,
     priceTiers: asksQuantity(working.pricingUnit) ? working.priceTiers : [],
-    speedTiers: working.speedTiers,
+    speedTiers: working.speedTiers.map(({ turnaroundDays, ...tier }) => ({
+      ...tier,
+      ...speedTierDaysField(turnaroundDays),
+    })),
     turnaroundMode: working.turnaroundMode,
-    turnaroundHours: working.turnaroundMode === "override" ? working.turnaroundHours : null,
-    minimumTurnaroundHours:
-      working.turnaroundMode === "override" ? working.minimumTurnaroundHours : null,
+    ...(working.turnaroundMode === "override"
+      ? listingDaysFields(working.minimumTurnaroundDays, working.turnaroundDays)
+      : listingDaysFields(null, null)),
     subcategoryCode: working.subcategoryCode,
     ...(onTheBoard == null ? {} : { active: onTheBoard }),
   };
@@ -228,6 +233,6 @@ function tierKey(tiers: Listing["priceTiers"]): string {
 
 function speedKey(tiers: Listing["speedTiers"]): string {
   return tiers
-    .map((tier) => `${tier.turnaroundHours}:${tier.label}:${tier.priceMinor ?? "-"}:${tier.surchargeMinor ?? "-"}`)
+    .map((tier) => `${tier.turnaroundDays}:${tier.label}:${tier.priceMinor ?? "-"}:${tier.surchargeMinor ?? "-"}`)
     .join(",");
 }

@@ -357,7 +357,7 @@ export function AddGroupButton({
       <TextField
         value={label}
         onChange={(value) => setLabel(value.slice(0, LISTING_CAPS.optionLabelChars))}
-        placeholder={kind === "addon" ? "Ready in 24 hours" : "2 × 3 ft"}
+        placeholder={kind === "addon" ? "Rush, ready in 1 working day" : "2 × 3 ft"}
         accessibilityLabel="First choice"
         kind="text"
       />

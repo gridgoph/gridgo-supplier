@@ -29,7 +29,7 @@ const listing: Listing = {
   priceTiers: [],
   speedTiers: [],
   turnaroundMode: "override",
-  turnaroundHours: 24,
+  turnaroundDays: 1,
   fileFormatMode: "override",
   formatCodes: ["pdf"],
   onTheBoard: true,

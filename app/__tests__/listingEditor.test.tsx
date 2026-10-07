@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 
 import ListingScreen from "@/app/shop/[id]/index";
 import { router } from "expo-router";
@@ -70,7 +70,7 @@ function listingWith(overrides: Partial<Listing> = {}): Listing {
     priceTiers: [],
     speedTiers: [],
     turnaroundMode: "inherit",
-    turnaroundHours: null,
+    turnaroundDays: null,
     fileFormatMode: "inherit",
     formatCodes: [],
     onTheBoard: false,
@@ -142,7 +142,7 @@ describe("the listing editor", () => {
     view = await render(<ListingScreen />);
 
     expect(await screen.findByText("PRICE")).toBeTruthy();
-    expect(screen.getByText("READY IN")).toBeTruthy();
+    expect(screen.getByText("PRODUCTION TIME")).toBeTruthy();
     expect(screen.getByText("WHAT A CLIENT PICKS")).toBeTruthy();
     expect(screen.getByText("ARTWORK YOU ACCEPT")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Proceed" })).toBeNull();
@@ -199,6 +199,32 @@ describe("the listing editor", () => {
       pathname: "/shop/[id]/preview",
       params: { id: "sci_1" },
     });
+  });
+
+  it("sets this listing's own production time in working days and saves the days", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith() });
+
+    view = await render(<ListingScreen />);
+
+    await fireEvent.press(
+      within(await screen.findByLabelText("How long this listing takes")).getByText("Just this listing"),
+    );
+    expect(screen.getByText(/Working days, on your shop's open hours/)).toBeTruthy();
+    expect(screen.getByText(/A job that starts now is ready/)).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Increase Maximum production time in working days"));
+    await fireEvent.changeText(screen.getByLabelText("Your price"), "450");
+    await fireEvent.press(screen.getByLabelText("See what clients see"));
+
+    await waitFor(() =>
+      expect(saveListing).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "sci_1" }),
+        expect.objectContaining({
+          turnaroundMode: "override",
+          minimumTurnaroundDays: 2,
+          turnaroundDays: 3,
+        }),
+      ),
+    );
   });
 
   /**
@@ -290,7 +316,7 @@ describe("the listing editor", () => {
         description: "Printed on 13oz matte tarpaulin.",
         basePriceMinor: 45000,
         turnaroundMode: "override",
-        turnaroundHours: 24,
+        turnaroundDays: 1,
         fileFormatMode: "override",
         formatCodes: ["pdf"],
         photos: [{ fileId: "file_1", sortOrder: 0, altText: null }],

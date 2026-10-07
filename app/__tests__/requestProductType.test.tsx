@@ -42,7 +42,7 @@ beforeEach(() => {
   (useBoard as jest.Mock).mockReturnValue({
     catalog,
     services: [
-      { id: "svc_1", categoryCode: "corporate_event_merch", state: "live", turnaroundHours: 24, formatCodes: [] },
+      { id: "svc_1", categoryCode: "corporate_event_merch", state: "live", turnaroundDays: 1, formatCodes: [] },
     ],
     loading: false,
     notOpenYet: false,

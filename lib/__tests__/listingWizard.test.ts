@@ -1,4 +1,4 @@
-import { aboutBlocker, artworkBlocker, pickReady, priceReady, productionHours, speedReady } from "@/lib/listingWizard";
+import { aboutBlocker, artworkBlocker, pickReady, priceReady, productionDays, speedReady } from "@/lib/listingWizard";
 import { draftFrom } from "@/lib/listingDraft";
 import type { Listing } from "@/lib/listings";
 
@@ -20,7 +20,7 @@ const listing: Listing = {
   priceTiers: [],
   speedTiers: [],
   turnaroundMode: "inherit",
-  turnaroundHours: null,
+  turnaroundDays: null,
   fileFormatMode: "inherit",
   formatCodes: [],
   onTheBoard: false,
@@ -63,13 +63,15 @@ describe("wizard gates", () => {
 
   it("treats a production window as ready when the soonest is not after the latest", () => {
     const draft = draftFrom(listing);
-    expect(productionHours(draft, 48)).toEqual({ min: 48, max: 48 });
-    expect(speedReady(listing, draft, { inheritedTurnaroundHours: 48, inheritedFormatCodes: [] })).toBe(true);
+    expect(productionDays(draft, 2)).toEqual({ min: 2, max: 2 });
+    expect(productionDays(draft, null)).toEqual({ min: 2, max: 2 });
+    expect(productionDays({ ...draft, minimumTurnaroundDays: 4, turnaroundDays: 2 }, null)).toEqual({ min: 2, max: 2 });
+    expect(speedReady(listing, draft, { inheritedTurnaroundDays: 2, inheritedFormatCodes: [] })).toBe(true);
     expect(
       speedReady(
         listing,
-        { ...draft, turnaroundMode: "override", minimumTurnaroundHours: 24, turnaroundHours: 72 },
-        { inheritedTurnaroundHours: 48, inheritedFormatCodes: [] },
+        { ...draft, turnaroundMode: "override", minimumTurnaroundDays: 1, turnaroundDays: 3 },
+        { inheritedTurnaroundDays: 2, inheritedFormatCodes: [] },
       ),
     ).toBe(true);
   });
@@ -82,14 +84,14 @@ describe("wizard gates", () => {
 
   it("requires a format when the listing overrides artwork", () => {
     const draft = { ...draftFrom(listing), fileFormatMode: "override" as const, formatCodes: [] };
-    expect(artworkBlocker(listing, draft, { inheritedTurnaroundHours: 48, inheritedFormatCodes: ["pdf"] })).toContain(
+    expect(artworkBlocker(listing, draft, { inheritedTurnaroundDays: 2, inheritedFormatCodes: ["pdf"] })).toContain(
       "artwork",
     );
     expect(
       artworkBlocker(
         listing,
         { ...draft, formatCodes: ["pdf"] },
-        { inheritedTurnaroundHours: 48, inheritedFormatCodes: ["pdf"] },
+        { inheritedTurnaroundDays: 2, inheritedFormatCodes: ["pdf"] },
       ),
     ).toBeNull();
   });

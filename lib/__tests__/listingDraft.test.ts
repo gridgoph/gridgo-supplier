@@ -19,7 +19,7 @@ const listing: Listing = {
   priceTiers: [],
   speedTiers: [],
   turnaroundMode: "inherit",
-  turnaroundHours: null,
+  turnaroundDays: null,
   fileFormatMode: "inherit",
   formatCodes: [],
   onTheBoard: false,
@@ -54,20 +54,38 @@ describe("listingSavePatch measured units", () => {
     );
   });
 
-  it("sends the soonest and latest hours when the listing overrides ready-in", () => {
+  it("sends the soonest and latest working days when the listing overrides ready-in", () => {
     const working = {
       ...draftFrom(listing),
       turnaroundMode: "override" as const,
-      minimumTurnaroundHours: 24,
-      turnaroundHours: 72,
+      minimumTurnaroundDays: 1,
+      turnaroundDays: 3,
     };
     expect(listingSavePatch(working, 0)).toEqual(
       expect.objectContaining({
         turnaroundMode: "override",
-        minimumTurnaroundHours: 24,
-        turnaroundHours: 72,
+        minimumTurnaroundDays: 1,
+        turnaroundDays: 3,
       }),
     );
+  });
+
+  it("clears both days when the listing follows its category, and sends speeds in days", () => {
+    const working = {
+      ...draftFrom(listing),
+      turnaroundMode: "inherit" as const,
+      minimumTurnaroundDays: 1,
+      turnaroundDays: 3,
+      speedTiers: [{ id: "s1", label: "Express", turnaroundDays: 1, priceMinor: 50_000, surchargeMinor: null }],
+    };
+    const patch = listingSavePatch(working, 0);
+    expect(patch).toEqual(
+      expect.objectContaining({ minimumTurnaroundDays: null, turnaroundDays: null }),
+    );
+    expect(patch.speedTiers).toEqual([
+      { id: "s1", label: "Express", turnaroundDays: 1, priceMinor: 50_000, surchargeMinor: null },
+    ]);
+    expect(JSON.stringify(patch)).not.toMatch(/Hours/);
   });
 
   it("keeps a measure unit the shop already chose", () => {
