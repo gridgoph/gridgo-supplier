@@ -117,3 +117,25 @@ it("keeps released jobs free of due or late wording", async () => {
   expect(screen.queryByText(/Due in|Late by/)).toBeNull();
   expect(screen.queryByRole("button", { name: /late/ })).toBeNull();
 });
+
+it.each([
+  "cancelled", "delivered", "issue_window_open", "completed", "payout_released",
+].flatMap((state) => [readyBy, deadline].map((readyBy) => ({ state, readyBy }))))(
+  "shows the recorded date without due or late wording for $state at $readyBy",
+  async ({ state, readyBy }) => {
+    await render(<JobCard job={{ ...job, state, readyBy }} onPress={() => {}} />);
+    const date = screen.getByText(`Ready by ${formatDeadlineFull(readyBy)}`);
+    expect(date.props.className).toBe("text-body text-text-secondary");
+    expect(screen.queryByText(/Due in|Late by/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /late/i })).toBeNull();
+  },
+);
+
+it.each(["cancelled", "fulfilled_with_refund"] as const)(
+  "does not count down a job closed by a %s refund settlement",
+  async (refundDisposition) => {
+    await render(<JobCard job={{ ...job, readyBy, refundDisposition }} onPress={() => {}} />);
+    expect(screen.queryByText(/Due in|Late by/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /late/i })).toBeNull();
+  },
+);
