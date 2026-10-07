@@ -184,7 +184,6 @@ export default function JobsScreen() {
                 <JobCard
                   key={job.id}
                   job={job}
-                  showSpec={false}
                   onPress={() => router.push({ pathname: "/job/[id]", params: { id: job.id } })}
                 />
               ))}
