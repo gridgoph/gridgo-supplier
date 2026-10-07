@@ -1,3 +1,4 @@
+import { Linking } from "react-native";
 import { useAlertsStore } from "@/store/alerts";
 import {act,renderHook} from "@testing-library/react-native";
 import {usePushNotifications} from "@/hooks/usePushNotifications";
@@ -73,4 +74,26 @@ it("keeps a newer screen reconciliation when an older foreground push read retur
   expect(useAlertsStore.getState().unreadCount).toBe(2);
   await act(async () => { receive([{ id: "one", read: false } as api.Notification]); });
   expect(useAlertsStore.getState().unreadCount).toBe(2);
+});
+
+
+it.each(["cold start", "background"])("opens release download while signed out from %s", async mode => {
+  const open = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+  useSession.setState({ user: null });
+  const release = { notification: { request: { identifier: "release-tap", content: {
+    title: "GRIDGO Supplier 1.0.123 is ready", data: { type: "announcement" },
+  } } } };
+  mockLast.mockResolvedValue(mode === "cold start" ? release : null);
+  const view = await renderHook(() => usePushNotifications());
+  if (mode === "background") {
+    const onTap = jest.requireMock("expo-notifications").addNotificationResponseReceivedListener.mock.calls.at(-1)[0];
+    await act(async () => { onTap(release); onTap(release); });
+  }
+  await act(async () => { jest.advanceTimersByTime(100); });
+  expect(open).toHaveBeenCalledWith("https://gridgo.talasora.com/downloads/gridgo-supplier.apk");
+  expect(open).toHaveBeenCalledTimes(1);
+  expect(jest.requireMock("expo-notifications").clearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
+  expect(mockPush).not.toHaveBeenCalled();
+  await view.unmount();
+  open.mockRestore();
 });

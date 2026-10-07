@@ -95,17 +95,17 @@ export function ServiceCapacityCard({
       </FieldShell>
 
       <FieldShell
-        label="Turnaround"
-        hint="From accepting a job to having it packed."
+        label="Production time"
+        hint="Working days on your shop's open hours, from accepting a job to having it packed."
         error={error}
       >
         <Stepper
-          value={draft.turnaroundHours}
-          onChange={(turnaroundHours) => onChange({ turnaroundHours })}
+          value={draft.turnaroundDays}
+          onChange={(turnaroundDays) => onChange({ turnaroundDays })}
           min={CAPACITY_BOUNDS.turnaround.min}
           max={CAPACITY_BOUNDS.turnaround.max}
-          unit="hours"
-          accessibilityLabel={`Turnaround hours for ${categoryName}`}
+          unit={draft.turnaroundDays === 1 ? "working day" : "working days"}
+          accessibilityLabel={`Production time in working days for ${categoryName}`}
           disabled={disabled}
         />
       </FieldShell>

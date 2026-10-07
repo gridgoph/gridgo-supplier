@@ -439,7 +439,8 @@ export type StoredFile = {
     /** A sample photo on one of the shop's own listings. Provisional. */
     | "catalog_item_photo"
     /** The shop's own receiving QR, bound through `updatePayoutAccount`. */
-    | "supplier_payout_qr";
+    | "supplier_payout_qr"
+    | "support_chat_image";
   originalFilename: string;
   declaredContentType: string;
   detectedContentType: string;
@@ -533,7 +534,10 @@ export type SupplierService = {
   qtyMax: number | null;
   pricingBasis: string;
   referenceRateMinor: number;
-  turnaroundHours: number;
+  /** Usual production time in working days. Read through `lib/productionDays.ts`. */
+  turnaroundDays?: number | null;
+  /** An older GRIDGO's hours; kept for the release gap. */
+  turnaroundHours?: number | null;
   capacityDaily: number | null;
   capacityWeekly: number | null;
   zones: string[];
@@ -558,7 +562,8 @@ export type SupplierService = {
 export type SupplierServicePatch = {
   capacityDaily?: number;
   capacityWeekly?: number;
-  turnaroundHours?: number;
+  /** Whole working days. */
+  turnaroundDays?: number;
   materialCodes?: string[];
   finishCodes?: string[];
 };
@@ -1991,13 +1996,21 @@ export type SupportChatThread = {
   updatedAt: string;
 };
 
+export type SupportChatAttachment = {
+  fileId: string;
+  contentType?: string | null;
+  originalFilename?: string | null;
+};
+
 export type SupportChatMessage = {
   id: string;
   threadId: string;
   senderUserId: string;
   senderRole: SupportChatSenderRole;
   senderName?: string | null;
+  senderImageUrl?: string | null;
   body: string;
+  attachments?: SupportChatAttachment[];
   createdAt: string;
   mine: boolean;
 };
@@ -2011,11 +2024,20 @@ export async function getSupportChatMe(): Promise<{
   return request("/support-chat/me");
 }
 
-export async function getSupportChatThread(threadId: string): Promise<{
+export async function getSupportChatThread(
+  threadId: string,
+  filters?: { q?: string; media?: boolean },
+): Promise<{
   thread: SupportChatThread;
   messages: SupportChatMessage[];
 }> {
-  return request(`/support-chat/threads/${encodeURIComponent(threadId)}`);
+  const params = new URLSearchParams();
+  if (filters?.q?.trim()) params.set("q", filters.q.trim());
+  if (filters?.media) params.set("media", "1");
+  const query = params.toString();
+  return request(
+    `/support-chat/threads/${encodeURIComponent(threadId)}${query ? `?${query}` : ""}`,
+  );
 }
 
 export async function openSupportChatThread(): Promise<{ thread: SupportChatThread }> {
@@ -2033,7 +2055,7 @@ export async function openSupportChatThread(): Promise<{ thread: SupportChatThre
 export async function sendSupportChatMessage(
   body: string,
   threadId?: string,
-  options: { newThread?: boolean } = {},
+  options: { newThread?: boolean; attachmentFileIds?: string[] } = {},
 ): Promise<{
   thread: SupportChatThread;
   message: SupportChatMessage;
@@ -2043,7 +2065,16 @@ export async function sendSupportChatMessage(
     body: JSON.stringify({
       body,
       ...(threadId ? { threadId } : options.newThread ? { newThread: true } : {}),
+      ...(options.attachmentFileIds?.length
+        ? { attachmentFileIds: options.attachmentFileIds }
+        : {}),
     }),
+  });
+}
+
+export async function deleteSupportChatThread(threadId: string): Promise<void> {
+  await request(`/support-chat/threads/${encodeURIComponent(threadId)}`, {
+    method: "DELETE",
   });
 }
 

@@ -25,6 +25,7 @@ import { DestinationRow } from "@/components/listing/DestinationRow";
 import { ListingStandingPanel } from "@/components/listing/ListingStandingPanel";
 import { ListingSection as Section } from "@/components/listing/ListingSection";
 import { PrinterCapField } from "@/components/listing/PrinterCapField";
+import { PRODUCTION_DAYS_HINT, ProductionDaysField } from "@/components/listing/ProductionDaysField";
 import { SampleStrip } from "@/components/listing/SampleStrip";
 import { PriceTierEditor, SpeedTierEditor } from "@/components/listing/TierEditor";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
@@ -91,6 +92,7 @@ import {
   type BoardOutcome,
 } from "@/lib/listingsApi";
 import { listingFoot, SUBMITTED_NOTICE } from "@/lib/listingReview";
+import { productionDays } from "@/lib/listingWizard";
 import { linkFileOptions, uploadedFileOptions } from "@/lib/fileFormatResolve";
 import { parseMoney } from "@/lib/money";
 import { resolveCategoryCode } from "@/lib/taxonomy";
@@ -486,6 +488,7 @@ export default function ListingScreen() {
       ) ??
       null)
     : null;
+  const ownWindow = productionDays(working, context.inheritedTurnaroundDays);
 
   return (
     <View className="gg-screen">
@@ -749,38 +752,49 @@ export default function ListingScreen() {
           </Section>
         </TourTarget>
 
-        {/* 4. Ready in */}
-        <Section title="READY IN">
+        {/* 4. Production time */}
+        <Section title="PRODUCTION TIME" hint={PRODUCTION_DAYS_HINT}>
           <SegmentedControl
             options={[
               { value: "inherit", label: "Your usual time" },
               { value: "override", label: "Just this listing" },
             ]}
             value={working.turnaroundMode}
-            onChange={(value) => setDraft({ ...working, turnaroundMode: value })}
+            onChange={(value) =>
+              // Its own time starts from the usual one, so "Just this listing"
+              // never saves a listing with no production time at all.
+              setDraft(
+                value === "override" && working.turnaroundDays == null
+                  ? {
+                      ...working,
+                      turnaroundMode: value,
+                      minimumTurnaroundDays: ownWindow.min,
+                      turnaroundDays: ownWindow.max,
+                    }
+                  : { ...working, turnaroundMode: value },
+              )
+            }
             accessibilityLabel="How long this listing takes"
           />
+          {working.turnaroundMode === "override" ? (
+            <ProductionDaysField
+              minDays={ownWindow.min}
+              maxDays={ownWindow.max}
+              onChange={({ minDays, maxDays }) =>
+                setDraft({ ...working, minimumTurnaroundDays: minDays, turnaroundDays: maxDays })
+              }
+            />
+          ) : (
+            <Text className="text-caption text-text-muted">
+              {context.inheritedTurnaroundDays
+                ? `${readyInLine(context.inheritedTurnaroundDays)}, the time on your accreditation for this category.`
+                : "Your shop has no usual time on this category yet. Set the working days here, or add one in Services you offer."}
+            </Text>
+          )}
           <SpeedTierEditor
             tiers={working.speedTiers}
             onChange={(next) => setDraft({ ...working, speedTiers: next })}
           />
-          {working.turnaroundMode === "override" ? (
-            <Stepper
-              value={working.turnaroundHours ?? 24}
-              onChange={(value) => setDraft({ ...working, turnaroundHours: value })}
-              min={1}
-              max={336}
-              step={1}
-              unit="hours"
-              accessibilityLabel="Hours this listing takes"
-            />
-          ) : (
-            <Text className="text-caption text-text-muted">
-              {context.inheritedTurnaroundHours
-                ? `${readyInLine(context.inheritedTurnaroundHours)}, the time on your accreditation for this category.`
-                : "Your shop has no usual time on this category yet. Set the hours here, or add one in Services you offer."}
-            </Text>
-          )}
         </Section>
 
         {/* 5. Steps */}

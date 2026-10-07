@@ -25,7 +25,7 @@ function service(partial: Partial<SupplierService> = {}): SupplierService {
     qtyMax: null,
     pricingBasis: "per_unit",
     referenceRateMinor: 0,
-    turnaroundHours: 48,
+    turnaroundDays: 2,
     capacityDaily: 20,
     capacityWeekly: 100,
     zones: [],
@@ -83,7 +83,7 @@ describe("clampCapacity", () => {
 describe("validateCapacity", () => {
   it("accepts a sane set", () => {
     expect(
-      validateCapacity({ capacityDaily: 20, capacityWeekly: 100, turnaroundHours: 24 }),
+      validateCapacity({ capacityDaily: 20, capacityWeekly: 100, turnaroundDays: 1 }),
     ).toBeNull();
   });
 
@@ -91,21 +91,21 @@ describe("validateCapacity", () => {
     const problem = validateCapacity({
       capacityDaily: 40,
       capacityWeekly: 10,
-      turnaroundHours: 24,
+      turnaroundDays: 1,
     });
     expect(problem).toContain("Weekly capacity is lower");
   });
 
   it("allows an unset weekly figure", () => {
     expect(
-      validateCapacity({ capacityDaily: 40, capacityWeekly: 0, turnaroundHours: 24 }),
+      validateCapacity({ capacityDaily: 40, capacityWeekly: 0, turnaroundDays: 1 }),
     ).toBeNull();
   });
 
-  it("rejects an out-of-range turnaround", () => {
+  it("rejects an out-of-range production time", () => {
     expect(
-      validateCapacity({ capacityDaily: 1, capacityWeekly: 1, turnaroundHours: 5000 }),
-    ).toContain("Turnaround");
+      validateCapacity({ capacityDaily: 1, capacityWeekly: 1, turnaroundDays: 5000 }),
+    ).toContain("Production time");
   });
 });
 
@@ -171,8 +171,17 @@ describe("capacity drafts", () => {
     expect(capacityDraftFor(service({ capacityDaily: null, capacityWeekly: null }))).toEqual({
       capacityDaily: 0,
       capacityWeekly: 0,
-      turnaroundHours: 48,
+      turnaroundDays: 2,
     });
+  });
+
+  it("reads the line's production time in working days, converting an older GRIDGO's hours", () => {
+    expect(capacityDraftFor(service({ turnaroundDays: 3 })).turnaroundDays).toBe(3);
+    // 48 hours at GRIDGO's default ten-hour working day, rounded up.
+    expect(
+      capacityDraftFor(service({ turnaroundDays: undefined, turnaroundHours: 48 })).turnaroundDays,
+    ).toBe(5);
+    expect(capacityDraftFor(service({ turnaroundDays: null })).turnaroundDays).toBe(2);
   });
 
   it("only reports a change when a number actually moved", () => {

@@ -38,6 +38,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Check release announcement delivery
+        run: node --test scripts/announce-release.test.mjs
+
       # The only check that resolves every config plugin out of node_modules.
       # Metro never reads expo.plugins and neither does jest, which is how a
       # stale plugin entry once shipped a launch crash past a green suite.
@@ -381,6 +384,15 @@ jobs:
             --title "GRIDGO Supplier $VERSION" \
             --notes "$notes" \
             "${latest[@]}"
+
+      - name: Broadcast the app release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          RELEASE_ANNOUNCE_TOKEN: ${{ secrets.RELEASE_ANNOUNCE_TOKEN }}
+          RELEASE_APP: supplier
+          RELEASE_VERSION: ${{ steps.config.outputs.version }}
+        run: node scripts/announce-release.mjs
 
       # After the landing site and the GitHub Release have the APK. Quota on
       # Actions artifacts is not allowed to fail this job once the signed

@@ -1,10 +1,11 @@
 import type { Order, SupplierService } from "@/lib/api";
 import { toDayKey } from "@/lib/day";
+import { PRODUCTION_DAYS, readServiceLineDays } from "@/lib/productionDays";
 
 /**
  * Shop capacity, derived only from fields the API really holds.
  *
- * `capacityDaily` / `capacityWeekly` / `turnaroundHours` are editable numbers on
+ * `capacityDaily` / `capacityWeekly` / `turnaroundDays` are editable numbers on
  * a supplier service line. Committed load is the sum of the quantities of jobs
  * the shop has promised for a day. Nothing here is estimated or invented; where
  * the shop has set no capacity, the screens say "not set" rather than guessing.
@@ -14,7 +15,7 @@ import { toDayKey } from "@/lib/day";
 export const CAPACITY_BOUNDS = {
   daily: { min: 0, max: 5000, step: 5 },
   weekly: { min: 0, max: 20000, step: 25 },
-  turnaround: { min: 1, max: 720, step: 1 },
+  turnaround: { min: PRODUCTION_DAYS.min, max: PRODUCTION_DAYS.max, step: 1 },
 } as const;
 
 export type CapacityField = keyof typeof CAPACITY_BOUNDS;
@@ -29,15 +30,19 @@ export function clampCapacity(field: CapacityField, value: number): number {
 export type CapacityDraft = {
   capacityDaily: number;
   capacityWeekly: number;
-  turnaroundHours: number;
+  /** The line's usual production time, in working days (gridgo-supplier#122). */
+  turnaroundDays: number;
 };
+
+/** A line with no usual time yet starts the stepper here. */
+const DEFAULT_LINE_DAYS = 2;
 
 /** The saved values a draft starts from, with the API's own defaults applied. */
 export function capacityDraftFor(service: SupplierService): CapacityDraft {
   return {
     capacityDaily: clampCapacity("daily", service.capacityDaily ?? 0),
     capacityWeekly: clampCapacity("weekly", service.capacityWeekly ?? 0),
-    turnaroundHours: clampCapacity("turnaround", service.turnaroundHours ?? 48),
+    turnaroundDays: clampCapacity("turnaround", readServiceLineDays(service) ?? DEFAULT_LINE_DAYS),
   };
 }
 
@@ -46,7 +51,7 @@ export function capacityDraftChanged(service: SupplierService, draft: CapacityDr
   return (
     saved.capacityDaily !== draft.capacityDaily ||
     saved.capacityWeekly !== draft.capacityWeekly ||
-    saved.turnaroundHours !== draft.turnaroundHours
+    saved.turnaroundDays !== draft.turnaroundDays
   );
 }
 
@@ -62,8 +67,8 @@ export function validateCapacity(values: CapacityDraft): string | null {
   if (values.capacityWeekly < weekly.min || values.capacityWeekly > weekly.max) {
     return `Weekly capacity must be between ${weekly.min} and ${weekly.max} units.`;
   }
-  if (values.turnaroundHours < turnaround.min || values.turnaroundHours > turnaround.max) {
-    return `Turnaround must be between ${turnaround.min} and ${turnaround.max} hours.`;
+  if (values.turnaroundDays < turnaround.min || values.turnaroundDays > turnaround.max) {
+    return `Production time must be between ${turnaround.min} and ${turnaround.max} working days.`;
   }
   if (values.capacityWeekly > 0 && values.capacityWeekly < values.capacityDaily) {
     return "Weekly capacity is lower than daily capacity. Raise the weekly figure or lower the daily one.";
