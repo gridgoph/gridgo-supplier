@@ -363,6 +363,17 @@ function RootStack({ introDone }: { introDone: boolean }) {
           }}
         />
         {/*
+          Reached only from Danger zone on Your shop details. It asks for the
+          password (or an emailed code) before anything is sent.
+        */}
+        <Stack.Screen
+          name="delete-account"
+          options={{
+            title: "Delete account",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
           The board itself is a tab now; this group is what opens on top of it —
           adding a listing, and the editor with its samples and preview. It sits
           under the signed-in guard rather than the matchable one because
