@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.190 (Improvement)
+
+- Document jobs show the pages selected for printing, the full file count, and pages per copy.
+- Jobs cards now show when your shop must have the job ready, with due and late wording based on that date.
+
 ## 1.0.183 (New feature)
 
 - The shop map stays large enough to place your pin, even with larger text or the keyboard open.
