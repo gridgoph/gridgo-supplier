@@ -21,6 +21,14 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.183 (New feature)
+
+- The shop map stays large enough to place your pin, even with larger text or the keyboard open.
+- Send a photo of the packed job before dispatch so the client and Operations can see it.
+- Searching for your shop during sign-up brings the map into view, even with larger text and the keyboard open.
+- Delete account now lives under Danger zone in Your shop details and asks for your password or an emailed code first.
+- Job cards show your shop's own price and the size selected from your listing.
+
 ## 1.0.168 (New feature)
 
 - Request account deletion from Account and read the Privacy Policy from Account or sign-up.
