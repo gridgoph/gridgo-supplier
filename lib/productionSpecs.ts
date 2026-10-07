@@ -36,3 +36,14 @@ export function orderProductionItems(order: Pick<Order, "id" | "title" | "quanti
   return [{ id: order.id, itemName: order.title, quantity: order.quantity, pricingUnit: null, packageQty: null, measurement: null,
     structuredSpec: { size: order.size, material: order.material, finish: order.finish }, options: [], artworkFileId: null, mockupFileId: null }];
 }
+
+/** Compact item specs, using the same production snapshots as the job brief. */
+export function orderSpecSummary(order: Parameters<typeof orderProductionItems>[0]): string {
+  return orderProductionItems(order).map((item) => {
+    const rows = productionSpecRows(item);
+    const size = rows.filter((row) => /\bsize\b/i.test(row.label) && row.label !== "Pack size")
+      .map((row) => row.value).join(" / ");
+    const material = rows.find((row) => row.label.toLowerCase() === "material")?.value;
+    return [`${item.quantity} × ${size || "size not set"}`, material].filter(Boolean).join(" · ");
+  }).join("; ");
+}
