@@ -9,6 +9,7 @@ import { formatPhp, type Order } from "@/lib/api";
 import { presentJobStatus } from "@/lib/jobState";
 import { deadlineUrgency } from "@/lib/urgency";
 import { acceptWindow, acceptWindowLine } from "@/lib/acceptWindow";
+import { orderSpecSummary } from "@/lib/productionSpecs";
 import { shopRelease } from "@/lib/shopRecovery";
 import { useNow } from "@/hooks/useNow";
 
@@ -42,12 +43,10 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
   const answerLine = acceptWindowLine(window, now);
   // A job the shop let go is not due anywhere.
   const urgency = deadlineUrgency(shopRelease(job) ? null : job.promisedDate || job.deadline, now);
-  const spec = [
-    `${job.quantity} × ${job.size || "size not set"}`,
-    job.material || null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const spec = orderSpecSummary(job);
+  const price = job.supplierPriceMinor != null
+    ? formatPhp(job.supplierPriceMinor)
+    : "Price not recorded yet";
 
   const content = (
     <View className="gg-card gap-3">
@@ -91,7 +90,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
         </Text>
         {showSpec ? (
           <Text className="text-caption text-text-muted" numberOfLines={2}>
-            {spec} · {formatPhp(job.totalMinor)}
+            {spec} · {price}
           </Text>
         ) : null}
       </View>
