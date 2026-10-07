@@ -160,6 +160,7 @@ export type SupplierSettlementPayout = {
 export type RefundDisposition = "cancelled" | "fulfilled_with_refund";
 
 export type ProductionItem = {
+  documentPages?: { total: number; range: string | null; printed: number } | null;
   id: string;
   itemName: string;
   quantity: number;
