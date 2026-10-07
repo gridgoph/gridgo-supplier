@@ -1,13 +1,14 @@
-import { useHeaderHeight } from "expo-router/react-navigation";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { router } from "expo-router";
 
 import { BusyOverlay } from "@/components/BusyOverlay";
+import { FormScrollView } from "@/components/FormScrollView";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ShopLocationPicker } from "@/components/ShopLocationPicker";
+import { spacing } from "@/constants/theme";
 import * as api from "@/lib/api";
 import { isSamePin, pinProblem, type ShopPin } from "@/lib/shopLocation";
 import { PIN_NOT_OPEN_YET, saveShopLocation } from "@/lib/verification";
@@ -22,17 +23,14 @@ import { useSession } from "@/store/session";
  * stakes: this pin is already pricing live jobs, so the change is confirmed
  * before it is sent and nothing is drawn to press until something has moved.
  *
- * There is no scroll view to move here — the map is the content — so the screen
- * shortens for the keyboard and the map gives up the space, which keeps both
- * the address field and the save action above the keys. Unlike the sign-up
- * step, this one is pushed under a header, and the avoiding view measures
- * against its own parent: without the header's height it would lift by that
- * much too little.
+ * The picker keeps a usable map height, while the form scrolls to keep the
+ * address reachable with larger text or an open keyboard. The save action
+ * follows the keyboard just as it does in onboarding.
  */
 export default function ShopLocationScreen() {
   const user = useSession((s) => s.user);
   const refresh = useSession((s) => s.refresh);
-  const headerHeight = useHeaderHeight();
+  const [footerHeight, setFooterHeight] = useState(0);
 
   const saved: ShopPin | null = user?.shop ?? null;
   const [initialPin] = useState(saved);
@@ -85,14 +83,15 @@ export default function ShopLocationScreen() {
 
   return (
     <View className="gg-screen">
-      <KeyboardAvoidingView
-        behavior="padding"
-        keyboardVerticalOffset={headerHeight}
-        style={{ flex: 1 }}
-      >
+      <FormScrollView bottomOffset={footerHeight + spacing.md}>
         <ShopLocationPicker pin={pin} onChange={setPin} />
+      </FormScrollView>
 
-        <View className="gg-page gap-3 pb-6 pt-3">
+      <KeyboardStickyView>
+        <View
+          className="gg-page gap-3 bg-canvas pb-6 pt-3"
+          onLayout={(event) => setFooterHeight(event.nativeEvent.layout.height)}
+        >
           {notice ? <ErrorNotice message={notice} /> : null}
           {unchanged ? (
             // Nothing to save is not a state worth drawing a dead yellow button
@@ -111,7 +110,7 @@ export default function ShopLocationScreen() {
             <Text className="text-caption text-error">{problem}</Text>
           ) : null}
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardStickyView>
 
       <BusyOverlay visible={saving} label="Saving your shop's pin" />
     </View>

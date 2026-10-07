@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, type Ref } from "react";
 import { Text, View, type LayoutChangeEvent } from "react-native";
-import { KeyboardAvoidingView, KeyboardStickyView } from "react-native-keyboard-controller";
+import { KeyboardStickyView, type KeyboardAwareScrollViewRef } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FormScrollView } from "@/components/FormScrollView";
@@ -18,8 +18,10 @@ type Props = {
   contentClassName?: string;
   /** Drawn over the whole step, not inside its scroll — a busy scrim. */
   overlay?: ReactNode;
-  /** Set on the map step, which fills the screen instead of scrolling. */
+  /** Set on the map step, whose picker owns its horizontal padding. */
   fill?: boolean;
+  /** Lets a step bring its working area into view on focus. */
+  scrollRef?: Ref<KeyboardAwareScrollViewRef>;
 };
 
 /**
@@ -35,15 +37,9 @@ type Props = {
  * action is pinned below it, so the two have to agree about the keyboard, and
  * four steps agreeing separately is four chances to disagree.
  *
- * That keyboard agreement is the one place this component splits in two, and
- * the split follows the layout rather than the platform:
- *
- * - A scrolling step keeps its footer where it is and lets it ride up on the
- *   keyboard, so the action stays pressable without dismissing anything. The
- *   scroll view is told how tall that footer is, so the field being typed into
- *   clears the button as well as the keyboard.
- * - The map step has no scroll view to move — the map *is* the content — so the
- *   whole area shortens instead and the map gives up the space.
+ * Every step scrolls its content and keeps its footer above the keyboard.
+ * The map reserves its own usable height rather than giving that space away
+ * when the keyboard, display zoom or larger text leaves a shorter viewport.
  */
 export function OnboardingStep({
   id,
@@ -54,6 +50,7 @@ export function OnboardingStep({
   contentClassName,
   overlay,
   fill,
+  scrollRef,
 }: Props) {
   const insets = useSafeAreaInsets();
   const index = stepIndex(id);
@@ -64,7 +61,7 @@ export function OnboardingStep({
 
   const footerBlock = footer ? (
     <View
-      className="gg-page gap-3 pt-4"
+      className="gg-page gap-3 bg-canvas pt-4"
       style={{ paddingBottom: insets.bottom + spacing.lg }}
       onLayout={onFooterLayout}
     >
@@ -103,18 +100,24 @@ export function OnboardingStep({
       </View>
 
       {fill ? (
-        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
-          <View className="flex-1">
+        <>
+          <FormScrollView
+            scrollRef={scrollRef}
+            bottomOffset={Math.max(footerHeight - insets.bottom, 0) + spacing.md}
+          >
             {heading}
             {children}
-          </View>
-          {footerBlock}
-        </KeyboardAvoidingView>
+          </FormScrollView>
+          <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
+            {footerBlock}
+          </KeyboardStickyView>
+        </>
       ) : (
         <>
           <View className="gg-page flex-1">
             {heading}
             <FormScrollView
+              scrollRef={scrollRef}
               contentClassName={contentClassName ?? "pb-4 pt-4"}
               // The footer floats over the last of the content once it rides
               // the keyboard, so the caret has to clear the button too — minus

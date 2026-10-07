@@ -23,8 +23,7 @@ const OPENS_A_KEYBOARD = /<(TextInput|TextField|PasswordField|NoteField|MoneyFie
 
 /**
  * Somewhere in this file's own tree, the keyboard is accounted for: either the
- * app's keyboard-aware scroll surface, or the avoiding view the two map screens
- * use because their content is a map rather than a scroll.
+ * app's keyboard-aware scroll surface or an avoiding view.
  */
 const HANDLES_A_KEYBOARD = /<(FormScrollView|KeyboardAvoidingView|OnboardingStep|FlowScreen|ListingWizardShell)\b/;
 
@@ -44,8 +43,8 @@ const CONTROLS = "components/controls";
  *
  * `components/ShopLocationPicker` is the deliberate exception and is listed
  * here by name: it is a component rather than a screen, and both screens that
- * use it wrap it in the avoiding view — its own content is a full-height map,
- * so shrinking is the only thing that can move its address field into view.
+ * use it wrap it in a keyboard-aware scroll surface so its map keeps a usable
+ * height while the address field can move into view.
  */
 const HANDLED_BY_ITS_CALLERS = [
   "components/ConversationDetails.tsx",

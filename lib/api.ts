@@ -294,6 +294,8 @@ export type Order = {
    * from an API older than the rule; read through `lib/productionPhoto.ts`.
    */
   productionProgress?: ProductionProgress | null;
+  /** Separate packed-work evidence required before dispatch. */
+  packingProgress?: ProductionProgress | null;
   deliveryPhotoFileIds?: string[];
   /** The rider's latest counter check. Absent until a rider has checked it. */
   pickupChecklist?: PickupChecklist | null;
@@ -433,6 +435,7 @@ export type StoredFile = {
     | "fulfilment_proof"
     /** A progress photo of the job on the floor. Records progress, moves no money. */
     | "production_photo"
+    | "packing_photo"
     | "delivery_photo"
     | "service_image"
     | "verification_document"
@@ -1336,6 +1339,11 @@ export async function attachProductionPhoto(
     method: "POST",
     body: JSON.stringify({ orderId }),
   });
+}
+
+/** Attach packed-work evidence without changing state or payout. */
+export async function attachPackingPhoto(fileId: string, orderId: string): Promise<{ file: StoredFile; order?: Order }> {
+  return request(`/files/${fileId}/attach`, { method: "POST", body: JSON.stringify({ orderId }) });
 }
 
 export async function getFile(fileId: string): Promise<StoredFile> {

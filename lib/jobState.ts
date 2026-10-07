@@ -3,6 +3,7 @@ import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 import { acceptWindow } from "@/lib/acceptWindow";
 import { CURRENT_PAYOUT_PLAN, nextShopProof } from "@/lib/milestones";
 import { counterCheck, presentCheckCodes } from "@/lib/pickupCheck";
+import { needsPackingPhoto } from "@/lib/packingPhoto";
 import { needsProductionPhoto } from "@/lib/productionPhoto";
 import { presentRefundTimelineNote, refundStanding, refundStatus } from "@/lib/refund";
 import { rescheduleNotice } from "@/lib/reschedule";
@@ -25,6 +26,7 @@ export type SupplierActionKind =
   | "start_production"
   | "ready_for_pickup"
   | "add_production_photo"
+  | "add_packing_photo"
   | "add_proof";
 
 export type SupplierAction = {
@@ -233,6 +235,13 @@ export function actionsForJob(order: JobActionOrder, now: Date = new Date()): Su
           resultLabel: "Photo on the job",
         });
       }
+      if (needsPackingPhoto(order)) {
+        return demote(proofStep, {
+          kind: "add_packing_photo", label: "Add a packing photo", targetState: null,
+          primary: true, consequence: "Show the finished prints packed and ready. The client and Operations can see the photo.",
+          resultLabel: "Packing photo sent",
+        });
+      }
       return demote(proofStep, {
         kind: "ready_for_pickup",
         label: "Package for pickup",
@@ -257,6 +266,7 @@ export type JobActionOrder = Pick<
   | "refundHold"
   | "refundDisposition"
   | "productionProgress"
+  | "packingProgress"
   | "shopAcceptance"
   | "shopRecovery"
   | "rescheduleRequest"
@@ -290,6 +300,7 @@ export function routeForAction(kind: SupplierActionKind): SupplierActionRoute {
       return "/job/[id]/decline";
     case "add_proof":
       return "/job/[id]/fulfilment";
+    case "add_packing_photo":
     case "ready_for_pickup":
       return "/job/[id]/handoff";
     case "add_production_photo":

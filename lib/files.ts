@@ -156,6 +156,7 @@ const UPLOAD_MESSAGES: Record<string, string> = {
     "GRIDGO's file storage is not responding. Nothing was lost — try sending the file again in a moment.",
   storage_initializing:
     "GRIDGO's file storage is still starting up. Wait a few seconds and send the file again.",
+  packing_photo_upload_not_allowed: "This job has moved past packing. Refresh the job to see its latest step.",
   production_photo_upload_not_allowed:
     "This job has moved past production, so it no longer takes progress photos. Its latest step is on the job.",
 };
@@ -332,7 +333,7 @@ export function messageFor(
   purpose?: api.StoredFile["purpose"],
 ): string {
   const code = typeof body?.error === "string" ? body.error : "";
-  const known = (purpose === "production_photo" ? PHOTO_ONLY_MESSAGES[code] : undefined) ?? UPLOAD_MESSAGES[code];
+  const known = (["production_photo", "packing_photo"].includes(purpose ?? "") ? PHOTO_ONLY_MESSAGES[code] : undefined) ?? UPLOAD_MESSAGES[code];
   if (known) return known;
   if (status === 401) return "Your session ended. Sign in again to send this file.";
   if (status >= 500) return "GRIDGO could not handle this file. Try again in a moment.";

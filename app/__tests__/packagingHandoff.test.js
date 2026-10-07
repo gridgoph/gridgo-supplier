@@ -28,6 +28,12 @@ jest.mock("@/components/PrimaryButton", () => ({ PrimaryButton: "PrimaryButton" 
 jest.mock("@/components/SecondaryButton", () => ({ SecondaryButton: "SecondaryButton" }));
 jest.mock("@/components/SpecRow", () => ({ SpecRow: "SpecRow" }));
 jest.mock("@/components/StatusChip", () => ({ StatusChip: "StatusChip" }));
+jest.mock("@/components/ProgressPhotoStrip", () => ({ ProgressPhotoStrip: "ProgressPhotoStrip" }));
+jest.mock("@/components/UploadList", () => ({ UploadList: "UploadList" }));
+jest.mock("@/hooks/useFileUpload", () => ({
+  useFileUpload: () => ({ items: [], busy: false }),
+}));
+jest.mock("@/lib/api", () => ({ attachPackingPhoto: jest.fn() }));
 jest.mock("lucide-react-native", () => ({ ReceiptText: "ReceiptText" }));
 jest.mock("@/hooks/useTheme", () => ({ useThemeColors: () => ({ info: "#1565C0" }) }));
 let mockJobState = "production";
@@ -173,7 +179,7 @@ describe("the production photo comes before packing", () => {
   it("packs as before once a photo is on the job, and says how many", async () => {
     mockPlan = { productionProgress: { status: "photos_available", photos: [{ fileId: "start" }] } };
     await act(async () => rendered.update(React.createElement(HandoffScreen)));
-    expect(rendered.root.findByType("PrimaryButton").props.label).toBe("Mark package ready");
+    expect(rendered.root.findByType("PrimaryButton").props.label).toBe("Ready for dispatch");
     const rows = rendered.root.findAllByType("SpecRow").map((row) => [row.props.label, row.props.value]);
     expect(rows).toContainEqual(["Production photo", "1 on the job"]);
   });
