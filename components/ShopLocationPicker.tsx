@@ -1,6 +1,6 @@
 import { Crosshair, MapPin, Search, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
 
 import { MapFrame, type MapFrameHandle } from "@/components/MapFrame";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -35,6 +35,8 @@ type Props = {
  * label, never the other way round.
  */
 export function ShopLocationPicker({ pin, onChange }: Props) {
+  const { height } = useWindowDimensions();
+  const mapHeight = Math.max(280, Math.min(480, height * 0.45));
   const colors = useThemeColors();
   const theme = useThemeName();
   const frame = useRef<MapFrameHandle>(null);
@@ -148,9 +150,13 @@ export function ShopLocationPicker({ pin, onChange }: Props) {
   const searchEndInset = query ? 48 : spacing.lg;
 
   return (
-    <View className="flex-1">
-      {/* The map owns the middle of the screen, so panning never fights a list. */}
-      <View className="mx-4 flex-1 overflow-hidden rounded-card border border-outline">
+    <View>
+      {/* Keep room to drag the pin; the surrounding form scrolls on short screens. */}
+      <View
+        testID="shop-location-map"
+        className="mx-4 overflow-hidden rounded-card border border-outline"
+        style={{ height: mapHeight }}
+      >
         <MapFrame
           ref={frame}
           html={initialHtml}
