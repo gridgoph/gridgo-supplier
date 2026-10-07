@@ -1,3 +1,4 @@
+import { PrivacyPolicyLink } from "@/components/AccountPrivacy";
 import { useAuth, useUser } from "@clerk/expo";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
@@ -134,6 +135,7 @@ export default function ShopIdentityStep() {
           />
         </FieldShell>
       )}
+      <PrivacyPolicyLink />
     </OnboardingStep>
   );
 }
