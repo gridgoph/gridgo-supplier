@@ -53,7 +53,7 @@ function listingWith(photos: string[]): Listing {
     priceTiers: [],
     speedTiers: [],
     turnaroundMode: "inherit",
-    turnaroundHours: null,
+    turnaroundDays: null,
     fileFormatMode: "inherit",
     formatCodes: [],
     onTheBoard: false,

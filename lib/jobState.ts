@@ -432,7 +432,8 @@ export function waitingOn(
 }
 
 /** Timeline row label — actor-facing, never the raw user id alone. */
-export function presentTimelineActor(by: string): string {
+export function presentTimelineActor(by: unknown): string {
+  if (typeof by !== "string" || !by.trim()) return "GRIDGO";
   if (by === "system") return "GRIDGO";
   if (by === "user_client") return "Client";
   if (by === "user_supplier") return "You";

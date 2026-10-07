@@ -3,7 +3,8 @@ import { Pressable, Text, View } from "react-native";
 import { SamplePhoto } from "@/components/SamplePhoto";
 import {
   boardContextFor,
-  effectiveTurnaroundHours,
+  effectiveMinimumDays,
+  effectiveTurnaroundDays,
   photoViewUrl,
   priceLine,
   readyInLine,
@@ -25,7 +26,7 @@ type Props = {
  */
 export function ClientPreviewCard({ listing, services, onPress }: Props) {
   const context = boardContextFor(listing, services);
-  const hours = effectiveTurnaroundHours(listing, context.inheritedTurnaroundHours);
+  const days = effectiveTurnaroundDays(listing, context.inheritedTurnaroundDays);
   const name = listing.name.trim() || "Untitled listing";
 
   return (
@@ -57,7 +58,7 @@ export function ClientPreviewCard({ listing, services, onPress }: Props) {
             {priceLine(listing)}
           </Text>
           <Text className="text-caption text-text-muted" numberOfLines={1}>
-            {readyInLine(hours, listing.minimumTurnaroundHours)}
+            {readyInLine(days, effectiveMinimumDays(listing))}
           </Text>
         </View>
       </View>

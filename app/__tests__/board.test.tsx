@@ -79,7 +79,7 @@ const listing: Listing = {
   priceTiers: [],
   speedTiers: [],
   turnaroundMode: "override",
-  turnaroundHours: 24,
+  turnaroundDays: 1,
   fileFormatMode: "override",
   formatCodes: ["pdf"],
   onTheBoard: true,
@@ -175,7 +175,7 @@ describe("the shop's board", () => {
     expect(await screen.findByText("Tarpaulin, 13oz")).toBeTruthy();
     expect(screen.getByText("Prints up to 5 ft")).toBeTruthy();
     expect(screen.getByText("₱450.00 per piece")).toBeTruthy();
-    expect(screen.queryByText("Ready in 24 hours")).toBeNull();
+    expect(screen.queryByText("Ready in 1 working day")).toBeNull();
     expect(screen.queryByText(/still needs something/)).toBeNull();
     expect(screen.getByLabelText("Add a listing")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Put something on the board" })).toBeNull();
@@ -236,7 +236,7 @@ describe("the shop's board", () => {
     await screen.findByText("Tarpaulin, 13oz");
     await fireEvent.press(screen.getByLabelText("Show as a list"));
 
-    expect(screen.getByText("Ready in 24 hours")).toBeTruthy();
+    expect(screen.getByText("Ready in 1 working day")).toBeTruthy();
     expect(screen.getByText("₱450.00")).toBeTruthy();
     expect(screen.getByText("per piece")).toBeTruthy();
     expect(String(screen.getByText("₱450.00").props.className ?? "")).toContain("text-body");

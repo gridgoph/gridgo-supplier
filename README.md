@@ -65,3 +65,15 @@ EXPO_PUBLIC_API_URL=http://10.0.2.2:8787 npm start
 ```
 
 For a physical device over Wi-Fi, use the host machine’s reachable LAN address. API URL precedence and build-time configuration are documented in [AGENTS.md](AGENTS.md#mvp-stack-current-phase).
+
+
+### Release notifications
+
+After the Android workflow uploads the APK and publishes the latest GitHub Release
+on a push to `main`, `scripts/announce-release.mjs` broadcasts the released version.
+Firstmate configures the repository secret `RELEASE_ANNOUNCE_TOKEN` with the same
+value as the API environment variable. Deploy the API release-announcement route
+and migration first. Missing configuration skips with a notice; delivery failures
+warn in the job summary without failing the published release. Manual dispatches
+never broadcast. `lib/releasePush.ts` recognizes the fixed public release copy and
+opens this app's existing download URL on a push tap, including while signed out.

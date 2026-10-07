@@ -68,7 +68,7 @@ function line(
     qtyMax: null,
     pricingBasis: "per_unit",
     referenceRateMinor: 0,
-    turnaroundHours: 48,
+    turnaroundDays: 2,
     capacityDaily: null,
     capacityWeekly: null,
     zones: [],

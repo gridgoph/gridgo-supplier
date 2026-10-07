@@ -2,10 +2,11 @@ import { Text } from "react-native";
 
 import { Stepper } from "@/components/controls/Stepper";
 import { ListingSection } from "@/components/listing/ListingSection";
+import { PRODUCTION_DAYS_HINT, ProductionDaysField } from "@/components/listing/ProductionDaysField";
 import { PriceTierEditor } from "@/components/listing/TierEditor";
 import { asksQuantity, unitLine, type BoardContext, type Listing } from "@/lib/listings";
 import { applyDraft, PACK_STEP, type ListingDraft } from "@/lib/listingDraft";
-import { productionHours } from "@/lib/listingWizard";
+import { productionDays } from "@/lib/listingWizard";
 
 type Props = {
   listing: Listing;
@@ -16,16 +17,14 @@ type Props = {
 
 export function SpeedStep({ listing, working, context, onChange }: Props) {
   const merged = applyDraft(listing, working);
-  const { min, max } = productionHours(working, context.inheritedTurnaroundHours);
+  const { min, max } = productionDays(working, context.inheritedTurnaroundDays);
 
-  function setWindow(nextMin: number, nextMax: number) {
-    const soonest = Math.max(1, Math.min(nextMin, nextMax));
-    const latest = Math.max(soonest, nextMax);
+  function setWindow({ minDays, maxDays }: { minDays: number; maxDays: number }) {
     onChange({
       ...working,
       turnaroundMode: "override",
-      minimumTurnaroundHours: soonest,
-      turnaroundHours: latest,
+      minimumTurnaroundDays: minDays,
+      turnaroundDays: maxDays,
       speedTiers: [],
     });
   }
@@ -72,29 +71,9 @@ export function SpeedStep({ listing, working, context, onChange }: Props) {
         </ListingSection>
       ) : null}
 
-      <ListingSection
-        title="PRODUCTION TIME"
-        hint="The soonest you can finish, and the latest you will take. A client sees this as ready-in time."
-      >
-        <Stepper
-          value={min}
-          onChange={(value) => setWindow(value, max)}
-          min={1}
-          max={336}
-          step={1}
-          unit="hours minimum"
-          accessibilityLabel="Minimum production time"
-        />
-        <Stepper
-          value={max}
-          onChange={(value) => setWindow(min, value)}
-          min={1}
-          max={336}
-          step={1}
-          unit="hours maximum"
-          accessibilityLabel="Maximum production time"
-        />
-        {context.inheritedTurnaroundHours && working.turnaroundHours == null ? (
+      <ListingSection title="PRODUCTION TIME" hint={PRODUCTION_DAYS_HINT}>
+        <ProductionDaysField minDays={min} maxDays={max} onChange={setWindow} />
+        {context.inheritedTurnaroundDays && working.turnaroundDays == null ? (
           <Text className="text-caption text-text-muted">
             Starts from your usual time for this category. Change either number for just this listing.
           </Text>

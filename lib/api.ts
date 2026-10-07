@@ -320,7 +320,7 @@ export type Order = {
   timeline: {
     at: string;
     state: string;
-    by: string;
+    by?: string | null;
     note: string;
     /** Present on evidence entries. */
     fileId?: string;
@@ -534,7 +534,10 @@ export type SupplierService = {
   qtyMax: number | null;
   pricingBasis: string;
   referenceRateMinor: number;
-  turnaroundHours: number;
+  /** Usual production time in working days. Read through `lib/productionDays.ts`. */
+  turnaroundDays?: number | null;
+  /** An older GRIDGO's hours; kept for the release gap. */
+  turnaroundHours?: number | null;
   capacityDaily: number | null;
   capacityWeekly: number | null;
   zones: string[];
@@ -559,7 +562,8 @@ export type SupplierService = {
 export type SupplierServicePatch = {
   capacityDaily?: number;
   capacityWeekly?: number;
-  turnaroundHours?: number;
+  /** Whole working days. */
+  turnaroundDays?: number;
   materialCodes?: string[];
   finishCodes?: string[];
 };

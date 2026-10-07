@@ -47,7 +47,7 @@ const READY: Listing = {
   priceTiers: [],
   speedTiers: [],
   turnaroundMode: "override",
-  turnaroundHours: 24,
+  turnaroundDays: 1,
   fileFormatMode: "override",
   formatCodes: ["pdf", "png"],
   onTheBoard: true,
@@ -58,7 +58,7 @@ const READY: Listing = {
   updatedAt: "2026-08-01T00:00:00.000Z",
 };
 
-const NOTHING_INHERITED = { inheritedTurnaroundHours: null, inheritedFormatCodes: [] };
+const NOTHING_INHERITED = { inheritedTurnaroundDays: null, inheritedFormatCodes: [] };
 
 describe("reading what GRIDGO sends", () => {
   it("reads the platform's own spelling and its snake_case twin", () => {
@@ -92,6 +92,8 @@ describe("reading what GRIDGO sends", () => {
     expect(snake?.printerMaxWidthFeet).toBeNull();
     expect(snake?.pricingUnit).toBe("per_package");
     expect(snake?.packageQty).toBe(100);
+    // An older GRIDGO's 48 hours, at its default 10-hour working day, rounded up.
+    expect(snake?.turnaroundDays).toBe(5);
     expect(snake?.onTheBoard).toBe(false);
     // Photos arrive in the order the shop set, whatever order they were sent.
     expect(snake?.photos.map((photo) => photo.fileId)).toEqual(["f1", "f2"]);
@@ -187,6 +189,7 @@ describe("reading what GRIDGO sends", () => {
     expect(starters[0].specCount).toBe(2);
     expect(starters[0].addOnCount).toBe(1);
     expect(starters[0].formatCodes).toEqual(["pdf", "png"]);
+    expect(starters[0].turnaroundDays).toBe(3);
   });
 });
 
@@ -259,10 +262,11 @@ describe("what a listing costs", () => {
     ).toBe(0);
   });
 
-  it("says the wait in the unit a shop would say it in", () => {
-    expect(readyInLine(24)).toBe("Ready in 24 hours");
-    expect(readyInLine(72)).toBe("Ready in 3 days");
-    expect(readyInLine(72, 24)).toBe("Ready in 24–72 hours");
+  it("says the wait in working days", () => {
+    expect(readyInLine(1)).toBe("Ready in 1 working day");
+    expect(readyInLine(3)).toBe("Ready in 3 working days");
+    expect(readyInLine(3, 1)).toBe("Ready in 1–3 working days");
+    expect(readyInLine(3, 3)).toBe("Ready in 3 working days");
     expect(readyInLine(null)).toBe("Ready-in not set");
   });
 });
@@ -334,11 +338,11 @@ describe("what stops a listing going on the board", () => {
     expect(boardBlockers(empty, NOTHING_INHERITED).join(" ")).toContain("“Size”");
   });
 
-  it("asks for a turnaround when neither the listing nor its category has one", () => {
-    const inheriting: Listing = { ...READY, turnaroundMode: "inherit", turnaroundHours: null };
-    expect(boardBlockers(inheriting, NOTHING_INHERITED).join(" ")).toContain("turnaround");
+  it("asks for a production time when neither the listing nor its category has one", () => {
+    const inheriting: Listing = { ...READY, turnaroundMode: "inherit", turnaroundDays: null };
+    expect(boardBlockers(inheriting, NOTHING_INHERITED).join(" ")).toContain("production time");
     expect(
-      boardBlockers(inheriting, { inheritedTurnaroundHours: 48, inheritedFormatCodes: ["pdf"] }),
+      boardBlockers(inheriting, { inheritedTurnaroundDays: 2, inheritedFormatCodes: ["pdf"] }),
     ).toEqual([]);
   });
 });
@@ -475,7 +479,7 @@ describe("where a shop may file a listing", () => {
     id: "svc_1",
     categoryCode: "marketing_collateral",
     state: "pending_verification",
-    turnaroundHours: 48,
+    turnaroundDays: 2,
     formatCodes: [],
     ...over,
   });
@@ -491,7 +495,7 @@ describe("where a shop may file a listing", () => {
   it("inherits the line's turnaround and formats", () => {
     const context = boardContextFor(READY, [line({ formatCodes: ["pdf"] })]);
     expect(context).toEqual({
-      inheritedTurnaroundHours: 48,
+      inheritedTurnaroundDays: 2,
       inheritedFormatCodes: ["pdf"],
       serviceLive: false,
     });
@@ -544,12 +548,12 @@ describe("how a shop says it sells something", () => {
         { minQuantity: 1, unitPriceMinor: 10_000 },
       ],
       speedTiers: [
-        { id: "s5", label: "5 days", turnaroundHours: 120, priceMinor: 25_000 },
-        { id: "s1", label: "1 day", turnaroundHours: 24, priceMinor: 50_000 },
+        { id: "s5", label: "5 days", turnaroundDays: 5, priceMinor: 25_000 },
+        { id: "s1", label: "1 day", turnaroundDays: 1, priceMinor: 50_000 },
       ],
     });
     expect(parsed?.priceTiers.map((tier) => tier.minQuantity)).toEqual([1, 250]);
-    expect(parsed?.speedTiers.map((tier) => tier.turnaroundHours)).toEqual([24, 120]);
+    expect(parsed?.speedTiers.map((tier) => tier.turnaroundDays)).toEqual([1, 5]);
   });
 });
 
