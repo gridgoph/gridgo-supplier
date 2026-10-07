@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.164 (Fix)
+
+- Shop photos save correctly from your camera or gallery, with a clear way to try again if an upload fails.
+
 ## 1.0.160 (New feature)
 
 - Get a notification when a new app version is ready. Tap it to download the update.
