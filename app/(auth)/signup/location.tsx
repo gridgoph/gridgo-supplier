@@ -13,7 +13,7 @@ import { useSignupDraft } from "@/store/signupDraft";
  *
  * This is the one screen in onboarding where getting it roughly right costs a
  * shop money forever — GRIDGO measures every delivery fee from this point — so
- * the map gets the whole screen and the step will not move on without it.
+ * the map keeps room for the pin and the step will not move on without it.
  */
 export default function ShopLocationStep() {
   const draft = useSignupDraft((s) => s.draft);
