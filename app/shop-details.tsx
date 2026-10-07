@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import { Alert, Platform, Pressable, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 
+import { DangerZone } from "@/components/AccountPrivacy";
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -16,6 +17,7 @@ import { ShopPortrait } from "@/components/ShopPortrait";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { TextField } from "@/components/controls/TextField";
+import { deletionConfirmMethod } from "@/lib/accountDeletion";
 import type { SupplierProfile } from "@/lib/api";
 import { changeShopPortrait, type PortraitSource } from "@/lib/clerkIdentity";
 import {
@@ -427,6 +429,15 @@ export default function ShopDetailsScreen() {
             </View>
           </>
         ) : null}
+
+        {/*
+          Last on the page and set apart, so it is never what a thumb lands on
+          while correcting a detail above. The button only opens the Delete
+          account screen, which confirms it is the account holder first.
+        */}
+        <View className="mt-10">
+          <DangerZone confirmBy={deletionConfirmMethod(clerkUser)} />
+        </View>
       </FormScrollView>
 
       <BusyOverlay visible={saving} label="Saving your shop details…" />
