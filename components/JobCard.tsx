@@ -36,13 +36,14 @@ type Props = {
  */
 export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
   const status = presentJobStatus(job);
-  // A new job's clock replaces its due date on the card: it is the sooner of the two.
+  // Keep the answer clock separate from the production date.
   const ticking = acceptWindow(job).kind !== "none";
   const now = useNow(ticking ? 30_000 : null);
   const window = acceptWindow(job, now);
   const answerLine = acceptWindowLine(window, now);
+  const dueAt = job.readyBy || job.promisedDate || job.deadline;
   // A job the shop let go is not due anywhere.
-  const urgency = deadlineUrgency(shopRelease(job) ? null : job.promisedDate || job.deadline, now);
+  const urgency = deadlineUrgency(shopRelease(job) ? null : dueAt, now);
   const spec = orderSpecSummary(job);
   const price = job.supplierPriceMinor != null
     ? formatPhp(job.supplierPriceMinor)
@@ -85,7 +86,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
                 : "text-body text-text-secondary"
           }
         >
-          {formatDeadlineFull(job.deadline || job.promisedDate)}
+          {job.readyBy ? "Ready by " : ""}{formatDeadlineFull(dueAt)}
           {urgency.level === "undated" ? "" : ` · ${urgency.label}`}
         </Text>
         {showSpec ? (
