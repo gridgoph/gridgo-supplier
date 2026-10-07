@@ -72,7 +72,7 @@ export default function ProgressPhotoScreen() {
   const proofCounts = owedProof && PHOTO_PROOF_CODES.has(owedProof.code) ? owedProof : null;
   const pdfProof = job && waiting ? uncountedPhotoProof(job) : null;
   const toSend = upload.items.filter((item) => item.stage === "stored" && item.fileId);
-  const canPackage = job ? Boolean(findAction(job, "ready_for_pickup")) : false;
+  const canPackage = job ? Boolean(findAction(job, "ready_for_pickup") || findAction(job, "add_packing_photo")) : false;
 
   async function send() {
     if (!job || !toSend.length) return;
