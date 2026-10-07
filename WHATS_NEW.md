@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.168 (New feature)
+
+- Request account deletion from Account and read the Privacy Policy from Account or sign-up.
+
 ## 1.0.164 (Fix)
 
 - Shop photos save correctly from your camera or gallery, with a clear way to try again if an upload fails.
