@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.160 (New feature)
+
+- Get a notification when a new app version is ready. Tap it to download the update.
+- Production time is now set in working days on your open hours, with the date a job started now would be ready.
+
 ## 1.0.153 (Fix)
 
 - Job history stays open even when an update has missing details.
