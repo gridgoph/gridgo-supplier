@@ -10,9 +10,14 @@ export function productionSpecRows(item: ProductionItem): SpecValue[] {
   const rows: SpecValue[] = [{ label: "Quantity", value: String(item.quantity) }];
   if (item.pricingUnit) rows.push({ label: "Unit", value: readableSpec(item.pricingUnit) });
   if (item.packageQty) rows.push({ label: "Pack size", value: String(item.packageQty) });
+  if (item.documentPages) {
+    rows.push({ label: "File pages", value: String(item.documentPages.total) });
+    rows.push({ label: "Pages to print", value: item.documentPages.range ?? "All pages" });
+    rows.push({ label: "Pages per copy", value: String(item.documentPages.printed) });
+  }
   const measurement = item.measurement;
   if (measurement) {
-    if (measurement.pages != null) rows.push({ label: "Pages", value: String(measurement.pages) });
+    if (measurement.pages != null && !item.documentPages) rows.push({ label: "Pages", value: String(measurement.pages) });
     for (const [key, label] of [["widthMilli", "Width"], ["heightMilli", "Height"], ["lengthMilli", "Length"]] as const) {
       const value = measurement[key];
       if (value != null) rows.push({ label, value: `${value / 1000}${measurement.unit ? ` ${measurement.unit}` : " (unit not recorded)"}` });

@@ -15,3 +15,18 @@ it("retains readable summary specs for legacy orders", () => {
   const items = orderProductionItems({ id: "old", title: "Legacy print", quantity: 5, size: "A4", material: "paper", finish: "matte" });
   expect(productionSpecRows(items[0])).toContainEqual({ label: "Size", value: "A4" });
 });
+
+it("shows which document pages to print and how many belong to each copy", () => {
+  const rows = productionSpecRows({ ...item, pricingUnit: "per_page", quantity: 3,
+    measurement: { pages: 5 }, documentPages: { total: 30, range: "1-4, 8", printed: 5 } });
+  expect(rows).toEqual(expect.arrayContaining([
+    { label: "Quantity", value: "3" }, { label: "File pages", value: "30" },
+    { label: "Pages to print", value: "1-4, 8" }, { label: "Pages per copy", value: "5" },
+  ]));
+  expect(rows.some(row => row.label === "Pages")).toBe(false);
+});
+it("labels all-page selections and preserves older page-only orders", () => {
+  expect(productionSpecRows({ ...item, documentPages: { total: 10, range: null, printed: 10 } }))
+    .toContainEqual({ label: "Pages to print", value: "All pages" });
+  expect(productionSpecRows({ ...item, measurement: { pages: 4 } })).toContainEqual({ label: "Pages", value: "4" });
+});
