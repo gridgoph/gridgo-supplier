@@ -2,6 +2,13 @@ import { useCallback, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
+import { Camera } from "lucide-react-native";
+import { ProgressPhotoStrip } from "@/components/ProgressPhotoStrip";
+import { UploadList } from "@/components/UploadList";
+import { useFileUpload } from "@/hooks/useFileUpload";
+import { useThemeColors } from "@/hooks/useTheme";
+import { attachPackingPhoto } from "@/lib/api";
+import { needsPackingPhoto, packingPhotoViews } from "@/lib/packingPhoto";
 import { CounterCheckPanel } from "@/components/CounterCheckPanel";
 import { FlowScreen } from "@/components/FlowScreen";
 import { PackageInvoiceNotice } from "@/components/PackageInvoiceNotice";
@@ -10,9 +17,18 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { SpecRow } from "@/components/SpecRow";
 import { StatusChip } from "@/components/StatusChip";
 import { custodyForOrder, HANDOFF_SEQUENCE } from "@/lib/handoff";
-import { isProductionPhotoRequired } from "@/lib/apiErrors";
+import {
+  humanizeApiError,
+  isPackingPhotoRequired,
+  isProductionPhotoRequired,
+  offlineMessage,
+} from "@/lib/apiErrors";
 import { findAction } from "@/lib/jobState";
-import { needsProductionPhoto, productionProgressOf, takesProductionPhoto } from "@/lib/productionPhoto";
+import {
+  needsProductionPhoto,
+  productionProgressOf,
+  takesProductionPhoto,
+} from "@/lib/productionPhoto";
 import { counterCheck, countTargets } from "@/lib/pickupCheck";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
@@ -38,11 +54,15 @@ export default function HandoffScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { job, loading, error, reload } = useJob(id);
   const action = useJobAction();
+  const colors = useThemeColors();
+  const upload = useFileUpload("packing_photo");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const clearDraft = useJobDrafts((s) => s.clearDraft);
 
   const [confirming, setConfirming] = useState(false);
   const pending = useRef(false);
-  const busy = confirming || action.busy;
+  const busy = confirming || action.busy || sending || upload.busy;
 
   useFocusEffect(
     useCallback(() => {
@@ -52,20 +72,67 @@ export default function HandoffScreen() {
 
   const custody = job ? custodyForOrder(job) : null;
   // The package is still at the counter until the rider confirms pickup.
-  const packing = custody ? custody.state !== "with_rider" && custody.state !== "delivered" : false;
+  const packing = custody
+    ? custody.state !== "with_rider" && custody.state !== "delivered"
+    : false;
   const step = job ? findAction(job, "ready_for_pickup") : null;
   // A refusal speaks for a GRIDGO too old to say whether a photo is on the job.
   const refused = isProductionPhotoRequired(action.failure);
   const photoGate = job ? needsProductionPhoto(job, refused) : false;
-  const progress = job && takesProductionPhoto(job) ? productionProgressOf(job) : null;
+  const packingGate = job
+    ? needsPackingPhoto(job, isPackingPhotoRequired(action.failure))
+    : false;
+  const canAddPacking =
+    job &&
+    !photoGate &&
+    packingGate &&
+    Boolean(findAction(job, "add_packing_photo") || step);
+  const packingPhotos = job ? packingPhotoViews(job) : [];
+  const toSend = upload.items.filter(
+    (item) => item.stage === "stored" && item.fileId,
+  );
+  const progress =
+    job && takesProductionPhoto(job) ? productionProgressOf(job) : null;
   // What the rider counts, per line, so the shop can count it first.
   const targets = job ? countTargets(job) : [];
   const check = job?.state === "rider_assigned" ? counterCheck(job) : null;
   const counterIssue = check && check.stage !== "passed" ? check : null;
 
+  async function sendPacking() {
+    if (!job || !canAddPacking || !toSend.length || pending.current) return;
+    pending.current = true;
+    setConfirming(true);
+    try {
+      const confirmed = await askConfirm({
+        question: "Send this packing photo?",
+        consequence:
+          "The client and Operations can see it straight away. Once sent, it stays on the job. You will mark Ready for dispatch next.",
+        confirmLabel: "Send packing photo",
+        cancelLabel: "Not yet",
+      });
+      if (!confirmed) return;
+      setSending(true);
+      setSendError(null);
+      for (const item of toSend) {
+        await attachPackingPhoto(item.fileId!, job.id);
+        upload.markAttached(item.key);
+      }
+      await reload();
+    } catch (error) {
+      setSendError(
+        humanizeApiError(error, offlineMessage("send this packing photo")),
+      );
+      void reload();
+    } finally {
+      pending.current = false;
+      setConfirming(false);
+      setSending(false);
+    }
+  }
+
   async function markReady() {
     if (pending.current) return;
-    if (!job || !step?.targetState) return;
+    if (!job || !step?.targetState || photoGate || packingGate) return;
 
     pending.current = true;
     setConfirming(true);
@@ -106,18 +173,23 @@ export default function HandoffScreen() {
       loading={loading && !job}
       error={job ? null : error}
       onRetry={() => void reload()}
-      title="Package for pickup"
+      title={packingGate && !photoGate ? "Packed" : "Package for pickup"}
       subject={job?.title}
       // A stopped pickup is explained once, in its own panel below.
       lede={
         photoGate
-          ? "A photo of the work comes first. GRIDGO notifies riders once one is on the job."
-          : counterIssue
-            ? "The package stays at your counter until the rider checks it again."
-            : custody?.detail ?? "Getting a job ready for the rider who collects it."
+          ? "A production photo comes first. After packing, add a separate photo of the package."
+          : canAddPacking
+            ? "Show the finished prints packed and ready. The client and Operations will see this update."
+            : counterIssue
+              ? "The package stays at your counter until the rider checks it again."
+              : (custody?.detail ??
+                "Getting a job ready for the rider who collects it.")
       }
       // The photo panel below is the explanation; the refusal would say it twice.
-      actionError={photoGate ? null : action.error}
+      actionError={
+        sendError ?? (photoGate || packingGate ? null : action.error)
+      }
       footer={
         photoGate && job ? (
           <>
@@ -130,16 +202,53 @@ export default function HandoffScreen() {
                 })
               }
             />
-            <SecondaryButton label="Back to job" onPress={() => router.back()} />
+            <SecondaryButton
+              label="Back to job"
+              onPress={() => router.back()}
+            />
           </>
-        ) : step ? (
+        ) : canAddPacking ? (
+          toSend.length ? (
+            <>
+              <PrimaryButton
+                label={
+                  sending ? "Sending packing photo…" : "Send packing photo"
+                }
+                disabled={busy}
+                onPress={() => void sendPacking()}
+              />
+              <SecondaryButton
+                label="Back to job"
+                disabled={busy}
+                onPress={() => router.back()}
+              />
+            </>
+          ) : (
+            <>
+              <PrimaryButton
+                label={upload.busy ? "Saving photo…" : "Take a packing photo"}
+                disabled={busy}
+                onPress={() => void upload.takePhoto()}
+              />
+              <SecondaryButton
+                label="Choose from gallery"
+                disabled={busy}
+                onPress={() => void upload.pickImage()}
+              />
+            </>
+          )
+        ) : step && !packingGate ? (
           <>
             <PrimaryButton
-              label={action.busy ? "Notifying riders…" : "Mark package ready"}
+              label={action.busy ? "Notifying riders…" : "Ready for dispatch"}
               disabled={busy}
               onPress={() => void markReady()}
             />
-            <SecondaryButton label="Back to job" disabled={busy} onPress={() => router.back()} />
+            <SecondaryButton
+              label="Back to job"
+              disabled={busy}
+              onPress={() => router.back()}
+            />
           </>
         ) : (
           <SecondaryButton label="Back to job" onPress={() => router.back()} />
@@ -149,23 +258,87 @@ export default function HandoffScreen() {
       {photoGate ? (
         <View className="gg-card gap-2">
           <View className="flex-row">
-            <StatusChip tone="warning" label="Production photo needed" icon="triangle-alert" />
+            <StatusChip
+              tone="warning"
+              label="Production photo needed"
+              icon="triangle-alert"
+            />
           </View>
           <Text className="text-body text-text-secondary">
-            One photo of this job on your floor, so the client can see it was made. If you filed
-            your start-of-production proof as a photo, it already counts. A PDF does not.
+            One photo of this job on your floor, so the client can see it was
+            made. If you filed your start-of-production proof as a photo, it
+            already counts. A PDF does not.
           </Text>
         </View>
       ) : null}
 
-      {job && custody ? (
+      {!photoGate && (canAddPacking || packingPhotos.length > 0) ? (
+        <View className="gg-card gap-3">
+          <View className="flex-row">
+            <StatusChip
+              tone={packingPhotos.length ? "success" : "info"}
+              label={
+                packingPhotos.length
+                  ? "Packing photo sent"
+                  : "Packing photo needed"
+              }
+              icon={packingPhotos.length ? "circle-check" : "clock"}
+            />
+          </View>
+          {packingPhotos.length ? (
+            <>
+              <ProgressPhotoStrip
+                photos={packingPhotos}
+                label="Packing photo"
+              />
+              <Text className="text-body text-text-secondary">
+                The client and Operations can see your packed work.
+              </Text>
+            </>
+          ) : (
+            <Text className="text-body text-text-secondary">
+              Photograph the finished prints in their packaging, ready to leave
+              the shop. Your production photo is a separate update.
+            </Text>
+          )}
+          {canAddPacking ? (
+            upload.items.length ? (
+              <UploadList
+                items={upload.items}
+                onRetry={(key) => void upload.retry(key)}
+                onRemove={upload.remove}
+                wording="photo"
+                emptyHint=""
+              />
+            ) : (
+              <View className="h-40 items-center justify-center gap-2 rounded-field border border-dashed border-outline bg-surface-variant px-6">
+                <Camera size={28} color={colors.textMuted} aria-hidden />
+                <Text className="text-body font-medium text-text-primary">
+                  Packed and ready
+                </Text>
+                <Text className="text-center text-caption text-text-muted">
+                  Keep the whole package in view. JPEG, PNG or WebP.
+                </Text>
+              </View>
+            )
+          ) : null}
+        </View>
+      ) : null}
+
+      {job && custody && !canAddPacking ? (
         <View className="gg-card gap-3">
           <Text className="text-overline text-text-muted">CUSTODY</Text>
           <View className="flex-row">
-            <StatusChip tone={custody.tone} label={custody.label} icon={custody.icon} />
+            <StatusChip
+              tone={custody.tone}
+              label={custody.label}
+              icon={custody.icon}
+            />
           </View>
           {counterIssue ? null : (
-            <Text className="text-body text-text-secondary">{custody.detail}</Text>
+            <Text className="text-body text-text-secondary">
+              {custody.detail}
+            </Text>
           )}
           <View>
             <SpecRow label="Next move by" value={custody.nextActor} />
@@ -184,7 +357,10 @@ export default function HandoffScreen() {
               value={job.pickup?.label || "Your shop address on file"}
             />
             {targets.length === 1 ? (
-              <SpecRow label="Pieces the rider counts" value={targets[0].expected.toLocaleString("en-PH")} />
+              <SpecRow
+                label="Pieces the rider counts"
+                value={targets[0].expected.toLocaleString("en-PH")}
+              />
             ) : targets.length > 1 ? (
               targets.map((target) => (
                 <SpecRow
@@ -204,14 +380,17 @@ export default function HandoffScreen() {
         <CounterCheckPanel
           check={counterIssue}
           onMessageOperations={() =>
-            router.push({ pathname: "/report", params: { orderId: job!.id, title: job!.title } })
+            router.push({
+              pathname: "/report",
+              params: { orderId: job!.id, title: job!.title },
+            })
           }
         />
       ) : null}
 
-      {packing ? <PackageInvoiceNotice /> : null}
+      {packing && !canAddPacking ? <PackageInvoiceNotice /> : null}
 
-      <HandoffSequence />
+      {canAddPacking ? null : <HandoffSequence />}
     </FlowScreen>
   );
 }
@@ -231,15 +410,22 @@ function HandoffSequence() {
           <View key={step.id} className="flex-row gap-3">
             <View className="items-center">
               <View className="h-6 w-6 items-center justify-center rounded-pill bg-accent">
-                <Text maxFontSizeMultiplier={1.2} className="text-caption font-medium text-accent-on">
+                <Text
+                  maxFontSizeMultiplier={1.2}
+                  className="text-caption font-medium text-accent-on"
+                >
                   {index + 1}
                 </Text>
               </View>
               {last ? null : <View className="mt-1 w-px flex-1 bg-outline" />}
             </View>
             <View className={last ? "flex-1 gap-1" : "flex-1 gap-1 pb-3"}>
-              <Text className="text-body font-medium text-text-primary">{step.title}</Text>
-              <Text className="text-body text-text-secondary">{step.detail}</Text>
+              <Text className="text-body font-medium text-text-primary">
+                {step.title}
+              </Text>
+              <Text className="text-body text-text-secondary">
+                {step.detail}
+              </Text>
             </View>
           </View>
         );

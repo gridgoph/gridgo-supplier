@@ -13,6 +13,7 @@ import { rememberLink } from "@/lib/signedLinks";
 
 type Props = {
   photos: ProgressPhotoView[];
+  label?: string;
 };
 
 /**
@@ -27,7 +28,7 @@ type Props = {
  * Plain rounded plates, not the crop-mark frame: register marks say "print
  * sample", and these are pictures of a job on the floor.
  */
-export function ProgressPhotoStrip({ photos }: Props) {
+export function ProgressPhotoStrip({ photos, label = "Progress photo" }: Props) {
   if (!photos.length) return null;
   return (
     <ScrollView
@@ -35,16 +36,16 @@ export function ProgressPhotoStrip({ photos }: Props) {
       showsHorizontalScrollIndicator={false}
       contentContainerClassName="gap-3"
       accessibilityRole="list"
-      accessibilityLabel={`${photos.length} progress ${photos.length === 1 ? "photo" : "photos"}`}
+      accessibilityLabel={`${photos.length} ${label.toLowerCase()}${photos.length === 1 ? "" : "s"}`}
     >
       {photos.map((photo, index) => (
-        <ProgressPhotoTile key={photo.fileId} photo={photo} index={index + 1} />
+        <ProgressPhotoTile key={photo.fileId} photo={photo} index={index + 1} label={label} />
       ))}
     </ScrollView>
   );
 }
 
-function ProgressPhotoTile({ photo, index }: { photo: ProgressPhotoView; index: number }) {
+function ProgressPhotoTile({ photo, index, label }: { photo: ProgressPhotoView; index: number; label: string }) {
   const colors = useThemeColors();
   // The order read carried a link; keep it so the plate draws without a second request.
   rememberLink(photo.fileId, photo.downloadUrl, photo.downloadUrlExpiresAt);
@@ -54,7 +55,7 @@ function ProgressPhotoTile({ photo, index }: { photo: ProgressPhotoView; index: 
 
   const when = photo.at ? formatTimelineAt(photo.at) : null;
   const proof = photo.proofOf ? milestoneDefinition(photo.proofOf).proofName : null;
-  const alt = `Progress photo ${index}${when ? `, ${when}` : ""}${proof ? `, also your ${proof} proof` : ""}`;
+  const alt = `${label} ${index}${when ? `, ${when}` : ""}${proof ? `, also your ${proof} proof` : ""}`;
 
   return (
     <View className="w-28 gap-1.5" accessibilityRole="none">
