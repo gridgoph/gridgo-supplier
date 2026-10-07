@@ -6,6 +6,13 @@ import {
   type CatalogCoverage,
   type ServiceCatalog,
 } from "@/lib/taxonomy";
+import {
+  readListingDays,
+  readServiceLineDays,
+  readSpeedTierDays,
+  readStarterDays,
+  workingDaysLabel,
+} from "@/lib/productionDays";
 import { listingOwnSteps, type ListingReadiness } from "@/lib/readiness";
 
 /**
@@ -69,14 +76,15 @@ export type PriceTier = { minQuantity: number; unitPriceMinor: number };
 
 /**
  * A speed the shop sells. It either replaces the price outright -- hardbound is
- * PHP 250 at five days and PHP 700 at two hours, which are two prices for the
+ * PHP 250 at five days and PHP 700 at one day, which are two prices for the
  * same book -- or adds a flat fee to the order, which is how a rush charge
  * works. Never both.
  */
 export type SpeedTier = {
   id: string;
   label: string;
-  turnaroundHours: number;
+  /** Whole working days. */
+  turnaroundDays: number;
   priceMinor: number | null;
   surchargeMinor: number | null;
 };
@@ -262,9 +270,10 @@ export type Listing = {
   priceTiers: PriceTier[];
   speedTiers: SpeedTier[];
   turnaroundMode: TurnaroundMode;
-  turnaroundHours: number | null;
-  /** Soonest this listing can be ready, in hours. Null when it inherits. */
-  minimumTurnaroundHours?: number | null;
+  /** Latest this listing takes, in working days. Null when it inherits. */
+  turnaroundDays: number | null;
+  /** Soonest this listing can be ready, in working days. Null when it inherits. */
+  minimumTurnaroundDays?: number | null;
   fileFormatMode: FileFormatMode;
   /** The listing's own set when it overrides; otherwise what GRIDGO echoed back. */
   formatCodes: string[];
@@ -343,7 +352,7 @@ export type ListingStarter = {
   subcategoryCode: string;
   pricingUnit: PricingUnit;
   packageQty: number | null;
-  turnaroundHours: number | null;
+  turnaroundDays: number | null;
   formatCodes: string[];
   /** What it brings, so the pick screen can say so before it is chosen. */
   specCount: number;
@@ -532,6 +541,7 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     str(pick(raw, "turnaroundMode", "turnaround_mode")) === "override" ? "override" : "inherit";
   const fileFormatMode: FileFormatMode =
     str(pick(raw, "fileFormatMode", "file_format_mode")) === "override" ? "override" : "inherit";
+  const days = readListingDays(raw);
 
   return {
     id,
@@ -552,8 +562,8 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     priceTiers: readPriceTiers(pick(raw, "priceTiers", "price_tiers")),
     speedTiers: readSpeedTiers(pick(raw, "speedTiers", "speed_tiers")),
     turnaroundMode,
-    turnaroundHours: num(pick(raw, "turnaroundHours", "turnaround_hours")),
-    minimumTurnaroundHours: num(pick(raw, "minimumTurnaroundHours", "minimum_turnaround_hours")),
+    turnaroundDays: days.maxDays,
+    minimumTurnaroundDays: days.minDays,
     fileFormatMode,
     formatCodes: readFormatCodes(
       pick(raw, "formatCodes", "format_codes", "fileFormats", "acceptedFormats"),
@@ -630,9 +640,7 @@ export function normalizeStarters(body: unknown): ListingStarter[] {
             ? "per_package"
             : "per_unit",
         packageQty: num(pick(raw, "defaultPackageQty", "default_package_qty", "packageQty")),
-        turnaroundHours: num(
-          pick(raw, "defaultTurnaroundHours", "default_turnaround_hours", "turnaroundHours"),
-        ),
+        turnaroundDays: readStarterDays(raw),
         formatCodes: readFormatCodes(
           pick(raw, "defaultFormatCodes", "default_format_codes", "formatCodes"),
         ),
@@ -733,18 +741,18 @@ function readSpeedTiers(value: unknown): SpeedTier[] {
   return value
     .map((row, index) => {
       if (!isRecord(row)) return null;
-      const turnaroundHours = num(pick(row, "turnaroundHours", "turnaround_hours"));
-      if (!turnaroundHours || turnaroundHours < 1) return null;
+      const turnaroundDays = readSpeedTierDays(row);
+      if (!turnaroundDays) return null;
       return {
         id: str(pick(row, "id")) ?? `speed_${index}`,
-        label: str(pick(row, "label")) ?? `${turnaroundHours} hours`,
-        turnaroundHours,
+        label: str(pick(row, "label")) ?? workingDaysLabel(turnaroundDays),
+        turnaroundDays,
         priceMinor: num(pick(row, "priceMinor", "price_minor")),
         surchargeMinor: num(pick(row, "surchargeMinor", "surcharge_minor")),
       };
     })
     .filter((row): row is SpeedTier => row !== null)
-    .sort((left, right) => left.turnaroundHours - right.turnaroundHours);
+    .sort((left, right) => left.turnaroundDays - right.turnaroundDays);
 }
 
 /**
@@ -779,23 +787,20 @@ export function priceLine(listing: Listing): string {
   return hasPriceRange(listing) ? `From ${money} ${unitLine(listing)}` : `${money} ${unitLine(listing)}`;
 }
 
-/** What the shop's usual time means for this listing, in hours. */
-export function effectiveTurnaroundHours(
+/** What the shop's usual time means for this listing, in working days. */
+export function effectiveTurnaroundDays(
   listing: Listing,
-  inheritedHours: number | null,
+  inheritedDays: number | null,
 ): number | null {
-  return listing.turnaroundMode === "override" ? listing.turnaroundHours : inheritedHours;
+  return listing.turnaroundMode === "override" ? listing.turnaroundDays : inheritedDays;
 }
 
-export function readyInLine(hours: number | null, minimumHours?: number | null): string {
-  if (hours == null || hours <= 0) return "Ready-in not set";
-  if (minimumHours != null && minimumHours > 0 && minimumHours < hours) {
-    return `Ready in ${minimumHours}–${hours} hours`;
-  }
-  if (hours < 48) return `Ready in ${hours} hours`;
-  if (hours % 24 === 0) return `Ready in ${hours / 24} days`;
-  return `Ready in ${hours} hours`;
+/** The soonest a client reads beside it, or null when there is no range to show. */
+export function effectiveMinimumDays(listing: Listing): number | null {
+  return listing.turnaroundMode === "override" ? (listing.minimumTurnaroundDays ?? null) : null;
 }
+
+export { readyInLine } from "@/lib/productionDays";
 
 /** The formats this listing actually accepts, override or inherited. */
 export function effectiveFormatCodes(
@@ -810,8 +815,8 @@ export function effectiveFormatCodes(
    -------------------------------------------------------------------------- */
 
 export type BoardContext = {
-  /** The service line's own turnaround, used when this listing inherits it. */
-  inheritedTurnaroundHours: number | null;
+  /** The service line's own production time in working days, used when this listing inherits it. */
+  inheritedTurnaroundDays: number | null;
   /** The service line's own accepted formats, used when this listing inherits. */
   inheritedFormatCodes: string[];
   /**
@@ -865,7 +870,7 @@ export function presentGridgoCode(code: string, listing: Listing): string {
  *
  * Matches `catalogItemBlockers` in gridgo-api: name, price, subcategory,
  * printer cap for tarpaulins, accepted formats, at least one photo, an active
- * option in every group. Description, measure unit, pack count and hours are
+ * option in every group. Description, measure unit, pack count and production days are
  * not here — those are editor guidance.
  *
  * A photo still `pending_upload` is invisible to this local pass (we only have
@@ -935,11 +940,11 @@ export function editorGuidance(listing: Listing, context: BoardContext): string[
   }
   if (
     listing.turnaroundMode === "override" &&
-    (listing.turnaroundHours == null || listing.turnaroundHours <= 0)
+    (listing.turnaroundDays == null || listing.turnaroundDays <= 0)
   ) {
-    out.push("Set how many hours this takes, or use your shop's usual time.");
-  } else if (effectiveTurnaroundHours(listing, context.inheritedTurnaroundHours) == null) {
-    out.push("Your shop has no usual turnaround yet. Set the hours for this listing.");
+    out.push("Set how many working days this takes, or use your shop's usual time.");
+  } else if (effectiveTurnaroundDays(listing, context.inheritedTurnaroundDays) == null) {
+    out.push("Your shop has no usual production time yet. Set the working days for this listing.");
   }
 
   return out;
@@ -1310,7 +1315,8 @@ export type ServiceLine = {
   id: string;
   categoryCode: string;
   state: string;
-  turnaroundHours: number | null;
+  /** The line's usual production time, in working days. */
+  turnaroundDays: number | null;
   formatCodes: string[];
 };
 
@@ -1324,8 +1330,7 @@ export function normalizeServiceLines(body: unknown): ServiceLine[] {
         id,
         categoryCode,
         state: str(pick(raw, "state")) ?? "draft",
-        turnaroundHours:
-          num(pick(raw, "turnaroundHours", "standardTurnaroundHours", "turnaround_hours")),
+        turnaroundDays: readServiceLineDays(raw),
         formatCodes: readFormatCodes(
           pick(raw, "acceptedFormats", "formatCodes", "accepted_formats", "fileFormats"),
         ),
@@ -1355,7 +1360,7 @@ export function boardContextFor(
 ): BoardContext {
   const line = serviceLineFor(listing, services);
   return {
-    inheritedTurnaroundHours: line?.turnaroundHours ?? null,
+    inheritedTurnaroundDays: line?.turnaroundDays ?? null,
     inheritedFormatCodes: line?.formatCodes ?? [],
     serviceLive: line ? line.state === "live" : null,
   };

@@ -9,6 +9,7 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";
 import type { PriceTier, SpeedTier } from "@/lib/listings";
+import { PRODUCTION_DAYS, workingDaysLabel } from "@/lib/productionDays";
 
 /**
  * Bulk breaks and speeds, edited as the short lists they are.
@@ -127,21 +128,21 @@ export function SpeedTierEditor({
   onChange: (next: SpeedTier[]) => void;
 }) {
   const [label, setLabel] = useState("");
-  const [hours, setHours] = useState(24);
+  const [days, setDays] = useState(1);
   const [price, setPrice] = useState("");
 
-  const sorted = [...tiers].sort((left, right) => left.turnaroundHours - right.turnaroundHours);
+  const sorted = [...tiers].sort((left, right) => left.turnaroundDays - right.turnaroundDays);
 
   const add = () => {
     const pesos = Number.parseFloat(price);
-    if (!label.trim() || !hours || !Number.isFinite(pesos) || pesos < 0) return;
-    if (sorted.some((tier) => tier.turnaroundHours === hours)) return;
+    if (!label.trim() || !days || !Number.isFinite(pesos) || pesos < 0) return;
+    if (sorted.some((tier) => tier.turnaroundDays === days)) return;
     onChange([
       ...sorted,
       {
-        id: `speed_${hours}`,
+        id: `speed_${days}`,
         label: label.trim(),
-        turnaroundHours: hours,
+        turnaroundDays: days,
         // A speed the shop prices is a price for the job at that speed, not a
         // fee on top. A rush fee is the other shape and is not offered here,
         // because a shop that wants one writes it as an add-on.
@@ -162,15 +163,15 @@ export function SpeedTierEditor({
 
       {sorted.map((tier) => (
         <RowShell
-          key={tier.turnaroundHours}
+          key={tier.turnaroundDays}
           removeLabel={`Remove ${tier.label}`}
-          onRemove={() => onChange(sorted.filter((row) => row.turnaroundHours !== tier.turnaroundHours))}
+          onRemove={() => onChange(sorted.filter((row) => row.turnaroundDays !== tier.turnaroundDays))}
         >
           <Text className="text-body text-text-primary">{tier.label}</Text>
           <Text className="text-body-lg text-text-primary font-medium">
             {tier.priceMinor != null ? api.formatPhp(tier.priceMinor) : `+${api.formatPhp(tier.surchargeMinor ?? 0)}`}{" "}
             <Text className="text-caption text-text-muted">
-              {tier.turnaroundHours} hours
+              {workingDaysLabel(tier.turnaroundDays)}
             </Text>
           </Text>
         </RowShell>
@@ -180,17 +181,17 @@ export function SpeedTierEditor({
         <TextField
           value={label}
           onChange={setLabel}
-          placeholder="What you call it — 3 days, same day"
+          placeholder="What you call it — Express, 1 day"
           accessibilityLabel="What this speed is called"
         />
         <Stepper
-          value={hours}
-          onChange={setHours}
-          min={1}
-          max={720}
+          value={days}
+          onChange={setDays}
+          min={PRODUCTION_DAYS.min}
+          max={PRODUCTION_DAYS.max}
           step={1}
-          unit="hours"
-          accessibilityLabel="Hours this speed takes"
+          unit={days === 1 ? "working day" : "working days"}
+          accessibilityLabel="Working days this speed takes"
         />
         <MoneyField value={price} onChange={setPrice} accessibilityLabel="Price at this speed" />
         <SecondaryButton

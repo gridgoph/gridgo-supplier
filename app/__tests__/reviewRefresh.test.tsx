@@ -24,7 +24,7 @@ jest.mock("@/lib/api", () => ({
 jest.mock("@/lib/listingsApi", () => ({ loadBoard: jest.fn(async () => ({ status: "not_open_yet" })) }));
 jest.mock("@/hooks/useBoard", () => ({ loadServiceLines: jest.fn(async () => []) }));
 
-const service = { id: "svc_1", categoryCode: "tarpaulin", state: "live", capacityDaily: 10, capacityWeekly: 100, turnaroundHours: 24 } as api.SupplierService;
+const service = { id: "svc_1", categoryCode: "tarpaulin", state: "live", capacityDaily: 10, capacityWeekly: 100, turnaroundDays: 1 } as api.SupplierService;
 const job: api.Order = {
   id: "ord_1", title: "Current print job", state: "production", timeline: [],
   clientId: "client_1", supplierId: "shop", riderId: null, productId: "product_1",
@@ -55,7 +55,7 @@ it("preserves capacity edits made while a live reload is pending", async () => {
   expect(screen.getByLabelText(/^Daily capacity for/).props.accessibilityValue.now).toBe(15);
   (api.updateSupplierService as jest.Mock).mockResolvedValue({ ...service, capacityDaily: 15 });
   await fireEvent.press(screen.getByLabelText("Save capacity"));
-  expect(api.updateSupplierService).toHaveBeenCalledWith("svc_1", { capacityDaily: 15, capacityWeekly: 100, turnaroundHours: 24 });
+  expect(api.updateSupplierService).toHaveBeenCalledWith("svc_1", { capacityDaily: 15, capacityWeekly: 100, turnaroundDays: 1 });
   await view.unmount();
 });
 

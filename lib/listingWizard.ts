@@ -4,7 +4,6 @@ import {
   NAME_NEEDED,
   PHOTO_NEEDED,
   effectiveFormatCodes,
-  effectiveTurnaroundHours,
   editorGuidance,
   isPrinterCapSet,
   needsPrinterCap,
@@ -12,6 +11,7 @@ import {
   type Listing,
 } from "@/lib/listings";
 import { applyDraft, type ListingDraft } from "@/lib/listingDraft";
+import { clampWindow, windowProblem } from "@/lib/productionDays";
 
 /**
  * The add-a-listing interview, in the order a shop walks it.
@@ -72,24 +72,32 @@ export function priceReady(price: string): boolean {
   return money.ok && money.minor != null;
 }
 
-export function productionHours(
+/** A new listing with nothing set starts at two working days. */
+export const DEFAULT_PRODUCTION_DAYS = 2;
+
+/**
+ * The window the production-time step shows: the listing's own, else its
+ * category line's usual time, else two working days.
+ */
+export function productionDays(
   draft: ListingDraft,
-  inheritedHours: number | null,
+  inheritedDays: number | null,
 ): { min: number; max: number } {
-  const max = draft.turnaroundHours ?? inheritedHours ?? 24;
-  const min = draft.minimumTurnaroundHours ?? max;
-  return { min: Math.min(min, max), max: Math.max(min, max) };
+  const max = draft.turnaroundDays ?? inheritedDays ?? DEFAULT_PRODUCTION_DAYS;
+  const min = draft.minimumTurnaroundDays ?? max;
+  const window = clampWindow(min, max);
+  return { min: window.minDays, max: window.maxDays };
 }
 
 export function speedReady(listing: Listing, draft: ListingDraft, context: BoardContext): boolean {
-  const { min, max } = productionHours(draft, context.inheritedTurnaroundHours);
-  return min >= 1 && max >= min;
+  const { min, max } = productionDays(draft, context.inheritedTurnaroundDays);
+  return windowProblem(min, max) == null;
 }
 
 export function speedGuidance(listing: Listing, draft: ListingDraft, context: BoardContext): string | null {
   const merged = applyDraft(listing, draft);
   return editorGuidance(merged, context).find((line) =>
-    line.includes("turnaround") || line.includes("hours this takes") || line.includes("usual"),
+    line.includes("production time") || line.includes("working days") || line.includes("usual"),
   ) ?? null;
 }
 

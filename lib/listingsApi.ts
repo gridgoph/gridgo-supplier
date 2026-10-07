@@ -16,7 +16,9 @@ import {
   type ListingStarter,
   type PrepStep,
   type SpecGroup,
+  type SpeedTier,
 } from "@/lib/listings";
+import type { speedTierDaysField } from "@/lib/productionDays";
 import {
   normalizeProductTypeRequest,
   normalizeProductTypeRequests,
@@ -219,10 +221,12 @@ export type ListingPatch = {
   minimumOrderQuantity?: number | null;
   /** Replaced as a set: removing a break removes it. */
   priceTiers?: Listing["priceTiers"];
-  speedTiers?: Listing["speedTiers"];
+  /** Written through `speedTierDaysField` in `lib/productionDays.ts`. */
+  speedTiers?: (Omit<SpeedTier, "turnaroundDays"> & ReturnType<typeof speedTierDaysField>)[];
   turnaroundMode?: Listing["turnaroundMode"];
-  turnaroundHours?: number | null;
-  minimumTurnaroundHours?: number | null;
+  /** Whole working days, written through `listingDaysFields` in `lib/productionDays.ts`. */
+  turnaroundDays?: number | null;
+  minimumTurnaroundDays?: number | null;
   subcategoryCode?: string;
   /** The platform's `active`; "on the board" everywhere a shop can see. */
   active?: boolean;

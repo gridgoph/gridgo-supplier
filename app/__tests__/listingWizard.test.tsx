@@ -71,7 +71,7 @@ const services = [
     id: "svc_1",
     categoryCode: "marketing_promotional",
     state: "live",
-    turnaroundHours: 48,
+    turnaroundDays: 2,
     formatCodes: ["pdf"],
   },
 ];
@@ -95,7 +95,7 @@ function listingWith(overrides: Partial<Listing> = {}): Listing {
     priceTiers: [],
     speedTiers: [],
     turnaroundMode: "inherit",
-    turnaroundHours: null,
+    turnaroundDays: null,
     fileFormatMode: "inherit",
     formatCodes: [],
     onTheBoard: false,
@@ -254,8 +254,8 @@ describe("Add a listing — later steps", () => {
     expect(await screen.findByLabelText("Pieces in a pack")).toBeTruthy();
     expect(screen.getByText(/Cheaper in bulk/)).toBeTruthy();
     expect(screen.getByLabelText("Smallest order you will take")).toBeTruthy();
-    expect(screen.getByLabelText("Minimum production time")).toBeTruthy();
-    expect(screen.getByLabelText("Maximum production time")).toBeTruthy();
+    expect(screen.getByLabelText("Minimum production time in working days")).toBeTruthy();
+    expect(screen.getByLabelText("Maximum production time in working days")).toBeTruthy();
     expect(screen.queryByText(/Faster, for more/)).toBeNull();
     expect(screen.queryByText("Your usual time")).toBeNull();
   });
@@ -268,7 +268,7 @@ describe("Add a listing — later steps", () => {
         name: "Event flyers",
         basePriceMinor: 45000,
         turnaroundMode: "inherit",
-        turnaroundHours: null,
+        turnaroundDays: null,
       }),
     );
     await render(<NewListingScreen />);
@@ -280,12 +280,48 @@ describe("Add a listing — later steps", () => {
         expect.objectContaining({ id: "item_1" }),
         expect.objectContaining({
           turnaroundMode: "override",
-          minimumTurnaroundHours: 48,
-          turnaroundHours: 48,
+          minimumTurnaroundDays: 2,
+          turnaroundDays: 2,
           speedTiers: [],
         }),
       );
     });
+  });
+
+  it("asks for production time in working days, shows a ready date, and saves the days", async () => {
+    openAt(
+      "speed",
+      listingWith({
+        photos: [{ fileId: "file_1", sortOrder: 0, altText: null }],
+        name: "Event flyers",
+        basePriceMinor: 45000,
+        turnaroundMode: "inherit",
+        turnaroundDays: null,
+      }),
+    );
+    await render(<NewListingScreen />);
+
+    expect(await screen.findByText(/Working days, on your shop's open hours/)).toBeTruthy();
+    expect(screen.getByText(/A job that starts now is ready by/)).toBeTruthy();
+    expect(screen.queryByText(/\d+ hours/)).toBeNull();
+
+    await fireEvent.press(screen.getByLabelText("Increase Maximum production time in working days"));
+    expect(screen.getByText(/A job that starts now is ready between/)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Proceed" }));
+
+    await waitFor(() => {
+      expect(saveListing).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "item_1" }),
+        expect.objectContaining({
+          turnaroundMode: "override",
+          minimumTurnaroundDays: 2,
+          turnaroundDays: 3,
+        }),
+      );
+    });
+    const patch = (saveListing as jest.Mock).mock.calls.at(-1)?.[1];
+    expect(patch).not.toHaveProperty("turnaroundHours");
+    expect(patch).not.toHaveProperty("minimumTurnaroundHours");
   });
 
   it("saves a step as soon as it is added", async () => {

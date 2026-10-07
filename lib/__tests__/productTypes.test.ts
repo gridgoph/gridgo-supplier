@@ -33,7 +33,7 @@ const target: BoardTarget = {
     id: "svc_1",
     categoryCode: "marketing_collateral",
     state: "live",
-    turnaroundHours: 24,
+    turnaroundDays: 1,
     formatCodes: ["pdf"],
   },
   category: catalog.categories[0],

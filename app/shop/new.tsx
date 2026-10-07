@@ -28,7 +28,7 @@ import {
   createListingName,
   pickReady,
   priceReady,
-  productionHours,
+  productionDays,
   speedReady,
   wizardStepIndex,
   type WizardStepId,
@@ -319,14 +319,14 @@ export default function NewListingScreen() {
         setActionError(money.error);
         return false;
       }
-      const window = productionHours(working, context?.inheritedTurnaroundHours ?? null);
+      const window = productionDays(working, context?.inheritedTurnaroundDays ?? null);
       const toSave =
         step === "speed"
           ? {
               ...working,
               turnaroundMode: "override" as const,
-              minimumTurnaroundHours: window.min,
-              turnaroundHours: window.max,
+              minimumTurnaroundDays: window.min,
+              turnaroundDays: window.max,
               speedTiers: [],
             }
           : working;
@@ -370,7 +370,7 @@ export default function NewListingScreen() {
         setBusy(false);
       }
     },
-    [baseline, context?.inheritedTurnaroundHours, reload, step, working],
+    [baseline, context?.inheritedTurnaroundDays, reload, step, working],
   );
 
   const persistThen = useCallback(
