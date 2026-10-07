@@ -48,6 +48,7 @@ const CONTROLS = "components/controls";
  * so shrinking is the only thing that can move its address field into view.
  */
 const HANDLED_BY_ITS_CALLERS = [
+  "components/ConversationDetails.tsx",
   "components/ShopLocationPicker.tsx",
   "components/JobTicketCode.tsx",
   "components/SpecGroupEditor.tsx",
@@ -71,6 +72,9 @@ const HANDLED_BY_ITS_CALLERS = [
  * are checked instead — an exemption nobody checks is a hole.
  */
 const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
+  // Search replaces the transcript inside the chat's keyboard-aware column.
+  // SupportChatConversation-search.test.tsx also checks the rendered ancestry.
+  { component: "ConversationDetails", users: /<ConversationDetails\b/, least: 1 },
   // Shop pin from Settings, and the public apply location step.
   { component: "ShopLocationPicker", users: /<ShopLocationPicker\b/, least: 2 },
   // Every step and add-on on one listing is edited inside the listing screen.
