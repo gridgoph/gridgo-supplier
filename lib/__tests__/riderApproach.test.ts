@@ -175,6 +175,13 @@ describe("buildApproachMapHtml", () => {
     expect(html).toContain("\\u003c/script\\u003e");
   });
 
+  it("writes only hex colours into attributes and escapes quotes in a name", () => {
+    const html = buildApproachMapHtml(model);
+    expect(html).toContain("hex(m.colors.rider, '#1565C0')");
+    expect(html).toContain(".replace(/'/g, '&#39;')");
+    expect(html).not.toMatch(/style="background:' \+ m\.colors/);
+  });
+
   it("says it is ready as soon as it can take a model", () => {
     expect(buildApproachMapHtml(model)).toContain("send({ type: 'ready' })");
   });

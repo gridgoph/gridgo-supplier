@@ -123,10 +123,17 @@ export function buildApproachMapHtml(model: ApproachMapModel): string {
 
     function escapeHtml(value) {
       return String(value == null ? '' : value)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
-    function shopIcon(c) {
+    // Colours are written into attributes, so only a plain hex value is ever used.
+    function hex(value, fallback) {
+      return /^#[0-9a-fA-F]{3,8}$/.test(String(value)) ? String(value) : fallback;
+    }
+
+    function shopIcon(colors) {
+      var c = { shopFill: hex(colors.shopFill, '#1A1A1A'), shopInk: hex(colors.shopInk, '#FFFFFF') };
       return L.divIcon({
         className: '',
         html: '<div class="shop"><svg width="34" height="48" viewBox="0 0 34 48">'
@@ -139,12 +146,13 @@ export function buildApproachMapHtml(model: ApproachMapModel): string {
     }
 
     function riderIcon(m) {
+      var dot = hex(m.colors.rider, '#1565C0');
       var name = m.riderLabel ? '<div class="name">' + escapeHtml(m.riderLabel) + '</div>' : '';
       return L.divIcon({
         className: '',
         html: '<div class="rider' + (m.faded ? ' faded' : '') + '">'
-          + '<div class="halo" style="background:' + m.colors.rider + '"></div>'
-          + '<div class="dot" style="background:' + m.colors.rider + '"></div>'
+          + '<div class="halo" style="background:' + dot + '"></div>'
+          + '<div class="dot" style="background:' + dot + '"></div>'
           + name + '</div>',
         iconSize: [22, 22],
         iconAnchor: [11, 11]
@@ -186,8 +194,8 @@ export function buildApproachMapHtml(model: ApproachMapModel): string {
       if (m.route && m.route.length >= 2) {
         var latlngs = m.route.map(function (c) { return [c[1], c[0]]; });
         var opacity = m.faded ? 0.45 : 1;
-        casing = L.polyline(latlngs, { color: m.colors.casing, weight: 9, opacity: opacity, lineJoin: 'round', lineCap: 'round' }).addTo(map);
-        line = L.polyline(latlngs, { color: m.colors.route, weight: 5, opacity: opacity, lineJoin: 'round', lineCap: 'round' }).addTo(map);
+        casing = L.polyline(latlngs, { color: hex(m.colors.casing, '#1A1A1A'), weight: 9, opacity: opacity, lineJoin: 'round', lineCap: 'round' }).addTo(map);
+        line = L.polyline(latlngs, { color: hex(m.colors.route, '#FFDE58'), weight: 5, opacity: opacity, lineJoin: 'round', lineCap: 'round' }).addTo(map);
       }
 
       if (m.shop) {
