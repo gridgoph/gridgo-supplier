@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+
 import * as api from "@/lib/api";
 
 export const SUPPORT_CHAT_IMAGE_PURPOSE = "support_chat_image" as const;
@@ -57,22 +59,36 @@ export async function uploadChatImage(asset: {
   if (!token) throw new Error("Sign in again to send this photo.");
   const form = new FormData();
   form.append("purpose", SUPPORT_CHAT_IMAGE_PURPOSE);
-  form.append("file", {
-    uri: asset.uri,
-    name: asset.name,
-    type: asset.mimeType,
-  } as unknown as Blob);
-  const response = await fetch(`${api.getApiBase()}/files`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${token}`,
-      "X-GRIDGO-Role": "supplier",
-    },
-    body: form,
+  if (Platform.OS === "web") {
+    const photo = await fetch(asset.uri);
+    form.append("file", await photo.blob(), asset.name);
+  } else {
+    form.append("file", {
+      uri: asset.uri,
+      name: asset.name,
+      type: asset.mimeType,
+    } as unknown as Blob);
+  }
+  // Expo 57's fetch rejects React Native's URI form parts; XHR streams them.
+  const response = await new Promise<{ status: number; text: string }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${api.getApiBase()}/files`);
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("X-GRIDGO-Role", "supplier");
+    xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText });
+    xhr.onerror = () => reject(new Error("That photo did not reach GRIDGO. Try again."));
+    xhr.ontimeout = () => reject(new Error("That photo took too long to send. Try again."));
+    xhr.onabort = () => reject(new Error("The photo upload was cancelled. Try again."));
+    xhr.send(form);
   });
-  const data = (await response.json().catch(() => null)) as { file?: { fileId?: string } } | null;
-  if (!response.ok || !data?.file?.fileId) {
+  let data: { file?: { fileId?: unknown } } | null = null;
+  try {
+    data = JSON.parse(response.text) as { file?: { fileId?: unknown } } | null;
+  } catch {
+    // A malformed response cannot confirm storage.
+  }
+  if (response.status !== 201 || typeof data?.file?.fileId !== "string" || !data.file.fileId) {
     throw new Error("That photo did not reach GRIDGO. Try again.");
   }
   return data.file.fileId;

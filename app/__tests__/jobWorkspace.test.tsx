@@ -1,5 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 
+import { formatDeadlineFull } from "@/lib/dates";
+
 import JobWorkspaceScreen from "@/app/job/[id]/index";
 import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
 import { getFile, getMyProductionLapses, getOrder } from "@/lib/api";
@@ -500,5 +502,29 @@ describe("job workspace late production", () => {
     await render(<JobWorkspaceScreen />);
     expect(await screen.findByText("Barangay tarpaulin")).toBeTruthy();
     expect(screen.queryByTestId("lateness-notice")).toBeNull();
+  });
+});
+
+describe("job workspace client date", () => {
+  afterEach(() => jest.clearAllMocks());
+
+  it.each([null, "2026-10-14T18:00:00+08:00"])(
+    "hides the absent client date with readyBy %s",
+    async (readyBy) => {
+      (getOrder as jest.Mock).mockResolvedValue(job({ promisedDate: null, deadline: null, readyBy }));
+      await render(<JobWorkspaceScreen />);
+      expect(await screen.findByText("Order ord_1")).toBeTruthy();
+      expect(screen.queryByText(/Client needs it by|Promised/)).toBeNull();
+    },
+  );
+
+  it.each([
+    { promisedDate: null, deadline: "2026-10-15T18:00:00+08:00", label: "Client needs it by" },
+    { promisedDate: "2026-10-14T18:00:00+08:00", deadline: "2026-10-15T18:00:00+08:00", label: "Promised" },
+  ])("keeps the real $label date", async ({ promisedDate, deadline, label }) => {
+    (getOrder as jest.Mock).mockResolvedValue(job({ promisedDate, deadline }));
+    await render(<JobWorkspaceScreen />);
+    const dates = await screen.findAllByText(`${label} ${formatDeadlineFull(promisedDate || deadline)}`);
+    expect(dates[0].props.className).toBe("text-body-lg text-text-secondary");
   });
 });

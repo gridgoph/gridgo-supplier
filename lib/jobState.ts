@@ -359,6 +359,17 @@ export function isAwaitingDecision(order: Pick<Order, "state">): boolean {
   return order.state === "supplier_assigned";
 }
 
+/** No deadline countdown once fulfilment has ended, even if payouts remain. */
+export function isFulfilmentFinished(order: Pick<Order, "state" | "refundDisposition">): boolean {
+  return Boolean(order.refundDisposition) || [
+    "cancelled",
+    "delivered",
+    "issue_window_open",
+    "completed",
+    "payout_released",
+  ].includes(order.state);
+}
+
 /** Jobs the shop is actively producing (downpayment in, through packing). */
 export function isInProductionPipeline(order: Pick<Order, "state">): boolean {
   return (
