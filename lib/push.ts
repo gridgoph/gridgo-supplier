@@ -148,7 +148,11 @@ export function parsePushData(raw: unknown): PushData {
  * carries no order state, so the job screen fetches the job as it always does.
  */
 export function pushTargetRoute(data: PushData): string {
-  return data.orderId ? `/job/${data.orderId}` : "/alerts";
+  if (!data.orderId) return "/alerts";
+  // A message from the rider collecting the job opens the conversation itself;
+  // its back control leads to the job (`app/job/[id]/messages.tsx`).
+  if (data.type === "pickup_chat_message") return `/job/${data.orderId}/messages`;
+  return `/job/${data.orderId}`;
 }
 
 /**

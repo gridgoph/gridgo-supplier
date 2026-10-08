@@ -74,3 +74,18 @@ jest.mock("react-native-keyboard-controller", () =>
 // has already frozen, and the whole run exits 1 with every test green. Reading
 // it once here installs it while the Expo globals still exist.
 void globalThis.fetch;
+
+// react-native-webview has no native module under Jest and throws at import.
+// Screens that draw a map (the job's rider-on-the-way panel) get an inert view
+// with the imperative handle MapFrame posts into; a test that needs more mocks
+// it itself.
+jest.mock("react-native-webview", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  return {
+    WebView: React.forwardRef(function TestWebView(props, ref) {
+      React.useImperativeHandle(ref, () => ({ injectJavaScript: jest.fn() }));
+      return React.createElement(View, props);
+    }),
+  };
+});

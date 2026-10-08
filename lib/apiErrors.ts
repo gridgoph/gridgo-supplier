@@ -296,3 +296,49 @@ const OFFLINE_PREFIX = "Cannot reach GRIDGO to ";
 export function offlineMessage(subject: string): string {
   return `${OFFLINE_PREFIX}${subject}. Check this device's connection, then try again.`;
 }
+
+/** Why a job's conversation with its rider cannot be shown (`lib/pickupChat.ts`). */
+export type PickupChatUnavailable = { title: string; body: string };
+
+/**
+ * The conversation is gone or never opened, or null when the failure is
+ * something a retry may fix (a dropped connection).
+ */
+export function pickupChatUnavailable(error: unknown): PickupChatUnavailable | null {
+  const code = apiErrorCode(error);
+  if (code === "pickup_chat_closed") {
+    return {
+      title: "These messages were removed",
+      body: "Messages with the rider are removed one day after delivery. For anything about this job, message Operations.",
+    };
+  }
+  if (code === "pickup_chat_not_available") {
+    return {
+      title: "No rider to message yet",
+      body: "You can message the rider once one accepts the pickup. GRIDGO tells you when that happens.",
+    };
+  }
+  if (code === "forbidden" || code === "order_not_found") {
+    return {
+      title: "This conversation is not available",
+      body: "Only your shop and the rider collecting this job can read its messages.",
+    };
+  }
+  return null;
+}
+
+/** Copy for a message to the rider that did not go through. */
+export function pickupSendError(error: unknown): string {
+  const code = apiErrorCode(error);
+  if (code === "pickup_chat_read_only") return "This job has been delivered, so no new messages can be sent.";
+  if (code === "too_many_requests") return "You are sending messages too fast. Wait a moment and try again.";
+  if (code === "invalid_request") return "Write a message of up to 1,000 characters, or add a photo.";
+  if (code === "invalid_chat_image" || code === "invalid_file_type" || code === "file_too_large") {
+    return "That photo could not be sent. Choose a JPEG, PNG, or WebP of up to 15 MB.";
+  }
+  if (code === "file_already_attached") return "That photo was already sent. Choose it again to send it once more.";
+  if (error instanceof Error && !(error instanceof ApiError) && error.message.startsWith("That photo")) {
+    return error.message;
+  }
+  return "That did not reach the rider. Check your connection and send it again.";
+}
