@@ -6,6 +6,7 @@ import { primaryAction } from "@/lib/jobState";
 import { linkOnlySummary, orderDesignLinks } from "@/lib/designLink";
 import { earningsSplit, milestoneViews, nextShopProof, payoutPlanCopy } from "@/lib/milestones";
 import { orderArtwork } from "@/lib/orderArtwork";
+import { pickupChatOf } from "@/lib/pickupChat";
 import { progressPhotoSummary, showsProgressPhotos } from "@/lib/productionPhoto";
 import { refundStanding } from "@/lib/refund";
 import { unreleasedMinor } from "@/lib/payout";
@@ -57,6 +58,7 @@ export const DEFAULT_BRIEF_SECTIONS: JobBriefSectionId[] = [
 type BriefOrder = Pick<
   Order,
   | "state"
+  | "pickupChat"
   | "riderId"
   | "payoutMilestones"
   | "payoutPlanVersion"
@@ -170,7 +172,11 @@ export function earningsSummary(order: BriefOrder): string {
 
 /** Where the package is between the counter and the client, for the pickup row. */
 export function handoffSummary(order: BriefOrder): string {
-  return custodyForOrder(order).label;
+  const label = custodyForOrder(order).label;
+  // Folded, the row still says the rider wrote: it is the one thing on it the shop has not read.
+  const unread = pickupChatOf(order)?.unread ?? 0;
+  if (!unread) return label;
+  return `${label}, ${unread === 1 ? "1 new message" : `${unread} new messages`}`;
 }
 
 /** True once the package is ready to leave, until the client has it. */

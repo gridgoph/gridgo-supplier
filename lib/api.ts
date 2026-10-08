@@ -6,6 +6,8 @@ import { Platform } from "react-native";
 
 import type { PublishedFileFormat } from "@/data/fileFormats";
 import { readPublishedFormats } from "@/lib/fileFormatResolve";
+import { pickupChatOf, type PickupChatMessage, type PickupChatSummary } from "@/lib/pickupChat";
+import { parseRiderApproach, type RiderApproach } from "@/lib/riderApproach";
 import type { DevicePlatform } from "@/lib/push";
 
 export { ApiError } from "@/lib/apiErrors";
@@ -320,6 +322,11 @@ export type Order = {
    * `lib/reschedule.ts`.
    */
   rescheduleRequest?: RescheduleRequest | null;
+  /**
+   * The shop's conversation with the rider collecting this job, while GRIDGO
+   * keeps one. Read only through `pickupChatOf` in `lib/pickupChat.ts`.
+   */
+  pickupChat?: unknown;
   timeline: {
     at: string;
     state: string;
@@ -2031,6 +2038,44 @@ export async function getSupportChatMe(): Promise<{
   unreadCount?: number;
 }> {
   return request("/support-chat/me");
+}
+
+/**
+ * The rider's last position on the way to this shop, and the shop's own
+ * pick-up point. GRIDGO stops sharing it at pick-up. Read through
+ * `lib/riderApproach.ts`.
+ */
+export async function getRiderApproach(orderId: string): Promise<RiderApproach> {
+  return parseRiderApproach(await request<unknown>(`/dispatch/${encodeURIComponent(orderId)}/location`));
+}
+
+/** This job's conversation with its rider (`lib/pickupChat.ts`). Opening it marks it read. */
+export async function getPickupChat(
+  orderId: string,
+): Promise<{ chat: PickupChatSummary | null; messages: PickupChatMessage[] }> {
+  const result = await request<{ chat?: unknown; messages?: PickupChatMessage[] }>(
+    `/orders/${encodeURIComponent(orderId)}/pickup-chat`,
+  );
+  return { chat: pickupChatOf({ pickupChat: result.chat }), messages: Array.isArray(result.messages) ? result.messages : [] };
+}
+
+/** `attachmentFileIds` are `pickup_chat_image` uploads; a photo may be the whole message. */
+export async function sendPickupMessage(
+  orderId: string,
+  body: string,
+  options?: { attachmentFileIds?: string[] },
+): Promise<{ chat: PickupChatSummary | null; message: PickupChatMessage }> {
+  const result = await request<{ chat?: unknown; message: PickupChatMessage }>(
+    `/orders/${encodeURIComponent(orderId)}/pickup-chat/messages`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        body,
+        ...(options?.attachmentFileIds?.length ? { attachmentFileIds: options.attachmentFileIds } : {}),
+      }),
+    },
+  );
+  return { chat: pickupChatOf({ pickupChat: result.chat }), message: result.message };
 }
 
 export async function getSupportChatThread(

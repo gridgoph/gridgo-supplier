@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react-native";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import Animated, { FadeIn, LinearTransition, useReducedMotion } from "react-native-reanimated";
 
@@ -37,6 +37,8 @@ type Props = {
   defaultOpen?: JobBriefSectionId | null;
   /** Bumped by pull-to-refresh so filed proof photographs are asked for again. */
   proofReloadVersion?: number;
+  /** Drawn at the foot of the Pickup row: the rider on the way and the chat with them. */
+  handoffExtra?: ReactNode;
 };
 
 /**
@@ -62,6 +64,7 @@ export function JobBrief({
   sections = DEFAULT_BRIEF_SECTIONS,
   defaultOpen = "make",
   proofReloadVersion = 0,
+  handoffExtra = null,
 }: Props) {
   const colors = useThemeColors();
   const reduceMotion = useReducedMotion();
@@ -113,7 +116,12 @@ export function JobBrief({
 
             {expanded ? (
               <Animated.View entering={entering} className="px-4 pb-4" testID={`job-brief-${row.id}`}>
-                <SectionBody id={row.id} order={order} proofReloadVersion={proofReloadVersion} />
+                <SectionBody
+                  id={row.id}
+                  order={order}
+                  proofReloadVersion={proofReloadVersion}
+                  handoffExtra={handoffExtra}
+                />
               </Animated.View>
             ) : null}
           </View>
@@ -128,10 +136,12 @@ function SectionBody({
   id,
   order,
   proofReloadVersion,
+  handoffExtra,
 }: {
   id: JobBriefSectionId;
   order: Order;
   proofReloadVersion: number;
+  handoffExtra: ReactNode;
 }) {
   switch (id) {
     case "make": {
@@ -289,6 +299,7 @@ function SectionBody({
               <CountLedger counts={check.counts} label="Counted at the counter" compact />
             </View>
           ) : null}
+          {handoffExtra ? <View className="gap-3 pt-2">{handoffExtra}</View> : null}
         </View>
       );
     }

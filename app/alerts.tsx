@@ -18,6 +18,7 @@ import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { localOnlyCaveat } from "@/lib/alertsApi";
 import { listingAlertHref } from "@/lib/listingReview";
 import { PICKUP_ISSUE_ALERT, presentAlertTitle, stageForAlert } from "@/lib/alertStages";
+import { PICKUP_CHAT_NOTICE, pickupChatHref } from "@/lib/pickupChat";
 import { jobScreenHref } from "@/lib/productionNudge";
 import { isLapseAlert } from "@/lib/productionLapse";
 import { isRefundAlert } from "@/lib/refund";
@@ -244,7 +245,9 @@ export default function NotificationsScreen() {
         onOpen={
           listingHref
             ? () => router.push(listingHref)
-            : // A notice asking the shop to act opens its job even before the list has it.
+            : alert.orderId && alert.type === PICKUP_CHAT_NOTICE
+              ? () => router.push(pickupChatHref(alert.orderId as string))
+              : // A notice asking the shop to act opens its job even before the list has it.
               alert.orderId &&
                 (job ||
                   alert.type === "shop_production_inactive" ||

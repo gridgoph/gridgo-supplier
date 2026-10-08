@@ -4,7 +4,8 @@ import { formatDeadlineFull } from "@/lib/dates";
 
 import JobWorkspaceScreen from "@/app/job/[id]/index";
 import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
-import { getFile, getMyProductionLapses, getOrder } from "@/lib/api";
+import { getFile, getMyProductionLapses, getOrder, getRiderApproach } from "@/lib/api";
+import { router } from "expo-router";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), navigate: jest.fn() },
@@ -16,9 +17,22 @@ jest.mock("expo-router", () => ({
   },
 }));
 
+// The rider-on-the-way map asks OSRM for a road; a test never reaches the internet.
+jest.mock("@/lib/osrm", () => ({
+  ...jest.requireActual("@/lib/osrm"),
+  fetchRoute: jest.fn(async (from: { lat: number; lng: number }, to: { lat: number; lng: number }) =>
+    jest.requireActual("@/lib/osrm").fallbackRoute(from, to),
+  ),
+}));
+
 jest.mock("@/lib/api", () => ({
   ...jest.requireActual("@/lib/api"),
   getOrder: jest.fn(),
+  getRiderApproach: jest.fn(async () => ({
+    ping: { lat: 7.09, lng: 125.6, at: new Date().toISOString() },
+    shop: { lat: 7.0731, lng: 125.6128 },
+    hidden: null,
+  })),
   getMyProductionLapses: jest.fn(async () => ({ lapses: [] })),
   getFile: jest.fn(async (fileId: string) => ({
     fileId,
@@ -526,5 +540,68 @@ describe("job workspace client date", () => {
     await render(<JobWorkspaceScreen />);
     const dates = await screen.findAllByText(`${label} ${formatDeadlineFull(promisedDate || deadline)}`);
     expect(dates[0].props.className).toBe("text-body-lg text-text-secondary");
+  });
+});
+
+describe("job workspace with a rider collecting it", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const riderOnTheWay = (partial: Partial<Order> = {}) =>
+    job({
+      state: "rider_assigned",
+      riderId: "user_rider",
+      pickup: { lat: 7.0731, lng: 125.6128, label: "Shop" },
+      pickupChat: { status: "open", unread: 2, closesAt: null, riderFirstName: "Jun" },
+      ...partial,
+    });
+
+  it("opens the Pickup row on the rider's way to the shop, with the conversation and its new messages", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay());
+    await render(<JobWorkspaceScreen />);
+
+    const pickup = await screen.findByTestId("job-brief-handoff");
+    expect(await within(pickup).findByTestId("rider-approach")).toBeTruthy();
+    expect(await within(pickup).findByText(/^Jun is about \d+ min away$/)).toBeTruthy();
+    expect(within(pickup).getByText("Updated just now")).toBeTruthy();
+    expect(within(pickup).getByText("Message Jun")).toBeTruthy();
+    expect(within(pickup).getByText("2 new")).toBeTruthy();
+    expect(getRiderApproach).toHaveBeenCalledWith("ord_1");
+
+    await fireEvent.press(within(pickup).getByTestId("pickup-chat-row"));
+    expect(router.push).toHaveBeenCalledWith({ pathname: "/job/[id]/messages", params: { id: "ord_1" } });
+  });
+
+  it("drops the map once the rider has it, and keeps the conversation", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay({ state: "picked_up" }));
+    await render(<JobWorkspaceScreen />);
+
+    const pickup = await screen.findByTestId("job-brief-handoff");
+    expect(within(pickup).getByText("Message Jun")).toBeTruthy();
+    expect(within(pickup).queryByTestId("rider-approach")).toBeNull();
+    expect(getRiderApproach).not.toHaveBeenCalled();
+  });
+
+  it("keeps the delivered conversation reachable after the Pickup row is gone", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      riderOnTheWay({
+        state: "delivered",
+        pickupChat: { status: "read_only", unread: 0, closesAt: "2026-10-09T02:00:00.000Z", riderFirstName: "Jun" },
+      }),
+    );
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByText("Messages with Jun")).toBeTruthy();
+    expect(screen.queryByTestId("job-brief-handoff")).toBeNull();
+    expect(screen.queryByTestId("rider-approach")).toBeNull();
+  });
+
+  it("shows no conversation when GRIDGO sends none", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay({ pickupChat: undefined }));
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByTestId("rider-approach")).toBeTruthy();
+    expect(screen.queryByTestId("pickup-chat-row")).toBeNull();
   });
 });

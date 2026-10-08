@@ -11,9 +11,11 @@ import { JobActionBar } from "@/components/JobActionBar";
 import { JobBrief } from "@/components/JobBrief";
 import { JourneyTrack } from "@/components/JourneyTrack";
 import { LatenessPanel } from "@/components/LatenessPanel";
+import { PickupChatRow } from "@/components/PickupChatRow";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { PushEnableCard } from "@/components/PushEnableCard";
 import { RefundNoticePanel } from "@/components/RefundNoticePanel";
+import { RiderApproachPanel } from "@/components/RiderApproachPanel";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { ShopReleasePanel } from "@/components/ShopReleasePanel";
@@ -34,6 +36,7 @@ import { refundNotice, refundStanding } from "@/lib/refund";
 import { canRequestNewDeadline, rescheduleNotice } from "@/lib/reschedule";
 import { canCancelJob, shopRelease } from "@/lib/shopRecovery";
 import { counterCheck } from "@/lib/pickupCheck";
+import { pickupChatHref, pickupChatOf } from "@/lib/pickupChat";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useViewing } from "@/store/toasts";
 import { useJob } from "@/hooks/useJob";
@@ -149,6 +152,35 @@ export default function JobWorkspaceScreen() {
   const lapse = lapseForOrder(lapses.lapses, job.id);
   // A held job's late card yields its next step to the hold; a job the shop let go has no late card here.
   const lateness = lapse && !release ? lapseNotice(lapse, job, undefined, requestStopped || refundStanding(job) !== "none") : null;
+
+  /*
+    The rider collecting this job: where they are on the way, and the
+    conversation with them. The map is drawn only while they are travelling to
+    the shop — GRIDGO stops sharing the position at pick-up, and so does this.
+    The conversation outlives the Pickup row by a day after delivery, so once
+    that row is gone its entry moves down beside the other ways out.
+  */
+  const pickupChat = pickupChatOf(job);
+  const riderOnTheWay = job.state === "rider_assigned" && !counterIssue && !release && refundStanding(job) === "none";
+  const chatRow = pickupChat ? (
+    <PickupChatRow chat={pickupChat} onPress={() => router.push(pickupChatHref(job.id))} />
+  ) : null;
+  const handoffExtra =
+    riderOnTheWay || chatRow ? (
+      <>
+        {riderOnTheWay ? (
+          <RiderApproachPanel
+            orderId={job.id}
+            shopPin={job.pickup ?? null}
+            riderFirstName={pickupChat?.riderFirstName ?? null}
+            onPickedUp={() => void reload()}
+          />
+        ) : null}
+        {chatRow ? (
+          <View className={riderOnTheWay ? "border-t border-outline-subtle pt-1" : undefined}>{chatRow}</View>
+        ) : null}
+      </>
+    ) : null;
 
   const canAskForTime = canRequestNewDeadline(job);
   const canCancel = canCancelJob(job);
@@ -293,6 +325,7 @@ export default function JobWorkspaceScreen() {
             sections={workspaceBriefSections(job)}
             defaultOpen={defaultBriefSection(job)}
             proofReloadVersion={proofReloadVersion}
+            handoffExtra={handoffExtra}
           />
         </View>
 
@@ -304,6 +337,9 @@ export default function JobWorkspaceScreen() {
           nothing is offered.
         */}
         {!primary ? <PushEnableCard spacing="above" /> : null}
+
+        {/* Delivered, the Pickup row is gone; the day the messages stay readable starts here. */}
+        {chatRow && !hasHandoff(job) ? <View className="gg-card mt-6 py-2">{chatRow}</View> : null}
 
         {/*
           Last, and charcoal: the way out when the job itself is what is wrong.
