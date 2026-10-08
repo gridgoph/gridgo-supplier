@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.197 (Fix)
+
+- Photos sent to Operations in chat now upload correctly on Android.
+- Finished jobs no longer show due or late countdowns, and missing client dates no longer appear in job headers.
+
 ## 1.0.190 (Improvement)
 
 - Document jobs show the pages selected for printing, the full file count, and pages per copy.
