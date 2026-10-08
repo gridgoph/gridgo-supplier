@@ -342,3 +342,19 @@ export function pickupSendError(error: unknown): string {
   }
   return "That did not reach the rider. Check your connection and send it again.";
 }
+
+/**
+ * Why GRIDGO refused a call request (`lib/orderCall.ts`, gridgo-api
+ * `docs/CALLS_API.md`), or null when a retry may fix it (a dropped connection).
+ */
+export type CallRefusal = "not_available" | "too_many" | "already_active" | "not_active" | "gone";
+
+export function callRefusal(error: unknown): CallRefusal | null {
+  const code = apiErrorCode(error);
+  if (code === "call_not_available" || code === "forbidden" || code === "order_not_found") return "not_available";
+  if (code === "too_many_requests") return "too_many";
+  if (code === "call_already_active") return "already_active";
+  if (code === "call_not_active" || code === "invalid_call_transition") return "not_active";
+  if (code === "call_not_found" || code === "call_history_closed") return "gone";
+  return null;
+}

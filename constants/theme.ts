@@ -59,6 +59,8 @@ export const colors = {
     success: "#2E7D32",
     /** Blocked, failed */
     error: "#C62828",
+    /** Icon on a solid error fill: the red button that ends a call. */
+    errorOn: "#FFFFFF",
     /** Risk, attention */
     warning: "#F57F17",
     /** Informational, support */
@@ -98,6 +100,7 @@ export const colors = {
 
     success: "#66BB6A",
     error: "#EF5350",
+    errorOn: "#FFFFFF",
     warning: "#FFCA28",
     info: "#42A5F5",
 

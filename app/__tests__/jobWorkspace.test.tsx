@@ -4,7 +4,7 @@ import { formatDeadlineFull } from "@/lib/dates";
 
 import JobWorkspaceScreen from "@/app/job/[id]/index";
 import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
-import { getFile, getMyProductionLapses, getOrder, getRiderApproach } from "@/lib/api";
+import { getFile, getMyProductionLapses, getOrder, getRiderApproach, listCalls } from "@/lib/api";
 import { router } from "expo-router";
 
 jest.mock("expo-router", () => ({
@@ -34,6 +34,7 @@ jest.mock("@/lib/api", () => ({
     hidden: null,
   })),
   getMyProductionLapses: jest.fn(async () => ({ lapses: [] })),
+  listCalls: jest.fn(async () => []),
   getFile: jest.fn(async (fileId: string) => ({
     fileId,
     originalFilename: `${fileId}.jpg`,
@@ -595,6 +596,65 @@ describe("job workspace with a rider collecting it", () => {
     expect(await screen.findByText("Messages with Jun")).toBeTruthy();
     expect(screen.queryByTestId("job-brief-handoff")).toBeNull();
     expect(screen.queryByTestId("rider-approach")).toBeNull();
+  });
+
+  it("offers a call to the rider beside the messages while they are on the way", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay());
+    await render(<JobWorkspaceScreen />);
+
+    const pickup = await screen.findByTestId("job-brief-handoff");
+    expect(within(pickup).getByText("Call Jun")).toBeTruthy();
+    // Jest has no WebRTC module, like Expo Go: the row says where the app that can call is.
+    expect(within(pickup).getByText("Calls need the latest GRIDGO app from the download page")).toBeTruthy();
+    expect(screen.queryByText(/\+?63|09\d{2}/)).toBeNull();
+
+    await fireEvent.press(within(pickup).getByTestId("pickup-call-row"));
+    expect(router.push).toHaveBeenCalledWith({ pathname: "/call", params: { orderId: "ord_1", mode: "start", name: "Jun" } });
+    expect(listCalls).toHaveBeenCalledWith("ord_1");
+  });
+
+  it("closes calling at pick-up while the messages stay", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay({ state: "picked_up" }));
+    await render(<JobWorkspaceScreen />);
+
+    const pickup = await screen.findByTestId("job-brief-handoff");
+    expect(within(pickup).getByText("Message Jun")).toBeTruthy();
+    expect(within(pickup).queryByTestId("pickup-call-row")).toBeNull();
+    expect(listCalls).not.toHaveBeenCalled();
+  });
+
+  it("draws no call before a rider accepts the pickup", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay({ pickupChat: undefined }));
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByTestId("rider-approach")).toBeTruthy();
+    expect(screen.queryByTestId("pickup-call-row")).toBeNull();
+  });
+
+  it("says who called when a call was missed, and offers to call back", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay());
+    (listCalls as jest.Mock).mockResolvedValue([
+      {
+        id: "e115b493-dee1-448f-b6ba-a9868f448df2",
+        orderId: "ord_1",
+        pair: "pickup",
+        state: "missed",
+        caller: { firstName: "Jun", role: "rider" },
+        callee: { firstName: "Shop", role: "supplier" },
+        mine: false,
+        createdAt: new Date(Date.now() - 60_000).toISOString(),
+        ringExpiresAt: new Date(Date.now() - 30_000).toISOString(),
+        acceptedAt: null,
+        endedAt: new Date(Date.now() - 30_000).toISOString(),
+        leaseExpiresAt: null,
+      },
+    ]);
+    await render(<JobWorkspaceScreen />);
+
+    const notice = await screen.findByTestId("missed-call-notice");
+    expect(within(notice).getByText("Missed call from Jun")).toBeTruthy();
+    await fireEvent.press(within(notice).getByText("Call back"));
+    expect(router.push).toHaveBeenCalledWith({ pathname: "/call", params: { orderId: "ord_1", mode: "start", name: "Jun" } });
   });
 
   it("shows no conversation when GRIDGO sends none", async () => {

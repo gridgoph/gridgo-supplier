@@ -152,6 +152,9 @@ export function pushTargetRoute(data: PushData): string {
   // A message from the rider collecting the job opens the conversation itself;
   // its back control leads to the job (`app/job/[id]/messages.tsx`).
   if (data.type === "pickup_chat_message") return `/job/${data.orderId}/messages`;
+  // A rider's call opens the call screen, which rings only if the call still is;
+  // a missed one opens the job, where "Missed call from …" offers to call back.
+  if (data.type === "order_call_incoming") return `/call?orderId=${encodeURIComponent(data.orderId)}&mode=incoming`;
   return `/job/${data.orderId}`;
 }
 

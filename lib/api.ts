@@ -6,6 +6,7 @@ import { Platform } from "react-native";
 
 import type { PublishedFileFormat } from "@/data/fileFormats";
 import { readPublishedFormats } from "@/lib/fileFormatResolve";
+import { parseCall, parseCalls, type OrderCall } from "@/lib/orderCall";
 import { pickupChatOf, type PickupChatMessage, type PickupChatSummary } from "@/lib/pickupChat";
 import { parseRiderApproach, type RiderApproach } from "@/lib/riderApproach";
 import type { DevicePlatform } from "@/lib/push";
@@ -2076,6 +2077,84 @@ export async function sendPickupMessage(
     },
   );
   return { chat: pickupChatOf({ pickupChat: result.chat }), message: result.message };
+}
+
+/* --------------------------------------------------------------------------
+   Internet calls with the rider (`lib/orderCall.ts`, gridgo-api
+   `docs/CALLS_API.md`). Read through `parseCall`, so a projection that drifts
+   reaches no screen.
+   -------------------------------------------------------------------------- */
+
+function callsPath(orderId: string, callId?: string, action?: string): string {
+  return `/orders/${encodeURIComponent(orderId)}/calls${callId ? `/${encodeURIComponent(callId)}` : ""}${action ? `/${action}` : ""}`;
+}
+
+function callOf(raw: { call?: unknown } | null | undefined): OrderCall {
+  const call = parseCall(raw?.call);
+  if (!call) throw new Error("GRIDGO sent a call this app cannot read.");
+  return call;
+}
+
+/** Start ringing the rider. `409 call_already_active` means one is live; list to find it. */
+export async function startCall(orderId: string, pair: string): Promise<OrderCall> {
+  return callOf(await request<{ call?: unknown }>(callsPath(orderId), { method: "POST", body: JSON.stringify({ pair }) }));
+}
+
+/** This shop's calls on the job, active first then newest. */
+export async function listCalls(orderId: string): Promise<OrderCall[]> {
+  const result = await request<{ calls?: unknown }>(callsPath(orderId));
+  return parseCalls(result?.calls);
+}
+
+export async function getCall(orderId: string, callId: string): Promise<OrderCall> {
+  return callOf(await request<{ call?: unknown }>(callsPath(orderId, callId)));
+}
+
+export type CallAction = "accept" | "decline" | "cancel" | "end" | "heartbeat";
+
+export async function callAction(orderId: string, callId: string, action: CallAction): Promise<OrderCall> {
+  return callOf(await request<{ call?: unknown }>(callsPath(orderId, callId, action), { method: "POST", body: "{}" }));
+}
+
+export type CallSignalBody =
+  | { clientId: string; kind: "offer" | "answer"; sdp: string }
+  | { clientId: string; kind: "ice"; candidate: string; sdpMid: string | null; sdpMLineIndex: number | null };
+
+export type CallSignal = CallSignalBody & { id: number };
+
+export async function sendCallSignal(orderId: string, callId: string, signal: CallSignalBody): Promise<void> {
+  await request(callsPath(orderId, callId, "signals"), { method: "POST", body: JSON.stringify(signal) });
+}
+
+/** The rider's signals after `after`, plus the call's state, in one read. */
+export async function getCallSignals(
+  orderId: string,
+  callId: string,
+  after: number,
+): Promise<{ signals: CallSignal[]; cursor: number; call: OrderCall | null }> {
+  const result = await request<{ signals?: unknown; cursor?: unknown; call?: unknown }>(
+    `${callsPath(orderId, callId, "signals")}?after=${after}`,
+  );
+  const signals = Array.isArray(result?.signals)
+    ? (result.signals as CallSignal[]).filter((s) => s && typeof s.id === "number" && typeof s.kind === "string")
+    : [];
+  const cursor = typeof result?.cursor === "number" ? result.cursor : after;
+  return { signals, cursor, call: parseCall(result?.call) };
+}
+
+export type IceServer = { urls: string[] | string; username?: string; credential?: string };
+
+/** Fresh STUN/TURN for one call. Never reused for another call. */
+export async function getCallIceServers(orderId: string, callId: string): Promise<IceServer[]> {
+  const result = await request<{ iceServers?: unknown }>(callsPath(orderId, callId, "ice"));
+  if (!Array.isArray(result?.iceServers)) return [];
+  return (result.iceServers as IceServer[])
+    .filter((server) => server && (typeof server.urls === "string" || Array.isArray(server.urls)))
+    .map(({ urls, username, credential }) => ({
+      urls,
+      ...(typeof username === "string" ? { username } : {}),
+      ...(typeof credential === "string" ? { credential } : {}),
+    }));
 }
 
 export async function getSupportChatThread(
