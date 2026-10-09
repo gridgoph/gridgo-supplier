@@ -11,6 +11,8 @@ import { JobActionBar } from "@/components/JobActionBar";
 import { JobBrief } from "@/components/JobBrief";
 import { JourneyTrack } from "@/components/JourneyTrack";
 import { LatenessPanel } from "@/components/LatenessPanel";
+import { MissedCallNotice } from "@/components/MissedCallNotice";
+import { PickupCallRow } from "@/components/PickupCallRow";
 import { PickupChatRow } from "@/components/PickupChatRow";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { PushEnableCard } from "@/components/PushEnableCard";
@@ -37,9 +39,12 @@ import { canRequestNewDeadline, rescheduleNotice } from "@/lib/reschedule";
 import { canCancelJob, shopRelease } from "@/lib/shopRecovery";
 import { counterCheck } from "@/lib/pickupCheck";
 import { pickupChatHref, pickupChatOf } from "@/lib/pickupChat";
+import { callsSupported } from "@/lib/callRuntime";
+import { callHref, latestMissedCall, pickupCallAvailability } from "@/lib/orderCall";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useViewing } from "@/store/toasts";
 import { useJob } from "@/hooks/useJob";
+import { useOrderCalls } from "@/hooks/useOrderCalls";
 import { useProductionLapses } from "@/hooks/useProductionLapses";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -54,6 +59,9 @@ export default function JobWorkspaceScreen() {
   const colors = useThemeColors();
   const { job, loading, error, reload } = useJob(id);
   const lapses = useProductionLapses();
+  // Calling is open only while the rider is on the way; read the shop's calls only then.
+  const callWindowOpen = pickupCallAvailability(job).kind === "open";
+  const calls = useOrderCalls(id, callWindowOpen);
   const [proofReloadVersion, setProofReloadVersion] = useState(0);
   // Bumped when the hour to answer runs out on screen, so the steps go with it.
   const [, setExpiredAt] = useState(0);
@@ -165,6 +173,18 @@ export default function JobWorkspaceScreen() {
   const chatRow = pickupChat ? (
     <PickupChatRow chat={pickupChat} onPress={() => router.push(pickupChatHref(job.id))} />
   ) : null;
+  /*
+    A call with the rider, beside the messages, from the moment they accept
+    the pickup until they collect it (`lib/orderCall.ts`). A stopped or
+    released job has nobody coming, so nothing is offered.
+  */
+  const callable = callWindowOpen && !release && refundStanding(job) === "none";
+  const callRider = () =>
+    router.push(callHref({ orderId: job.id, mode: "start", name: pickupChat?.riderFirstName ?? null }));
+  const callRow = callable ? (
+    <PickupCallRow riderFirstName={pickupChat?.riderFirstName ?? null} supported={callsSupported()} onPress={callRider} />
+  ) : null;
+  const missedCall = callable ? latestMissedCall(calls) : null;
   const handoffExtra =
     riderOnTheWay || chatRow ? (
       <>
@@ -179,6 +199,7 @@ export default function JobWorkspaceScreen() {
         {chatRow ? (
           <View className={riderOnTheWay ? "border-t border-outline-subtle pt-1" : undefined}>{chatRow}</View>
         ) : null}
+        {callRow ? <View className="border-t border-outline-subtle pt-1">{callRow}</View> : null}
       </>
     ) : null;
 
@@ -255,6 +276,13 @@ export default function JobWorkspaceScreen() {
         {acceptWindow(job).kind !== "none" ? (
           <View className="mt-6">
             <AcceptWindowPanel order={job} onExpire={onAnswerExpired} />
+          </View>
+        ) : null}
+
+        {/* The rider tried to reach the shop: said before anything else on the job. */}
+        {missedCall ? (
+          <View className="mt-6">
+            <MissedCallNotice missed={missedCall} onCallBack={callRider} />
           </View>
         ) : null}
 

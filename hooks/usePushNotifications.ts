@@ -10,6 +10,8 @@ import { getNotificationsNative as notifications } from "@/lib/expoNotifications
 import { playProductionNudgeSting } from "@/lib/nudgeSound";
 import { parsePushData, PUSH_FOREGROUND_BEHAVIOR, pushTargetRoute } from "@/lib/push";
 import { useAlertsStore } from "@/store/alerts";
+import { useCall } from "@/store/call";
+import { CALL_INCOMING_NOTICE } from "@/lib/orderCall";
 import { shouldToast, useViewing } from "@/store/toasts";
 import { usePush } from "@/store/push";
 import { isMatchable, isSignedIn, useSession } from "@/store/session";
@@ -222,7 +224,10 @@ export function usePushNotifications(): void {
     // A push landing in the foreground shows nothing (see the handler above);
     // reconcile resources and the unread badge through their shared boundaries.
     const received = withoutNativeModule(() =>
-      Notifications?.addNotificationReceivedListener(() => {
+      Notifications?.addNotificationReceivedListener((notification) => {
+        // A rider calling while the app is open rings here rather than in the tray.
+        const data = parsePushData(notification?.request?.content?.data);
+        if (data.type === CALL_INCOMING_NOTICE && data.orderId) void useCall.getState().checkIncoming(data.orderId);
         invalidate("*");
         void refreshUnread();
       }),

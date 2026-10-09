@@ -11,8 +11,9 @@
   second copy of the rule is how a screen offers a conversation the server has
   already deleted. A job handed to another rider starts a clean conversation.
 
-  There is no call button: the rider never sees a shop member's phone, and the
-  shop sees the rider's first name only. A message may carry up to four photos,
+  Calls with the rider are in-app internet audio (`lib/orderCall.ts`): the
+  rider never sees a shop member's phone, and the shop sees the rider's first
+  name only. A message may carry up to four photos,
   uploaded as `pickup_chat_image`; only the two parties can open them.
 
   The API's refusal codes are read in `lib/apiErrors.ts`, like every other.

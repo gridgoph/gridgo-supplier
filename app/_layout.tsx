@@ -33,6 +33,7 @@ import { useAlertStream } from "@/hooks/useAlertStream";
 import { useAppUpdateCheck } from "@/hooks/useAppUpdateCheck";
 import { useSupportChatUnread } from "@/hooks/useSupportChatUnread";
 import { useAppFonts } from "@/hooks/useAppFonts";
+import { useIncomingCallScreen } from "@/hooks/useIncomingCallScreen";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { usePushPromptCheck } from "@/hooks/usePushPromptCheck";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
@@ -186,6 +187,8 @@ function RootStack({ introDone }: { introDone: boolean }) {
   // once. It never raises the permission dialog — only a tap on
   // `PushEnableCard` or on the explainer below does that.
   usePushNotifications();
+  // A rider's call opens the call screen over whatever is on screen.
+  useIncomingCallScreen(matchable);
   // Both sheets wait for the opening and for the session to settle, because
   // the stack below is re-keyed when a restored session arrives and would take
   // a sheet pushed earlier with it. And one sheet at a time: the notifications
@@ -411,6 +414,21 @@ function RootStack({ introDone }: { introDone: boolean }) {
         */}
         {/* The job stack draws its own headers for the workspace and its flows. */}
         <Stack.Screen name="job/[id]" options={{ headerShown: false }} />
+        {/*
+          A call with the rider takes the whole screen, over whatever was open,
+          and owns its way out: the red button. Swiping it away would leave a
+          microphone open behind the shop's back.
+        */}
+        <Stack.Screen
+          name="call"
+          options={{
+            title: "Call",
+            headerShown: false,
+            presentation: "fullScreenModal",
+            animation: "fade",
+            gestureEnabled: false,
+          }}
+        />
         <Stack.Screen
           name="payout"
           options={{

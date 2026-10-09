@@ -1,6 +1,7 @@
 import type { Notification, Order } from "@/lib/api";
 import { presentPickupIssueNotice } from "@/lib/pickupCheck";
 import { presentListingAlert } from "@/lib/listingReview";
+import { presentCallAlert } from "@/lib/orderCall";
 import { presentLapseAlert } from "@/lib/productionLapse";
 import { presentRefundAlert } from "@/lib/refund";
 import { presentRescheduleAlert } from "@/lib/reschedule";
@@ -17,7 +18,8 @@ export const PICKUP_ISSUE_ALERT = "shop_pickup_issue_changed";
  * (`lib/productionLapse.ts`). A job a shop let go and a deadline request both
  * arrive in words written for the client (`lib/shopRecovery.ts`,
  * `lib/reschedule.ts`). A listing review or take-down notice is said in the
- * board's words (`lib/listingReview.ts`).
+ * board's words (`lib/listingReview.ts`). A call from the rider arrives in
+ * GRIDGO's generic "order" words (`lib/orderCall.ts`).
  */
 export function presentAlertBody(alert: Pick<Notification, "type" | "body">): string {
   const rewritten = rewrite(alert);
@@ -32,6 +34,7 @@ export function presentAlertTitle(alert: Pick<Notification, "type" | "title" | "
 
 function rewrite(alert: Pick<Notification, "type" | "body">): { title: string; body: string } | null {
   return (
+    presentCallAlert(alert) ??
     presentRefundAlert(alert) ??
     presentLapseAlert(alert) ??
     presentShopRecoveryAlert(alert) ??
