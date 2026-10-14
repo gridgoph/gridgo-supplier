@@ -606,7 +606,7 @@ describe("job workspace with a rider collecting it", () => {
     expect(within(pickup).getByText("Call Jun")).toBeTruthy();
     // Jest has no WebRTC module, like Expo Go: the row says where the app that can call is.
     expect(within(pickup).getByText("Calls need the latest GRIDGO app from the download page")).toBeTruthy();
-    expect(screen.queryByText(/\+?63|09\d{2}/)).toBeNull();
+    expect(screen.queryByText(/(\+?63|0)9\d{2}/)).toBeNull();
 
     await fireEvent.press(within(pickup).getByTestId("pickup-call-row"));
     expect(router.push).toHaveBeenCalledWith({ pathname: "/call", params: { orderId: "ord_1", mode: "start", name: "Jun" } });

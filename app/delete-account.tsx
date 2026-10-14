@@ -3,7 +3,6 @@ import { router } from "expo-router";
 import { useEffect } from "react";
 import { Pressable, Text, View } from "react-native";
 
-import { PrivacyPolicyLink } from "@/components/AccountPrivacy";
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { DangerButton } from "@/components/DangerButton";
 import { EmptyState } from "@/components/EmptyState";
@@ -13,7 +12,8 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { PasswordField } from "@/components/controls/PasswordField";
 import { TextField } from "@/components/controls/TextField";
-import { deletionConfirmMethod, DELETION_SENT } from "@/lib/accountDeletion";
+import { deletionConfirmMethod } from "@/lib/accountDeletion";
+import { legalDate, RETENTION_NOTE } from "@/lib/legal";
 import { useAccountDeletion } from "@/store/accountDeletion";
 
 const BUSY_LABEL = {
@@ -25,11 +25,12 @@ const BUSY_LABEL = {
 /**
  * Delete account: what it means, then proof that it is the account holder.
  *
- * Reached only from Danger zone on Your shop details. Nothing leaves the phone
- * until Clerk has re-checked the person on this session — the password for an
- * account that has one, an emailed code for a Google-only account — and only
- * then is `POST /me/account-deletion-request` sent. See
- * `lib/accountDeletion.ts`, shared with the client and rider apps.
+ * Reached from Your data and from Danger zone on Your shop details. Nothing
+ * leaves the phone until Clerk has re-checked the person on this session — the
+ * password for an account that has one, an emailed code for a Google-only
+ * account — and only then is a `deletion` request sent to the privacy queue
+ * (`POST /me/privacy-requests`). See `lib/accountDeletion.ts`, shared with the
+ * client and rider apps.
  *
  * No yellow on this screen: the one action is a deletion, and it is drawn in
  * the error token like every other action that cannot be taken back.
@@ -47,6 +48,7 @@ export default function DeleteAccountScreen() {
   const error = useAccountDeletion((s) => s.error);
   const confirmed = useAccountDeletion((s) => s.confirmedAt != null);
   const sent = useAccountDeletion((s) => s.sent);
+  const request = useAccountDeletion((s) => s.request);
   const setSecret = useAccountDeletion((s) => s.setSecret);
   const emailCode = useAccountDeletion((s) => s.emailCode);
   const submit = useAccountDeletion((s) => s.submit);
@@ -72,6 +74,7 @@ export default function DeleteAccountScreen() {
   }
 
   if (sent) {
+    const due = legalDate(request?.dueAt);
     return (
       <View className="gg-screen">
         <FormScrollView contentClassName="gg-page pb-16 pt-4">
@@ -79,14 +82,17 @@ export default function DeleteAccountScreen() {
             <Text className="text-h2 text-text-primary" accessibilityRole="header">
               Request sent
             </Text>
-            <Text className="text-body-lg text-text-primary">{DELETION_SENT}</Text>
-            <Text className="text-body text-text-secondary">
-              Operations processes it by hand. Your account stays available while the request
-              is reviewed.
+            <Text className="text-body-lg text-text-primary">
+              {due ? `GRIDGO will answer by ${due}.` : "GRIDGO will answer as soon as it can."}
             </Text>
+            <Text className="text-body text-text-secondary">
+              Operations process it by hand. Your account stays available while the request is
+              reviewed, and you can follow it on Your data.
+            </Text>
+            <Text className="text-body text-text-secondary">{RETENTION_NOTE}</Text>
           </View>
           <View className="mt-8">
-            <SecondaryButton label="Back to your shop details" onPress={() => router.back()} />
+            <SecondaryButton label="Go back" onPress={() => router.back()} />
           </View>
         </FormScrollView>
       </View>
@@ -104,14 +110,13 @@ export default function DeleteAccountScreen() {
           </Text>
           <Text className="text-body text-text-secondary">
             Operations will delete your GRIDGO sign-in and personal data. You will lose access
-            across GRIDGO apps, and deletion cannot be undone. Records that must be retained are
-            explained in the Privacy Policy.
+            across GRIDGO apps, and deletion cannot be undone.
           </Text>
+          <Text className="text-body text-text-secondary">{RETENTION_NOTE}</Text>
           <Text className="text-body text-text-secondary">
-            This sends a request for manual processing within 30 days. Your account stays
-            available while the request is reviewed.
+            This sends a request that Operations handle by hand. Your account stays available
+            while it is reviewed.
           </Text>
-          <PrivacyPolicyLink />
         </View>
 
         <View className="mt-8 gap-4">

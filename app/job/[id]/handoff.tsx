@@ -34,6 +34,8 @@ import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
 import { useJobDrafts } from "@/store/jobDrafts";
 import { askConfirm } from "@/store/sheets";
+import { WhyWeAsk } from "@/components/legal/WhyWeAsk";
+import { WHY_WE_ASK } from "@/lib/legal";
 
 /**
  * The custody moment.
@@ -235,6 +237,7 @@ export default function HandoffScreen() {
                 disabled={busy}
                 onPress={() => void upload.pickImage()}
               />
+              <WhyWeAsk>{WHY_WE_ASK.packedPhoto}</WhyWeAsk>
             </>
           )
         ) : step && !packingGate ? (

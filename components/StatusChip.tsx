@@ -1,4 +1,5 @@
 import {
+  Banknote,
   CircleCheck,
   CirclePause,
   CircleX,
@@ -25,6 +26,7 @@ export type StatusTone = "success" | "warning" | "error" | "info" | "neutral";
  * vocabulary small enough to stay consistent across screens.
  */
 const ICONS = {
+  banknote: Banknote,
   "circle-check": CircleCheck,
   "triangle-alert": TriangleAlert,
   "circle-x": CircleX,

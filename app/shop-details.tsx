@@ -17,6 +17,8 @@ import { ShopPortrait } from "@/components/ShopPortrait";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { TextField } from "@/components/controls/TextField";
+import { WhyWeAsk } from "@/components/legal/WhyWeAsk";
+import { WHY_WE_ASK } from "@/lib/legal";
 import { deletionConfirmMethod } from "@/lib/accountDeletion";
 import type { SupplierProfile } from "@/lib/api";
 import { changeShopPortrait, type PortraitSource } from "@/lib/clerkIdentity";
@@ -244,6 +246,7 @@ export default function ShopDetailsScreen() {
             Your shopfront, your sign, or the best job on your rack. Not a logo a client cannot
             place.
           </Text>
+          <WhyWeAsk centered>{WHY_WE_ASK.shopPhoto}</WhyWeAsk>
         </View>
 
         {portraitError ? (
@@ -329,6 +332,7 @@ export default function ShopDetailsScreen() {
               <FieldShell
                 label="Mobile number"
                 hint="The rider collecting from you gets this number."
+                why={WHY_WE_ASK.phone}
                 error={fieldError("phone")}
               >
                 <TextField

@@ -55,6 +55,33 @@ jest.mock("@/store/session", () => {
   };
 });
 
+// The legal library as GRIDGO has it in effect: what the apply box agrees to.
+jest.mock("@/lib/api", () => {
+  const actual = jest.requireActual("@/lib/api") as typeof import("@/lib/api");
+  const version = (documentId: string, title: string) => ({
+    id: `${documentId}-1`,
+    documentId,
+    version: 1,
+    title,
+    audience: documentId === "supplier-agreement" ? "supplier" : "all",
+    text: "Placeholder text.",
+    effectiveAt: "2026-10-09T02:00:00.000Z",
+    placeholder: true,
+    material: false,
+    penalties: false,
+    status: "placeholder",
+  });
+  return {
+    ...actual,
+    listLegalDocuments: jest.fn(async () => [
+      version("terms-of-service", "Terms of Service"),
+      version("privacy-notice", "Privacy Notice"),
+      version("supplier-agreement", "Supplier Agreement"),
+      version("cookie-notice", "Cookie Notice"),
+    ]),
+  };
+});
+
 jest.mock("react-native-safe-area-context", () => {
   const { View } = require("react-native");
   return {
@@ -65,6 +92,14 @@ jest.mock("react-native-safe-area-context", () => {
 
 import ReviewStep from "@/app/(auth)/signup/review";
 import { useSignupDraft } from "@/store/signupDraft";
+
+const AGREE = /I am 18 or older and agree, for this shop, to the Terms of Service, Privacy Notice and Supplier Agreement/;
+
+async function agree() {
+  const box = await screen.findByRole("checkbox", { name: AGREE });
+  await waitFor(() => expect(box).toBeEnabled());
+  await fireEvent.press(box);
+}
 
 const mockRouter = jest.requireMock("expo-router").router as {
   push: jest.Mock;
@@ -103,6 +138,7 @@ describe("signup verify then enroll", () => {
 
   it("verifies the emailed job number, enrolls, and opens Home", async () => {
     await render(<ReviewStep />);
+    await agree();
 
     await fireEvent.press(screen.getByRole("button", { name: "Send my application" }));
 
@@ -159,6 +195,7 @@ describe("signup verify then enroll", () => {
     mockFetchStatus = "fetching";
 
     await render(<ReviewStep />);
+    await agree();
     await fireEvent.press(screen.getByRole("button", { name: "Send my application" }));
 
     await waitFor(() => {
@@ -167,5 +204,38 @@ describe("signup verify then enroll", () => {
     });
     expect(mockSendEmailCode).not.toHaveBeenCalled();
     expect(mockPassword).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing, and makes no sign-in, until the agreement is ticked", async () => {
+    await render(<ReviewStep />);
+    const box = await screen.findByRole("checkbox", { name: AGREE });
+    expect(box).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Send me GRIDGO news and offers for shops" })).not.toBeChecked();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Send my application" }));
+
+    expect(await screen.findByText("Tick this to send your application.")).toBeTruthy();
+    expect(mockPassword).not.toHaveBeenCalled();
+    expect(mockEnrollSupplier).not.toHaveBeenCalled();
+  });
+
+  it("enrolls with the exact versions shown, and news left unticked", async () => {
+    mockIsSignedIn = true;
+    await render(<ReviewStep />);
+    await agree();
+    await fireEvent.press(screen.getByRole("button", { name: "Send my application" }));
+
+    await waitFor(() => expect(mockEnrollSupplier).toHaveBeenCalled());
+    const [body] = mockEnrollSupplier.mock.calls[0];
+    expect(body.legalConsentVersion).toBe(1);
+    expect(body.legalConsent).toMatchObject({
+      accepted: true,
+      versionIds: ["terms-of-service-1", "privacy-notice-1", "supplier-agreement-1"],
+      method: "checkbox",
+      junior: false,
+      marketing: false,
+    });
+    expect(body.legalConsent.app).toMatch(/^gridgo-supplier\//);
+    expect(typeof body.legalConsent.device).toBe("string");
   });
 });

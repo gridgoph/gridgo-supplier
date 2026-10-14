@@ -53,6 +53,26 @@ export function isProductionPhotoUploadNotAllowed(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "production_photo_upload_not_allowed";
 }
 
+/** Codes gridgo-api answers when an agreement could not be recorded (`docs/LEGAL_API.md`). */
+const LEGAL_REFUSALS = new Set([
+  "legal_consent_required",
+  "legal_version_changed",
+  "invalid_legal_versions",
+  "invalid_acceptance_metadata",
+  "unsupported_legal_consent_version",
+  "legal_audience_mismatch",
+]);
+
+/** GRIDGO refused the agreement itself; nothing it was sent with was committed. */
+export function isLegalRefusal(error: unknown): boolean {
+  return error instanceof ApiError && LEGAL_REFUSALS.has(apiErrorCode(error));
+}
+
+/** A newer version took effect while the shop was reading. */
+export function isLegalVersionChanged(error: unknown): boolean {
+  return error instanceof ApiError && apiErrorCode(error) === "legal_version_changed";
+}
+
 /** Mapped GRIDGO identity that is not a shop. */
 export function isNonSupplierIdentity(error: unknown): boolean {
   if (!(error instanceof ApiError) || error.status !== 403) return false;

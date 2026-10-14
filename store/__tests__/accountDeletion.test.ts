@@ -1,10 +1,10 @@
 import { DELETION_NO_SESSION, DELETION_PASSWORD_WRONG, DELETION_REQUEST_FAILED } from "@/lib/accountDeletion";
-import { requestAccountDeletion } from "@/lib/api";
+import { createPrivacyRequest } from "@/lib/api";
 import { useAccountDeletion } from "@/store/accountDeletion";
 
-jest.mock("@/lib/api", () => ({ requestAccountDeletion: jest.fn() }));
+jest.mock("@/lib/api", () => ({ createPrivacyRequest: jest.fn() }));
 
-const send = requestAccountDeletion as jest.Mock;
+const send = createPrivacyRequest as jest.Mock;
 
 function session(attempt: jest.Mock = jest.fn(async () => ({ status: "complete" }))) {
   return {
@@ -19,7 +19,7 @@ function session(attempt: jest.Mock = jest.fn(async () => ({ status: "complete" 
 
 beforeEach(() => {
   useAccountDeletion.getState().reset();
-  send.mockReset().mockResolvedValue({ ok: true, message: "We will delete your account within 30 days" });
+  send.mockReset().mockResolvedValue({ id: "pr_1", kind: "deletion", status: "pending", requestedAt: "2026-10-09T02:00:00.000Z", dueAt: "2026-10-24T02:00:00.000Z" });
 });
 
 describe("the deletion request waits on the person proving it is them", () => {
@@ -30,6 +30,7 @@ describe("the deletion request waits on the person proving it is them", () => {
 
     expect(s.attemptFirstFactorVerification).toHaveBeenCalledWith({ strategy: "password", password: "secret-pass" });
     expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith("deletion");
     const state = useAccountDeletion.getState();
     expect(state.sent).toBe(true);
     // The password does not outlive the check.

@@ -38,6 +38,8 @@ import {
 } from "@/lib/payoutAccount";
 import { askConfirm } from "@/store/sheets";
 import { useThemeColors } from "@/hooks/useTheme";
+import { WhyWeAsk } from "@/components/legal/WhyWeAsk";
+import { WHY_WE_ASK } from "@/lib/legal";
 
 /**
  * Where the shop gets paid.
@@ -252,6 +254,9 @@ export default function PayoutAccountScreen() {
                   <Trash2 size={20} color={colors.textMuted} strokeWidth={2} />
                 </Pressable>
               ) : null}
+            </View>
+            <View className="mt-3">
+              <WhyWeAsk>{WHY_WE_ASK.payoutQr}</WhyWeAsk>
             </View>
 
             {fieldError("qr") ? (

@@ -266,13 +266,16 @@ describe("root stack auth guard wiring", () => {
     expect(src).toContain("Stack.Protected");
     expect(src).toContain("isSignedIn");
     // Tabs alone are not enough — detail screens live outside the tab group.
-    expect(src).toMatch(/guard=\{signedIn\}[\s\S]*name="\(tabs\)"/);
+    expect(src).toMatch(/guard=\{floorOpen\}[\s\S]*name="\(tabs\)"/);
+    // Terms waiting to be agreed close the floor but never the way out.
+    expect(src).toContain("const floorOpen = signedIn && !legalBlocked;");
+    expect(src).toMatch(/guard=\{legalBlocked\}[\s\S]*name="legal\/review"/);
     expect(src).toMatch(/Stack\.Protected[\s\S]*name="job\/\[id\]"/);
     expect(src).toMatch(/Stack\.Protected[\s\S]*name="payout"/);
     expect(src).toMatch(/Stack\.Protected[\s\S]*name="design-system"/);
     // Tabs are for every signed-in shop; job money screens stay matchable.
     const tabsAt = src.indexOf('name="(tabs)"');
-    const matchableAt = src.indexOf("guard={matchable}");
+    const matchableAt = src.indexOf("guard={matchable && !legalBlocked}");
     expect(tabsAt).toBeGreaterThan(-1);
     expect(matchableAt).toBeGreaterThan(-1);
     expect(tabsAt).toBeLessThan(matchableAt);

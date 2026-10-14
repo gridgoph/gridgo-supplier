@@ -38,6 +38,8 @@ import {
   type PickupChatMessage,
   type PickupChatSummary,
 } from "@/lib/pickupChat";
+import { WhyWeAsk } from "@/components/legal/WhyWeAsk";
+import { WHY_WE_ASK } from "@/lib/legal";
 
 type PendingPhoto = { uri: string; name: string; mimeType: string };
 
@@ -330,6 +332,7 @@ export function PickupChatConversation({ orderId, onOpenJob }: { orderId: string
               ))}
             </View>
           ) : null}
+          {open && pending.length ? <WhyWeAsk>{WHY_WE_ASK.chatPhoto}</WhyWeAsk> : null}
 
           {open ? (
             <View className="flex-row items-end gap-2">

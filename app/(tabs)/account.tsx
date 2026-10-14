@@ -1,4 +1,3 @@
-import { PrivacyPolicyButton } from "@/components/AccountPrivacy";
 import { useUser } from "@clerk/expo";
 import { ChevronRight } from "lucide-react-native";
 import { useCallback, useState } from "react";
@@ -277,13 +276,23 @@ export default function AccountScreen() {
         </View>
 
         {/*
-          The policy is a button of its own. Deleting the account is not
-          here: it lives under Danger zone on Your shop details, behind a
-          check that it is really the account holder asking.
+          The agreements the shop works under, and what it can ask about its
+          own data — read from the API, so a newly published version is here
+          without an app update. Deleting the account is one of the asks on
+          Your data, still behind a check that it is really the account holder.
         */}
         <View className="mt-6 gap-2">
           <Text className="text-overline text-text-muted">PRIVACY</Text>
-          <PrivacyPolicyButton />
+          <DestinationRow
+            title="Legal & Privacy"
+            detail="Your Supplier Agreement, the Terms and the Privacy Notice"
+            onPress={() => router.push("/legal" as Href)}
+          />
+          <DestinationRow
+            title="Your data"
+            detail="See, correct or delete the personal data GRIDGO holds about you"
+            onPress={() => router.push("/privacy" as Href)}
+          />
         </View>
 
         <View className="mt-8">
