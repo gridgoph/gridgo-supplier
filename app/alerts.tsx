@@ -16,11 +16,13 @@ import { spacing, touchTarget, typography } from "@/constants/theme";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { localOnlyCaveat } from "@/lib/alertsApi";
+import { CHAT_LIST_ROUTE, chatThreadRoute, isChatThreadId } from "@/lib/chatThreads";
 import { listingAlertHref } from "@/lib/listingReview";
 import { PICKUP_ISSUE_ALERT, presentAlertTitle, stageForAlert } from "@/lib/alertStages";
 import { PICKUP_CHAT_NOTICE, pickupChatHref } from "@/lib/pickupChat";
 import { jobScreenHref } from "@/lib/productionNudge";
 import { isLapseAlert } from "@/lib/productionLapse";
+import { SUPPORT_MESSAGE_PUSH_TYPE } from "@/lib/push";
 import { isRefundAlert } from "@/lib/refund";
 import { isAlertUnread, useAlertsStore, visibleAlerts } from "@/store/alerts";
 import { askConfirm } from "@/store/sheets";
@@ -233,6 +235,8 @@ export default function NotificationsScreen() {
   const renderAlert = (alert: api.Notification) => {
     const job = alert.orderId ? jobs.find((candidate) => candidate.id === alert.orderId) : null;
     const listingHref = listingAlertHref(alert);
+    // The inbox row names its support thread (the push does not).
+    const supportThread = alert.threadId ?? undefined;
     return (
       <AlertCard
         key={alert.id}
@@ -247,6 +251,8 @@ export default function NotificationsScreen() {
             ? () => router.push(listingHref)
             : alert.orderId && alert.type === PICKUP_CHAT_NOTICE
               ? () => router.push(pickupChatHref(alert.orderId as string))
+              : alert.type === SUPPORT_MESSAGE_PUSH_TYPE
+              ? () => router.push(isChatThreadId(supportThread) ? chatThreadRoute(supportThread) : CHAT_LIST_ROUTE)
               : // A notice asking the shop to act opens its job even before the list has it.
               alert.orderId &&
                 (job ||

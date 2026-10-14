@@ -1,13 +1,20 @@
 import {
+  channelAudibility,
   devicePlatform,
   parsePushData,
   PUSH_CHANNEL_ID,
   PUSH_FOREGROUND_BEHAVIOR,
   pushOffer,
   pushOfferCopy,
+  pushTapKey,
   pushTargetRoute,
   readPushPermission,
+  supportThreadRoute,
 } from "@/lib/push";
+
+const THREAD = "0b9a1f2c-3d4e-4f5a-8b6c-7d8e9f0a1b2c";
+/** expo-notifications' own `AndroidImportance` values. */
+const LEVELS = { none: 2, default: 5 };
 
 describe("the channel the server names", () => {
   it("is the server's own identifier", () => {
@@ -15,6 +22,42 @@ describe("the channel the server names", () => {
     // and Android 8+ drops or downgrades one naming a channel that does not
     // exist. All three GRIDGO apps must use this exact string.
     expect(PUSH_CHANNEL_ID).toBe("gridgo_default");
+  });
+});
+
+describe("channelAudibility", () => {
+  // A channel belongs to the person once it exists, so the app reads back what
+  // the phone will actually do rather than trusting what it asked for.
+  it("is audible at default importance or higher with a sound", () => {
+    expect(channelAudibility({ importance: 6, sound: "default" }, LEVELS)).toBe("audible");
+    expect(channelAudibility({ importance: 5, sound: "default" }, LEVELS)).toBe("audible");
+  });
+
+  it("is silent when the shop set it to Silent or removed its sound", () => {
+    expect(channelAudibility({ importance: 4, sound: "default" }, LEVELS)).toBe("silent");
+    expect(channelAudibility({ importance: 6, sound: null }, LEVELS)).toBe("silent");
+  });
+
+  it("is off when the shop turned the channel off", () => {
+    expect(channelAudibility({ importance: 2, sound: "default" }, LEVELS)).toBe("off");
+  });
+
+  it("says nothing when there is nothing to read", () => {
+    expect(channelAudibility(null, LEVELS)).toBe("unknown");
+    expect(channelAudibility({ importance: 0, sound: "default" }, LEVELS)).toBe("unknown");
+    expect(channelAudibility({ sound: "default" }, LEVELS)).toBe("unknown");
+  });
+});
+
+describe("pushTapKey", () => {
+  it("remembers a tap by the server's notification, whatever the native identifier", () => {
+    const data = parsePushData({ notificationId: "n1", type: "support_message" });
+    expect(pushTapKey("launch-id", data)).toBe(pushTapKey("tray-id", data));
+  });
+
+  it("falls back to the native identifier for a push with no notification", () => {
+    const data = parsePushData({});
+    expect(pushTapKey("a", data)).not.toBe(pushTapKey("b", data));
   });
 });
 
@@ -82,6 +125,24 @@ describe("pushTargetRoute", () => {
     ).toBe("/job/ord_demo_1");
   });
 
+  it("opens the pick-up chat for a message from the rider", () => {
+    expect(
+      pushTargetRoute(parsePushData({ type: "pickup_chat_message", orderId: "ord_demo_1" })),
+    ).toBe("/job/ord_demo_1/messages");
+  });
+
+  it("opens the exact support thread the owner's notification names", () => {
+    const data = parsePushData({ notificationId: "n1", type: "support_message" });
+    expect(pushTargetRoute(data, THREAD)).toBe(`/chat/${THREAD}`);
+  });
+
+  it("opens chat history, never a guessed thread, when no thread is named", () => {
+    const data = parsePushData({ notificationId: "n1", type: "support_message" });
+    expect(pushTargetRoute(data)).toBe("/chat");
+    expect(pushTargetRoute(data, "not-a-thread")).toBe("/chat");
+    expect(supportThreadRoute(null)).toBe("/chat");
+  });
+
   it("opens the alerts list when there is no job behind the alert", () => {
     expect(pushTargetRoute(parsePushData({ type: "account_update" }))).toBe(
       "/alerts",
@@ -137,6 +198,17 @@ describe("pushOffer", () => {
 
   it("offers nothing once permission is granted", () => {
     expect(pushOffer({ ...base, permission: "granted" })).toBe("hidden");
+  });
+
+  it("points a granted phone with a silenced channel at the channel's settings", () => {
+    expect(pushOffer({ ...base, permission: "granted", channel: "silent" })).toBe("silent");
+    expect(pushOffer({ ...base, permission: "granted", channel: "off" })).toBe("muted");
+    expect(pushOffer({ ...base, permission: "granted", channel: "audible" })).toBe("hidden");
+    expect(pushOffer({ ...base, permission: "granted", channel: "unknown" })).toBe("hidden");
+  });
+
+  it("does not tell a signed-out phone about its channel", () => {
+    expect(pushOffer({ ...base, signedIn: false, permission: "granted", channel: "silent" })).toBe("hidden");
   });
 
   it("sends a blocked phone to its own settings, which is the only thing that works", () => {
@@ -209,6 +281,15 @@ describe("pushOfferCopy", () => {
     expect(copy.body).toMatch(/new version/i);
     expect(copy.body).toMatch(/once you sign in/i);
     expect(copy.body).not.toMatch(/offers your shop work/i);
+  });
+
+  it("says a silenced channel costs the shop its messages, and where to fix it", () => {
+    for (const offer of ["silent", "muted"] as const) {
+      const copy = pushOfferCopy(offer);
+      expect(copy.body).toMatch(/messages/i);
+      expect(copy.body).toMatch(/Job and payout alerts/);
+      expect(copy.action).toBe("Open notification settings");
+    }
   });
 
   it("asks a blocked phone to open settings rather than promising a dialog", () => {

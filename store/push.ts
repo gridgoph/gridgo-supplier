@@ -6,12 +6,14 @@ import { getNotificationsNative as notifications, pushSupported } from "@/lib/ex
 import * as api from "@/lib/api";
 import { humanizeApiError } from "@/lib/apiErrors";
 import {
+  channelAudibility,
   devicePlatform,
   PRODUCTION_NUDGE_SOUND,
   PUSH_CHANNEL,
   PUSH_CHANNEL_ID,
   PUSH_PRODUCTION_NUDGE_CHANNEL_ID,
   readPushPermission,
+  type ChannelAudibility,
   type PushPermission,
 } from "@/lib/push";
 
@@ -60,6 +62,11 @@ export { pushSupported } from "@/lib/expoNotifications";
 type PushState = {
   supported: boolean;
   permission: PushPermission;
+  /**
+   * Whether the installed Android channel makes a sound. Read back after every
+   * create, because a shop's own channel settings outlive any re-create.
+   */
+  channel: ChannelAudibility;
   /** The FCM registration token this installation currently holds. */
   token: string | null;
   /**
@@ -81,6 +88,8 @@ type PushState = {
   registerIfGranted: () => Promise<void>;
   /** Firebase reissued the token while the app was running. */
   adoptToken: (token: string) => Promise<void>;
+  /** The channel's own settings screen: sound, importance, on/off. */
+  openChannelSettings: () => Promise<void>;
   /**
    * Sign-out has already unregistered the token with the sign-out call. Forget
    * the claim, then put this phone back on the unclaimed list so GRIDGO can
@@ -112,17 +121,19 @@ function isUnclaimedRouteAbsent(error: unknown): boolean {
  * exists — so this runs before the first permission read, not before the first
  * notification.
  */
-async function ensureChannel(): Promise<void> {
-  if (Platform.OS !== "android") return;
+async function ensureChannel(): Promise<ChannelAudibility> {
+  if (Platform.OS !== "android") return "unknown";
   const Notifications = notifications();
-  if (!Notifications) return;
+  if (!Notifications) return "unknown";
   await withDeadline(Notifications.setNotificationChannelAsync(PUSH_CHANNEL_ID, {
     name: PUSH_CHANNEL.name,
     description: PUSH_CHANNEL.description,
-    // These are expiring job offers and money waiting on a photograph: worth a
-    // sound and a heads-up banner, which is also what the server's
-    // `priority: high` asks for. This channel keeps the system sound.
+    // These are expiring job offers, money waiting on a photograph and a
+    // rider's messages: worth a sound, a buzz and a heads-up banner, which is
+    // also what the server's `priority: high` asks for. `sound` is left out on
+    // purpose — an absent key is the phone's default sound, `null` is silence.
     importance: Notifications.AndroidImportance.HIGH,
+    enableVibrate: true,
   }), api.API_REQUEST_MS);
   await withDeadline(Notifications.setNotificationChannelAsync(PUSH_PRODUCTION_NUDGE_CHANNEL_ID, {
     name: "Production reminders",
@@ -132,6 +143,20 @@ async function ensureChannel(): Promise<void> {
     enableVibrate: true,
     vibrationPattern: [0, 250, 250, 250],
   }), api.API_REQUEST_MS);
+  // Android keeps the shop's own choices on an existing channel, so what was
+  // asked for above is not necessarily what is installed. Read it back.
+  try {
+    const installed = await withDeadline(
+      Notifications.getNotificationChannelAsync(PUSH_CHANNEL_ID),
+      api.API_REQUEST_MS,
+    );
+    return channelAudibility(installed, {
+      none: Notifications.AndroidImportance.NONE,
+      default: Notifications.AndroidImportance.DEFAULT,
+    });
+  } catch {
+    return "unknown";
+  }
 }
 
 /** The raw FCM token for this installation, or null if it cannot be had. */
@@ -153,6 +178,7 @@ export function serializeDeviceMutation(action: () => Promise<void>): Promise<vo
 export const usePush = create<PushState>((set, get) => ({
   supported: pushSupported(),
   permission: "unknown",
+  channel: "unknown",
   token: null,
   claimed: false,
   busy: false,
@@ -161,14 +187,14 @@ export const usePush = create<PushState>((set, get) => ({
   syncPermission: async () => {
     if (!get().supported) return "unknown";
     try {
-      await ensureChannel();
+      const channel = await ensureChannel();
       const Notifications = notifications();
       if (!Notifications) {
         set({ permission: "unknown" });
         return "unknown";
       }
       const permission = readPushPermission(await withDeadline(Notifications.getPermissionsAsync(), api.API_REQUEST_MS));
-      set({ permission });
+      set({ permission, channel });
       return permission;
     } catch {
       // Expo Go on Android, or a build with no Firebase config. Push is simply
@@ -182,7 +208,7 @@ export const usePush = create<PushState>((set, get) => ({
     if (!get().supported || get().busy) return false;
     set({ busy: true, error: null });
     try {
-      await ensureChannel();
+      set({ channel: await ensureChannel() });
       const Notifications = notifications();
       if (!Notifications) {
         set({ busy: false, permission: "unknown" });
@@ -258,6 +284,10 @@ export const usePush = create<PushState>((set, get) => ({
     await get().registerIfGranted();
   },
 
+  openChannelSettings: async () => {
+    await openNotificationSettings(PUSH_CHANNEL_ID);
+  },
+
   release: async () => {
     set({ token: null, claimed: false, busy: false, error: null });
     // The bearer is already gone, so this re-registers the phone unclaimed —
@@ -289,8 +319,21 @@ function errorText(e: unknown): string {
  * a vendor build, iOS — the app's settings page is the fallback. Returning to
  * GRIDGO re-reads the permission and registers (`hooks/usePushNotifications`).
  */
-export async function openNotificationSettings(): Promise<void> {
+export async function openNotificationSettings(channelId?: string): Promise<void> {
   if (Platform.OS === "android") {
+    if (channelId) {
+      // A silenced channel is one switch deeper than the app's page: open the
+      // channel itself, where Sound and importance live.
+      try {
+        await Linking.sendIntent("android.settings.CHANNEL_NOTIFICATION_SETTINGS", [
+          { key: "android.provider.extra.APP_PACKAGE", value: androidPackage() },
+          { key: "android.provider.extra.CHANNEL_ID", value: channelId },
+        ]);
+        return;
+      } catch {
+        // Some launchers refuse the channel page; the app's page still works.
+      }
+    }
     try {
       await Linking.sendIntent("android.settings.APP_NOTIFICATION_SETTINGS", [
         { key: "android.provider.extra.APP_PACKAGE", value: androidPackage() },

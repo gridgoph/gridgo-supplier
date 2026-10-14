@@ -512,6 +512,8 @@ export type Notification = {
   orderId?: string;
   /** Set when a Super Admin took one listing down. */
   catalogItemId?: string;
+  /** The support thread a `support_message` is about. Never in push data. */
+  threadId?: string | null;
   title: string;
   body: string;
   /** Current job title, when the alert is about a job the caller can see. */
@@ -979,6 +981,20 @@ export async function enrollSupplier(
 /** Mark one owned notification read; lib/alertsApi owns deployment fallback. */
 export async function markNotificationRead(id: string): Promise<void> {
   await request(`/notifications/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ read: true }) });
+}
+
+/**
+ * Mark one notification read and return it as its owner sees it.
+ *
+ * A tapped support push resolves its conversation this way: the push carries
+ * no thread ID, and the returned row's `threadId` is only ever the owner's.
+ * A deleted or foreign notification is `404`.
+ */
+export async function readNotification(id: string): Promise<Notification> {
+  const result = await request<{ notification: Notification }>(`/notifications/${encodeURIComponent(id)}`, {
+    method: "PATCH", body: JSON.stringify({ read: true }),
+  });
+  return result.notification;
 }
 
 /** Mark a named set read; lib/alertsApi.markAllRead owns the visible-id invariant. */

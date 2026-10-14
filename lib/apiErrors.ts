@@ -420,6 +420,15 @@ export function pickupChatUnavailable(error: unknown): PickupChatUnavailable | n
   return null;
 }
 
+/**
+ * A named support thread this shop cannot open: removed, closed, or not its
+ * own (`support_chat_thread_not_found`, `forbidden`). A dropped connection is
+ * not this — a retry may fix it.
+ */
+export function supportThreadUnavailable(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 403 || error.status === 404 || error.status === 410);
+}
+
 /** Copy for a message to the rider that did not go through. */
 export function pickupSendError(error: unknown): string {
   const code = apiErrorCode(error);
