@@ -7,8 +7,8 @@ import { formatPhp } from "@/lib/api";
 import {
   boardContextFor,
   boardStanding,
-  effectiveMinimumDays,
-  effectiveTurnaroundDays,
+  effectiveMinimumTurnaround,
+  effectiveTurnaround,
   fromPriceMinor,
   hasPriceRange,
   photoViewUrl,
@@ -56,7 +56,7 @@ export function ListingRow({
   const context = boardContextFor(listing, services);
   const standing = boardStanding(listing, context, shopApproved, readiness);
   const caption = standingCaption(standing);
-  const days = effectiveTurnaroundDays(listing, context.inheritedTurnaroundDays);
+  const turnaround = effectiveTurnaround(listing, context.inheritedTurnaround);
   const first = listing.photos[0];
   const money = formatPhp(fromPriceMinor(listing));
 
@@ -98,7 +98,7 @@ export function ListingRow({
             {subcategoryName(catalog, listing.subcategoryCode)}
           </Text>
           <Text className="text-caption text-text-muted" numberOfLines={2}>
-            {readyInLine(days, effectiveMinimumDays(listing))}
+            {readyInLine(turnaround, effectiveMinimumTurnaround(listing))}
           </Text>
           <View className="mt-0.5">
             <StandingChips standing={standing} />

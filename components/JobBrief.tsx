@@ -22,6 +22,8 @@ import {
   DEFAULT_BRIEF_SECTIONS,
   distanceLabel,
   jobBriefSections,
+  jobDetailsOf,
+  NOT_SPECIFIED,
   type JobBriefSectionId,
 } from "@/lib/jobBrief";
 import { orderArtwork } from "@/lib/orderArtwork";
@@ -146,18 +148,34 @@ function SectionBody({
   switch (id) {
     case "make": {
       const items = orderProductionItems(order);
+      const details = jobDetailsOf(order);
       return (
         <View className="gap-3">
-          {items.map((item) => (
-            <View key={item.id}>
-              {items.length > 1 ? (
-                <Text className="pt-1 text-body font-medium text-text-primary">{item.itemName}</Text>
-              ) : null}
-              {productionSpecRows(item).map((spec, index) => (
-                <SpecRow key={`${spec.label}:${index}`} label={spec.label} value={spec.value} />
-              ))}
-            </View>
-          ))}
+          {items.map((item) => {
+            const rows = productionSpecRows(item);
+            // GRIDGO names the material even where the line's own spec did not;
+            // a line with none says so rather than leaving the row out.
+            const material =
+              details && !rows.some((row) => /^materials?$/i.test(row.label))
+                ? (items.length === 1 ? details.material : NOT_SPECIFIED)
+                : null;
+            return (
+              <View key={item.id}>
+                {items.length > 1 ? (
+                  <Text className="pt-1 text-body font-medium text-text-primary">{item.itemName}</Text>
+                ) : null}
+                {rows.map((spec, index) => (
+                  <SpecRow
+                    key={`${spec.label}:${index}`}
+                    label={spec.label}
+                    value={spec.value}
+                    muted={spec.value === NOT_SPECIFIED}
+                  />
+                ))}
+                {material ? <SpecRow label="Material" value={material} muted={material === NOT_SPECIFIED} /> : null}
+              </View>
+            );
+          })}
         </View>
       );
     }
@@ -184,13 +202,20 @@ function SectionBody({
       );
     case "delivery": {
       const distance = distanceLabel(order.deliveryDistanceMeters);
+      const details = jobDetailsOf(order);
+      const readyBy = order.readyBy || details?.promisedDate;
       return (
         <View>
-          {order.readyBy ? (
-            <SpecRow label="Have it ready by" value={formatDeadlineFull(order.readyBy)} />
+          {readyBy ? (
+            <SpecRow label="Have it ready by" value={formatDeadlineFull(readyBy)} />
+          ) : details ? (
+            <SpecRow label="Have it ready by" value={NOT_SPECIFIED} muted />
           ) : (
             <SpecRow label="Client needs it by" value={formatDeadlineFull(order.promisedDate || order.deadline)} />
           )}
+          {details ? (
+            <SpecRow label="Zone" value={details.zone} muted={details.zone === NOT_SPECIFIED} />
+          ) : null}
           <SpecRow label="Deliver to" value={order.address || "—"} />
           {distance ? <SpecRow label="Distance" value={distance} /> : null}
           <Text className="pt-3 text-caption text-text-muted">

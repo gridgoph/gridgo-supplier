@@ -63,7 +63,7 @@ function listingWith(overrides: Partial<Listing> = {}): Listing {
     priceTiers: [],
     speedTiers: [],
     turnaroundMode: "inherit",
-    turnaroundDays: null,
+    turnaround: null,
     fileFormatMode: "inherit",
     formatCodes: [],
     onTheBoard: false,

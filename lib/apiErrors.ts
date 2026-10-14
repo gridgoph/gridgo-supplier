@@ -102,6 +102,8 @@ const MESSAGES: Record<string, string> = {
     "Operations has already verified this one, so there is nothing to send. Refresh to see it.",
   supplier_not_approved:
     "Your shop's accreditation is still with Operations, so services cannot be verified yet. They will let you know when it clears.",
+  claim_hold_active:
+    "A client claim is open on this job, so it cannot be packaged yet. Operations has to clear the claim first.",
   payout_held:
     "A client report or refund request is open on this job, so GRIDGO is holding what is left of your earnings until Operations settles it.",
   refund_fulfillment_stopped:
@@ -247,6 +249,77 @@ export function apiErrorBlockers(error: unknown): string[] {
 export function isRouteNotOpen(error: unknown): boolean {
   if (!(error instanceof ApiError) || (error.status !== 404 && error.status !== 405)) return false;
   return apiErrorCode(error) !== "order_not_found";
+}
+
+/**
+ * What a shop can do about one thing GRIDGO still needs before a step. The
+ * shop's vocabulary, so no screen ever branches on the platform's code.
+ */
+export type RequirementKind =
+  | "production_photo"
+  | "packing_photo"
+  | "claim"
+  | "job_stopped"
+  | "moved_on"
+  | "other";
+
+export type Requirement = { kind: RequirementKind; message: string };
+
+const REQUIREMENT_KINDS: Record<string, RequirementKind> = {
+  production_photo_required: "production_photo",
+  packing_photo_required: "packing_photo",
+  claim_hold_active: "claim",
+  refund_fulfillment_stopped: "job_stopped",
+  reschedule_fulfillment_stopped: "job_stopped",
+  shop_recovery_pending: "job_stopped",
+  transition_not_allowed: "moved_on",
+};
+
+/**
+ * GRIDGO's own sentence, when it is one a shop can read. Its refusals now
+ * carry a plain `message`; one that is only a code, or has a code in it, is
+ * not shown — the shop gets this app's sentence for that code instead.
+ */
+function plainSentence(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (!text || !/\s/.test(text) || /\b[a-z0-9]+_[a-z0-9_]+\b/.test(text)) return null;
+  return text;
+}
+
+function requirementOf(raw: unknown): Requirement | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const code = typeof (raw as { code?: unknown }).code === "string" ? (raw as { code: string }).code : "";
+  const message = plainSentence((raw as { message?: unknown }).message) ?? MESSAGES[code];
+  if (!code && !message) return null;
+  return {
+    kind: REQUIREMENT_KINDS[code] ?? "other",
+    message: message ?? "GRIDGO needs something else on this job first. Ask Operations what it is.",
+  };
+}
+
+/**
+ * Everything GRIDGO lists as still missing before a step
+ * (gridgo-api `docs/SUPPLIER_JOB_READINESS_API.md`), in its order. The same
+ * shape arrives in a job's `transitionReadiness` and in a refused step.
+ */
+export function readRequirements(value: unknown): Requirement[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(requirementOf).filter((item): item is Requirement => item !== null);
+}
+
+/**
+ * A step GRIDGO refused, in its own words: the sentence it answered with, and
+ * every requirement still missing — not only the first. Null for anything that
+ * is not a refusal (a dead connection, a server fault), which keeps its own
+ * sentence from `humanizeApiError`.
+ */
+export function stepRefusal(error: unknown): { message: string; missing: Requirement[] } | null {
+  if (!(error instanceof ApiError) || ![400, 403, 409].includes(error.status)) return null;
+  const body = typeof error.body === "object" && error.body !== null ? (error.body as Record<string, unknown>) : {};
+  const message = plainSentence(body.message) ?? MESSAGES[apiErrorCode(error)];
+  if (!message) return null;
+  return { message, missing: readRequirements(body.missing) };
 }
 
 export function humanizeApiError(error: unknown, fallback: string): string {

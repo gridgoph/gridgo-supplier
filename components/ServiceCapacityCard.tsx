@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { StatusChip } from "@/components/StatusChip";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { Stepper } from "@/components/controls/Stepper";
+import { ProductionTimePicker } from "@/components/listing/ProductionTimeField";
 import type { SupplierService } from "@/lib/api";
 import { CAPACITY_BOUNDS, type CapacityDraft } from "@/lib/capacity";
 import { presentLifecycle, serviceLifecycle } from "@/lib/supplierServices";
@@ -96,16 +97,15 @@ export function ServiceCapacityCard({
 
       <FieldShell
         label="Production time"
-        hint="Working days on your shop's open hours, from accepting a job to having it packed."
+        hint="Hours for same-day work, or working days, on your shop's open hours — from accepting a job to having it packed."
         error={error}
       >
-        <Stepper
-          value={draft.turnaroundDays}
-          onChange={(turnaroundDays) => onChange({ turnaroundDays })}
-          min={CAPACITY_BOUNDS.turnaround.min}
-          max={CAPACITY_BOUNDS.turnaround.max}
-          unit={draft.turnaroundDays === 1 ? "working day" : "working days"}
-          accessibilityLabel={`Production time in working days for ${categoryName}`}
+        <ProductionTimePicker
+          time={draft.turnaround}
+          onChange={(turnaround) => onChange({ turnaround })}
+          dayMinutes={draft.productionDayMinutes ?? undefined}
+          accessibilityLabel={`Production time for ${categoryName}`}
+          unitLabel={`Count production time for ${categoryName} in`}
           disabled={disabled}
         />
       </FieldShell>

@@ -665,3 +665,120 @@ describe("job workspace with a rider collecting it", () => {
     expect(screen.queryByTestId("pickup-chat-row")).toBeNull();
   });
 });
+
+// Report 6C695C15: a shop could not package a job and was never told why.
+describe("job workspace before packaging", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const PRODUCTION_PHOTO =
+    "Attach at least one production progress photo before marking this job packed or ready for dispatch. A start-of-production photo counts.";
+  const PACKING_PHOTO = "Add a photo of the finished prints packed and ready before marking Ready for dispatch.";
+  const CLAIM =
+    "This order cannot be packaged for pickup while a claim holds payouts. Operations must clear the claim first.";
+  const readiness = (missing: { code: string; message: string }[]) => ({
+    ready_for_dispatch: { allowed: missing.length === 0, missing, receiptScan: { required: false, attached: false } },
+  });
+  const filled = { material: "130gsm gloss", zone: "Nearby", promisedDate: "2026-08-12T02:00:00.000Z", missing: [] };
+
+  it("lists what GRIDGO still needs, in its own words, before the step is pressed", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        payoutMilestones: escrow({ production_started: "released" }, { production_started: ["file_start"] }),
+        payoutPlanVersion: 2,
+        productionProgress: { status: "photos_available", photos: [{ fileId: "file_start", at: null }] },
+        packingProgress: { status: "waiting_for_photo", photos: [] },
+        transitionReadiness: readiness([{ code: "packing_photo_required", message: PACKING_PHOTO }]),
+        jobDetails: filled,
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    const list = await screen.findByTestId("packaging-checklist");
+    expect(within(list).getByText("1 of 2 photos on the job.")).toBeTruthy();
+    expect(within(list).getByLabelText(/^Production photo, Done/)).toBeTruthy();
+    expect(within(list).getByLabelText(/^Packing photo, Needed/)).toBeTruthy();
+    expect(within(list).getByText(PACKING_PHOTO)).toBeTruthy();
+    // Optional, said as optional, never a thing that is missing.
+    expect(within(list).getByText("Not needed. It never holds up packing.")).toBeTruthy();
+    expect(within(screen.getByTestId("job-action-bar")).getByText("Add a packing photo")).toBeTruthy();
+  });
+
+  it("offers no packaging step while a claim holds the job, and says who clears it", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        payoutMilestones: escrow({ production_started: "released" }, { production_started: ["file_start"] }),
+        payoutPlanVersion: 2,
+        productionProgress: { status: "photos_available", photos: [{ fileId: "file_start", at: null }] },
+        packingProgress: { status: "photos_available", photos: [{ fileId: "file_pack", at: null }] },
+        transitionReadiness: readiness([{ code: "claim_hold_active", message: CLAIM }]),
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    const list = await screen.findByTestId("packaging-checklist");
+    expect(within(list).getByText("Both photos are on the job. Something else is holding it too.")).toBeTruthy();
+    expect(within(list).getByLabelText(/^Client claim open, Waiting on Operations/)).toBeTruthy();
+    expect(within(list).getByText(CLAIM)).toBeTruthy();
+    expect(screen.queryByText("Package for pickup")).toBeNull();
+    fireEvent.press(within(list).getByText("Message Operations"));
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: "/report",
+      params: { orderId: "ord_1", title: "Barangay tarpaulin" },
+    });
+  });
+
+  it("draws no checklist once GRIDGO would take the step", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        payoutMilestones: escrow({ production_started: "released" }, { production_started: ["file_start"] }),
+        payoutPlanVersion: 2,
+        productionProgress: { status: "photos_available", photos: [{ fileId: "file_start", at: null }] },
+        packingProgress: { status: "photos_available", photos: [{ fileId: "file_pack", at: null }] },
+        transitionReadiness: readiness([]),
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByText("Package for pickup")).toBeTruthy();
+    expect(screen.queryByTestId("packaging-checklist")).toBeNull();
+  });
+
+  it("shows the zone and date GRIDGO filled, and says Not specified for what it could not", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        readyBy: null,
+        jobDetails: { material: "Not specified", zone: "Not specified", promisedDate: "2026-08-12T02:00:00.000Z", missing: ["material", "zone"] },
+        productionItems: [
+          {
+            id: "line_1", itemName: "Brochures", quantity: 100, pricingUnit: null, packageQty: null, measurement: null,
+            structuredSpec: { size: "A4" }, options: [], artworkFileId: null, mockupFileId: null,
+          },
+        ],
+        timeline: [{ at: "2026-08-07T00:00:00.000Z", state: "production", note: "Proof filed for production_started" }],
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    if (!screen.queryByTestId("job-brief-make")) {
+      fireEvent.press(await screen.findByRole("button", { name: /^What to make/ }));
+    }
+    const make = await screen.findByTestId("job-brief-make");
+    expect(within(make).getByText("Material")).toBeTruthy();
+    expect(within(make).getByText("Not specified")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: /^Where and when/ }));
+    const delivery = await screen.findByTestId("job-brief-delivery");
+    expect(within(delivery).getByText("Zone")).toBeTruthy();
+    expect(within(delivery).getByText(formatDeadlineFull("2026-08-12T02:00:00.000Z"))).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: /^What happened so far/ }));
+    const history = await screen.findByTestId("job-brief-history");
+    // No internal payout label, and an unnamed row is not attributed to GRIDGO.
+    expect(within(history).getByText("Proof filed for Start of production")).toBeTruthy();
+    expect(within(history).queryByText(/GRIDGO/)).toBeNull();
+  });
+});

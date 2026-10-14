@@ -80,7 +80,7 @@ function listing(id: string, photos: string[]): Listing {
     priceTiers: [],
     speedTiers: [],
     turnaroundMode: "override",
-    turnaroundDays: 1,
+    turnaround: { unit: "days" as const, days: 1 },
     fileFormatMode: "override",
     formatCodes: ["pdf"],
     onTheBoard: true,

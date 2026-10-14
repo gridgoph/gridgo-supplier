@@ -8,6 +8,7 @@ const mockRun = jest.fn();
 const mockMarkAttached = jest.fn();
 let mockJob: Partial<api.Order>;
 let mockItems: UploadItem[];
+let mockActionError: string | null = null;
 jest.mock("expo-router", () => ({
   router: { back: jest.fn(), replace: jest.fn(), push: jest.fn() },
   useLocalSearchParams: () => ({ id: "job" }),
@@ -25,8 +26,9 @@ jest.mock("@/hooks/useJobAction", () => ({
   useJobAction: () => ({
     busy: false,
     run: mockRun,
-    error: null,
+    error: mockActionError,
     failure: null,
+    missing: [],
   }),
 }));
 jest.mock("@/hooks/useFileUpload", () => ({
@@ -60,6 +62,7 @@ beforeEach(() => {
     payoutMilestones: [],
   };
   mockItems = [];
+  mockActionError = null;
 });
 it("shows the packing step instead of dispatch until a photo is attached", async () => {
   const view = await render(<HandoffScreen />);
@@ -122,5 +125,46 @@ it("offers dispatch after the server reports the packing photo", async () => {
   const view = await render(<HandoffScreen />);
   expect(screen.getByLabelText("Ready for dispatch")).toBeTruthy();
   expect(screen.getByText("Packing photo sent")).toBeTruthy();
+  await view.unmount();
+});
+
+// Report 6C695C15: packaging refused with no reason.
+it("holds the step and names the claim when only Operations can clear it", async () => {
+  const claim =
+    "This order cannot be packaged for pickup while a claim holds payouts. Operations must clear the claim first.";
+  mockJob = {
+    ...mockJob,
+    packingProgress: { status: "photos_available", photos: [{ fileId: "packed", at: null }] },
+    transitionReadiness: {
+      ready_for_dispatch: { allowed: false, missing: [{ code: "claim_hold_active", message: claim }] },
+    },
+  };
+  const view = await render(<HandoffScreen />);
+  expect(screen.getByText(claim)).toBeTruthy();
+  expect(screen.queryByLabelText("Ready for dispatch")).toBeNull();
+  expect(screen.queryByLabelText("Take a packing photo")).toBeNull();
+  expect(screen.getAllByText("Message Operations")).toHaveLength(1);
+  await view.unmount();
+});
+it("does not repeat a refusal the checklist already says", async () => {
+  const claim =
+    "This order cannot be packaged for pickup while a claim holds payouts. Operations must clear the claim first.";
+  mockActionError = claim;
+  mockJob = {
+    ...mockJob,
+    packingProgress: { status: "photos_available", photos: [{ fileId: "packed", at: null }] },
+    transitionReadiness: {
+      ready_for_dispatch: { allowed: false, missing: [{ code: "claim_hold_active", message: claim }] },
+    },
+  };
+  const view = await render(<HandoffScreen />);
+  expect(screen.getAllByText(claim)).toHaveLength(1);
+  await view.unmount();
+});
+it("says GRIDGO's own reason when it refuses the step", async () => {
+  mockActionError = "Add a photo of the finished prints packed and ready before marking Ready for dispatch.";
+  const view = await render(<HandoffScreen />);
+  expect(screen.getByText(mockActionError)).toBeTruthy();
+  expect(screen.queryByText(/would not accept this/)).toBeNull();
   await view.unmount();
 });

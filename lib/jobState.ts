@@ -1,9 +1,10 @@
 import type { MilestoneCode, Order, PayoutPlanVersion } from "@/lib/api";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 import { acceptWindow } from "@/lib/acceptWindow";
-import { CURRENT_PAYOUT_PLAN, nextShopProof } from "@/lib/milestones";
+import { CURRENT_PAYOUT_PLAN, milestoneDefinition, nextShopProof } from "@/lib/milestones";
 import { counterCheck, presentCheckCodes } from "@/lib/pickupCheck";
 import { needsPackingPhoto } from "@/lib/packingPhoto";
+import { packagingCheck, packagingHeld } from "@/lib/packagingReadiness";
 import { needsProductionPhoto } from "@/lib/productionPhoto";
 import { presentRefundTimelineNote, refundStanding, refundStatus } from "@/lib/refund";
 import { rescheduleNotice } from "@/lib/reschedule";
@@ -222,6 +223,10 @@ export function actionsForJob(order: JobActionOrder, now: Date = new Date()): Su
     case "production":
     // Older clients may still leave a job at this state.
     case "supplier_self_qc":
+      // A claim, or a stop the shop cannot lift, stands in the way: GRIDGO
+      // would refuse every packing step, so none is offered. The job's
+      // checklist says what is holding it and who can clear it.
+      if (packagingHeld(packagingCheck(order))) return proofStep ? [proofStep] : [];
       // GRIDGO will not let the job be packed without a photo of the work, so
       // the step that would be refused is replaced by the one that opens it.
       if (photoOwed) {
@@ -267,6 +272,7 @@ export type JobActionOrder = Pick<
   | "refundDisposition"
   | "productionProgress"
   | "packingProgress"
+  | "transitionReadiness"
   | "shopAcceptance"
   | "shopRecovery"
   | "rescheduleRequest"
@@ -478,5 +484,15 @@ export function presentTimelineState(state: string): string {
  * escalated: visible_defects" — and those are the ones a shop cannot read.
  */
 export function presentTimelineNote(note: string): string {
-  return presentRefundTimelineNote(presentCheckCodes(note));
+  return presentRefundTimelineNote(presentCheckCodes(note)).replace(
+    PAYOUT_STAGE_CODES,
+    (code) => milestoneDefinition(code as MilestoneCode).label,
+  );
 }
+
+/**
+ * Payout stage codes an older GRIDGO left in a note ("Proof filed for
+ * production_started"). GRIDGO now writes the stage's own name; this keeps an
+ * older note from showing a shop the internal label (report 6C695C15).
+ */
+const PAYOUT_STAGE_CODES = /\b(production_started|packaging_qc|issue_window)\b/g;

@@ -1,5 +1,6 @@
 import { draftFrom, listingSavePatch, measureUnitFor, packageQtyFor } from "@/lib/listingDraft";
 import type { Listing } from "@/lib/listings";
+import { sameDay, workingDays } from "@/lib/productionDays";
 
 const listing: Listing = {
   id: "item_1",
@@ -19,7 +20,7 @@ const listing: Listing = {
   priceTiers: [],
   speedTiers: [],
   turnaroundMode: "inherit",
-  turnaroundDays: null,
+  turnaround: null,
   fileFormatMode: "inherit",
   formatCodes: [],
   onTheBoard: false,
@@ -58,8 +59,8 @@ describe("listingSavePatch measured units", () => {
     const working = {
       ...draftFrom(listing),
       turnaroundMode: "override" as const,
-      minimumTurnaroundDays: 1,
-      turnaroundDays: 3,
+      minimumTurnaround: workingDays(1),
+      turnaround: workingDays(3),
     };
     expect(listingSavePatch(working, 0)).toEqual(
       expect.objectContaining({
@@ -70,19 +71,38 @@ describe("listingSavePatch measured units", () => {
     );
   });
 
-  it("clears both days when the listing follows its category, and sends speeds in days", () => {
+  it("sends a same-day window as minutes, and only the chosen unit's field", () => {
+    const working = {
+      ...draftFrom(listing),
+      turnaroundMode: "override" as const,
+      minimumTurnaround: sameDay(60),
+      turnaround: sameDay(150),
+    };
+    const patch = listingSavePatch(working, 0);
+    expect(patch).toEqual(
+      expect.objectContaining({ minimumTurnaroundMinutes: 60, turnaroundMinutes: 150 }),
+    );
+    expect(patch).not.toHaveProperty("turnaroundDays");
+    expect(patch).not.toHaveProperty("minimumTurnaroundDays");
+  });
+
+  it("clears the window when the listing follows its category, and sends each speed in its own unit", () => {
     const working = {
       ...draftFrom(listing),
       turnaroundMode: "inherit" as const,
-      minimumTurnaroundDays: 1,
-      turnaroundDays: 3,
-      speedTiers: [{ id: "s1", label: "Express", turnaroundDays: 1, priceMinor: 50_000, surchargeMinor: null }],
+      minimumTurnaround: workingDays(1),
+      turnaround: workingDays(3),
+      speedTiers: [
+        { id: "s0", label: "Same day", turnaround: sameDay(120), priceMinor: 80_000, surchargeMinor: null },
+        { id: "s1", label: "Express", turnaround: workingDays(1), priceMinor: 50_000, surchargeMinor: null },
+      ],
     };
     const patch = listingSavePatch(working, 0);
     expect(patch).toEqual(
       expect.objectContaining({ minimumTurnaroundDays: null, turnaroundDays: null }),
     );
     expect(patch.speedTiers).toEqual([
+      { id: "s0", label: "Same day", turnaroundMinutes: 120, priceMinor: 80_000, surchargeMinor: null },
       { id: "s1", label: "Express", turnaroundDays: 1, priceMinor: 50_000, surchargeMinor: null },
     ]);
     expect(JSON.stringify(patch)).not.toMatch(/Hours/);

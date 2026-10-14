@@ -1,12 +1,20 @@
-import type { Order, SupplierService } from "@/lib/api";
+import type { Order, SupplierService, SupplierServicePatch } from "@/lib/api";
 import { toDayKey } from "@/lib/day";
-import { PRODUCTION_DAYS, readServiceLineDays } from "@/lib/productionDays";
+import {
+  DEFAULT_WORKING_DAYS,
+  readDayMinutes,
+  readServiceLineTime,
+  sameTime,
+  singleTimeProblem,
+  timeFields,
+  type ProductionTime,
+} from "@/lib/productionDays";
 
 /**
  * Shop capacity, derived only from fields the API really holds.
  *
- * `capacityDaily` / `capacityWeekly` / `turnaroundDays` are editable numbers on
- * a supplier service line. Committed load is the sum of the quantities of jobs
+ * `capacityDaily` / `capacityWeekly` and the usual production time are editable
+ * on a supplier service line. Committed load is the sum of the quantities of jobs
  * the shop has promised for a day. Nothing here is estimated or invented; where
  * the shop has set no capacity, the screens say "not set" rather than guessing.
  */
@@ -15,7 +23,6 @@ import { PRODUCTION_DAYS, readServiceLineDays } from "@/lib/productionDays";
 export const CAPACITY_BOUNDS = {
   daily: { min: 0, max: 5000, step: 5 },
   weekly: { min: 0, max: 20000, step: 25 },
-  turnaround: { min: PRODUCTION_DAYS.min, max: PRODUCTION_DAYS.max, step: 1 },
 } as const;
 
 export type CapacityField = keyof typeof CAPACITY_BOUNDS;
@@ -26,23 +33,24 @@ export function clampCapacity(field: CapacityField, value: number): number {
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
-/** The three numbers a shop edits on one service line. */
+/** What a shop edits on one service line. */
 export type CapacityDraft = {
   capacityDaily: number;
   capacityWeekly: number;
-  /** The line's usual production time, in working days (gridgo-supplier#122). */
-  turnaroundDays: number;
+  /** The line's usual production time: hours for same-day work, else working days. */
+  turnaround: ProductionTime;
+  /** The shop's working day, which a same-day time must stay under. Null when GRIDGO did not say. */
+  productionDayMinutes: number | null;
 };
 
-/** A line with no usual time yet starts the stepper here. */
-const DEFAULT_LINE_DAYS = 2;
-
-/** The saved values a draft starts from, with the API's own defaults applied. */
+/** The saved values a draft starts from, with the API's own defaults applied. A line with no time starts at two days. */
 export function capacityDraftFor(service: SupplierService): CapacityDraft {
+  const raw = service as unknown as Record<string, unknown>;
   return {
     capacityDaily: clampCapacity("daily", service.capacityDaily ?? 0),
     capacityWeekly: clampCapacity("weekly", service.capacityWeekly ?? 0),
-    turnaroundDays: clampCapacity("turnaround", readServiceLineDays(service) ?? DEFAULT_LINE_DAYS),
+    turnaround: readServiceLineTime(raw) ?? DEFAULT_WORKING_DAYS,
+    productionDayMinutes: readDayMinutes(raw),
   };
 }
 
@@ -51,8 +59,17 @@ export function capacityDraftChanged(service: SupplierService, draft: CapacityDr
   return (
     saved.capacityDaily !== draft.capacityDaily ||
     saved.capacityWeekly !== draft.capacityWeekly ||
-    saved.turnaroundDays !== draft.turnaroundDays
+    !sameTime(saved.turnaround, draft.turnaround)
   );
+}
+
+/** What a capacity save sends: the two counts, and the production time in its own unit's field. */
+export function capacityPatch(draft: CapacityDraft): SupplierServicePatch {
+  return {
+    capacityDaily: draft.capacityDaily,
+    capacityWeekly: draft.capacityWeekly,
+    ...timeFields("turnaround", draft.turnaround),
+  };
 }
 
 /**
@@ -60,16 +77,15 @@ export function capacityDraftChanged(service: SupplierService, draft: CapacityDr
  * Weekly below daily is the mistake that actually happens on a shop floor.
  */
 export function validateCapacity(values: CapacityDraft): string | null {
-  const { daily, weekly, turnaround } = CAPACITY_BOUNDS;
+  const { daily, weekly } = CAPACITY_BOUNDS;
   if (values.capacityDaily < daily.min || values.capacityDaily > daily.max) {
     return `Daily capacity must be between ${daily.min} and ${daily.max} units.`;
   }
   if (values.capacityWeekly < weekly.min || values.capacityWeekly > weekly.max) {
     return `Weekly capacity must be between ${weekly.min} and ${weekly.max} units.`;
   }
-  if (values.turnaroundDays < turnaround.min || values.turnaroundDays > turnaround.max) {
-    return `Production time must be between ${turnaround.min} and ${turnaround.max} working days.`;
-  }
+  const timeProblem = singleTimeProblem(values.turnaround, values.productionDayMinutes ?? undefined);
+  if (timeProblem) return timeProblem;
   if (values.capacityWeekly > 0 && values.capacityWeekly < values.capacityDaily) {
     return "Weekly capacity is lower than daily capacity. Raise the weekly figure or lower the daily one.";
   }
