@@ -143,7 +143,22 @@ it("holds the step and names the claim when only Operations can clear it", async
   expect(screen.getByText(claim)).toBeTruthy();
   expect(screen.queryByLabelText("Ready for dispatch")).toBeNull();
   expect(screen.queryByLabelText("Take a packing photo")).toBeNull();
-  expect(screen.getAllByText("Message Operations").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Message Operations")).toHaveLength(1);
+  await view.unmount();
+});
+it("does not repeat a refusal the checklist already says", async () => {
+  const claim =
+    "This order cannot be packaged for pickup while a claim holds payouts. Operations must clear the claim first.";
+  mockActionError = claim;
+  mockJob = {
+    ...mockJob,
+    packingProgress: { status: "photos_available", photos: [{ fileId: "packed", at: null }] },
+    transitionReadiness: {
+      ready_for_dispatch: { allowed: false, missing: [{ code: "claim_hold_active", message: claim }] },
+    },
+  };
+  const view = await render(<HandoffScreen />);
+  expect(screen.getAllByText(claim)).toHaveLength(1);
   await view.unmount();
 });
 it("says GRIDGO's own reason when it refuses the step", async () => {

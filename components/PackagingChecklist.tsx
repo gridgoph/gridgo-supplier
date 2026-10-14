@@ -73,9 +73,7 @@ export function PackagingChecklist({ check, onMessageOperations }: Props) {
           state="optional"
           title="Receipt scan"
           detail={
-            check.receiptAttached
-              ? "On the job. It is optional either way."
-              : "Optional. It never holds up packing."
+            check.receiptAttached ? "On the job." : "Not needed. It never holds up packing."
           }
           colors={colors}
         />

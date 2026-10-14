@@ -702,7 +702,7 @@ describe("job workspace before packaging", () => {
     expect(within(list).getByLabelText(/^Packing photo, Needed/)).toBeTruthy();
     expect(within(list).getByText(PACKING_PHOTO)).toBeTruthy();
     // Optional, said as optional, never a thing that is missing.
-    expect(within(list).getByText("Optional. It never holds up packing.")).toBeTruthy();
+    expect(within(list).getByText("Not needed. It never holds up packing.")).toBeTruthy();
     expect(within(screen.getByTestId("job-action-bar")).getByText("Add a packing photo")).toBeTruthy();
   });
 

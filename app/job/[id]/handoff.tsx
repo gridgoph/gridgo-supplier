@@ -95,6 +95,8 @@ export default function HandoffScreen() {
   // A claim or a stop only Operations can lift: nothing here would be taken.
   const packaging = job ? packagingCheck(job) : null;
   const held = packagingHeld(packaging);
+  // A refusal the checklist already says, word for word, is not said twice.
+  const refusalShown = Boolean(action.error && packaging?.missing.some((item) => item.message === action.error));
   const toSend = upload.items.filter(
     (item) => item.stage === "stored" && item.fileId,
   );
@@ -202,13 +204,11 @@ export default function HandoffScreen() {
       }
       // GRIDGO's own sentence for a refused step, even where a panel below
       // explains the fix: the shop pressed something and is owed the answer.
-      actionError={sendError ?? action.error}
+      actionError={sendError ?? (refusalShown ? null : action.error)}
       footer={
         held && job ? (
-          <>
-            <SecondaryButton label="Message Operations" onPress={messageOperations} />
-            <SecondaryButton label="Back to job" onPress={() => router.back()} />
-          </>
+          // The checklist row carries the way to Operations.
+          <SecondaryButton label="Back to job" onPress={() => router.back()} />
         ) : photoGate && job ? (
           <>
             <PrimaryButton
@@ -348,7 +348,7 @@ export default function HandoffScreen() {
         </View>
       ) : null}
 
-      {job && custody && !canAddPacking ? (
+      {job && custody && !canAddPacking && !held ? (
         <View className="gg-card gap-3">
           <Text className="text-overline text-text-muted">CUSTODY</Text>
           <View className="flex-row">
@@ -406,9 +406,10 @@ export default function HandoffScreen() {
         />
       ) : null}
 
-      {packing && !canAddPacking ? <PackageInvoiceNotice /> : null}
+      {packing && !canAddPacking && !held ? <PackageInvoiceNotice /> : null}
 
-      {canAddPacking ? null : <HandoffSequence />}
+      {/* While held, what happens after packing is not the next thing to read. */}
+      {canAddPacking || held ? null : <HandoffSequence />}
     </FlowScreen>
   );
 }
