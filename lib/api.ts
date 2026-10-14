@@ -214,6 +214,24 @@ export type PickupChecklist = {
   handoffSignature?: { signerName: string; signedAt: string } | null;
 };
 
+/** One thing GRIDGO still needs before a step, with its own plain sentence. */
+export type MissingRequirement = { code: string; message: string };
+
+export type TransitionReadiness = {
+  allowed: boolean;
+  missing: MissingRequirement[];
+  /** Optional, and never in `missing`: a receipt scan never stops packing. */
+  receiptScan?: { required: boolean; attached: boolean } | null;
+};
+
+export type JobDetails = {
+  material: string;
+  zone: string;
+  promisedDate: string;
+  /** Which of the three GRIDGO could not fill: "material", "zone", "promisedDate". */
+  missing: string[];
+};
+
 export type Order = {
   id: string;
   clientId: string;
@@ -300,6 +318,19 @@ export type Order = {
   productionProgress?: ProductionProgress | null;
   /** Separate packed-work evidence required before dispatch. */
   packingProgress?: ProductionProgress | null;
+  /**
+   * What GRIDGO still needs before each packaging step, as of this read
+   * (gridgo-api `docs/SUPPLIER_JOB_READINESS_API.md`). A snapshot, not a
+   * reservation: the step itself is checked again. Absent on an older API.
+   * Read only through `lib/packagingReadiness.ts`.
+   */
+  transitionReadiness?: Partial<Record<"supplier_self_qc" | "ready_for_dispatch", TransitionReadiness>> | null;
+  /**
+   * Material, zone and the date the shop is held to, filled from the order's
+   * own snapshots; each missing one is exactly "Not specified" and named in
+   * `missing`. Absent on an older API. Read through `lib/jobBrief.ts`.
+   */
+  jobDetails?: JobDetails | null;
   deliveryPhotoFileIds?: string[];
   /** The rider's latest counter check. Absent until a rider has checked it. */
   pickupChecklist?: PickupChecklist | null;

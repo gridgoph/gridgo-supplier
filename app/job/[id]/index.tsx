@@ -11,6 +11,7 @@ import { JobActionBar } from "@/components/JobActionBar";
 import { JobBrief } from "@/components/JobBrief";
 import { JourneyTrack } from "@/components/JourneyTrack";
 import { LatenessPanel } from "@/components/LatenessPanel";
+import { PackagingChecklist } from "@/components/PackagingChecklist";
 import { MissedCallNotice } from "@/components/MissedCallNotice";
 import { PickupCallRow } from "@/components/PickupCallRow";
 import { PickupChatRow } from "@/components/PickupChatRow";
@@ -33,6 +34,7 @@ import {
   type SupplierAction,
 } from "@/lib/jobState";
 import { keptAfterSettlement, payoutPlanOf } from "@/lib/milestones";
+import { packagingCheck } from "@/lib/packagingReadiness";
 import { lapseForOrder, lapseNotice } from "@/lib/productionLapse";
 import { refundNotice, refundStanding } from "@/lib/refund";
 import { canRequestNewDeadline, rescheduleNotice } from "@/lib/reschedule";
@@ -203,6 +205,8 @@ export default function JobWorkspaceScreen() {
       </>
     ) : null;
 
+  // What GRIDGO still needs before packaging, shown before the button is pressed.
+  const packaging = packagingCheck(job);
   const canAskForTime = canRequestNewDeadline(job);
   const canCancel = canCancelJob(job);
 
@@ -312,6 +316,10 @@ export default function JobWorkspaceScreen() {
         ) : deadlineRequest && requestStopped ? (
           <View className="mt-6">
             <DeadlineRequestPanel request={deadlineRequest} />
+          </View>
+        ) : packaging && !packaging.allowed ? (
+          <View className="mt-6">
+            <PackagingChecklist check={packaging} onMessageOperations={messageOperations} />
           </View>
         ) : !primary ? (
           <View className="gg-panel mt-6 gap-1">

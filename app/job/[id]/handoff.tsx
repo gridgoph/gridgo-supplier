@@ -10,6 +10,8 @@ import { useThemeColors } from "@/hooks/useTheme";
 import { attachPackingPhoto } from "@/lib/api";
 import { needsPackingPhoto, packingPhotoViews } from "@/lib/packingPhoto";
 import { CounterCheckPanel } from "@/components/CounterCheckPanel";
+import { PackagingChecklist } from "@/components/PackagingChecklist";
+import { packagingCheck, packagingHeld } from "@/lib/packagingReadiness";
 import { FlowScreen } from "@/components/FlowScreen";
 import { PackageInvoiceNotice } from "@/components/PackageInvoiceNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -90,6 +92,9 @@ export default function HandoffScreen() {
     packingGate &&
     Boolean(findAction(job, "add_packing_photo") || step);
   const packingPhotos = job ? packingPhotoViews(job) : [];
+  // A claim or a stop only Operations can lift: nothing here would be taken.
+  const packaging = job ? packagingCheck(job) : null;
+  const held = packagingHeld(packaging);
   const toSend = upload.items.filter(
     (item) => item.stage === "stored" && item.fileId,
   );
@@ -99,6 +104,11 @@ export default function HandoffScreen() {
   const targets = job ? countTargets(job) : [];
   const check = job?.state === "rider_assigned" ? counterCheck(job) : null;
   const counterIssue = check && check.stage !== "passed" ? check : null;
+
+  function messageOperations() {
+    if (!job) return;
+    router.push({ pathname: "/report", params: { orderId: job.id, title: job.title } });
+  }
 
   async function sendPacking() {
     if (!job || !canAddPacking || !toSend.length || pending.current) return;
@@ -134,7 +144,7 @@ export default function HandoffScreen() {
 
   async function markReady() {
     if (pending.current) return;
-    if (!job || !step?.targetState || photoGate || packingGate) return;
+    if (!job || !step?.targetState || photoGate || packingGate || held) return;
 
     pending.current = true;
     setConfirming(true);
@@ -179,21 +189,27 @@ export default function HandoffScreen() {
       subject={job?.title}
       // A stopped pickup is explained once, in its own panel below.
       lede={
-        photoGate
-          ? "A production photo comes first. After packing, add a separate photo of the package."
-          : canAddPacking
-            ? "Show the finished prints packed and ready. The client and Operations will see this update."
-            : counterIssue
-              ? "The package stays at your counter until the rider checks it again."
-              : (custody?.detail ??
-                "Getting a job ready for the rider who collects it.")
+        held
+          ? "This job cannot be packaged yet. What is holding it, and who can clear it, is below."
+          : photoGate
+            ? "A production photo comes first. After packing, add a separate photo of the package."
+            : canAddPacking
+              ? "Show the finished prints packed and ready. The client and Operations will see this update."
+              : counterIssue
+                ? "The package stays at your counter until the rider checks it again."
+                : (custody?.detail ??
+                  "Getting a job ready for the rider who collects it.")
       }
-      // The photo panel below is the explanation; the refusal would say it twice.
-      actionError={
-        sendError ?? (photoGate || packingGate ? null : action.error)
-      }
+      // GRIDGO's own sentence for a refused step, even where a panel below
+      // explains the fix: the shop pressed something and is owed the answer.
+      actionError={sendError ?? action.error}
       footer={
-        photoGate && job ? (
+        held && job ? (
+          <>
+            <SecondaryButton label="Message Operations" onPress={messageOperations} />
+            <SecondaryButton label="Back to job" onPress={() => router.back()} />
+          </>
+        ) : photoGate && job ? (
           <>
             <PrimaryButton
               label="Add a production photo"
@@ -258,7 +274,11 @@ export default function HandoffScreen() {
         )
       }
     >
-      {photoGate ? (
+      {held && packaging ? (
+        <PackagingChecklist check={packaging} onMessageOperations={messageOperations} />
+      ) : null}
+
+      {photoGate && !held ? (
         <View className="gg-card gap-2">
           <View className="flex-row">
             <StatusChip
@@ -275,7 +295,7 @@ export default function HandoffScreen() {
         </View>
       ) : null}
 
-      {!photoGate && (canAddPacking || packingPhotos.length > 0) ? (
+      {!photoGate && !held && (canAddPacking || packingPhotos.length > 0) ? (
         <View className="gg-card gap-3">
           <View className="flex-row">
             <StatusChip
@@ -382,12 +402,7 @@ export default function HandoffScreen() {
       {counterIssue ? (
         <CounterCheckPanel
           check={counterIssue}
-          onMessageOperations={() =>
-            router.push({
-              pathname: "/report",
-              params: { orderId: job!.id, title: job!.title },
-            })
-          }
+          onMessageOperations={messageOperations}
         />
       ) : null}
 

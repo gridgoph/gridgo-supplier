@@ -45,7 +45,8 @@ export function JobTimeline({ timeline }: Props) {
                 {presentTimelineState(entry.state)}
               </Text>
               <Text className="mt-0.5 text-caption text-text-muted">
-                {formatTimelineAt(entry.at)} · {presentTimelineActor(entry.by)}
+                {/* GRIDGO no longer says who moved a shop's job; an unnamed row is not GRIDGO's. */}
+                {entry.by ? `${formatTimelineAt(entry.at)} · ${presentTimelineActor(entry.by)}` : formatTimelineAt(entry.at)}
               </Text>
               {entry.note ? (
                 <Text className="mt-1 text-body text-text-secondary">
