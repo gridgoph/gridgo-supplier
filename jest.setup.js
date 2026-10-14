@@ -41,9 +41,11 @@ jest.mock("react-native-safe-area-context", () => {
 // against a granted phone it never granted.
 jest.mock("expo-notifications", () => ({
   __esModule: true,
-  AndroidImportance: { HIGH: 4 },
+  // Expo's own numbers (`AndroidImportance` in expo-notifications).
+  AndroidImportance: { UNKNOWN: 0, UNSPECIFIED: 1, NONE: 2, MIN: 3, LOW: 4, DEFAULT: 5, HIGH: 6, MAX: 7 },
   setNotificationHandler: jest.fn(),
   setNotificationChannelAsync: jest.fn(async () => undefined),
+  getNotificationChannelAsync: jest.fn(async () => null),
   getPermissionsAsync: jest.fn(async () => ({
     status: "undetermined",
     granted: false,

@@ -1,5 +1,5 @@
 import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
+import { Linking, Platform } from "react-native";
 
 import * as api from "@/lib/api";
 import { PRODUCTION_NUDGE_SOUND, PUSH_CHANNEL_ID, PUSH_PRODUCTION_NUDGE_CHANNEL_ID } from "@/lib/push";
@@ -45,6 +45,7 @@ beforeEach(() => {
   usePush.setState({
     supported: true,
     permission: "unknown",
+    channel: "unknown",
     token: null,
     claimed: false,
     busy: false,
@@ -184,6 +185,64 @@ describe("registerIfGranted", () => {
       PUSH_CHANNEL_ID,
       expect.not.objectContaining({ sound: PRODUCTION_NUDGE_SOUND }),
     );
+  });
+
+  it("creates gridgo_default audible: high importance, vibration, the phone's default sound", async () => {
+    // gridgo-client#231: a rider's message at the counter must make a noise.
+    // No `sound` key is Android's default sound; `null` would be silence and
+    // `"default"` would be looked up as a custom file.
+    await usePush.getState().syncPermission();
+
+    const [, options] = mocked.setNotificationChannelAsync.mock.calls.find(([id]) => id === PUSH_CHANNEL_ID)!;
+    expect(options).toEqual(expect.objectContaining({
+      importance: Notifications.AndroidImportance.HIGH,
+      enableVibrate: true,
+    }));
+    expect(options).not.toHaveProperty("sound");
+  });
+
+  it("reads the installed channel back, because Android keeps a shop's Silent setting", async () => {
+    mocked.getPermissionsAsync.mockResolvedValue(granted as never);
+    mocked.getNotificationChannelAsync.mockResolvedValueOnce({
+      id: PUSH_CHANNEL_ID,
+      importance: Notifications.AndroidImportance.LOW,
+      sound: "default",
+    } as never);
+    await usePush.getState().syncPermission();
+    expect(mocked.getNotificationChannelAsync).toHaveBeenCalledWith(PUSH_CHANNEL_ID);
+    expect(usePush.getState().channel).toBe("silent");
+
+    mocked.getNotificationChannelAsync.mockResolvedValueOnce({
+      id: PUSH_CHANNEL_ID,
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: "default",
+    } as never);
+    await usePush.getState().syncPermission();
+    expect(usePush.getState().channel).toBe("audible");
+  });
+
+  it("treats an unreadable channel as unknown rather than costing push", async () => {
+    mocked.getPermissionsAsync.mockResolvedValue(granted as never);
+    mocked.getNotificationChannelAsync.mockRejectedValueOnce(new Error("no channel api"));
+    await expect(usePush.getState().syncPermission()).resolves.toBe("granted");
+    expect(usePush.getState().channel).toBe("unknown");
+  });
+
+  it("opens the channel's own settings page, then the app's when that is refused", async () => {
+    const sendIntent = jest.spyOn(Linking, "sendIntent").mockResolvedValue(undefined);
+    await usePush.getState().openChannelSettings();
+    expect(sendIntent).toHaveBeenCalledWith("android.settings.CHANNEL_NOTIFICATION_SETTINGS", [
+      { key: "android.provider.extra.APP_PACKAGE", value: expect.any(String) },
+      { key: "android.provider.extra.CHANNEL_ID", value: PUSH_CHANNEL_ID },
+    ]);
+
+    sendIntent.mockReset();
+    sendIntent.mockRejectedValueOnce(new Error("no activity")).mockResolvedValueOnce(undefined);
+    await usePush.getState().openChannelSettings();
+    expect(sendIntent).toHaveBeenLastCalledWith("android.settings.APP_NOTIFICATION_SETTINGS", [
+      { key: "android.provider.extra.APP_PACKAGE", value: expect.any(String) },
+    ]);
+    sendIntent.mockRestore();
   });
 
   it("survives a native module that throws — Expo Go has no remote push at all", async () => {

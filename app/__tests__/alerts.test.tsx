@@ -268,3 +268,40 @@ it("opens the board from a review decision that names no listing", async () => {
   fireEvent.press(await screen.findByText("Operations asked for changes"));
   await waitFor(() => expect(router.push).toHaveBeenCalledWith("/(tabs)/catalogues"));
 });
+
+it("opens the exact Operations thread an inbox message names, and chat history when it names none", async () => {
+  // The inbox row carries `threadId`; the push does not (gridgo-client#231).
+  const thread = "0b9a1f2c-3d4e-4f5a-8b6c-7d8e9f0a1b2c";
+  useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, localOnly: false });
+  const { router } = jest.requireMock("expo-router") as { router: { push: jest.Mock } };
+  router.push.mockClear();
+  api.listNotifications.mockResolvedValue([
+    {
+      id: "ntf_support",
+      userId: "user_supplier",
+      type: "support_message",
+      threadId: thread,
+      title: "Message from Operations",
+      body: "Operations replied to your message.",
+      read: false,
+      at: "2026-10-14T01:00:00.000Z",
+    },
+    {
+      id: "ntf_support_old",
+      userId: "user_supplier",
+      type: "support_message",
+      title: "Older message from Operations",
+      body: "Operations replied to your message.",
+      read: true,
+      at: "2026-10-13T01:00:00.000Z",
+    },
+  ]);
+  api.listJobs.mockResolvedValue([]);
+
+  await render(<AlertsScreen />);
+
+  fireEvent.press(await screen.findByText("Message from Operations"));
+  await waitFor(() => expect(router.push).toHaveBeenCalledWith({ pathname: "/chat/[thread]", params: { thread } }));
+  fireEvent.press(screen.getByText("Older message from Operations"));
+  await waitFor(() => expect(router.push).toHaveBeenLastCalledWith("/chat"));
+});

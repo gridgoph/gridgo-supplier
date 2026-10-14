@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { Bike, Briefcase, Timer, Wallet, type LucideIcon } from "lucide-react-native";
+import { Bike, Briefcase, MessageCircle, Timer, Wallet, type LucideIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
@@ -15,6 +15,7 @@ const REASON_ICONS: Record<PushPromptReason["key"], LucideIcon> = {
   offers: Briefcase,
   payouts: Wallet,
   pickups: Bike,
+  messages: MessageCircle,
   reminders: Timer,
 };
 
