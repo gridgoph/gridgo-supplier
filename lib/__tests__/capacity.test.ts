@@ -1,8 +1,10 @@
 import type { Order, SupplierService } from "@/lib/api";
+import { sameDay, workingDays } from "@/lib/productionDays";
 import {
   CAPACITY_BOUNDS,
   capacityDraftChanged,
   capacityDraftFor,
+  capacityPatch,
   capacityForDay,
   clampCapacity,
   loadByDay,
@@ -72,7 +74,6 @@ describe("clampCapacity", () => {
   it("holds every value inside its own bounds", () => {
     expect(clampCapacity("daily", -5)).toBe(CAPACITY_BOUNDS.daily.min);
     expect(clampCapacity("daily", 99999)).toBe(CAPACITY_BOUNDS.daily.max);
-    expect(clampCapacity("turnaround", 0)).toBe(CAPACITY_BOUNDS.turnaround.min);
   });
 
   it("falls back to the minimum for a value that is not a number", () => {
@@ -83,7 +84,7 @@ describe("clampCapacity", () => {
 describe("validateCapacity", () => {
   it("accepts a sane set", () => {
     expect(
-      validateCapacity({ capacityDaily: 20, capacityWeekly: 100, turnaroundDays: 1 }),
+      validateCapacity({ capacityDaily: 20, capacityWeekly: 100, turnaround: workingDays(1), productionDayMinutes: 600 }),
     ).toBeNull();
   });
 
@@ -91,21 +92,31 @@ describe("validateCapacity", () => {
     const problem = validateCapacity({
       capacityDaily: 40,
       capacityWeekly: 10,
-      turnaroundDays: 1,
+      turnaround: workingDays(1),
+      productionDayMinutes: 600,
     });
     expect(problem).toContain("Weekly capacity is lower");
   });
 
   it("allows an unset weekly figure", () => {
     expect(
-      validateCapacity({ capacityDaily: 40, capacityWeekly: 0, turnaroundDays: 1 }),
+      validateCapacity({ capacityDaily: 40, capacityWeekly: 0, turnaround: workingDays(1), productionDayMinutes: 600 }),
     ).toBeNull();
   });
 
   it("rejects an out-of-range production time", () => {
     expect(
-      validateCapacity({ capacityDaily: 1, capacityWeekly: 1, turnaroundDays: 5000 }),
+      validateCapacity({ capacityDaily: 1, capacityWeekly: 1, turnaround: workingDays(5000), productionDayMinutes: 600 }),
     ).toContain("Production time");
+  });
+
+  it("takes a same-day time under the shop's working day, and refuses one a day long", () => {
+    expect(
+      validateCapacity({ capacityDaily: 1, capacityWeekly: 1, turnaround: sameDay(90), productionDayMinutes: 600 }),
+    ).toBeNull();
+    expect(
+      validateCapacity({ capacityDaily: 1, capacityWeekly: 1, turnaround: sameDay(480), productionDayMinutes: 480 }),
+    ).toContain("working days");
   });
 });
 
@@ -171,17 +182,30 @@ describe("capacity drafts", () => {
     expect(capacityDraftFor(service({ capacityDaily: null, capacityWeekly: null }))).toEqual({
       capacityDaily: 0,
       capacityWeekly: 0,
-      turnaroundDays: 2,
+      turnaround: workingDays(2),
+      productionDayMinutes: null,
     });
   });
 
-  it("reads the line's production time in working days, converting an older GRIDGO's hours", () => {
-    expect(capacityDraftFor(service({ turnaroundDays: 3 })).turnaroundDays).toBe(3);
-    // 48 hours at GRIDGO's default ten-hour working day, rounded up.
+  it("reads the line's production time in its own unit, never rounding hours up into days", () => {
+    expect(capacityDraftFor(service({ turnaroundDays: 3 })).turnaround).toEqual(workingDays(3));
     expect(
-      capacityDraftFor(service({ turnaroundDays: undefined, turnaroundHours: 48 })).turnaroundDays,
-    ).toBe(5);
-    expect(capacityDraftFor(service({ turnaroundDays: null })).turnaroundDays).toBe(2);
+      capacityDraftFor(service({ turnaroundDays: null, turnaroundMinutes: 90, productionDayMinutes: 600 })),
+    ).toEqual(expect.objectContaining({ turnaround: sameDay(90), productionDayMinutes: 600 }));
+    // An older GRIDGO's hours are exact time, as GRIDGO itself now reads them.
+    expect(
+      capacityDraftFor(service({ turnaroundDays: undefined, turnaroundHours: 48 })).turnaround,
+    ).toEqual(sameDay(2880));
+    expect(capacityDraftFor(service({ turnaroundDays: null })).turnaround).toEqual(workingDays(2));
+  });
+
+  it("saves only the chosen unit's field", () => {
+    const draft = { ...capacityDraftFor(service()), turnaround: sameDay(120) };
+    expect(capacityPatch(draft)).toEqual({ capacityDaily: draft.capacityDaily, capacityWeekly: draft.capacityWeekly, turnaroundMinutes: 120 });
+    expect(capacityPatch({ ...draft, turnaround: workingDays(3) })).toEqual(
+      expect.objectContaining({ turnaroundDays: 3 }),
+    );
+    expect(capacityPatch({ ...draft, turnaround: workingDays(3) })).not.toHaveProperty("turnaroundMinutes");
   });
 
   it("only reports a change when a number actually moved", () => {

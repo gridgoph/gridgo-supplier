@@ -4,7 +4,7 @@ import { Image, Pressable, Text, View } from "react-native";
 import { CropMarkFrame } from "@/components/CropMarkFrame";
 import { starterImage } from "@/constants/images";
 import type { ListingStarter } from "@/lib/listings";
-import { workingDaysLabel } from "@/lib/productionDays";
+import { timeLabel } from "@/lib/productionDays";
 import { useThemeColors } from "@/hooks/useTheme";
 
 type Props = {
@@ -134,7 +134,7 @@ export function starterDetail(starter: ListingStarter): string {
   if (starter.addOnCount) {
     parts.push(starter.addOnCount === 1 ? "1 add-on" : `${starter.addOnCount} add-ons`);
   }
-  if (starter.turnaroundDays) parts.push(`ready in ${workingDaysLabel(starter.turnaroundDays)}`);
+  if (starter.turnaround) parts.push(`ready in ${timeLabel(starter.turnaround)}`);
   return parts.length
     ? `Comes with ${parts.join(", ")}. All of it yours to change.`
     : "GRIDGO's own starting point for this work.";

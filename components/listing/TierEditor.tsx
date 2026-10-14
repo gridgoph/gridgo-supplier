@@ -9,7 +9,15 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";
 import type { PriceTier, SpeedTier } from "@/lib/listings";
-import { PRODUCTION_DAYS, workingDaysLabel } from "@/lib/productionDays";
+import { ProductionTimePicker } from "@/components/listing/ProductionTimeField";
+import {
+  sameTime,
+  timeKey,
+  timeLabel,
+  timeMinutes,
+  workingDays,
+  type ProductionTime,
+} from "@/lib/productionDays";
 
 /**
  * Bulk breaks and speeds, edited as the short lists they are.
@@ -123,26 +131,32 @@ export function PriceTierEditor({
 export function SpeedTierEditor({
   tiers,
   onChange,
+  dayMinutes,
 }: {
   tiers: SpeedTier[];
   onChange: (next: SpeedTier[]) => void;
+  /** The shop's working day, which a same-day speed must stay under. */
+  dayMinutes?: number;
 }) {
   const [label, setLabel] = useState("");
-  const [days, setDays] = useState(1);
+  const [time, setTime] = useState<ProductionTime>(workingDays(1));
   const [price, setPrice] = useState("");
 
-  const sorted = [...tiers].sort((left, right) => left.turnaroundDays - right.turnaroundDays);
+  const sorted = [...tiers].sort(
+    (left, right) => timeMinutes(left.turnaround, dayMinutes) - timeMinutes(right.turnaround, dayMinutes),
+  );
+  // One speed per time: a second "1 hour" would leave a client's date nothing to choose between.
+  const taken = sorted.some((tier) => sameTime(tier.turnaround, time));
 
   const add = () => {
     const pesos = Number.parseFloat(price);
-    if (!label.trim() || !days || !Number.isFinite(pesos) || pesos < 0) return;
-    if (sorted.some((tier) => tier.turnaroundDays === days)) return;
+    if (!label.trim() || taken || !Number.isFinite(pesos) || pesos < 0) return;
     onChange([
       ...sorted,
       {
-        id: `speed_${days}`,
+        id: `speed_${timeKey(time)}`,
         label: label.trim(),
-        turnaroundDays: days,
+        turnaround: time,
         // A speed the shop prices is a price for the job at that speed, not a
         // fee on top. A rush fee is the other shape and is not offered here,
         // because a shop that wants one writes it as an add-on.
@@ -163,15 +177,15 @@ export function SpeedTierEditor({
 
       {sorted.map((tier) => (
         <RowShell
-          key={tier.turnaroundDays}
+          key={timeKey(tier.turnaround)}
           removeLabel={`Remove ${tier.label}`}
-          onRemove={() => onChange(sorted.filter((row) => row.turnaroundDays !== tier.turnaroundDays))}
+          onRemove={() => onChange(sorted.filter((row) => !sameTime(row.turnaround, tier.turnaround)))}
         >
           <Text className="text-body text-text-primary">{tier.label}</Text>
           <Text className="text-body-lg text-text-primary font-medium">
             {tier.priceMinor != null ? api.formatPhp(tier.priceMinor) : `+${api.formatPhp(tier.surchargeMinor ?? 0)}`}{" "}
             <Text className="text-caption text-text-muted">
-              {workingDaysLabel(tier.turnaroundDays)}
+              {timeLabel(tier.turnaround)}
             </Text>
           </Text>
         </RowShell>
@@ -181,23 +195,26 @@ export function SpeedTierEditor({
         <TextField
           value={label}
           onChange={setLabel}
-          placeholder="What you call it — Express, 1 day"
+          placeholder="What you call it — Express, Same day"
           accessibilityLabel="What this speed is called"
         />
-        <Stepper
-          value={days}
-          onChange={setDays}
-          min={PRODUCTION_DAYS.min}
-          max={PRODUCTION_DAYS.max}
-          step={1}
-          unit={days === 1 ? "working day" : "working days"}
-          accessibilityLabel="Working days this speed takes"
+        <ProductionTimePicker
+          time={time}
+          onChange={setTime}
+          dayMinutes={dayMinutes}
+          accessibilityLabel="How long this speed takes"
+          unitLabel="Count this speed in"
         />
+        {taken ? (
+          <Text className="text-caption text-text-muted">
+            You already sell a speed at {timeLabel(time)}. Pick another time, or remove that one first.
+          </Text>
+        ) : null}
         <MoneyField value={price} onChange={setPrice} accessibilityLabel="Price at this speed" />
         <SecondaryButton
           label="Add this speed"
           onPress={add}
-          disabled={!label.trim() || !price.trim()}
+          disabled={!label.trim() || !price.trim() || taken}
         />
       </View>
     </View>

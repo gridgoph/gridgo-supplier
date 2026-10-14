@@ -9,8 +9,8 @@ import {
   addOns,
   boardContextFor,
   effectiveFormatCodes,
-  effectiveMinimumDays,
-  effectiveTurnaroundDays,
+  effectiveMinimumTurnaround,
+  effectiveTurnaround,
   fromPriceMinor,
   hasPriceRange,
   photoViewUrl,
@@ -43,7 +43,7 @@ export function ListingPreviewBody({
   prepSteps: PrepStep[];
 }) {
   const context = boardContextFor(listing, services);
-  const days = effectiveTurnaroundDays(listing, context.inheritedTurnaroundDays);
+  const turnaround = effectiveTurnaround(listing, context.inheritedTurnaround);
   const formats = effectiveFormatCodes(listing, context.inheritedFormatCodes);
   const uploads = formats.filter(
     (code) => PUBLISHED_FILE_FORMATS.find((format) => format.code === code)?.uploadable === true,
@@ -98,7 +98,7 @@ export function ListingPreviewBody({
           <Text className="text-body text-text-secondary">{unitLine(listing)}</Text>
         </View>
         <Text className="text-body text-text-secondary">
-          {readyInLine(days, effectiveMinimumDays(listing))}
+          {readyInLine(turnaround, effectiveMinimumTurnaround(listing))}
         </Text>
       </View>
 

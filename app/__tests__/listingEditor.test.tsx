@@ -70,7 +70,7 @@ function listingWith(overrides: Partial<Listing> = {}): Listing {
     priceTiers: [],
     speedTiers: [],
     turnaroundMode: "inherit",
-    turnaroundDays: null,
+    turnaround: null,
     fileFormatMode: "inherit",
     formatCodes: [],
     onTheBoard: false,
@@ -209,9 +209,9 @@ describe("the listing editor", () => {
     await fireEvent.press(
       within(await screen.findByLabelText("How long this listing takes")).getByText("Just this listing"),
     );
-    expect(screen.getByText(/Working days, on your shop's open hours/)).toBeTruthy();
+    expect(screen.getByText(/Hours for work you finish the same day/)).toBeTruthy();
     expect(screen.getByText(/A job that starts now is ready/)).toBeTruthy();
-    await fireEvent.press(screen.getByLabelText("Increase Maximum production time in working days"));
+    await fireEvent.press(screen.getByLabelText("Increase Latest production time"));
     await fireEvent.changeText(screen.getByLabelText("Your price"), "450");
     await fireEvent.press(screen.getByLabelText("See what clients see"));
 
@@ -225,6 +225,40 @@ describe("the listing editor", () => {
         }),
       ),
     );
+  });
+
+  // Report 39853344: a job a shop finishes in an hour was promised a working day later.
+  it("sets a same-day production time in hours and saves exact minutes", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith() });
+
+    view = await render(<ListingScreen />);
+
+    await fireEvent.press(
+      within(await screen.findByLabelText("How long this listing takes")).getByText("Just this listing"),
+    );
+    await fireEvent.press(
+      within(screen.getByLabelText("Count production time in")).getByText("Hours"),
+    );
+    expect(screen.getByText(/Hours count only while you are open/)).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Increase Latest production time"));
+    await fireEvent.press(screen.getByLabelText("Increase Latest production time"));
+    expect(screen.getByLabelText("Latest production time").props.accessibilityValue).toEqual({ text: "2 hours" });
+    await fireEvent.changeText(screen.getByLabelText("Your price"), "450");
+    await fireEvent.press(screen.getByLabelText("See what clients see"));
+
+    await waitFor(() =>
+      expect(saveListing).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "sci_1" }),
+        expect.objectContaining({
+          turnaroundMode: "override",
+          minimumTurnaroundMinutes: 60,
+          turnaroundMinutes: 120,
+        }),
+      ),
+    );
+    const patch = (saveListing as jest.Mock).mock.calls.at(-1)?.[1];
+    expect(patch).not.toHaveProperty("turnaroundDays");
+    expect(patch).not.toHaveProperty("minimumTurnaroundDays");
   });
 
   /**
@@ -316,7 +350,7 @@ describe("the listing editor", () => {
         description: "Printed on 13oz matte tarpaulin.",
         basePriceMinor: 45000,
         turnaroundMode: "override",
-        turnaroundDays: 1,
+        turnaround: { unit: "days" as const, days: 1 },
         fileFormatMode: "override",
         formatCodes: ["pdf"],
         photos: [{ fileId: "file_1", sortOrder: 0, altText: null }],

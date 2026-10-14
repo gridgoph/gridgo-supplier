@@ -289,7 +289,7 @@ describe("setupGaps", () => {
 
 describe("boardStanding with GRIDGO's verdict", () => {
   const services = [
-    { id: "svc_1", categoryCode: "c", state: "live", turnaroundDays: 1, formatCodes: [] },
+    { id: "svc_1", categoryCode: "c", state: "live", turnaround: { unit: "days" as const, days: 1 }, formatCodes: [] },
   ];
 
   it("is Live when GRIDGO matches the listing, whatever the phone's own checks say", () => {

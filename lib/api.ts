@@ -546,10 +546,13 @@ export type SupplierService = {
   qtyMax: number | null;
   pricingBasis: string;
   referenceRateMinor: number;
-  /** Usual production time in working days. Read through `lib/productionDays.ts`. */
+  /** Usual production time: days for day-based work, else exact minutes. Read through `lib/productionDays.ts`. */
   turnaroundDays?: number | null;
-  /** An older GRIDGO's hours; kept for the release gap. */
+  turnaroundMinutes?: number | null;
+  /** Compatibility hours (`minutes / 60`) for older apps. */
   turnaroundHours?: number | null;
+  /** The shop's working day in minutes; a same-day time stays under it. */
+  productionDayMinutes?: number | null;
   capacityDaily: number | null;
   capacityWeekly: number | null;
   zones: string[];
@@ -574,8 +577,9 @@ export type SupplierService = {
 export type SupplierServicePatch = {
   capacityDaily?: number;
   capacityWeekly?: number;
-  /** Whole working days. */
-  turnaroundDays?: number;
+  /** Only the chosen unit is sent: whole working days, or same-day minutes (`timeFields`). */
+  turnaroundDays?: number | null;
+  turnaroundMinutes?: number | null;
   materialCodes?: string[];
   finishCodes?: string[];
 };

@@ -2,11 +2,12 @@ import { Text } from "react-native";
 
 import { Stepper } from "@/components/controls/Stepper";
 import { ListingSection } from "@/components/listing/ListingSection";
-import { PRODUCTION_DAYS_HINT, ProductionDaysField } from "@/components/listing/ProductionDaysField";
+import { PRODUCTION_TIME_HINT, ProductionTimeField } from "@/components/listing/ProductionTimeField";
 import { PriceTierEditor } from "@/components/listing/TierEditor";
 import { asksQuantity, unitLine, type BoardContext, type Listing } from "@/lib/listings";
 import { applyDraft, PACK_STEP, type ListingDraft } from "@/lib/listingDraft";
-import { productionDays } from "@/lib/listingWizard";
+import { productionWindow } from "@/lib/listingWizard";
+import type { ProductionTime } from "@/lib/productionDays";
 
 type Props = {
   listing: Listing;
@@ -17,14 +18,15 @@ type Props = {
 
 export function SpeedStep({ listing, working, context, onChange }: Props) {
   const merged = applyDraft(listing, working);
-  const { min, max } = productionDays(working, context.inheritedTurnaroundDays);
+  const dayMinutes = listing.productionDayMinutes ?? undefined;
+  const { min, max } = productionWindow(working, context.inheritedTurnaround, dayMinutes);
 
-  function setWindow({ minDays, maxDays }: { minDays: number; maxDays: number }) {
+  function setWindow(window: { min: ProductionTime; max: ProductionTime }) {
     onChange({
       ...working,
       turnaroundMode: "override",
-      minimumTurnaroundDays: minDays,
-      turnaroundDays: maxDays,
+      minimumTurnaround: window.min,
+      turnaround: window.max,
       speedTiers: [],
     });
   }
@@ -71,11 +73,11 @@ export function SpeedStep({ listing, working, context, onChange }: Props) {
         </ListingSection>
       ) : null}
 
-      <ListingSection title="PRODUCTION TIME" hint={PRODUCTION_DAYS_HINT}>
-        <ProductionDaysField minDays={min} maxDays={max} onChange={setWindow} />
-        {context.inheritedTurnaroundDays && working.turnaroundDays == null ? (
+      <ListingSection title="PRODUCTION TIME" hint={PRODUCTION_TIME_HINT}>
+        <ProductionTimeField min={min} max={max} dayMinutes={dayMinutes} onChange={setWindow} />
+        {context.inheritedTurnaround && working.turnaround == null ? (
           <Text className="text-caption text-text-muted">
-            Starts from your usual time for this category. Change either number for just this listing.
+            Starts from your usual time for this category. Change either one for just this listing.
           </Text>
         ) : null}
       </ListingSection>

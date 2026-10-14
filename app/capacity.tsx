@@ -17,6 +17,7 @@ import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { blackoutReasonLabel, blackoutSpanLabel } from "@/lib/blackouts";
 import {
   capacityDraftChanged,
+  capacityPatch,
   capacityDraftFor,
   validateCapacity,
   type CapacityDraft,
@@ -105,7 +106,7 @@ export default function CapacityScreen() {
     setSaved(false);
     try {
       const updated = await Promise.all(
-        changed.map((service) => api.updateSupplierService(service.id, drafts[service.id])),
+        changed.map((service) => api.updateSupplierService(service.id, capacityPatch(drafts[service.id]))),
       );
       setCapacity((current) => ({
         services: current.services.map((s) => updated.find((u) => u.id === s.id) ?? s),
