@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ObligationRow } from "@/components/ObligationRow";
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { LegalNoticeCard } from "@/components/legal/LegalNoticeCard";
 import { PushEnableCard } from "@/components/PushEnableCard";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
@@ -194,6 +195,13 @@ export default function HomeScreen() {
             </View>
           }
         />
+
+        {/*
+          An editorial change to a legal document: read once, never asked to
+          agree to. Under the masthead because it is rare and closes for good
+          with one tap; it draws nothing once seen on this phone.
+        */}
+        <LegalNoticeCard className="mb-4" />
 
         {/*
           Shaped to the screen that replaces it — the figure, the card with its

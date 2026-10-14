@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
-import { requestAccountDeletion } from "@/lib/api";
+import { createPrivacyRequest } from "@/lib/api";
 import DeleteAccountScreen from "@/app/delete-account";
 
 jest.mock("expo-router", () => ({ router: { push: jest.fn(), back: jest.fn() } }));
-jest.mock("@/lib/api", () => ({ requestAccountDeletion: jest.fn() }));
+jest.mock("@/lib/api", () => ({ createPrivacyRequest: jest.fn() }));
 jest.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
@@ -30,7 +30,7 @@ jest.mock("@clerk/expo", () => ({
   }),
 }));
 
-const send = requestAccountDeletion as jest.Mock;
+const send = createPrivacyRequest as jest.Mock;
 
 it("asks a Google-only account for an emailed code instead of a password it never set", async () => {
   await render(<DeleteAccountScreen />);

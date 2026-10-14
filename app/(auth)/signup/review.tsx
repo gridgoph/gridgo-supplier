@@ -1,7 +1,7 @@
 import { useAuth, useClerk, useSignUp } from "@clerk/expo";
 import { router } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { BusyOverlay } from "@/components/BusyOverlay";
@@ -10,6 +10,7 @@ import { JobTicketCode } from "@/components/JobTicketCode";
 import { OnboardingStep } from "@/components/OnboardingStep";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SupplierTermsNotice } from "@/components/SupplierTermsNotice";
+import { ApplyConsentFields } from "@/components/legal/ApplyConsentFields";
 import { PUBLISHED_CATALOG } from "@/data/serviceCatalog";
 import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";
@@ -23,7 +24,16 @@ import { continuationAfterSignUp } from "@/lib/clerkSignUp";
 import { firstIncompleteStep, stepAt, type OnboardingStep as Step } from "@/lib/onboardingSteps";
 import { coordinateText, isPlaced } from "@/lib/shopLocation";
 import { debugAuth } from "@/lib/debugAuth";
+import {
+  APPLY_CONSENT_REFUSED,
+  applyDocuments,
+  EMPTY_APPLY_CONSENT,
+  enrollmentConsentBody,
+  type ApplyConsent,
+} from "@/lib/legal";
+import { legalContext } from "@/lib/legalContext";
 import { enrollmentIdempotencyKey, toEnrollRequest } from "@/lib/signup";
+import { useLegalLibrary } from "@/store/legalLibrary";
 import { useSession } from "@/store/session";
 import { useSignupDraft } from "@/store/signupDraft";
 
@@ -37,6 +47,12 @@ import { useSignupDraft } from "@/store/signupDraft";
  *
  * Send creates a Clerk session if this phone is not already signed in, then
  * enrolls the shop. Papers are collected after the account exists.
+ *
+ * The last thing on the screen is the agreement: the Terms, the Privacy Notice
+ * and the Supplier Agreement as GRIDGO has them in effect, and an unticked box.
+ * Send checks the box before anything else — before a Clerk identity is made —
+ * and the enrollment names exactly the versions drawn here
+ * (`legalConsent`, gridgo-api `docs/LEGAL_API.md`).
  */
 export default function ReviewStep() {
   const draft = useSignupDraft((s) => s.draft);
@@ -52,6 +68,17 @@ export default function ReviewStep() {
   const [code, setCode] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [consent, setConsent] = useState<ApplyConsent>(EMPTY_APPLY_CONSENT);
+  const [consentProblem, setConsentProblem] = useState(false);
+  const libraryStatus = useLegalLibrary((s) => s.status);
+  const documents = applyDocuments(useLegalLibrary((s) => s.documents));
+  // Without the legal library GRIDGO has nothing to record an agreement
+  // against, and enrolls on the old body.
+  const legacyApply = libraryStatus === "unsupported";
+
+  useEffect(() => {
+    void useLegalLibrary.getState().load({ force: true });
+  }, []);
 
   // Only the Send / verify action owns this overlay. Session `loading` is
   // Clerk projecting `/auth/me` for any signed-in identity — including a
@@ -117,10 +144,26 @@ export default function ReviewStep() {
   }
 
   async function enroll(): Promise<boolean> {
-    const request = toEnrollRequest(draft);
-    if (!request) {
+    const profile = toEnrollRequest(draft);
+    if (!profile) {
       router.push("/(auth)/signup/location");
       return false;
+    }
+    let request: api.SupplierEnrollment = profile;
+    if (!legacyApply) {
+      if (!documents || !consent.agreed) {
+        setConsentProblem(true);
+        return false;
+      }
+      request = {
+        ...profile,
+        legalConsentVersion: api.LEGAL_CONSENT_VERSION,
+        legalConsent: enrollmentConsentBody(
+          documents.map((doc) => doc.id),
+          consent,
+          await legalContext(),
+        ),
+      };
     }
     const key = enrollmentIdempotencyKey(draft.enrollKey);
     if (key !== draft.enrollKey) patch({ enrollKey: key });
@@ -135,7 +178,17 @@ export default function ReviewStep() {
 
     const created = await enrollSupplier(request, key);
     debugAuth("enroll-result", { created });
-    if (!created) return false;
+    if (!created) {
+      if (useSession.getState().error === APPLY_CONSENT_REFUSED) {
+        // Nothing was enrolled. Read the terms again, and ask again for a tick
+        // given to what is now on screen — under a fresh key, because the
+        // retry is a different body.
+        setConsent((current) => ({ ...current, agreed: false }));
+        patch({ enrollKey: "" });
+        void useLegalLibrary.getState().load({ force: true });
+      }
+      return false;
+    }
     clearDraft();
     router.replace("/(tabs)/home");
     return true;
@@ -150,6 +203,12 @@ export default function ReviewStep() {
     }
     if (!toEnrollRequest(draft)) {
       router.push("/(auth)/signup/location");
+      return;
+    }
+    // The agreement is checked before an identity is made: a Clerk account for
+    // a shop that has not agreed to anything is one nobody can use.
+    if (!legacyApply && (!documents || !consent.agreed)) {
+      setConsentProblem(true);
       return;
     }
 
@@ -272,8 +331,6 @@ export default function ReviewStep() {
             missing={draft.categoryCodes.length === 0}
           />
 
-          <SupplierTermsNotice />
-
           <View className="gg-panel gap-2">
             <Text className="text-body font-medium text-text-primary">
               What happens after you press this
@@ -286,6 +343,23 @@ export default function ReviewStep() {
             <Text className="text-body text-text-secondary">
               They usually come back within a working day. You will not need to apply again.
             </Text>
+          </View>
+
+          <SupplierTermsNotice />
+
+          <View className="pt-3">
+            <ApplyConsentFields
+              consent={consent}
+              onChange={(next) => {
+                setConsent(next);
+                setConsentProblem(false);
+              }}
+              documents={documents}
+              status={libraryStatus}
+              onRetry={() => void useLegalLibrary.getState().load({ force: true })}
+              showProblem={consentProblem}
+              disabled={sending}
+            />
           </View>
         </>
       )}

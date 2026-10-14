@@ -1,7 +1,13 @@
 import type { User } from "@/lib/api";
+import type { LegalGateStatus } from "@/lib/legal";
 import { isSignedIn, type IdentityState } from "@/store/session";
 
-export type LaunchHref = "/access" | "/(auth)/welcome" | "/(auth)/login" | "/(tabs)/home";
+export type LaunchHref =
+  | "/access"
+  | "/(auth)/welcome"
+  | "/(auth)/login"
+  | "/legal/review"
+  | "/(tabs)/home";
 
 /**
  * Where a cold start begins.
@@ -12,14 +18,21 @@ export type LaunchHref = "/access" | "/(auth)/welcome" | "/(auth)/login" | "/(ta
  * is not a signed-in shop here, so it goes to welcome and apply rather than
  * the closed-shop screen. Clerk still restoring is the same: send them to
  * the door, never a blank route. A null launch is a black canvas on device.
+ *
+ * Terms waiting to be agreed come before the floor (`store/legalConsent.ts`):
+ * an invited shop's first sign-in, and every shop after a material change.
+ * `legal` omitted reads as clear, so a caller that does not track it keeps the
+ * old ladder; `app/index.tsx` waits while it is still `unknown`.
  */
 export function launchHref(
   identity: IdentityState,
   user: User | null,
+  legal: LegalGateStatus = "clear",
 ): LaunchHref {
   if (identity.kind === "mismatch" || identity.kind === "error") return "/access";
   if (identity.kind === "signed_out" && identity.reason === "session_ended") return "/(auth)/login";
   if (!isSignedIn(user)) return "/(auth)/welcome";
+  if (legal === "blocked") return "/legal/review";
   return "/(tabs)/home";
 }
 

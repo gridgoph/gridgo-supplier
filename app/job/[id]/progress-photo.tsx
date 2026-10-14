@@ -25,6 +25,8 @@ import { useFileUpload } from "@/hooks/useFileUpload";
 import { useJob } from "@/hooks/useJob";
 import { useThemeColors } from "@/hooks/useTheme";
 import { askConfirm } from "@/store/sheets";
+import { WhyWeAsk } from "@/components/legal/WhyWeAsk";
+import { WHY_WE_ASK } from "@/lib/legal";
 
 /** Stages whose proof, filed as a picture, also stands as the production photo. */
 const PHOTO_PROOF_CODES = new Set(["production_started", "printing", "packaging_qc"]);
@@ -181,6 +183,7 @@ export default function ProgressPhotoScreen() {
               onPress={() => void upload.takePhoto()}
             />
             <SecondaryButton label="Choose from gallery" disabled={busy} onPress={() => void upload.pickImage()} />
+            <WhyWeAsk>{WHY_WE_ASK.progressPhoto}</WhyWeAsk>
           </>
         )
       }

@@ -33,6 +33,8 @@ import {
 } from "@/lib/chatImages";
 import { openSupportChatStream } from "@/lib/supportChatStream";
 import { useSupportChatStore } from "@/store/supportChat";
+import { WhyWeAsk } from "@/components/legal/WhyWeAsk";
+import { WHY_WE_ASK } from "@/lib/legal";
 
 /**
  * One Operations conversation. The shop already has Alerts for job news; this
@@ -337,9 +339,12 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
             )}
           </ScrollView>
           {pending.length ? (
-            <Text className="text-caption text-text-muted">
-              {pending.length === 1 ? pending[0].name : `${pending.length} photos ready to send`}
-            </Text>
+            <View className="gap-1">
+              <Text className="text-caption text-text-muted">
+                {pending.length === 1 ? pending[0].name : `${pending.length} photos ready to send`}
+              </Text>
+              <WhyWeAsk>{WHY_WE_ASK.chatPhoto}</WhyWeAsk>
+            </View>
           ) : null}
           <View className="flex-row items-end gap-2">
             <Pressable
