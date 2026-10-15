@@ -13,6 +13,7 @@ import { OptionList } from "@/components/controls/OptionList";
 import {
   DECLINE_REASONS,
   declineTimelineNote,
+  findDeclineReason,
   type DeclineReasonId,
 } from "@/lib/decline";
 import * as api from "@/lib/api";
@@ -27,12 +28,13 @@ import { askConfirm } from "@/store/sheets";
  * taking.
  */
 export default function DeclineJobScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `reason` arrives from the accept screen's "Not possible?" link, already chosen.
+  const { id, reason: preset } = useLocalSearchParams<{ id: string; reason?: string }>();
   const { job, loading, error, reload } = useJob(id);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const [reason, setReason] = useState<DeclineReasonId | null>(null);
+  const [reason, setReason] = useState<DeclineReasonId | null>(findDeclineReason(preset ?? null)?.id ?? null);
   const [detail, setDetail] = useState("");
   const [showErrors, setShowErrors] = useState(false);
   const [declined, setDeclined] = useState(false);

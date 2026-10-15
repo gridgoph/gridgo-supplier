@@ -136,6 +136,28 @@ const MESSAGES: Record<string, string> = {
     "GRIDGO has no ready-by on this job to move. Ask Operations to set it first.",
   invalid_reschedule_date: "Choose a time later than both now and your current ready-by.",
   invalid_reschedule_reason: "Tell the client why the job needs more time, in under 2,000 characters.",
+  special_instructions_acknowledgement_required:
+    "Read the special instructions and tick that you read them, then accept.",
+  change_request_already_open:
+    "This job already has a change request waiting. Where it stands is on the job.",
+  change_request_pending:
+    "This job has a change request waiting. Ask for a new deadline once the client has answered it.",
+  reschedule_request_pending:
+    "This job has a deadline request waiting. Ask for a change once the client has answered it.",
+  change_request_window_closed:
+    "A change can only be asked for before the job is marked ready. Refresh the job to see where it stands.",
+  change_request_requires_committed_order:
+    "This job is not paid for yet, so a change cannot be asked for. Refresh the job and try again.",
+  change_request_multi_shop_legacy:
+    "This job is shared with another shop, so GRIDGO handles changes to it. Report a problem with this job.",
+  change_request_limit: "This job has had as many change requests as GRIDGO keeps. Report a problem with this job.",
+  change_terms_required: "Say what you will do differently.",
+  invalid_change_request: "Say what you will do differently and why, in the space given.",
+  invalid_change_line: "That item is no longer on this job. Refresh the job and pick it again.",
+  invalid_change_amount: "Enter the extra as an amount in pesos, or leave it empty for no extra.",
+  change_request_idempotency_conflict: "This request was already sent with different details. Go back to the job and check it.",
+  change_deadline_operations_required:
+    "A late-production deduction already applies to this job, so GRIDGO handles changes to it. Report a problem with this job.",
   reschedule_fulfillment_stopped:
     "The client declined your new deadline, so this job is paused while GRIDGO sorts out the next step.",
   reschedule_operations_required:

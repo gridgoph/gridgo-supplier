@@ -1,5 +1,6 @@
 import type { Notification, Order, RescheduleRequest, RescheduleResolution, RescheduleStatus } from "@/lib/api";
 import { formatDeadlineFull } from "@/lib/dates";
+import { hasOpenChange } from "@/lib/orderChanges";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 
 /**
@@ -38,12 +39,21 @@ export const RESCHEDULE_REASON_MAX = 2000;
 export function canRequestNewDeadline(
   order: Pick<
     Order,
-    "state" | "readyAt" | "readyBy" | "rescheduleRequest" | "shopRecovery" | "refundHold" | "refundDisposition"
+    | "state"
+    | "readyAt"
+    | "readyBy"
+    | "rescheduleRequest"
+    | "shopRecovery"
+    | "refundHold"
+    | "refundDisposition"
+    | "changeRequests"
   >,
 ): boolean {
   if (!ACTIVE_STATES.has(order.state) || order.readyAt) return false;
   // One request per job, ever — whatever became of it.
   if (order.rescheduleRequest) return false;
+  // GRIDGO keeps a deadline request off a job while a change request waits.
+  if (hasOpenChange(order)) return false;
   if (order.shopRecovery && order.shopRecovery.status !== "accepted") return false;
   if (order.refundHold || order.refundDisposition) return false;
   return Boolean(order.readyBy);

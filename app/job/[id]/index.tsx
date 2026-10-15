@@ -3,6 +3,7 @@ import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 
 import { AcceptWindowPanel } from "@/components/AcceptWindowPanel";
+import { ChangeRequestPanel } from "@/components/ChangeRequestPanel";
 import { CounterCheckPanel } from "@/components/CounterCheckPanel";
 import { DangerButton } from "@/components/DangerButton";
 import { DeadlineRequestPanel } from "@/components/DeadlineRequestPanel";
@@ -24,6 +25,7 @@ import { RiderPackingPanel } from "@/components/RiderPackingPanel";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { ShopReleasePanel } from "@/components/ShopReleasePanel";
+import { SpecialInstructionsPanel } from "@/components/SpecialInstructionsPanel";
 import { StatusChip } from "@/components/StatusChip";
 import { acceptWindow } from "@/lib/acceptWindow";
 import { formatDeadlineFull } from "@/lib/dates";
@@ -36,6 +38,14 @@ import {
   type SupplierAction,
 } from "@/lib/jobState";
 import { keptAfterSettlement, payoutPlanOf } from "@/lib/milestones";
+import {
+  canRequestChange,
+  changeRequestsOf,
+  changeWindowOpen,
+  currentChangeRequest,
+  instructionsReadAt,
+  itemInstructions,
+} from "@/lib/orderChanges";
 import { packagingCheck } from "@/lib/packagingReadiness";
 import { lapseForOrder, lapseNotice } from "@/lib/productionLapse";
 import { refundNotice, refundStanding } from "@/lib/refund";
@@ -224,6 +234,18 @@ export default function JobWorkspaceScreen() {
   const packaging = packagingCheck(job);
   const canAskForTime = canRequestNewDeadline(job);
   const canCancel = canCancelJob(job);
+  /*
+    The client's special instructions, in front of the work from the offer
+    until the job is ready; after that they live under each item in the
+    docket. A job that is stopped or let go has no work to put them in front of.
+  */
+  const notes = itemInstructions(job);
+  const stopped = Boolean(release) || refundStanding(job) !== "none";
+  const showNotes = notes.some((note) => note.text) && changeWindowOpen(job) && !stopped;
+  const canChange = canRequestChange(job);
+  const change = release ? null : currentChangeRequest(job);
+  const earlierChanges = change ? changeRequestsOf(job).filter((row) => row.id !== change.id) : [];
+  const requestChange = () => router.push({ pathname: "/job/[id]/change", params: { id: job.id } });
 
   function messageOperations() {
     router.push({ pathname: "/report", params: { orderId: job!.id, title: job!.title } });
@@ -354,6 +376,24 @@ export default function JobWorkspaceScreen() {
           </View>
         ) : null}
 
+        {showNotes ? (
+          <View className="mt-6">
+            <SpecialInstructionsPanel
+              notes={notes}
+              readAt={instructionsReadAt(job)}
+              offer={job.state === "supplier_assigned"}
+              onRequestChange={canChange ? requestChange : undefined}
+            />
+          </View>
+        ) : null}
+
+        {/* The job's change request, and where the client's answer stands. */}
+        {change ? (
+          <View className="mt-6">
+            <ChangeRequestPanel request={change} earlier={earlierChanges} />
+          </View>
+        ) : null}
+
         {/* A step GRIDGO forced past a missing check, with its reason. */}
         {isForcedByGridgo(job) ? (
           <View className="mt-6">
@@ -416,8 +456,17 @@ export default function JobWorkspaceScreen() {
         */}
         {counterIssue || release ? null : (
           <View className="mt-8 gap-3">
-            {canAskForTime || canCancel ? (
+            {canAskForTime || canCancel || (canChange && !showNotes) ? (
               <Text className="text-overline text-text-muted">RUNNING INTO TROUBLE?</Text>
+            ) : null}
+            {/* Beside the notes when they are on screen; here when the job has none. */}
+            {canChange && !showNotes ? (
+              <View className="gap-1">
+                <SecondaryButton label="Request a change" onPress={requestChange} />
+                <Text className="text-caption text-text-muted">
+                  Ask the client to approve a different spec or an extra. Nothing changes until they do.
+                </Text>
+              </View>
             ) : null}
             {canAskForTime ? (
               <View className="gap-1">

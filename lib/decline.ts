@@ -11,7 +11,8 @@ export type DeclineReasonId =
   | "deadline_unachievable"
   | "spec_not_printable"
   | "price_too_low"
-  | "shop_closed";
+  | "shop_closed"
+  | "special_instructions";
 
 export type DeclineReason = {
   id: DeclineReasonId;
@@ -51,6 +52,12 @@ export const DECLINE_REASONS: readonly DeclineReason[] = [
     id: "shop_closed",
     label: "Shop is closed on that date",
     timelineNote: "Declined — shop is closed on the requested date",
+  },
+  {
+    id: "special_instructions",
+    label: "The special instructions are not possible",
+    // GRIDGO's own wording for this reason (docs/ORDER_CHANGES_API.md).
+    timelineNote: "Special instructions not possible",
   },
 ] as const;
 

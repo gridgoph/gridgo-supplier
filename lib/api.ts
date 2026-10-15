@@ -187,6 +187,13 @@ export type ProductionItem = {
    * attachments; read through `lib/artworkAttachments.ts`.
    */
   artworkAttachments?: ArtworkAttachment[];
+  /**
+   * The client's special instructions for this item, contact details already
+   * masked by GRIDGO; empty when there are none. Read through `lib/orderChanges.ts`.
+   */
+  specialInstructions?: string;
+  /** The latest change the client agreed to for this item. */
+  agreedChange?: { id: string; proposedSpec: string; appliedAt: string } | null;
 };
 
 /** One design link on an order line, snapshotted at checkout. HTTPS by contract. */
@@ -391,6 +398,16 @@ export type Order = {
    * `lib/reschedule.ts`.
    */
   rescheduleRequest?: RescheduleRequest | null;
+  /**
+   * Special instructions and change requests (gridgo-api
+   * `docs/ORDER_CHANGES_API.md`). The notes this shop must tick before
+   * accepting, the tick once recorded, and every change request on the job.
+   * Read only through `lib/orderChanges.ts`.
+   */
+  specialInstructions?: string;
+  specialInstructionLines?: { lineItemId: string; text: string }[];
+  specialInstructionsAcknowledgement?: { supplierId?: string; at: string } | null;
+  changeRequests?: unknown;
   /**
    * The shop's conversation with the rider collecting this job, while GRIDGO
    * keeps one. Read only through `pickupChatOf` in `lib/pickupChat.ts`.
@@ -1294,6 +1311,23 @@ export async function requestNewDeadline(
  */
 export async function getMyRescheduleRequests(): Promise<unknown> {
   return request<unknown>("/me/reschedule-requests");
+}
+
+/**
+ * Ask the client to approve a change to the job (gridgo-api
+ * `docs/ORDER_CHANGES_API.md`). The same key and body replay the first
+ * answer; read it through `normalizeChangeRequest` in `lib/orderChanges.ts`.
+ */
+export async function requestOrderChange(
+  orderId: string,
+  body: { lineItemId?: string; reason: string; proposedSpec: string; extraPrincipalMinor: number },
+  idempotencyKey: string,
+): Promise<unknown> {
+  return request<unknown>(`/orders/${orderId}/change-requests`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(body),
+  });
 }
 
 /** Platform-wide settings. Read for the issue-window length, never assumed. */
