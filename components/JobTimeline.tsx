@@ -1,6 +1,7 @@
 import { Text, View } from "react-native";
 
 import type { Order } from "@/lib/api";
+import type { HandoverFlow } from "@/lib/shopHandover";
 import { formatTimelineAt } from "@/lib/dates";
 import {
   presentTimelineActor,
@@ -10,6 +11,8 @@ import {
 
 type Props = {
   timeline: Order["timeline"];
+  /** The job's handover, which renames the states packing moved out of. */
+  flow?: HandoverFlow;
 };
 
 /**
@@ -17,7 +20,7 @@ type Props = {
  * Ordering carries real meaning — newest last so the current state sits at
  * the bottom where the eye rests after reading the story.
  */
-export function JobTimeline({ timeline }: Props) {
+export function JobTimeline({ timeline, flow = "legacy" }: Props) {
   if (!timeline.length) {
     return (
       <Text className="text-body text-text-muted">No timeline events yet for this job.</Text>
@@ -42,7 +45,7 @@ export function JobTimeline({ timeline }: Props) {
             </View>
             <View className={`min-w-0 flex-1 pb-4 ${isLast ? "pb-0" : ""}`}>
               <Text className="text-body font-medium text-text-primary">
-                {presentTimelineState(entry.state)}
+                {presentTimelineState(entry.state, flow)}
               </Text>
               <Text className="mt-0.5 text-caption text-text-muted">
                 {/* GRIDGO no longer says who moved a shop's job; an unnamed row is not GRIDGO's. */}

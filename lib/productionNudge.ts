@@ -1,6 +1,7 @@
 import type { Order } from "@/lib/api";
 import { actionsForJob } from "@/lib/jobState";
 import { findMilestoneView, payoutPlanOf } from "@/lib/milestones";
+import { ridersPack } from "@/lib/shopHandover";
 
 /**
  * What the shop still owes, in shop words, from the live job.
@@ -12,7 +13,8 @@ import { findMilestoneView, payoutPlanOf } from "@/lib/milestones";
  */
 export function owedProductionMove(
   order:
-    | Pick<Order, "state" | "payoutMilestones" | "payoutHold" | "payoutPlanVersion" | "productionProgress" | "packingProgress">
+    | (Pick<Order, "state" | "payoutMilestones" | "payoutHold" | "payoutPlanVersion" | "productionProgress" | "packingProgress"> &
+        Partial<Pick<Order, "handoverFlow" | "shopHandover" | "supplierId" | "transitionReadiness">>)
     | null
     | undefined,
   fallbackState?: string | null,
@@ -26,7 +28,15 @@ export function owedProductionMove(
     }
     if (proof?.kind === "add_production_photo") return "Photograph the job so it can be packed";
     if (proof?.kind === "add_packing_photo") return "Photograph the packed job before dispatch";
+    if (proof?.kind === "send_finished_photos") return "Photograph the finished products for GRIDGO's review";
+    if (proof?.kind === "ready_for_pickup" && ridersPack(order)) return "Call a rider; do not pack yet";
     if (order.state === "payment_authorized") return "Start production";
+    // The newer handover is never packed before pickup: it ends in GRIDGO's review.
+    if (ridersPack(order)) {
+      return order.state === "supplier_self_qc"
+        ? "GRIDGO is reviewing your finished photos"
+        : "Update the press or send finished photos";
+    }
     const legacy = payoutPlanOf(order) === 1;
     if (order.state === "supplier_self_qc") {
       return legacy ? "Pack it or file packaging proof" : "Pack it for pickup";

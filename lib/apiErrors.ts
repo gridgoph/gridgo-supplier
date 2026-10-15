@@ -44,6 +44,13 @@ export function isProductionPhotoRequired(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "production_photo_required";
 }
 
+/** The job left production while a finished-product photo was on its way; reload it. */
+export function isFinishedPhotoNotAllowed(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 409) return false;
+  const code = apiErrorCode(error);
+  return code === "finished_product_photo_upload_not_allowed" || code === "production_finish_not_available";
+}
+
 export function isPackingPhotoRequired(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "packing_photo_required";
 }
@@ -177,6 +184,23 @@ const MESSAGES: Record<string, string> = {
     "Add a photo of this job first. GRIDGO needs one before it can be packaged — your start-of-production photo counts, a PDF does not.",
   production_photo_upload_not_allowed:
     "This job has moved past production, so it no longer takes progress photos. Its latest step is on the job.",
+  // The newer handover (docs/SHOP_HANDOVER_API.md): finished photos, GRIDGO's review, packing at the counter.
+  finished_product_photo_required:
+    "Add a photo of the finished, unpacked products first. Photos GRIDGO already reviewed cannot be sent again.",
+  finished_product_photo_upload_not_allowed:
+    "This job has moved past production, so it no longer takes finished-product photos. Its latest step is on the job.",
+  production_finished_required:
+    "Send photos of the finished, unpacked products for GRIDGO's review first.",
+  production_review_required:
+    "Wait for GRIDGO to approve the finished-product photos before calling a rider. Do not pack yet.",
+  production_finish_not_available:
+    "This job is not in production any more, so its finished photos cannot be sent. Its latest step is on the job.",
+  handover_flow_not_available:
+    "This job uses the older handover. Its next step is on the job.",
+  pickup_held:
+    "Something is holding this pickup. Operations has to clear it before the rider can take the job.",
+  unpacked_inspection_required:
+    "The rider checks the unpacked products first. Keep them unpacked until the checks pass.",
   milestone_not_reached:
     "The job has not reached this part yet. Take the step it shows and file your evidence then.",
   payment_method_not_allowed:
@@ -258,6 +282,10 @@ export function isRouteNotOpen(error: unknown): boolean {
 export type RequirementKind =
   | "production_photo"
   | "packing_photo"
+  /** Newer handover: photos of the finished, unpacked products. */
+  | "finished_photos"
+  /** Newer handover: GRIDGO's review of those photos. */
+  | "review"
   | "claim"
   | "job_stopped"
   | "moved_on"
@@ -268,6 +296,9 @@ export type Requirement = { kind: RequirementKind; message: string };
 const REQUIREMENT_KINDS: Record<string, RequirementKind> = {
   production_photo_required: "production_photo",
   packing_photo_required: "packing_photo",
+  production_finished_required: "finished_photos",
+  finished_product_photo_required: "finished_photos",
+  production_review_required: "review",
   claim_hold_active: "claim",
   refund_fulfillment_stopped: "job_stopped",
   reschedule_fulfillment_stopped: "job_stopped",

@@ -1,4 +1,4 @@
-import { Circle, CircleCheck, OctagonAlert, ReceiptText } from "lucide-react-native";
+import { Circle, CircleCheck, Clock, OctagonAlert, ReceiptText } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 
@@ -7,13 +7,17 @@ import { useThemeColors } from "@/hooks/useTheme";
 import type { Requirement } from "@/lib/apiErrors";
 import {
   otherRequirements,
-  photoRequirement,
   requirementTitle,
+  stepRequirement,
   type PackagingCheck,
+  type PackagingStepKind,
 } from "@/lib/packagingReadiness";
+import type { FinishedStage } from "@/lib/shopHandover";
 
 type Props = {
   check: PackagingCheck;
+  /** Where the finished photos stand with GRIDGO, on the newer handover. */
+  stage?: FinishedStage | null;
   /** Opens a problem report on this job: the way out of a claim only Operations can clear. */
   onMessageOperations: () => void;
 };
@@ -30,37 +34,40 @@ type Props = {
  *
  * Status is icon, word and colour together, and nothing here is yellow — the
  * one yellow on the job is the step that fixes the first open row.
+ *
+ * On the newer handover (`lib/shopHandover.ts`) nothing is packed before
+ * pickup, so the rows are the finished photos and GRIDGO's review instead of
+ * two photos, and the card is headed by the step it leads to: calling a rider.
  */
-export function PackagingChecklist({ check, onMessageOperations }: Props) {
+export function PackagingChecklist({ check, stage = null, onMessageOperations }: Props) {
   const colors = useThemeColors();
   const others = otherRequirements(check);
-  const done = check.photos.filter((photo) => photo.done).length;
+  const done = check.steps.filter((step) => step.done).length;
+  const ridersPack = check.flow === "rider_packs";
+  const summary = ridersPack
+    ? done === check.steps.length
+      ? "GRIDGO approved your finished products."
+      : `${done} of ${check.steps.length} steps done. Do not pack yet; the rider checks the unpacked items first.`
+    : done === check.steps.length
+      ? "Both photos are on the job."
+      : `${done} of ${check.steps.length} photos on the job.`;
 
   return (
     <View className="gg-card gap-4" testID="packaging-checklist">
       <View className="gap-1">
-        <Text className="text-overline text-text-muted">BEFORE IT CAN BE PACKAGED</Text>
+        <Text className="text-overline text-text-muted">
+          {ridersPack ? "BEFORE YOU CALL A RIDER" : "BEFORE IT CAN BE PACKAGED"}
+        </Text>
         <Text className="text-body text-text-secondary">
-          {done === check.photos.length
-            ? "Both photos are on the job."
-            : `${done} of ${check.photos.length} photos on the job.`}
+          {summary}
           {others.length ? " Something else is holding it too." : ""}
         </Text>
       </View>
 
       <View className="gap-4" accessibilityRole="list">
-        {check.photos.map((photo) => {
-          const owed = photoRequirement(check, photo.kind);
-          return (
-            <Row
-              key={photo.kind}
-              state={owed ? "needed" : "done"}
-              title={requirementTitle(photo.kind)}
-              detail={owed ? owed.message : "On the job."}
-              colors={colors}
-            />
-          );
-        })}
+        {check.steps.map((step) => (
+          <Row key={step.kind} {...stepRow(check, step.kind, stage)} colors={colors} />
+        ))}
         {others.map((item, index) => (
           <BlockerRow
             key={`${item.kind}:${index}`}
@@ -73,7 +80,11 @@ export function PackagingChecklist({ check, onMessageOperations }: Props) {
           state="optional"
           title="Receipt scan"
           detail={
-            check.receiptAttached ? "On the job." : "Not needed. It never holds up packing."
+            check.receiptAttached
+              ? "On the job."
+              : ridersPack
+                ? "Not needed. It never holds up pickup."
+                : "Not needed. It never holds up packing."
           }
           colors={colors}
         />
@@ -82,12 +93,58 @@ export function PackagingChecklist({ check, onMessageOperations }: Props) {
   );
 }
 
+/**
+ * One of the shop's own steps, in words. A legacy photo row is done or needed.
+ * The newer handover's review is neither while it waits on GRIDGO, and before
+ * the photos go it is simply next, so it does not read as a second fault.
+ */
+function stepRow(
+  check: PackagingCheck,
+  kind: PackagingStepKind,
+  stage: FinishedStage | null,
+): { state: RowState; title: string; detail: string } {
+  const title = requirementTitle(kind);
+  const owed = stepRequirement(check, kind);
+  if (kind === "finished_photos") {
+    if (!owed) return { state: "done", title, detail: "Sent for GRIDGO's review." };
+    if (stage?.stage === "not_sent" && stage.correction) {
+      return {
+        state: "needed",
+        title,
+        detail: stage.correction.note
+          ? `GRIDGO asked for a fix: “${stage.correction.note}” Fix it, then send new photos of the unpacked products.`
+          : "GRIDGO asked for a fix. Fix it, then send new photos of the unpacked products.",
+      };
+    }
+    return { state: "needed", title, detail: owed.message };
+  }
+  if (kind === "review") {
+    if (!owed) return { state: "done", title, detail: "Approved. You can call a rider." };
+    if (stage?.stage === "in_review") {
+      return {
+        state: "waiting",
+        title,
+        detail: "GRIDGO is checking your photos. Your production time is paused until it answers. Do not pack yet.",
+      };
+    }
+    if (stage?.stage === "with_gridgo") return { state: "blocked", title, detail: owed.message };
+    return {
+      state: "later",
+      title,
+      detail: "After you send the photos. Your production time pauses while GRIDGO reviews.",
+    };
+  }
+  return { state: owed ? "needed" : "done", title, detail: owed ? owed.message : "On the job." };
+}
+
 type Colors = ReturnType<typeof useThemeColors>;
-type RowState = "done" | "needed" | "blocked" | "optional";
+type RowState = "done" | "needed" | "waiting" | "later" | "blocked" | "optional";
 
 const STATE_WORD: Record<RowState, string> = {
   done: "Done",
   needed: "Needed",
+  waiting: "With GRIDGO",
+  later: "Next",
   blocked: "Waiting on Operations",
   optional: "Optional",
 };
@@ -110,11 +167,22 @@ function Row({
       ? colors.success
       : state === "needed"
         ? colors.warning
-        : state === "blocked"
-          ? colors.error
-          : colors.textMuted;
+        : state === "waiting"
+          ? colors.info
+          : state === "blocked"
+            ? colors.error
+            : colors.textMuted;
   const Icon =
-    state === "done" ? CircleCheck : state === "blocked" ? OctagonAlert : state === "optional" ? ReceiptText : Circle;
+    state === "done"
+      ? CircleCheck
+      : state === "blocked"
+        ? OctagonAlert
+        : state === "optional"
+          ? ReceiptText
+          : state === "waiting"
+            ? Clock
+            : Circle;
+  const quiet = state === "optional" || state === "later";
   return (
     <View
       className="flex-row gap-3"
@@ -126,11 +194,7 @@ function Row({
       <View className="min-w-0 flex-1 gap-1">
         <View className="flex-row flex-wrap items-baseline justify-between gap-x-3">
           <Text
-            className={
-              state === "optional"
-                ? "text-body text-text-secondary"
-                : "text-body font-medium text-text-primary"
-            }
+            className={quiet ? "text-body text-text-secondary" : "text-body font-medium text-text-primary"}
           >
             {title}
           </Text>
@@ -140,16 +204,18 @@ function Row({
                 ? "text-caption font-medium text-success"
                 : state === "needed"
                   ? "text-caption font-medium text-warning"
-                  : state === "blocked"
-                    ? "text-caption font-medium text-error"
-                    : "text-caption text-text-muted"
+                  : state === "waiting"
+                    ? "text-caption font-medium text-info"
+                    : state === "blocked"
+                      ? "text-caption font-medium text-error"
+                      : "text-caption text-text-muted"
             }
           >
             {STATE_WORD[state]}
           </Text>
         </View>
         <Text
-          className={state === "optional" ? "text-caption text-text-muted" : "text-body text-text-secondary"}
+          className={quiet ? "text-caption text-text-muted" : "text-body text-text-secondary"}
         >
           {detail}
         </Text>

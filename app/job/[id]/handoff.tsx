@@ -1,6 +1,6 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 
 import { Camera } from "lucide-react-native";
 import { ProgressPhotoStrip } from "@/components/ProgressPhotoStrip";
@@ -18,14 +18,25 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SpecRow } from "@/components/SpecRow";
 import { StatusChip } from "@/components/StatusChip";
-import { custodyForOrder, HANDOFF_SEQUENCE } from "@/lib/handoff";
+import { custodyForOrder, HANDOFF_SEQUENCE, RIDER_PACKS_SEQUENCE } from "@/lib/handoff";
+import { RiderPackingPanel } from "@/components/RiderPackingPanel";
+import { ForcedStepNotice } from "@/components/ForcedStepNotice";
+import {
+  DO_NOT_PACK_YET,
+  finishedStage,
+  forcedSteps,
+  isForcedByGridgo,
+  riderPacking,
+  ridersPack,
+} from "@/lib/shopHandover";
 import {
   humanizeApiError,
   isPackingPhotoRequired,
   isProductionPhotoRequired,
   offlineMessage,
 } from "@/lib/apiErrors";
-import { findAction } from "@/lib/jobState";
+import { findAction, waitingOnJob } from "@/lib/jobState";
+import { payoutPlanOf } from "@/lib/milestones";
 import {
   needsProductionPhoto,
   productionProgressOf,
@@ -53,10 +64,17 @@ import { WHY_WE_ASK } from "@/lib/legal";
  * A job without one reaches this screen from an old link or a stale card, or
  * is refused on the press; either way the screen turns into the way to the
  * photo rather than a button GRIDGO would only refuse again.
+ *
+ * On the newer handover (`lib/shopHandover.ts`) nothing is packed here. The
+ * step is "Ready for rider pickup", offered once GRIDGO has approved the
+ * finished photos, and the shop prepares packing materials while the products
+ * stay unpacked. With a rider at the counter, the screen follows the counter:
+ * the rider checks, the shop packs in front of the rider, the shop signs.
  */
 export default function HandoffScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { job, loading, error, reload } = useJob(id);
+  const navigation = useNavigation();
   const action = useJobAction();
   const colors = useThemeColors();
   const upload = useFileUpload("packing_photo");
@@ -80,10 +98,14 @@ export default function HandoffScreen() {
     ? custody.state !== "with_rider" && custody.state !== "delivered"
     : false;
   const step = job ? findAction(job, "ready_for_pickup") : null;
+  // The newer handover has no photo gates here: its finished photos have their own screen.
+  const newer = ridersPack(job);
+  const finished = job ? finishedStage(job) : null;
+  const sendFinished = job ? findAction(job, "send_finished_photos") : null;
   // A refusal speaks for a GRIDGO too old to say whether a photo is on the job.
   const refused = isProductionPhotoRequired(action.failure);
-  const photoGate = job ? needsProductionPhoto(job, refused) : false;
-  const packingGate = job
+  const photoGate = job && !newer ? needsProductionPhoto(job, refused) : false;
+  const packingGate = job && !newer
     ? needsPackingPhoto(job, isPackingPhotoRequired(action.failure))
     : false;
   const canAddPacking =
@@ -101,11 +123,17 @@ export default function HandoffScreen() {
     (item) => item.stage === "stored" && item.fileId,
   );
   const progress =
-    job && takesProductionPhoto(job) ? productionProgressOf(job) : null;
+    job && !newer && takesProductionPhoto(job) ? productionProgressOf(job) : null;
   // What the rider counts, per line, so the shop can count it first.
   const targets = job ? countTargets(job) : [];
   const check = job?.state === "rider_assigned" ? counterCheck(job) : null;
   const counterIssue = check && check.stage !== "passed" ? check : null;
+  const counter = job ? riderPacking(job) : null;
+  const waiting = job ? waitingOnJob(job, payoutPlanOf(job)) : null;
+
+  useEffect(() => {
+    if (newer) navigation.setOptions({ title: "Rider pickup" });
+  }, [newer, navigation]);
 
   function messageOperations() {
     if (!job) return;
@@ -152,19 +180,30 @@ export default function HandoffScreen() {
     setConfirming(true);
     let saved = false;
     try {
-      const confirmed = await askConfirm({
-        question: `Mark the package ready for ${job.title}?`,
-        consequence:
-          "Riders will be notified to accept this pickup. Keep the package at the counter and check it together when the rider arrives; all six checks must pass before transport.",
-        confirmLabel: "Mark package ready",
-        cancelLabel: "Not yet",
-      });
+      const confirmed = await askConfirm(
+        newer
+          ? {
+              question: `Call a rider for ${job.title}?`,
+              consequence: `Riders will be notified to accept this pickup. ${DO_NOT_PACK_YET}`,
+              confirmLabel: "Ready for rider pickup",
+              cancelLabel: "Not yet",
+            }
+          : {
+              question: `Mark the package ready for ${job.title}?`,
+              consequence:
+                "Riders will be notified to accept this pickup. Keep the package at the counter and check it together when the rider arrives; all six checks must pass before transport.",
+              confirmLabel: "Mark package ready",
+              cancelLabel: "Not yet",
+            },
+      );
       if (!confirmed) return;
 
       const updated = await action.run({
         jobId: job.id,
         targetState: step.targetState,
-        note: "Packaging ready — packed and staged for the joint pickup checks with the rider",
+        note: newer
+          ? "Ready for rider pickup — packing materials prepared; the products stay unpacked for the rider's check"
+          : "Packaging ready — packed and staged for the joint pickup checks with the rider",
       });
       if (!updated) {
         // Refused for want of a photo: read the job again so the screen
@@ -187,11 +226,27 @@ export default function HandoffScreen() {
       loading={loading && !job}
       error={job ? null : error}
       onRetry={() => void reload()}
-      title={packingGate && !photoGate ? "Packed" : "Package for pickup"}
+      title={
+        newer
+          ? step
+            ? "Ready for rider pickup"
+            : "Rider pickup"
+          : packingGate && !photoGate
+            ? "Packed"
+            : "Package for pickup"
+      }
       subject={job?.title}
       // A stopped pickup is explained once, in its own panel below.
       lede={
-        held
+        newer && !held && !counterIssue
+          ? step
+            ? `GRIDGO approved your finished products. ${DO_NOT_PACK_YET}`
+            : sendFinished
+              ? "Before a rider is called, GRIDGO checks photos of the finished, unpacked products."
+              : finished?.stage === "in_review" || finished?.stage === "with_gridgo"
+                ? (waiting?.body ?? "")
+                : (custody?.detail ?? "Getting a job ready for the rider who collects it.")
+          : held
           ? "This job cannot be packaged yet. What is holding it, and who can clear it, is below."
           : photoGate
             ? "A production photo comes first. After packing, add a separate photo of the package."
@@ -209,6 +264,14 @@ export default function HandoffScreen() {
         held && job ? (
           // The checklist row carries the way to Operations.
           <SecondaryButton label="Back to job" onPress={() => router.back()} />
+        ) : newer && sendFinished && job ? (
+          <>
+            <PrimaryButton
+              label={sendFinished.label}
+              onPress={() => router.replace({ pathname: "/job/[id]/finished", params: { id: job.id } })}
+            />
+            <SecondaryButton label="Back to job" onPress={() => router.back()} />
+          </>
         ) : photoGate && job ? (
           <>
             <PrimaryButton
@@ -259,7 +322,7 @@ export default function HandoffScreen() {
         ) : step && !packingGate ? (
           <>
             <PrimaryButton
-              label={action.busy ? "Notifying riders…" : "Ready for dispatch"}
+              label={action.busy ? "Notifying riders…" : newer ? "Ready for rider pickup" : "Ready for dispatch"}
               disabled={busy}
               onPress={() => void markReady()}
             />
@@ -274,9 +337,15 @@ export default function HandoffScreen() {
         )
       }
     >
-      {held && packaging ? (
-        <PackagingChecklist check={packaging} onMessageOperations={messageOperations} />
+      {(held || (newer && packaging && !packaging.allowed)) && packaging ? (
+        <PackagingChecklist check={packaging} stage={finished} onMessageOperations={messageOperations} />
       ) : null}
+
+      {counter && !counterIssue && waiting ? (
+        <RiderPackingPanel counter={counter} title={waiting.title} body={waiting.body} targets={targets} />
+      ) : null}
+
+      {job && isForcedByGridgo(job) ? <ForcedStepNotice steps={forcedSteps(job)} /> : null}
 
       {photoGate && !held ? (
         <View className="gg-card gap-2">
@@ -348,7 +417,8 @@ export default function HandoffScreen() {
         </View>
       ) : null}
 
-      {job && custody && !canAddPacking && !held ? (
+      {/* At the counter on the newer handover, the counter panel above says custody step by step. */}
+      {job && custody && !canAddPacking && !held && !counter ? (
         <View className="gg-card gap-3">
           <Text className="text-overline text-text-muted">CUSTODY</Text>
           <View className="flex-row">
@@ -409,7 +479,7 @@ export default function HandoffScreen() {
       {packing && !canAddPacking && !held ? <PackageInvoiceNotice /> : null}
 
       {/* While held, what happens after packing is not the next thing to read. */}
-      {canAddPacking || held ? null : <HandoffSequence />}
+      {canAddPacking || held || counter ? null : <HandoffSequence newer={newer} />}
     </FlowScreen>
   );
 }
@@ -419,12 +489,13 @@ export default function HandoffScreen() {
  * Numbered because it is a sequence, and monochrome because the one yellow on
  * this screen is the button that starts it.
  */
-function HandoffSequence() {
+function HandoffSequence({ newer }: { newer: boolean }) {
+  const sequence = newer ? RIDER_PACKS_SEQUENCE : HANDOFF_SEQUENCE;
   return (
     <View className="gg-panel gap-4" accessibilityRole="list">
       <Text className="text-overline text-text-muted">WHAT HAPPENS NEXT</Text>
-      {HANDOFF_SEQUENCE.map((step, index) => {
-        const last = index === HANDOFF_SEQUENCE.length - 1;
+      {sequence.map((step, index) => {
+        const last = index === sequence.length - 1;
         return (
           <View key={step.id} className="flex-row gap-3">
             <View className="items-center">

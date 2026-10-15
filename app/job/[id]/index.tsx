@@ -7,6 +7,7 @@ import { CounterCheckPanel } from "@/components/CounterCheckPanel";
 import { DangerButton } from "@/components/DangerButton";
 import { DeadlineRequestPanel } from "@/components/DeadlineRequestPanel";
 import { EmptyState } from "@/components/EmptyState";
+import { ForcedStepNotice } from "@/components/ForcedStepNotice";
 import { JobActionBar } from "@/components/JobActionBar";
 import { JobBrief } from "@/components/JobBrief";
 import { JourneyTrack } from "@/components/JourneyTrack";
@@ -19,6 +20,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { PushEnableCard } from "@/components/PushEnableCard";
 import { RefundNoticePanel } from "@/components/RefundNoticePanel";
 import { RiderApproachPanel } from "@/components/RiderApproachPanel";
+import { RiderPackingPanel } from "@/components/RiderPackingPanel";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { ShopReleasePanel } from "@/components/ShopReleasePanel";
@@ -30,7 +32,7 @@ import {
   actionsForJob,
   presentJobStatus,
   routeForAction,
-  waitingOn,
+  waitingOnJob,
   type SupplierAction,
 } from "@/lib/jobState";
 import { keptAfterSettlement, payoutPlanOf } from "@/lib/milestones";
@@ -39,7 +41,15 @@ import { lapseForOrder, lapseNotice } from "@/lib/productionLapse";
 import { refundNotice, refundStanding } from "@/lib/refund";
 import { canRequestNewDeadline, rescheduleNotice } from "@/lib/reschedule";
 import { canCancelJob, shopRelease } from "@/lib/shopRecovery";
-import { counterCheck } from "@/lib/pickupCheck";
+import { counterCheck, countTargets } from "@/lib/pickupCheck";
+import {
+  finishedStage,
+  forcedSteps,
+  handoverFlowOf,
+  isForcedByGridgo,
+  riderPacking,
+  shopFinish,
+} from "@/lib/shopHandover";
 import { pickupChatHref, pickupChatOf } from "@/lib/pickupChat";
 import { callsSupported } from "@/lib/callRuntime";
 import { callHref, latestMissedCall, pickupCallAvailability } from "@/lib/orderCall";
@@ -149,7 +159,11 @@ export default function JobWorkspaceScreen() {
   const urgency = deadlineUrgency(
     refundStanding(job) === "none" && !release && !requestStopped ? job.promisedDate || job.deadline : null,
   );
-  const waiting = waitingOn(job.state, payoutPlanOf(job));
+  const waiting = waitingOnJob(job, payoutPlanOf(job));
+  // The newer handover: GRIDGO's review of the finished photos, and the counter once a rider is there.
+  const flow = handoverFlowOf(job);
+  const finished = finishedStage(job);
+  const reviewPaused = Boolean(shopFinish(job)?.pending);
   // A refund stops the job and speaks over whose move it is.
   const refund = refundNotice(job, keptAfterSettlement(job));
   const handoff = hasHandoff(job) && refundStanding(job) === "none" && !release && !requestStopped;
@@ -172,6 +186,7 @@ export default function JobWorkspaceScreen() {
   */
   const pickupChat = pickupChatOf(job);
   const riderOnTheWay = job.state === "rider_assigned" && !counterIssue && !release && refundStanding(job) === "none";
+  const counter = riderOnTheWay ? riderPacking(job) : null;
   const chatRow = pickupChat ? (
     <PickupChatRow chat={pickupChat} onPress={() => router.push(pickupChatHref(job.id))} />
   ) : null;
@@ -258,7 +273,9 @@ export default function JobWorkspaceScreen() {
               {formatDeadlineFull(clientDate)}
             </Text>
           ) : null}
-          {urgency.level !== "undated" ? (
+          {reviewPaused ? (
+            <Text className="text-body text-text-muted">Production time paused while GRIDGO reviews</Text>
+          ) : urgency.level !== "undated" ? (
             <Text
               className={
                 urgency.level === "overdue"
@@ -291,7 +308,7 @@ export default function JobWorkspaceScreen() {
         ) : null}
 
         <View className="mt-6">
-          <JourneyTrack state={job.state} />
+          <JourneyTrack state={job.state} flow={flow} />
         </View>
 
         {/*
@@ -317,14 +334,30 @@ export default function JobWorkspaceScreen() {
           <View className="mt-6">
             <DeadlineRequestPanel request={deadlineRequest} />
           </View>
-        ) : packaging && !packaging.allowed ? (
+        ) : packaging && (!packaging.allowed || flow === "rider_packs") ? (
           <View className="mt-6">
-            <PackagingChecklist check={packaging} onMessageOperations={messageOperations} />
+            <PackagingChecklist check={packaging} stage={finished} onMessageOperations={messageOperations} />
+          </View>
+        ) : counter ? (
+          <View className="mt-6">
+            <RiderPackingPanel
+              counter={counter}
+              title={waiting.title}
+              body={waiting.body}
+              targets={countTargets(job)}
+            />
           </View>
         ) : !primary ? (
           <View className="gg-panel mt-6 gap-1">
             <Text className="text-body font-medium text-text-primary">{waiting.title}</Text>
             <Text className="text-body text-text-secondary">{waiting.body}</Text>
+          </View>
+        ) : null}
+
+        {/* A step GRIDGO forced past a missing check, with its reason. */}
+        {isForcedByGridgo(job) ? (
+          <View className="mt-6">
+            <ForcedStepNotice steps={forcedSteps(job)} />
           </View>
         ) : null}
 

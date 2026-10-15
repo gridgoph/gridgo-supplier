@@ -1,7 +1,7 @@
 import type { Order } from "@/lib/api";
 import {
   isAwaitingDecision,
-  presentOrderState,
+  presentJobStatus,
   primaryAction,
   routeForAction,
   type StatePresentation,
@@ -160,7 +160,7 @@ export function buildObligations(jobs: Order[], now: Date = new Date()): Obligat
     // A job the shop let go is GRIDGO's until the client chooses; nothing on it is the shop's.
     if (shopRelease(job)) continue;
     const urgency = deadlineUrgency(job.promisedDate || job.deadline, now);
-    const status = presentOrderState(job.state);
+    const status = presentJobStatus(job);
     const action = primaryAction(job, now);
 
     if (action?.kind === "add_proof") {

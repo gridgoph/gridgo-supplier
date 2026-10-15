@@ -31,6 +31,7 @@ export default function JobLayout() {
       <Stack.Screen name="reschedule" options={{ title: "New deadline" }} />
       <Stack.Screen name="fulfilment" options={{ title: "Proof of fulfilment" }} />
       <Stack.Screen name="progress-photo" options={{ title: "Production photo" }} />
+      <Stack.Screen name="finished" options={{ title: "Finished products" }} />
       <Stack.Screen
         name="advance"
         options={{

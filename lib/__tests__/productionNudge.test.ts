@@ -43,3 +43,20 @@ describe("owedProductionMove", () => {
     expect(owedProductionMove(undefined, "payment_authorized")).toBe("Start production");
   });
 });
+
+describe("the newer handover", () => {
+  it("asks for finished photos, never for packing, before pickup", () => {
+    const base = { payoutMilestones: [], payoutHold: false, payoutPlanVersion: 2 as const, handoverFlow: "rider_packs" as const };
+    expect(owedProductionMove({ ...base, state: "production", shopHandover: {} })).toBe(
+      "Photograph the finished products for GRIDGO's review",
+    );
+    expect(
+      owedProductionMove({
+        ...base,
+        state: "supplier_self_qc",
+        supplierId: "shop",
+        shopHandover: { finished: { at: "2026-10-15T02:00:00.000Z", supplierId: "shop", photoFileIds: ["f"] }, review: null },
+      }),
+    ).toBe("GRIDGO is reviewing your finished photos");
+  });
+});

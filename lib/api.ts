@@ -210,6 +210,13 @@ export type PickupChecklist = {
   evidenceFileIds?: string[];
   completedAt?: string | null;
   completedBy?: string | null;
+  /**
+   * Set on the newer handover (`handoverFlow: "rider_packs"`): the passing
+   * check of the unpacked products, before packing (status `inspected`), and
+   * kept on the record once the rider signs custody over.
+   */
+  inspectionId?: string | null;
+  inspectedAt?: string | null;
   escalationId?: string | null;
   handoffSignature?: { signerName: string; signedAt: string } | null;
 };
@@ -334,6 +341,20 @@ export type Order = {
   deliveryPhotoFileIds?: string[];
   /** The rider's latest counter check. Absent until a rider has checked it. */
   pickupChecklist?: PickupChecklist | null;
+  /**
+   * Which handover this job runs on (gridgo-api `docs/SHOP_HANDOVER_API.md`):
+   * `rider_packs` — finished photos, GRIDGO's review, the rider checks the
+   * unpacked products and the shop packs in front of them — or the older
+   * `legacy` one. Absent on an older API, which is legacy. Read, together
+   * with `shopHandover` and `forcedSteps`, only through `lib/shopHandover.ts`.
+   */
+  handoverFlow?: "rider_packs" | "legacy" | null;
+  /** The handover's evidence record: submissions, reviews, inspections, packed photos. */
+  shopHandover?: unknown;
+  /** Steps GRIDGO forced past a missing check, with its reason. */
+  forcedSteps?: unknown;
+  /** True once GRIDGO has forced any step on this job. */
+  forcedByGridgo?: boolean;
   /** What the rider counts per line; null when GRIDGO cannot establish it. */
   pickupCountItems?: PickupCountItem[] | null;
   /**
@@ -475,6 +496,8 @@ export type StoredFile = {
     | "fulfilment_proof"
     /** A progress photo of the job on the floor. Records progress, moves no money. */
     | "production_photo"
+    /** The finished, unpacked products, for GRIDGO's review on the newer handover. */
+    | "finished_product_photo"
     | "packing_photo"
     | "delivery_photo"
     | "service_image"
@@ -1408,6 +1431,30 @@ export async function attachProductionPhoto(
     method: "POST",
     body: JSON.stringify({ orderId }),
   });
+}
+
+/**
+ * Put a stored `finished_product_photo` on the job. Newer handover only, and
+ * only in production; it moves no state until `submitFinishedProducts`.
+ */
+export async function attachFinishedProductPhoto(
+  fileId: string,
+  orderId: string,
+): Promise<{ file: StoredFile; order?: Order }> {
+  return request(`/files/${fileId}/attach`, { method: "POST", body: JSON.stringify({ orderId }) });
+}
+
+/**
+ * Send the finished-product photos on the job for GRIDGO's review
+ * (`docs/SHOP_HANDOVER_API.md`). Every attached photo not already reviewed
+ * goes; the job moves to `supplier_self_qc` until GRIDGO answers.
+ */
+export async function submitFinishedProducts(orderId: string): Promise<Order> {
+  const result = await request<{ order: Order }>(`/orders/${orderId}/production-finished`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  return result.order;
 }
 
 /** Attach packed-work evidence without changing state or payout. */
