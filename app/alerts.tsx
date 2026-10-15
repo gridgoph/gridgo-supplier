@@ -24,6 +24,7 @@ import { jobScreenHref } from "@/lib/productionNudge";
 import { isLapseAlert } from "@/lib/productionLapse";
 import { SUPPORT_MESSAGE_PUSH_TYPE } from "@/lib/push";
 import { isRefundAlert } from "@/lib/refund";
+import { SHOP_HOURS_NOTICE, SHOP_HOURS_ROUTE } from "@/lib/shopHours";
 import { isAlertUnread, useAlertsStore, visibleAlerts } from "@/store/alerts";
 import { askConfirm } from "@/store/sheets";
 import { useViewing } from "@/store/toasts";
@@ -251,6 +252,8 @@ export default function NotificationsScreen() {
             ? () => router.push(listingHref)
             : alert.orderId && alert.type === PICKUP_CHAT_NOTICE
               ? () => router.push(pickupChatHref(alert.orderId as string))
+              : alert.type === SHOP_HOURS_NOTICE
+              ? () => router.push(SHOP_HOURS_ROUTE)
               : alert.type === SUPPORT_MESSAGE_PUSH_TYPE
               ? () => router.push(isChatThreadId(supportThread) ? chatThreadRoute(supportThread) : CHAT_LIST_ROUTE)
               : // A notice asking the shop to act opens its job even before the list has it.

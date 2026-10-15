@@ -55,6 +55,11 @@ export function isPackingPhotoRequired(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "packing_photo_required";
 }
 
+/** The shop's record moved on since it was read (shop details and shop hours share one version). */
+export function isSupplierProfileStale(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "supplier_profile_stale";
+}
+
 /** The job left production while a photo was on its way; reload it. */
 export function isProductionPhotoUploadNotAllowed(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "production_photo_upload_not_allowed";
@@ -270,6 +275,14 @@ const MESSAGES: Record<string, string> = {
     "Your shop details changed somewhere else while this screen was open. Load the latest, then make your change again.",
   expected_version_required:
     "GRIDGO could not tell which version of your details this change was made against. Load the latest and make the change again.",
+  // The shop's hours (docs/SHOP_HOURS_API.md).
+  invalid_shop_hours:
+    "GRIDGO could not use those hours. Keep one opening and closing time on the same day, and closure dates that cover 90 dates or fewer.",
+  production_day_length_unavailable:
+    "Every open day needs the same number of hours for now. Pick one opening and closing time for all your open days.",
+  invalid_shop_extension:
+    "GRIDGO could not extend today to that time. Pick a time later than your usual close, before midnight, and at least 30 minutes from now.",
+  shop_closed: "Your shop is temporarily closed. Reopen it before extending today's hours.",
   pickup_fulfillment_not_available:
     "Collecting from your counter is not switched on yet. Ask Operations to move this job to delivery.",
   email_not_editable:

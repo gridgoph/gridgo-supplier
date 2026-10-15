@@ -52,6 +52,7 @@
 import { Platform } from "react-native";
 
 import { CHAT_LIST_ROUTE, isChatThreadId } from "@/lib/chatThreads";
+import { SHOP_HOURS_NOTICE, SHOP_HOURS_ROUTE } from "@/lib/shopHours";
 
 /**
  * The Android channel the server names in every message.
@@ -224,6 +225,7 @@ export function supportThreadRoute(threadId: string | null | undefined): string 
  */
 export function pushTargetRoute(data: PushData, threadId: string | null = null): string {
   if (data.type === SUPPORT_MESSAGE_PUSH_TYPE) return supportThreadRoute(threadId);
+  if (data.type === SHOP_HOURS_NOTICE) return SHOP_HOURS_ROUTE;
   if (!data.orderId) return "/alerts";
   // A message from the rider collecting the job opens the conversation itself;
   // its back control leads to the job (`app/job/[id]/messages.tsx`).

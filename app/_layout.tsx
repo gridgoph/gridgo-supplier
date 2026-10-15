@@ -385,6 +385,34 @@ function RootStack({ introDone }: { introDone: boolean }) {
           }}
         />
         {/*
+          Hours sit behind the floor guard like the pin: a waiting shop sets
+          when it opens before its first job is timed on it.
+        */}
+        <Stack.Screen
+          name="shop-hours"
+          options={{
+            title: "Shop hours",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
+          A closure used to be presented as a modal, which is why it drew its
+          own "Cancel" in the header — a modal is dismissed, not navigated back
+          from. The captain wants the chevron every other screen in this app
+          has, and nothing here needed the modal: both entry points push it, it
+          has no dismiss guard, and its date picker is its own sheet route
+          either way. So it is an ordinary pushed screen and takes the stack's
+          own back control, rather than a modal wearing a chevron it should not
+          have.
+        */}
+        <Stack.Screen
+          name="shop-closure"
+          options={{
+            title: "Closure dates",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
           The shop's own name and number sit behind the same guard, and for a
           sharper version of the same reason: Operations rings that number to
           progress the application, so a waiting shop is the one that most needs
@@ -504,7 +532,7 @@ function RootStack({ introDone }: { introDone: boolean }) {
         <Stack.Screen
           name="capacity"
           options={{
-            title: "Capacity & closures",
+            title: "Capacity",
             headerBackButtonDisplayMode: "minimal",
           }}
         />
@@ -517,23 +545,6 @@ function RootStack({ introDone }: { introDone: boolean }) {
         />
         {/* The catalogue draws its own headers for the list and one category. */}
         <Stack.Screen name="services" options={{ headerShown: false }} />
-        {/*
-          A closure used to be presented as a modal, which is why it drew its
-          own "Cancel" in the header — a modal is dismissed, not navigated back
-          from. The captain wants the chevron every other screen in this app
-          has, and nothing here needed the modal: both entry points push it, it
-          has no dismiss guard, and its date picker is its own sheet route
-          either way. So it is an ordinary pushed screen and takes the stack's
-          own back control, rather than a modal wearing a chevron it should not
-          have.
-        */}
-        <Stack.Screen
-          name="shop-closure"
-          options={{
-            title: "Shop closure",
-            headerBackButtonDisplayMode: "minimal",
-          }}
-        />
         <Stack.Screen
           name="design-system"
           options={{

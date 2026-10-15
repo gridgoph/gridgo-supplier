@@ -517,6 +517,8 @@ export type Settings = {
     moderateBps: number;
     severeBps: number;
   };
+  /** GRIDGO's own review and delivery hours. Read through `operatingWeekOf` in `lib/shopHours.ts`. */
+  operatingHours?: unknown;
 };
 
 /** Stored file metadata. `fileId` is the only durable identity a client keeps. */
@@ -2012,6 +2014,29 @@ export async function updateSupplierProfile(
     body: JSON.stringify({ ...patch, expectedVersion: version }),
   });
   return result.profile;
+}
+
+/* --------------------------------------------------------------------------
+   The shop's hours (gridgo-api `docs/SHOP_HOURS_API.md`)
+
+   Weekly hours, closure dates, closing for a while and today's extension.
+   Read only through `normalizeShopHours` in `lib/shopHours.ts`, which also
+   builds every patch. The write carries the same shared version as
+   `/me/supplier-profile`; a stale one is `409 supplier_profile_stale`.
+   -------------------------------------------------------------------------- */
+
+export async function getShopHours(): Promise<unknown> {
+  return request<unknown>("/me/shop-hours");
+}
+
+export async function updateShopHours(
+  version: number,
+  patch: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>("/me/shop-hours", {
+    method: "PATCH",
+    body: JSON.stringify({ ...patch, expectedVersion: version }),
+  });
 }
 
 /* --------------------------------------------------------------------------

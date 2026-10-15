@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
@@ -11,18 +11,17 @@ import { SpecialInstructionsPanel } from "@/components/SpecialInstructionsPanel"
 import { CheckboxRow } from "@/components/controls/CheckboxRow";
 import * as api from "@/lib/api";
 import { acceptWindow, acceptWindowLine, acceptWindowTickMs } from "@/lib/acceptWindow";
-import { blackoutOnDay, blackoutReasonLabel } from "@/lib/blackouts";
-import { toDayKey } from "@/lib/day";
 import { formatDeadlineFull } from "@/lib/dates";
 import { findAction } from "@/lib/jobState";
 import { payoutPlanCopy } from "@/lib/milestones";
+import { closureOnDay, manilaClock } from "@/lib/shopHours";
 import { canRequestChange, hasSpecialInstructions, itemInstructions } from "@/lib/orderChanges";
 import { NO_SUBCONTRACTING_ACCEPT_LINE } from "@/lib/supplierTerms";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
 import { useNow } from "@/hooks/useNow";
 import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
-import { useShopPlan } from "@/store/shopPlan";
+import { useShopHours } from "@/store/shopHours";
 
 /**
  * Accepting is a commitment, so it is never a row tap — but there is nothing
@@ -51,7 +50,8 @@ export default function AcceptJobScreen() {
   const draft = useJobDraft(id);
   const setAccept = useJobDrafts((s) => s.setAccept);
   const clearDraft = useJobDrafts((s) => s.clearDraft);
-  const blackouts = useShopPlan((s) => s.blackouts);
+  const shopHours = useShopHours((s) => s.hours);
+  const loadShopHours = useShopHours((s) => s.load);
   const [showErrors, setShowErrors] = useState(false);
   // Always starts unticked: a box ticked for the shop records nothing it did.
   const [instructionsRead, setInstructionsRead] = useState(false);
@@ -69,7 +69,10 @@ export default function AcceptJobScreen() {
 
   // A closure on the day the job is due is still worth saying: the shop is
   // about to commit to a date it has marked itself shut for.
-  const closure = readyAt ? blackoutOnDay(blackouts, toDayKey(readyAt)) : null;
+  useEffect(() => {
+    void loadShopHours();
+  }, [loadShopHours]);
+  const closure = readyAt && shopHours ? closureOnDay(shopHours.closures, manilaClock(readyAt).dayKey) : null;
   const priceMinor = job?.supplierPriceMinor ?? null;
   // GRIDGO refuses the acceptance until the shop ticks that it read the client's notes.
   const notes = job ? itemInstructions(job) : [];
@@ -245,8 +248,8 @@ export default function AcceptJobScreen() {
           {closure ? (
             <View className="rounded-field border border-warning bg-surface p-3">
               <Text className="text-body text-warning">
-                Your shop is marked closed that day ({blackoutReasonLabel(closure.reason)}). Pick a
-                day you are open, or remove that closure in Capacity & closures.
+                That day is one of your closure dates. Make sure you can still finish on time, or
+                change your closure dates in Shop hours.
               </Text>
             </View>
           ) : null}
