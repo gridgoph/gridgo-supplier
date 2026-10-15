@@ -1,14 +1,16 @@
 import { Image } from "expo-image";
-import * as WebBrowser from "expo-web-browser";
 import { ExternalLink, FileImage, FileText } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
+import { ArtworkAttachments } from "@/components/ArtworkAttachments";
 import { DesignLinks } from "@/components/DesignLinks";
 import { SkeletonBlock } from "@/components/Skeleton";
+import { useOpenArtwork } from "@/hooks/useOpenArtwork";
 import { useSignedLink } from "@/hooks/useSignedLink";
 import { useThemeColors } from "@/hooks/useTheme";
-import { getFile, getDownloadUrl, type Order, type StoredFile } from "@/lib/api";
+import { getFile, type Order, type StoredFile } from "@/lib/api";
+import { attachmentGroups, showsAttachmentList } from "@/lib/artworkAttachments";
 import { orderDesignLinks } from "@/lib/designLink";
 import { describeArtwork, isArtworkImage, readOrderArtwork, orderArtwork, type ArtworkReference } from "@/lib/orderArtwork";
 import { signedLink } from "@/lib/signedLinks";
@@ -28,9 +30,27 @@ type Props = {
  * Wherever print artwork is drawn, the client's design links are drawn with
  * it: a link is the artwork for a job that has no file, so the panel names it
  * plainly instead of falling through to "no print file".
+ *
+ * A job whose items carry several files or labelled ones draws them as
+ * `ArtworkAttachments` instead: per item, in the client's order, main file
+ * marked. A job of one file per item keeps the single card it always had.
  */
 export function ArtworkPanel({ order, kinds }: Props) {
   const files = orderArtwork(order).filter((file) => !kinds || kinds.includes(file.kind));
+  if ((!kinds || kinds.includes("artwork")) && showsAttachmentList(order)) {
+    const listed = new Set(attachmentGroups(order).flatMap((group) =>
+      group.entries.flatMap((entry) => (entry.kind === "file" ? [entry.fileId] : []))));
+    // A file the order names outside its items, or a reference picture, keeps its own card.
+    const rest = files.filter((file) => !(file.kind === "artwork" && listed.has(file.fileId)));
+    return (
+      <View className="gap-3">
+        <ArtworkAttachments order={order} />
+        {rest.map((file) => (
+          <ArtworkFile key={`${order.id}:${file.fileId}`} orderId={order.id} reference={file} />
+        ))}
+      </View>
+    );
+  }
   const links = !kinds || kinds.includes("artwork") ? orderDesignLinks(order) : [];
   const showItem = (order.productionItems?.length ?? 0) > 1;
   if (!files.length && !links.length) {
@@ -91,16 +111,8 @@ function ArtworkFile({ orderId, reference }: { orderId: string; reference: Artwo
   const colors = useThemeColors();
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<FileState>({ kind: "loading" });
-  const [opening, setOpening] = useState(false);
-  const [openError, setOpenError] = useState<string | null>(null);
-  const openingRef = useRef(false);
-  const mounted = useRef(false);
   const { fileId, kind } = reference;
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => { mounted.current = false; };
-  }, []);
+  const { open, opening, openError, clearOpenError } = useOpenArtwork(fileId);
 
   useEffect(() => {
     let current = true;
@@ -118,25 +130,8 @@ function ArtworkFile({ orderId, reference }: { orderId: string; reference: Artwo
 
   function retry() {
     setState({ kind: "loading" });
-    setOpenError(null);
+    clearOpenError();
     setAttempt((value) => value + 1);
-  }
-
-  async function open() {
-    if (state.kind !== "ready" || openingRef.current) return;
-    openingRef.current = true;
-    setOpening(true);
-    setOpenError(null);
-    try {
-      // Fetch a fresh capability for every open, including PDF/Photoshop files.
-      const link = await getDownloadUrl(fileId);
-      if (mounted.current) await WebBrowser.openBrowserAsync(link.url);
-    } catch {
-      if (mounted.current) setOpenError("The file could not open. Check your connection and try Open file again.");
-    } finally {
-      openingRef.current = false;
-      if (mounted.current) setOpening(false);
-    }
   }
 
   // The preview link lives five minutes and a job can sit open in the
