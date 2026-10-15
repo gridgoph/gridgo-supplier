@@ -9,3 +9,7 @@ test("ordinary announcements, other apps and malformed titles stay in the inbox"
   }
   expect(releasePushDownloadUrl({ type: "order_updated" }, "GRIDGO Supplier 1.0.123 is ready")).toBeNull();
 });
+test("a Google Play build never opens the side-load APK from a release push", () => {
+  expect(releasePushDownloadUrl({ type: "announcement" }, "GRIDGO Supplier 1.0.123 is ready", "play")).toBeNull();
+  expect(releasePushDownloadUrl({ type: "announcement" }, "GRIDGO Supplier 1.0.123 is ready", "sideload")).toBe("https://gridgo.talasora.com/downloads/gridgo-supplier.apk");
+});

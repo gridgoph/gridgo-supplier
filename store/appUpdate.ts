@@ -57,6 +57,11 @@ type AppUpdateState = {
   updatedNotice: UpdatedNotice | null;
   /** This launch's build; `null` where the check does not run (dev, Expo Go). */
   installed: Build | null;
+  /**
+   * False in a Google Play build (`offersSideloadUpdates`): nothing is read,
+   * offered, confirmed or pinned, because Play installs the updates. In memory.
+   */
+  offersUpdates: boolean;
 
   hydrated: boolean;
   /**
@@ -86,6 +91,7 @@ export const useAppUpdate = create<AppUpdateState>()(
       latest: null,
       updatedNotice: null,
       installed: null,
+      offersUpdates: true,
       hydrated: false,
       lastCheckedAt: null,
       checking: false,
@@ -125,11 +131,30 @@ export function appUpdateHydrated(): Promise<void> {
  * Once per launch: note which build this is, and if it is newer than the one
  * the phone ran last time, queue the one-time "Update completed".
  */
-export function recordLaunch(installed: Build, now: number = Date.now()): void {
+export function recordLaunch(
+  installed: Build,
+  now: number = Date.now(),
+  offersUpdates: boolean = true,
+): void {
+  if (!offersUpdates) {
+    // A Play build keeps its version for Account > What's new, and says
+    // nothing about updates: Play installs them and tells nobody through
+    // this app.
+    useAppUpdate.setState({
+      installed,
+      offersUpdates,
+      lastSeenVersionCode: installed.versionCode,
+      offer: null,
+      completed: null,
+      updatedNotice: null,
+    });
+    return;
+  }
   const { lastSeenVersionCode, updatedNotice } = useAppUpdate.getState();
   const upgraded = completedUpdate(lastSeenVersionCode, installed);
   useAppUpdate.setState({
     installed,
+    offersUpdates,
     lastSeenVersionCode: installed.versionCode,
     completed: upgraded ? installed : null,
     updatedNotice: upgraded ? { build: installed, at: now } : updatedNotice,
@@ -141,10 +166,10 @@ export function recordLaunch(installed: Build, now: number = Date.now()): void {
  * which stays after "Later" — the sheet steps aside, the fact does not.
  */
 export function selectAvailableUpdate(
-  state: Pick<AppUpdateState, "installed" | "latest">,
+  state: Pick<AppUpdateState, "installed" | "latest" | "offersUpdates">,
 ): LatestRelease | null {
-  const { installed, latest } = state;
-  if (!installed || !latest) return null;
+  const { installed, latest, offersUpdates } = state;
+  if (!offersUpdates || !installed || !latest) return null;
   return latest.versionCode > installed.versionCode ? latest : null;
 }
 
@@ -153,10 +178,10 @@ export function selectAvailableUpdate(
  * notice about a build it has moved on from would be a lie.
  */
 export function selectUpdatedNotice(
-  state: Pick<AppUpdateState, "installed" | "updatedNotice">,
+  state: Pick<AppUpdateState, "installed" | "updatedNotice" | "offersUpdates">,
 ): UpdatedNotice | null {
-  const { installed, updatedNotice } = state;
-  if (!installed || !updatedNotice) return null;
+  const { installed, updatedNotice, offersUpdates } = state;
+  if (!offersUpdates || !installed || !updatedNotice) return null;
   return updatedNotice.build.versionCode === installed.versionCode ? updatedNotice : null;
 }
 
@@ -171,8 +196,8 @@ export async function checkForUpdate(
   now: Date = new Date(),
   fetchLatest: () => Promise<ReleaseRead> = () => fetchLatestRelease(),
 ): Promise<void> {
-  const { checking, lastCheckedAt } = useAppUpdate.getState();
-  if (checking) return;
+  const { checking, lastCheckedAt, offersUpdates } = useAppUpdate.getState();
+  if (checking || !offersUpdates) return;
   if (!shouldCheck(reason, lastCheckedAt, now.getTime())) {
     logUpdateCheck("skipped: GitHub was read less than 4 hours ago");
     return;

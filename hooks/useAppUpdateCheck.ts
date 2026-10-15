@@ -3,7 +3,13 @@ import { router } from "expo-router";
 import { useEffect } from "react";
 import { AppState, Platform } from "react-native";
 
-import { describeInstalledBuild, installedBuild, type Build } from "@/lib/appUpdate";
+import {
+  describeInstalledBuild,
+  installedBuild,
+  offersSideloadUpdates,
+  type Build,
+} from "@/lib/appUpdate";
+import { buildDistribution } from "@/lib/buildDistribution";
 import {
   appUpdateHydrated,
   checkForUpdate,
@@ -49,11 +55,15 @@ let launchRecorded = false;
  * finished and the session has settled — because the root stack is re-keyed
  * when a restored session arrives, and a sheet pushed before that would be torn
  * down with it.
+ *
+ * A Google Play build records its version and does nothing else: Play installs
+ * its updates, and Play policy forbids offering the side-load APK.
  */
 export function useAppUpdateCheck(ready: boolean): void {
   useEffect(() => {
     const installed = resolveInstalledBuild();
     if (!installed) return;
+    const offersUpdates = offersSideloadUpdates(buildDistribution());
 
     let cancelled = false;
     void (async () => {
@@ -61,10 +71,20 @@ export function useAppUpdateCheck(ready: boolean): void {
       if (cancelled) return;
       if (!launchRecorded) {
         launchRecorded = true;
-        recordLaunch(installed);
+        recordLaunch(installed, Date.now(), offersUpdates);
+      }
+      if (!offersUpdates) {
+        logUpdateCheck("off: a Google Play build, and Play installs its own updates");
+        return;
       }
       await checkForUpdate(installed, "launch");
     })();
+
+    if (!offersUpdates) {
+      return () => {
+        cancelled = true;
+      };
+    }
 
     const subscription = AppState.addEventListener("change", (next) => {
       if (next === "active") void checkForUpdate(installed, "foreground");
