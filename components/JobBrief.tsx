@@ -5,6 +5,7 @@ import Animated, { FadeIn, LinearTransition, useReducedMotion } from "react-nati
 
 import { ArtworkPanel } from "@/components/ArtworkPanel";
 import { CountLedger } from "@/components/CounterCheckPanel";
+import { ItemNote } from "@/components/ItemNote";
 import { JobTimeline } from "@/components/JobTimeline";
 import { MilestoneList } from "@/components/MilestoneList";
 import { ProgressPhotoStrip } from "@/components/ProgressPhotoStrip";
@@ -174,6 +175,7 @@ function SectionBody({
                   />
                 ))}
                 {material ? <SpecRow label="Material" value={material} muted={material === NOT_SPECIFIED} /> : null}
+                <ItemNote item={item} />
               </View>
             );
           })}

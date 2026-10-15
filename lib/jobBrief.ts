@@ -6,6 +6,7 @@ import { primaryAction } from "@/lib/jobState";
 import { linkOnlySummary, orderDesignLinks } from "@/lib/designLink";
 import { earningsSplit, milestoneViews, nextShopProof, payoutPlanCopy } from "@/lib/milestones";
 import { orderArtwork } from "@/lib/orderArtwork";
+import { hasSpecialInstructions } from "@/lib/orderChanges";
 import { pickupChatOf } from "@/lib/pickupChat";
 import { progressPhotoSummary, showsProgressPhotos } from "@/lib/productionPhoto";
 import { refundStanding } from "@/lib/refund";
@@ -73,6 +74,8 @@ type BriefOrder = Pick<
   | "material"
   | "finish"
   | "productionItems"
+  | "specialInstructions"
+  | "specialInstructionLines"
   | "artworkFileIds"
   | "mockupFileIds"
   | "readyBy"
@@ -126,10 +129,12 @@ function plural(count: number, one: string, many: string): string {
 
 /** "500 × Flyers · A5 · 130gsm gloss", or the count when the job has several items. */
 export function makeSummary(order: BriefOrder): string {
+  // A closed row still says the client wrote something nobody picked from a list.
+  const noted = hasSpecialInstructions(order) ? " · special instructions" : "";
   const items = orderProductionItems(order);
   if (items.length > 1) {
     const pieces = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-    return `${plural(items.length, "item", "items")} · ${plural(pieces, "piece", "pieces")}`;
+    return `${plural(items.length, "item", "items")} · ${plural(pieces, "piece", "pieces")}${noted}`;
   }
   const [item] = items;
   const spec = item.structuredSpec ?? {};
@@ -138,7 +143,7 @@ export function makeSummary(order: BriefOrder): string {
     typeof spec.size === "string" && spec.size ? readableSpec(spec.size) : null,
     typeof spec.material === "string" && spec.material ? readableSpec(spec.material) : null,
   ].filter(Boolean);
-  return parts.join(" · ");
+  return parts.join(" · ") + noted;
 }
 
 /** Print files and design links both count: a link is artwork, never "no print file". */
