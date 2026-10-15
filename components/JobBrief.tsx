@@ -27,6 +27,7 @@ import {
   NOT_SPECIFIED,
   type JobBriefSectionId,
 } from "@/lib/jobBrief";
+import { showsAttachmentList } from "@/lib/artworkAttachments";
 import { orderArtwork } from "@/lib/orderArtwork";
 import { counterCheck } from "@/lib/pickupCheck";
 import { progressPhotoViews } from "@/lib/productionPhoto";
@@ -184,7 +185,11 @@ function SectionBody({
       return (
         <View className="gap-2">
           {/* A link-only job gets its own plain sentence from the panel instead. */}
-          {orderArtwork(order).some((file) => file.kind === "artwork") ? (
+          {showsAttachmentList(order) ? (
+            <Text className="text-caption text-text-muted">
+              Every file and design link the client sent, in their order. Tap one to open it at full size.
+            </Text>
+          ) : orderArtwork(order).some((file) => file.kind === "artwork") ? (
             <Text className="text-caption text-text-muted">
               The files you print from, as the client approved them. Open one to check it at full size.
             </Text>
