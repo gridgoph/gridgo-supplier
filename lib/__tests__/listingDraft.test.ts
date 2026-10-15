@@ -16,6 +16,7 @@ const listing: Listing = {
   minimumHeightMilli: null,
   minimumLengthMilli: null,
   printerMaxWidthFeet: 5,
+  printLayouts: [],
   minimumOrderQuantity: null,
   priceTiers: [],
   speedTiers: [],

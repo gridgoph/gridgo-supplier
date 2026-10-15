@@ -19,6 +19,7 @@ import {
   type SpeedTier,
 } from "@/lib/listings";
 import type { timeFields } from "@/lib/productionDays";
+import type { PrintLayoutCode } from "@/lib/printLayout";
 import {
   normalizeProductTypeRequest,
   normalizeProductTypeRequests,
@@ -218,6 +219,8 @@ export type ListingPatch = {
   minimumLengthMilli?: number | null;
   /** Whole feet. Null on every family that is not tarpaulin. */
   printerMaxWidthFeet?: number | null;
+  /** Replaced as a set, `[]` for none. Changing it opens listing review. */
+  printLayouts?: PrintLayoutCode[];
   minimumOrderQuantity?: number | null;
   /** Replaced as a set: removing a break removes it. */
   priceTiers?: Listing["priceTiers"];

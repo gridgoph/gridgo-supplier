@@ -6,6 +6,7 @@ import {
 } from "@/lib/listings";
 import type { ListingPatch } from "@/lib/listingsApi";
 import { parseMoney } from "@/lib/money";
+import { samePrintLayouts, type PrintLayoutCode } from "@/lib/printLayout";
 import { listingTimeFields, sameTime, timeFields, timeKey, type ProductionTime } from "@/lib/productionDays";
 
 /**
@@ -32,6 +33,7 @@ export type ListingDraft = {
   minimumHeight: number | null;
   minimumLength: number | null;
   printerMaxWidthFeet: number | null;
+  printLayouts: PrintLayoutCode[];
   minimumOrderQuantity: number | null;
   priceTiers: Listing["priceTiers"];
   speedTiers: Listing["speedTiers"];
@@ -56,6 +58,7 @@ export function draftFrom(listing: Listing): ListingDraft {
     minimumHeight: fromMilli(listing.minimumHeightMilli),
     minimumLength: fromMilli(listing.minimumLengthMilli),
     printerMaxWidthFeet: listing.printerMaxWidthFeet,
+    printLayouts: listing.printLayouts,
     minimumOrderQuantity: listing.minimumOrderQuantity,
     priceTiers: listing.priceTiers,
     speedTiers: listing.speedTiers,
@@ -81,6 +84,7 @@ export function sameDraft(left: ListingDraft, right: ListingDraft): boolean {
     left.minimumHeight === right.minimumHeight &&
     left.minimumLength === right.minimumLength &&
     left.printerMaxWidthFeet === right.printerMaxWidthFeet &&
+    samePrintLayouts(left.printLayouts, right.printLayouts) &&
     left.minimumOrderQuantity === right.minimumOrderQuantity &&
     tierKey(left.priceTiers) === tierKey(right.priceTiers) &&
     speedKey(left.speedTiers) === speedKey(right.speedTiers) &&
@@ -120,6 +124,7 @@ export function applyDraft(listing: Listing, draft: ListingDraft): Listing {
       draft.subcategoryCode,
       draft.printerMaxWidthFeet,
     ),
+    printLayouts: draft.printLayouts,
     minimumOrderQuantity: asksQuantity(draft.pricingUnit) ? draft.minimumOrderQuantity : null,
     priceTiers: asksQuantity(draft.pricingUnit) ? draft.priceTiers : [],
     speedTiers: draft.speedTiers,
@@ -155,6 +160,7 @@ export function listingSavePatch(
       working.subcategoryCode,
       working.printerMaxWidthFeet,
     ),
+    printLayouts: working.printLayouts,
     minimumOrderQuantity: asksQuantity(working.pricingUnit) ? working.minimumOrderQuantity : null,
     priceTiers: asksQuantity(working.pricingUnit) ? working.priceTiers : [],
     speedTiers: working.speedTiers.map(({ turnaround, ...tier }) => ({

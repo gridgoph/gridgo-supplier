@@ -76,6 +76,7 @@ function listing(id: string, photos: string[]): Listing {
     minimumHeightMilli: null,
     minimumLengthMilli: null,
     printerMaxWidthFeet: 5,
+    printLayouts: [],
     minimumOrderQuantity: null,
     priceTiers: [],
     speedTiers: [],

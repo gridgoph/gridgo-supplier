@@ -194,6 +194,14 @@ export type ProductionItem = {
   specialInstructions?: string;
   /** The latest change the client agreed to for this item. */
   agreedChange?: { id: string; proposedSpec: string; appliedAt: string } | null;
+  /**
+   * The print layout the client chose (a layout code), part of the agreed
+   * spec; null or absent for products without layouts and older orders.
+   * Read through `lib/printLayout.ts`, never as a raw code on screen.
+   */
+  printLayout?: string | null;
+  /** GRIDGO's fit check, snapshotted at checkout. Read through `lib/printLayout.ts`. */
+  printLayoutCheck?: unknown;
 };
 
 /** One design link on an order line, snapshotted at checkout. HTTPS by contract. */
