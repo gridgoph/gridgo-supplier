@@ -12,6 +12,7 @@ import { progressPhotoSummary, showsProgressPhotos } from "@/lib/productionPhoto
 import { refundStanding } from "@/lib/refund";
 import { unreleasedMinor } from "@/lib/payout";
 import { orderProductionItems, readableSpec } from "@/lib/productionSpecs";
+import { printLayoutFacts, PRINT_LAYOUT_LABEL } from "@/lib/printLayout";
 
 /**
  * The job brief: everything a shop weighs before it accepts or declines, folded
@@ -142,8 +143,17 @@ export function makeSummary(order: BriefOrder): string {
     `${item.quantity} × ${item.itemName}`,
     typeof spec.size === "string" && spec.size ? readableSpec(spec.size) : null,
     typeof spec.material === "string" && spec.material ? readableSpec(spec.material) : null,
+    layoutSummary(item),
   ].filter(Boolean);
   return parts.join(" · ") + noted;
+}
+
+/** "Actual size, centred (edges cut off)": the layout is agreed spec, and a cut is the one fact to see closed. */
+function layoutSummary(item: Parameters<typeof printLayoutFacts>[0]): string | null {
+  const facts = printLayoutFacts(item);
+  if (!facts) return null;
+  const label = PRINT_LAYOUT_LABEL[facts.layout];
+  return facts.notes.some((note) => note.tone === "cut_off") ? `${label} (edges cut off)` : label;
 }
 
 /** Print files and design links both count: a link is artwork, never "no print file". */

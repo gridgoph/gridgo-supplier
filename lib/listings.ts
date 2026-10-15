@@ -17,6 +17,7 @@ import {
   type ProductionTime,
 } from "@/lib/productionDays";
 import { listingOwnSteps, type ListingReadiness } from "@/lib/readiness";
+import { readPrintLayouts, type PrintLayoutCode } from "@/lib/printLayout";
 
 /**
  * The shop's board — what clients see.
@@ -268,6 +269,11 @@ export type Listing = {
    * leftover number after the kind of work changes.
    */
   printerMaxWidthFeet: number | null;
+  /**
+   * How a client's file may be placed on the paper (`lib/printLayout.ts`).
+   * Empty: clients are not asked. Not limited by product type.
+   */
+  printLayouts: PrintLayoutCode[];
   /** The least the shop will run. */
   minimumOrderQuantity: number | null;
   priceTiers: PriceTier[];
@@ -563,6 +569,7 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     minimumHeightMilli: num(pick(raw, "minimumHeightMilli", "minimum_height_milli")),
     minimumLengthMilli: num(pick(raw, "minimumLengthMilli", "minimum_length_milli")),
     printerMaxWidthFeet: readPrinterCap(pick(raw, "printerMaxWidthFeet", "printer_max_width_feet")),
+    printLayouts: readPrintLayouts(pick(raw, "printLayouts", "print_layouts")),
     minimumOrderQuantity: num(pick(raw, "minimumOrderQuantity", "minimum_order_quantity")),
     priceTiers: readPriceTiers(pick(raw, "priceTiers", "price_tiers")),
     speedTiers: readSpeedTiers(pick(raw, "speedTiers", "speed_tiers")),

@@ -895,6 +895,7 @@ export default function NewListingScreen() {
 
       {step === "artwork" && listing && working && context ? (
         <ArtworkStep
+          listing={listing}
           working={working}
           context={context}
           formats={formats}

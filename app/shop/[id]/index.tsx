@@ -25,6 +25,7 @@ import { DestinationRow } from "@/components/listing/DestinationRow";
 import { ListingStandingPanel } from "@/components/listing/ListingStandingPanel";
 import { ListingSection as Section } from "@/components/listing/ListingSection";
 import { PrinterCapField } from "@/components/listing/PrinterCapField";
+import { PrintLayoutField } from "@/components/listing/PrintLayoutField";
 import { PRODUCTION_TIME_HINT, ProductionTimeField } from "@/components/listing/ProductionTimeField";
 import { SampleStrip } from "@/components/listing/SampleStrip";
 import { PriceTierEditor, SpeedTierEditor } from "@/components/listing/TierEditor";
@@ -92,6 +93,7 @@ import {
   type BoardOutcome,
 } from "@/lib/listingsApi";
 import { listingFoot, SUBMITTED_NOTICE } from "@/lib/listingReview";
+import { PRINT_LAYOUTS_HINT, printLayoutsNote, samePrintLayouts } from "@/lib/printLayout";
 import { productionWindow } from "@/lib/listingWizard";
 import { linkFileOptions, uploadedFileOptions } from "@/lib/fileFormatResolve";
 import { parseMoney } from "@/lib/money";
@@ -1042,7 +1044,22 @@ export default function ListingScreen() {
           )}
         </Section>
 
-        {/* 9. On the board */}
+        {/* 9. Print layouts */}
+        <Section title="PRINT LAYOUTS" hint={PRINT_LAYOUTS_HINT}>
+          <PrintLayoutField
+            value={working.printLayouts}
+            onChange={(next) => setDraft({ ...working, printLayouts: next })}
+            note={printLayoutsNote({
+              layouts: working.printLayouts,
+              changed: !samePrintLayouts(working.printLayouts, listing.printLayouts),
+              hasApprovedVersion: !awaitsFirstApproval(listing),
+              pendingReview: listing.reviewStatus === "pending",
+            })}
+            disabled={busy}
+          />
+        </Section>
+
+        {/* 10. On the board */}
         <Section title="ON THE BOARD">
           <Text className="text-body text-text-secondary">
             {boardSentence(merged, standing.kind === "suspended", verdict, approved)}

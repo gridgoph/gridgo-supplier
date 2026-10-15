@@ -160,6 +160,7 @@ const MESSAGES: Record<string, string> = {
   invalid_change_request: "Say what you will do differently and why, in the space given.",
   invalid_change_line: "That item is no longer on this job. Refresh the job and pick it again.",
   invalid_change_amount: "Enter the extra as an amount in pesos, or leave it empty for no extra.",
+  invalid_print_layouts: "GRIDGO did not recognise one of the print layouts. Refresh the listing and mark them again.",
   change_request_idempotency_conflict: "This request was already sent with different details. Go back to the job and check it.",
   change_deadline_operations_required:
     "A late-production deduction already applies to this job, so GRIDGO handles changes to it. Report a problem with this job.",

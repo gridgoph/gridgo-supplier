@@ -55,6 +55,54 @@ describe("JobBrief", () => {
     expect(screen.queryByTestId("job-brief-make")).toBeNull();
   });
 
+  it("states the client's print layout as agreed spec, with GRIDGO's cut-off check in the shop's words", async () => {
+    const plans = order({
+      title: "Site plan set",
+      productionItems: [{
+        id: "oli_1",
+        itemName: "CAD plotting",
+        quantity: 40,
+        pricingUnit: null,
+        packageQty: null,
+        measurement: null,
+        structuredSpec: { size: "A1", material: "White paper" },
+        options: [],
+        artworkFileId: "file_plans",
+        mockupFileId: null,
+        printLayout: "actual_size_centered",
+        printLayoutCheck: {
+          layout: "actual_size_centered",
+          paper: { label: "24x36 / A1", widthMilli: 594000, heightMilli: 841000, pageSize: "A1" },
+          files: [{
+            fileId: "file_plans",
+            page: { widthMilli: 841000, heightMilli: 1189000, pageSize: "A0", largestShortSideMilli: 841000, largestLongSideMilli: 1189000, mixedPageSizes: false },
+            exceedsPaper: true,
+          }],
+          exceedsPaper: true,
+          cutOff: true,
+          scaleChanges: false,
+          suggestedPaper: null,
+          unknown: [],
+        },
+      }],
+    });
+
+    await render(<JobBrief order={plans} defaultOpen="make" />);
+
+    expect(screen.getByText("40 × CAD plotting · A1 · White paper · Actual size, centred (edges cut off)")).toBeTruthy();
+    expect(screen.getByText("Print layout")).toBeTruthy();
+    expect(screen.getByText("Actual size, centred")).toBeTruthy();
+    expect(screen.getByText("24x36 / A1")).toBeTruthy();
+    expect(screen.getByText("A0 (841 × 1189 mm)")).toBeTruthy();
+    expect(screen.getByText(/^Their page is bigger than 24x36 \/ A1/)).toBeTruthy();
+  });
+
+  it("adds nothing to a job whose product has no layout choice", async () => {
+    await render(<JobBrief order={order()} defaultOpen="make" />);
+
+    expect(screen.queryByText("Print layout")).toBeNull();
+  });
+
   it("explains the three-part escrow payout before the job is split, with no retention", async () => {
     await render(<JobBrief order={order({ payoutPlanVersion: 2 })} defaultOpen="earnings" />);
 

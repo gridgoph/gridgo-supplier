@@ -91,6 +91,7 @@ function listingWith(overrides: Partial<Listing> = {}): Listing {
     minimumHeightMilli: null,
     minimumLengthMilli: null,
     printerMaxWidthFeet: null,
+    printLayouts: [],
     minimumOrderQuantity: null,
     priceTiers: [],
     speedTiers: [],
@@ -373,6 +374,32 @@ describe("Add a listing — later steps", () => {
     });
     expect(setFileFormats).not.toHaveBeenCalled();
     expect(await screen.findByText("Finalize your product")).toBeTruthy();
+  });
+
+  it("marks print layouts on the artwork step and sends them on Proceed", async () => {
+    openAt(
+      "artwork",
+      listingWith({
+        photos: [{ fileId: "file_1", sortOrder: 0, altText: null }],
+        name: "Floor plans",
+        basePriceMinor: 45000,
+        fileFormatMode: "inherit",
+        formatCodes: [],
+      }),
+    );
+    await render(<NewListingScreen />);
+
+    expect(await screen.findByText("PRINT LAYOUTS")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Actual size, in its original position"));
+    expect(screen.getByText("Clients must choose this layout before they can order this listing.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Proceed" }));
+
+    await waitFor(() =>
+      expect(saveListing).toHaveBeenCalledWith(
+        expect.objectContaining({ id: expect.any(String) }),
+        expect.objectContaining({ printLayouts: ["actual_size_original_position"] }),
+      ),
+    );
   });
 
   it("requires at least one format when the listing overrides artwork", async () => {
