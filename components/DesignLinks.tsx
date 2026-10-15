@@ -38,13 +38,18 @@ export function DesignLinks({ links, showItem = false }: Props) {
   );
 }
 
-function DesignLinkRow({ link, showItem, first }: { link: DesignLink; showItem: boolean; first: boolean }) {
+/**
+ * One design link: tap to open, copy beside it. A link the client labelled
+ * ("Logo design") is titled by its label, with the host beneath it.
+ */
+export function DesignLinkRow({ link, showItem = false, first }: { link: DesignLink; showItem?: boolean; first: boolean }) {
   const colors = useThemeColors();
   const [copied, setCopied] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const reset = useRef<ReturnType<typeof setTimeout> | null>(null);
   const label = linkLabel(link);
   const address = linkDisplay(link.url);
+  const title = link.label ?? label;
   const Icon = PROVIDER_ICONS[link.provider];
 
   useEffect(() => () => {
@@ -78,7 +83,7 @@ function DesignLinkRow({ link, showItem, first }: { link: DesignLink; showItem: 
         <Pressable
           onPress={() => void open()}
           accessibilityRole="link"
-          accessibilityLabel={`${label}${showItem && link.itemName ? ` for ${link.itemName}` : ""}: ${address}`}
+          accessibilityLabel={`${link.label ? `${link.label}, ${label}` : label}${showItem && link.itemName ? ` for ${link.itemName}` : ""}: ${address}`}
           accessibilityHint="Opens the design in your browser"
           className="gg-touch min-w-0 flex-1 flex-row items-center gap-3 rounded-field py-1"
         >
@@ -92,9 +97,10 @@ function DesignLinkRow({ link, showItem, first }: { link: DesignLink; showItem: 
                   <Text className="text-caption text-text-muted" numberOfLines={1}>{link.itemName}</Text>
                 ) : null}
                 <View className="flex-row items-center gap-1.5">
-                  <Text className="shrink text-body font-medium text-text-primary" numberOfLines={1}>{label}</Text>
+                  <Text className="shrink text-body font-medium text-text-primary" numberOfLines={2}>{title}</Text>
                   <ExternalLink size={14} color={colors.textMuted} strokeWidth={2} />
                 </View>
+                {link.label ? <Text className="text-caption text-text-secondary" numberOfLines={1}>{label}</Text> : null}
                 <Text className="text-caption text-text-secondary" numberOfLines={1} ellipsizeMode="middle">
                   {address}
                 </Text>
@@ -107,7 +113,7 @@ function DesignLinkRow({ link, showItem, first }: { link: DesignLink; showItem: 
           onPress={() => void copy()}
           accessibilityRole="button"
           accessibilityLabel={copied ? `${label} copied` : `Copy ${label}`}
-          className="gg-btn-secondary w-28 px-3"
+          className="gg-btn-secondary px-3"
         >
           {({ pressed }) => (
             <>

@@ -180,10 +180,26 @@ export type ProductionItem = {
    * Absent on an API older than the links; read through `lib/designLink.ts`.
    */
   artworkLinks?: ArtworkLink[];
+  /**
+   * Every file and design link the client sent for this line, in the client's
+   * order, each with an optional label ("Front", "Logo PDF"). Up to ten. The
+   * first file is `artworkFileId`, the main file. Absent on an API older than
+   * attachments; read through `lib/artworkAttachments.ts`.
+   */
+  artworkAttachments?: ArtworkAttachment[];
 };
 
 /** One design link on an order line, snapshotted at checkout. HTTPS by contract. */
-export type ArtworkLink = { formatCode: string; url: string };
+export type ArtworkLink = { formatCode: string; url: string; label?: string };
+
+/**
+ * One entry of `artworkAttachments` (gridgo-api `docs/ORDER_MATCH_API.md`,
+ * "Multiple artwork attachments"). A file entry may carry a five-minute signed
+ * `downloadUrl`; it is absent when storage could not sign one.
+ */
+export type ArtworkAttachment =
+  | { kind: "file"; fileId: string; label?: string; downloadUrl?: string; downloadUrlExpiresAt?: string }
+  | ({ kind: "link"; label?: string } & ArtworkLink);
 
 /**
  * What the rider counts at the counter for one line, in pieces. GRIDGO derives
