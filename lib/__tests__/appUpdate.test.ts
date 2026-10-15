@@ -9,6 +9,8 @@ import {
   fetchLatestRelease,
   formatDownloadSize,
   installedBuild,
+  offersSideloadUpdates,
+  parseAppDistribution,
   parseLatestRelease,
   parseReleaseTag,
   parseWhatsNew,
@@ -405,5 +407,20 @@ describe("parseWhatsNew", () => {
     const [long] = parseWhatsNew(`## What's new\n- ${"word ".repeat(200)}`);
     expect(long.length).toBeLessThanOrEqual(WHATS_NEW_LIMITS.maxChars);
     expect(long.endsWith("\u2026")).toBe(true);
+  });
+});
+
+describe("how this build is distributed", () => {
+  it("is a Google Play build only when the flag says exactly play", () => {
+    expect(parseAppDistribution("play")).toBe("play");
+    expect(parseAppDistribution(" Play\n")).toBe("play");
+    for (const raw of [undefined, null, "", "sideload", "google-play", "apk"]) {
+      expect(parseAppDistribution(raw)).toBe("sideload");
+    }
+  });
+
+  it("offers the side-load APK only outside Google Play", () => {
+    expect(offersSideloadUpdates("sideload")).toBe(true);
+    expect(offersSideloadUpdates("play")).toBe(false);
   });
 });
