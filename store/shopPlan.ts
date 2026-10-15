@@ -9,7 +9,8 @@ import { createPersistStorage } from "@/lib/persistStorage";
  * GRIDGO now holds closure dates itself (`store/shopHours.ts`). What is left
  * here was never sent, so Shop hours offers to add it to GRIDGO or delete it,
  * and nothing else reads it — a closure GRIDGO cannot see must not mark a day
- * shut anywhere in the app.
+ * shut anywhere in the app. It carries no account, so the session store deletes
+ * it when the signed-in shop signs out or changes.
  */
 export type PhoneOnlyClosure = {
   id: string;
