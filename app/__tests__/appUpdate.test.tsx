@@ -60,6 +60,7 @@ beforeEach(() => {
     latest: null,
     updatedNotice: null,
     installed: null,
+    offersUpdates: true,
     hydrated: true,
     lastCheckedAt: null,
     checking: false,
@@ -219,6 +220,37 @@ describe("what the Alerts card reads", () => {
     // The next build replaces it with its own.
     recordLaunch({ versionCode: 90, versionName: "1.0.90" }, 3_000);
     expect(selectUpdatedNotice(useAppUpdate.getState())?.build.versionName).toBe("1.0.90");
+  });
+});
+
+describe("a Google Play build", () => {
+  it("keeps its version but never reads GitHub", async () => {
+    const fetchLatest = jest.fn(answered);
+    recordLaunch(installed, 1_000, false);
+    await checkForUpdate(installed, "launch", morning, fetchLatest);
+    await checkForUpdate(installed, "foreground", new Date(2026, 8, 25, 9, 0), fetchLatest);
+
+    expect(fetchLatest).not.toHaveBeenCalled();
+    expect(useAppUpdate.getState()).toMatchObject({
+      installed,
+      lastSeenVersionCode: 80,
+      offersUpdates: false,
+      offer: null,
+    });
+  });
+
+  it("offers, pins and confirms nothing, even with a newer release remembered", () => {
+    useAppUpdate.setState({
+      lastSeenVersionCode: 70,
+      latest,
+      updatedNotice: { build: { versionCode: 70, versionName: "1.0.70" }, at: 500 },
+    });
+    recordLaunch(installed, 1_000, false);
+
+    const state = useAppUpdate.getState();
+    expect(state).toMatchObject({ completed: null, offer: null, updatedNotice: null });
+    expect(selectAvailableUpdate(state)).toBeNull();
+    expect(selectUpdatedNotice(state)).toBeNull();
   });
 });
 

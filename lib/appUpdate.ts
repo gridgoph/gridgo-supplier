@@ -24,6 +24,9 @@
  * The release body's `## What's new` section (written by CI from `whats-new/`,
  * see `WHATS_NEW.md`) is read as a short list of plain bullets
  * (`parseWhatsNew`) and shown in the sheet and on the Alerts card.
+ *
+ * A Google Play build (`AppDistribution`) does none of this: Play owns its
+ * updates.
  */
 
 /** The public repo whose latest Release names the newest build. */
@@ -42,6 +45,29 @@ export const DOWNLOAD_PAGE_URL = "https://gridgo.talasora.com/download";
  * HTTP stack to add one.
  */
 export const USER_AGENT = "GRIDGO-supplier";
+
+/**
+ * How this build reaches phones. `sideload` is the APK from the landing site,
+ * which updates itself through this module. `play` is a Google Play build:
+ * Play installs its updates, and Play policy forbids an app that offers to
+ * install an APK from anywhere else, so a Play build never prompts, never pins
+ * an update card and never opens the side-load download.
+ */
+export type AppDistribution = "sideload" | "play";
+
+/**
+ * The distribution named by `EXPO_PUBLIC_APP_DISTRIBUTION`. Only the exact
+ * word `play` makes a Play build; anything else, including unset, is today's
+ * side-load build. CI sets it on the Play bundle's Gradle step alone.
+ */
+export function parseAppDistribution(raw: string | null | undefined): AppDistribution {
+  return (raw ?? "").trim().toLowerCase() === "play" ? "play" : "sideload";
+}
+
+/** Whether this build may offer the side-load APK as an update. */
+export function offersSideloadUpdates(distribution: AppDistribution): boolean {
+  return distribution === "sideload";
+}
 
 /**
  * How long a foreground return waits before asking again. A launch always

@@ -3,6 +3,11 @@ name: Android release APK
 # Suppliers, riders and customers in Davao sideload this file, so every build
 # that reaches them must be a real signed release pointed at the deployed API —
 # not a debug artifact, and not one that quietly points at loopback.
+#
+# A manual dispatch with play_bundle builds a Google Play App Bundle (AAB)
+# instead, as an Actions artifact for the captain to upload to Play Console by
+# hand. That run never touches the APK path: no APK, no landing-site upload,
+# no GitHub Release, no release push. See README.md "Google Play bundle".
 
 on:
   push:
@@ -14,10 +19,17 @@ on:
         description: Also publish a GitHub Release for this build
         type: boolean
         default: false
+      play_bundle:
+        description: >-
+          Build a signed Google Play bundle (AAB) as an Actions artifact instead
+          of the APK. Publishes nothing, and ignores publish_release.
+        type: boolean
+        default: false
 
 # A release build takes ~20 minutes; never run two for the same ref.
+# A Play bundle run gets its own group, so it never cancels a main release.
 concurrency:
-  group: android-apk-${{ github.ref }}
+  group: android-apk-${{ github.ref }}${{ github.event.inputs.play_bundle == 'true' && '-play' || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -60,7 +72,7 @@ jobs:
         run: node scripts/whats-new.js check
 
   apk:
-    name: Signed release APK
+    name: ${{ github.event.inputs.play_bundle == 'true' && 'Signed Play bundle (AAB)' || 'Signed release APK' }}
     # A pull request gets the checks above and nothing else. No secrets are
     # referenced on that path, so no signing key is decoded and no artifact
     # exists that anyone could mistake for a shipped build.
@@ -72,6 +84,10 @@ jobs:
       contents: write # gh release create
     env:
       # Stamps the version a shop reads on the phone — see app.config.ts.
+      # Also the Play versionCode: every run of this workflow, APK or AAB, has
+      # a higher run number than the runs before it, and Play only accepts a
+      # versionCode above every one it has seen. Re-running a run keeps its
+      # number, so a re-run's AAB cannot be uploaded over the original's.
       GRIDGO_BUILD_NUMBER: ${{ github.run_number }}
 
     steps:
@@ -129,8 +145,10 @@ jobs:
           stem="gridgo-supplier-$version-${GITHUB_SHA::7}"
           {
             echo "version=$version"
+            echo "code=$code"
             echo "stem=$stem"
             echo "apk=$stem.apk"
+            echo "aab=$stem.aab"
           } >> "$GITHUB_OUTPUT"
           echo "GRIDGO Supplier $version (versionCode $code)"
 
@@ -222,6 +240,7 @@ jobs:
           } > "$HOME/.gradle/gradle.properties"
 
       - name: Build the release APK
+        if: github.event.inputs.play_bundle != 'true'
         working-directory: android
         env:
           # The load-bearing line of this whole workflow. EXPO_PUBLIC_* values
@@ -248,7 +267,38 @@ jobs:
           esac
           ./gradlew assembleRelease --no-daemon --max-workers=2
 
+      # The Play bundle: same injected upload key, same public configuration,
+      # plus EXPO_PUBLIC_APP_DISTRIBUTION=play, which turns off the update
+      # prompt, the pinned update card and every side-load download link
+      # (lib/buildDistribution.ts). Play policy forbids an app installed from
+      # Play offering an APK from anywhere else. Inlined at bundle time like
+      # the rest, so it belongs on this step and no other.
+      - name: Build the Play bundle
+        if: github.event.inputs.play_bundle == 'true'
+        working-directory: android
+        env:
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_CARTO_API_KEY: ${{ secrets.EXPO_PUBLIC_CARTO_API_KEY }}
+          EXPO_PUBLIC_APP_DISTRIBUTION: play
+        run: |
+          set -euo pipefail
+          if [ -z "${EXPO_PUBLIC_API_URL:-}" ]; then
+            echo "::error::EXPO_PUBLIC_API_URL is not set for the build step"
+            exit 1
+          fi
+          if [ -z "${EXPO_PUBLIC_CARTO_API_KEY:-}" ]; then
+            echo "::error::EXPO_PUBLIC_CARTO_API_KEY is not set for the build step"
+            exit 1
+          fi
+          case "${EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:-}" in
+            pk_live_*) ;;
+            *) echo "::error::EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY must be a production pk_live_ key"; exit 1 ;;
+          esac
+          ./gradlew bundleRelease --no-daemon --max-workers=2
+
       - name: Verify signature and baked-in API URL
+        if: github.event.inputs.play_bundle != 'true'
         env:
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -258,7 +308,19 @@ jobs:
           EXPO_PUBLIC_CARTO_API_KEY: ${{ secrets.EXPO_PUBLIC_CARTO_API_KEY }}
         run: scripts/verify-release-apk.sh android/app/build/outputs/apk/release/app-release.apk
 
+      - name: Verify the Play bundle's signature and baked-in public configuration
+        if: github.event.inputs.play_bundle == 'true'
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_CARTO_API_KEY: ${{ secrets.EXPO_PUBLIC_CARTO_API_KEY }}
+        run: scripts/verify-release-apk.sh android/app/build/outputs/bundle/release/app-release.aab
+
       - name: Name the build
+        if: github.event.inputs.play_bundle != 'true'
         id: apk
         env:
           VERSION: ${{ steps.config.outputs.version }}
@@ -353,8 +415,11 @@ jobs:
       # same build and is asked again on every launch. A manual dispatch never
       # uploads to the landing site (off main, or on it), so its Release is
       # never marked latest either.
+      #
+      # Never for a Play bundle run: its build is not the side-load APK, and a
+      # release would offer it to every side-loaded phone.
       - name: Publish the GitHub Release
-        if: github.ref == 'refs/heads/main' || github.event.inputs.publish_release == 'true'
+        if: (github.ref == 'refs/heads/main' || github.event.inputs.publish_release == 'true') && github.event.inputs.play_bundle != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.config.outputs.version }}
@@ -398,12 +463,49 @@ jobs:
       # Actions artifacts is not allowed to fail this job once the signed
       # build has already been published.
       - uses: actions/upload-artifact@v4
+        if: github.event.inputs.play_bundle != 'true'
         continue-on-error: true
         with:
           name: ${{ steps.config.outputs.stem }}
           path: ${{ runner.temp }}/out/*.apk
           if-no-files-found: error
           retention-days: 90
+
+      - name: Name the Play bundle
+        if: github.event.inputs.play_bundle == 'true'
+        env:
+          VERSION: ${{ steps.config.outputs.version }}
+          CODE: ${{ steps.config.outputs.code }}
+          AAB: ${{ steps.config.outputs.aab }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/play"
+          cp android/app/build/outputs/bundle/release/app-release.aab "$RUNNER_TEMP/play/$AAB"
+          size="$(du -h "$RUNNER_TEMP/play/$AAB" | cut -f1)"
+          {
+            echo "### GRIDGO Supplier $VERSION for Google Play"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| File | \`$AAB\` (in the artifact below) |"
+            echo "| versionCode | $CODE |"
+            echo "| Size | $size |"
+            echo "| Commit | \`$GITHUB_SHA\` |"
+            echo "| Signature | upload key, verified against the keystore alias |"
+            echo "| Updates | self-update prompt and side-load links off (Play build) |"
+            echo
+            echo "Upload it in Play Console under Testing > Internal testing. Nothing was published."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The bundle is the whole point of this run, so a failed upload fails it.
+      # An Actions artifact only: never the landing site or a GitHub Release.
+      - uses: actions/upload-artifact@v4
+        if: github.event.inputs.play_bundle == 'true'
+        with:
+          name: ${{ steps.config.outputs.stem }}-play
+          path: ${{ runner.temp }}/play/*.aab
+          if-no-files-found: error
+          retention-days: 30
 
       # The notes this release carried now belong to its version: they move
       # under "## <version> (<label>)" in WHATS_NEW.md and leave whats-new/, so
