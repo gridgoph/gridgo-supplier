@@ -3,14 +3,13 @@ import { Text, View } from "react-native";
 import { JobRow } from "@/components/JobRow";
 import { capacityForDay } from "@/lib/capacity";
 import { dayKeyDateLabel, dayKeyLabel } from "@/lib/day";
-import type { Blackout } from "@/lib/blackouts";
-import { blackoutReasonLabel } from "@/lib/blackouts";
+import type { Closure } from "@/lib/shopHours";
 import type { ScheduleDay } from "@/lib/schedule";
 
 type Props = {
   day: ScheduleDay;
   dailyCapacity: number | null;
-  closure: Blackout | null;
+  closure: Closure | null;
   now: Date;
   onOpenJob: (jobId: string) => void;
 };
@@ -74,8 +73,7 @@ export function ScheduleDayCard({ day, dailyCapacity, closure, now, onOpenJob }:
       {closure ? (
         <View className="rounded-field border border-outline bg-surface-variant px-3 py-2">
           <Text className="text-caption text-text-secondary">
-            Shop closed — {blackoutReasonLabel(closure.reason)}
-            {closure.note ? ` · ${closure.note}` : ""}
+            Shop closed — one of your closure dates
           </Text>
         </View>
       ) : null}

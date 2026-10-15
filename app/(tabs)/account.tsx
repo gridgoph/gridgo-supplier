@@ -13,10 +13,12 @@ import { StatusChip } from "@/components/StatusChip";
 import * as api from "@/lib/api";
 import { clerkDisplayName } from "@/lib/clerk";
 import { standingLine } from "@/lib/reviews";
+import { shopHoursSummary } from "@/lib/shopHours";
 import { WHATS_NEW_HISTORY_COPY } from "@/lib/whatsNewHistory";
 import { useThemeColors } from "@/hooks/useTheme";
 import { askConfirm } from "@/store/sheets";
 import { isMatchable, useSession } from "@/store/session";
+import { useShopHours } from "@/store/shopHours";
 import { useTour } from "@/store/tour";
 
 /**
@@ -80,6 +82,15 @@ export default function AccountScreen() {
         cancelled = true;
       };
     }, [approved]),
+  );
+
+  // Open now or not, on the row that changes it. A failed read keeps the plain description.
+  const shopHours = useShopHours((s) => s.hours);
+  const loadShopHours = useShopHours((s) => s.load);
+  useFocusEffect(
+    useCallback(() => {
+      void loadShopHours();
+    }, [loadShopHours]),
   );
 
   async function signOut() {
@@ -193,6 +204,15 @@ export default function AccountScreen() {
             />
           ) : null}
           <DestinationRow
+            title="Shop hours & closures"
+            detail={
+              shopHours
+                ? shopHoursSummary(shopHours, new Date())
+                : "When you open, closure dates, and closing for a while"
+            }
+            onPress={() => router.push("/shop-hours" as Href)}
+          />
+          <DestinationRow
             title="Where you print"
             detail={user?.shop?.label || "Set the pin every delivery fee is measured from"}
             onPress={() => router.push("/shop-location")}
@@ -213,8 +233,8 @@ export default function AccountScreen() {
           ) : null}
           {approved ? (
             <DestinationRow
-              title="Capacity & closures"
-              detail="What you can take on each day, and the days you are shut"
+              title="Capacity"
+              detail="What you can take on each day, and how fast you turn work around"
               onPress={() => router.push("/capacity")}
             />
           ) : null}
