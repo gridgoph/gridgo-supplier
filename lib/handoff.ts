@@ -1,5 +1,6 @@
 import type { Order } from "@/lib/api";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
+import { DO_NOT_PACK_YET, finishedStage, riderPacking, ridersPack } from "@/lib/shopHandover";
 
 /**
  * Custody: who is physically holding the job right now.
@@ -31,7 +32,8 @@ export type Custody = {
 };
 
 export function custodyForOrder(
-  order: Pick<Order, "state" | "riderId" | "pickupChecklist">,
+  order: Pick<Order, "state" | "riderId" | "pickupChecklist"> &
+    Partial<Pick<Order, "handoverFlow" | "shopHandover" | "supplierId">>,
 ): Custody {
   // A failed counter check keeps the package with the shop while the rider waits.
   if (order.state === "rider_assigned" && order.pickupChecklist?.status === "failed_escalated") {
@@ -45,6 +47,8 @@ export function custodyForOrder(
       nextActor: "You",
     };
   }
+  const newer = ridersPack(order) ? riderPacksCustody(order) : null;
+  if (newer) return newer;
   switch (order.state) {
     case "ready_for_dispatch":
       return {
@@ -104,6 +108,121 @@ export function custodyForOrder(
       };
   }
 }
+
+/**
+ * Custody on the newer handover, where the shop packs at the counter in front
+ * of the rider and custody moves only at its signature. Null where the older
+ * words already hold (with the rider, delivered).
+ */
+function riderPacksCustody(
+  order: Pick<Order, "state" | "riderId" | "pickupChecklist"> &
+    Partial<Pick<Order, "handoverFlow" | "shopHandover" | "supplierId">>,
+): Custody | null {
+  const counter = riderPacking(order);
+  switch (order.state) {
+    case "ready_for_dispatch":
+      return {
+        state: "ready",
+        label: "Waiting for a rider",
+        tone: "info",
+        icon: "clock",
+        detail: `Riders have been notified. ${DO_NOT_PACK_YET}`,
+        nextActor: "Rider",
+      };
+    case "rider_assigned":
+      if (counter?.step === "pack") {
+        return {
+          state: "rider_assigned",
+          label: "Checked at the counter",
+          tone: "info",
+          icon: "circle-check",
+          detail:
+            "Every check on the unpacked products passed. Pack the job now, in front of the rider, so they can photograph it packed.",
+          nextActor: "You",
+        };
+      }
+      if (counter?.step === "sign") {
+        return {
+          state: "rider_assigned",
+          label: "Packed in front of the rider",
+          tone: "info",
+          icon: "circle-check",
+          detail: "The rider photographed the packed job. Sign on the rider's phone to hand it over; until then it stays with your shop.",
+          nextActor: "You",
+        };
+      }
+      return {
+        state: "rider_assigned",
+        label: "Rider on the way",
+        tone: "info",
+        icon: "clock",
+        detail:
+          "Keep the products unpacked and your packing materials ready. At the counter the rider checks the unpacked products first; then you pack in front of them and sign on their phone.",
+        nextActor: "Rider",
+      };
+    case "picked_up":
+    case "out_for_delivery":
+    case "awaiting_collection":
+    case "delivered":
+    case "issue_window_open":
+    case "completed":
+    case "payout_released":
+      return null;
+    default:
+      if (finishedStage(order)?.stage === "approved") {
+        return {
+          state: "in_shop",
+          label: "Your shop holds this job",
+          tone: "neutral",
+          icon: "clock",
+          detail: `GRIDGO approved your finished products. Mark the job ready for rider pickup. ${DO_NOT_PACK_YET}`,
+          nextActor: "You",
+        };
+      }
+      return {
+        state: "in_shop",
+        label: "Your shop holds this job",
+        tone: "neutral",
+        icon: "clock",
+        detail:
+          "Send photos of the finished, unpacked products for GRIDGO's review. Once it approves, you call a rider. Do not pack yet; you pack at the counter, in front of the rider.",
+        nextActor: "You",
+      };
+  }
+}
+
+/**
+ * What the shop's packing step sets in motion on the newer handover, in order:
+ * nothing is packed until the rider has checked the unpacked products.
+ */
+export const RIDER_PACKS_SEQUENCE = [
+  {
+    id: "notified",
+    title: "Riders are notified",
+    detail: "Approved riders see this job in their Offers, and one of them accepts it.",
+  },
+  {
+    id: "arrives",
+    title: "The rider comes to your counter",
+    detail: "Have your packing materials ready and the products unpacked. If you already packed it, unpack it for the check.",
+  },
+  {
+    id: "checks",
+    title: "The rider checks the unpacked products",
+    detail:
+      "The rider counts every piece against the order and checks it against the spec, for visible defects and the paperwork, and looks over your packing materials.",
+  },
+  {
+    id: "packs",
+    title: "You pack it in front of the rider",
+    detail: "Once every check passes, pack the job at the counter. The rider photographs it packed.",
+  },
+  {
+    id: "signs",
+    title: "You sign on the rider's phone",
+    detail: "Your signature hands it over. A failed check keeps the job with you until you fix it with Operations.",
+  },
+] as const;
 
 /**
  * What marking the package ready sets in motion, in order. There is no shop-side

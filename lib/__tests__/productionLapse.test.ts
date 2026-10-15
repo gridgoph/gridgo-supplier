@@ -244,3 +244,56 @@ describe("late-production alerts", () => {
     expect(presentLapseAlert({ type: "shop_job_assigned", body: "x" })).toBeNull();
   });
 });
+
+describe("late production on the newer handover (GRIDGO's review is not the shop's time)", () => {
+  const SENT_AT = new Date(Date.parse(DEADLINE) + 2 * HOUR).toISOString();
+  const order = (shopHandover: unknown, state = "supplier_self_qc") => ({
+    readyBy: DEADLINE,
+    readyAt: null,
+    productionReassignmentEligible: false,
+    state,
+    supplierId: "shop_1",
+    handoverFlow: "rider_packs" as const,
+    shopHandover,
+  });
+
+  it("measures to the submission and says the clock is paused while GRIDGO reviews", () => {
+    const notice = lapseNotice(
+      lapse(),
+      order({ finished: { at: SENT_AT, supplierId: "shop_1", photoFileIds: ["f"] }, review: null }),
+      at(30),
+    );
+    expect(notice.measured).toContain("2 hours past");
+    expect(notice.measured).toContain("paused while GRIDGO reviews");
+    expect(notice.title).toBe("This job is past its ready-by time");
+    expect(notice.next).toMatch(/reviewing your finished photos/);
+    expect(notice.consequences.join(" ")).not.toMatch(/becomes moderate/);
+  });
+
+  it("takes an approved submission as the finish", () => {
+    const notice = lapseNotice(
+      lapse(),
+      order({
+        finished: { at: SENT_AT, supplierId: "shop_1", photoFileIds: ["f"] },
+        review: { at: at(40).toISOString(), decision: "approved", note: "" },
+      }),
+      at(50),
+    );
+    expect(notice.title).toBe("This job was ready late");
+    expect(notice.measured).toContain("Ready 2 hours after");
+  });
+
+  it("leaves a review GRIDGO sent back out of the count", () => {
+    const rejected = { at: at(5).toISOString(), decision: "rejected", note: "Fix it" };
+    const notice = lapseNotice(
+      lapse(),
+      order(
+        { finished: null, review: rejected, attempts: [{ finished: { at: SENT_AT, supplierId: "shop_1", photoFileIds: ["f"] }, review: rejected }] },
+        "production",
+      ),
+      at(6),
+    );
+    // Six hours past, less the three GRIDGO spent reviewing.
+    expect(notice.measured).toContain("Now 3 hours past");
+  });
+});

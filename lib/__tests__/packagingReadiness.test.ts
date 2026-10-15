@@ -26,13 +26,13 @@ describe("what GRIDGO needs before packaging (report 6C695C15)", () => {
       { kind: "production_photo", message: PRODUCTION },
       { kind: "packing_photo", message: PACKING },
     ]);
-    expect(check?.photos.every((photo) => !photo.done)).toBe(true);
+    expect(check?.steps.every((step) => !step.done)).toBe(true);
     expect(packagingHeld(check)).toBe(false);
   });
 
   it("holds the step for a claim, which only Operations can clear", () => {
     const check = packagingCheck({ state: "supplier_self_qc", transitionReadiness: readiness([{ code: "claim_hold_active", message: CLAIM }]) });
-    expect(check?.photos.every((photo) => photo.done)).toBe(true);
+    expect(check?.steps.every((step) => step.done)).toBe(true);
     expect(packagingHeld(check)).toBe(true);
   });
 
@@ -109,5 +109,49 @@ describe("job details and update labels", () => {
   it("never shows an internal payout label in an update", () => {
     expect(presentTimelineNote("Proof filed for production_started")).toBe("Proof filed for Start of production");
     expect(presentTimelineNote("Printing started")).toBe("Printing started");
+  });
+});
+
+describe("the newer handover's checklist (docs/SHOP_HANDOVER_API.md)", () => {
+  const FINISHED = "Submit photos of the finished, unpacked products for GRIDGO review first.";
+  const REVIEW = "Wait for GRIDGO to approve the finished-product photos before calling a rider. Do not pack yet.";
+
+  it("lists the finished photos and GRIDGO's review instead of the two photos", () => {
+    const check = packagingCheck({
+      state: "production",
+      handoverFlow: "rider_packs",
+      transitionReadiness: readiness([
+        { code: "production_finished_required", message: FINISHED },
+        { code: "production_review_required", message: REVIEW },
+      ]),
+    });
+    expect(check?.flow).toBe("rider_packs");
+    expect(check?.steps).toEqual([
+      { kind: "finished_photos", done: false },
+      { kind: "review", done: false },
+    ]);
+    // Neither is a hold: both are the shop's ordinary way to a rider.
+    expect(packagingHeld(check)).toBe(false);
+  });
+
+  it("ticks the photos once sent and still holds for a claim", () => {
+    const check = packagingCheck({
+      state: "supplier_self_qc",
+      handoverFlow: "rider_packs",
+      transitionReadiness: readiness([
+        { code: "production_review_required", message: REVIEW },
+        { code: "claim_hold_active", message: CLAIM },
+      ]),
+    });
+    expect(check?.steps).toEqual([
+      { kind: "finished_photos", done: true },
+      { kind: "review", done: false },
+    ]);
+    expect(packagingHeld(check)).toBe(true);
+  });
+
+  it("keeps the two photos on a legacy job", () => {
+    const check = packagingCheck({ state: "production", transitionReadiness: readiness([]) });
+    expect(check?.steps.map((step) => step.kind)).toEqual(["production_photo", "packing_photo"]);
   });
 });

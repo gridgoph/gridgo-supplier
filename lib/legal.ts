@@ -361,6 +361,8 @@ export const WHY_WE_ASK = {
   samplePhoto: "Clients see these photos on your board when choosing a shop.",
   progressPhoto: "This photo records that the job is in production. The client sees it on their order.",
   packedPhoto: "This photo records how the job was packed, for the check with the rider.",
+  finishedPhoto:
+    "GRIDGO checks these photos before a rider is called. The client sees them on their order, and they are kept for any later question about the job.",
   proofPhoto: "This file is your evidence for this part of the job's pay. Operations reviews it.",
   payoutQr: "We use this QR only to pay your shop.",
   chatPhoto: "Photos you send here are seen by the people in this chat and kept with the job.",

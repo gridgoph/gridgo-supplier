@@ -1,6 +1,7 @@
 import type { Notification, Order, Settings } from "@/lib/api";
 import { formatDeadlineFull } from "@/lib/dates";
 import { formatPhp } from "@/lib/money";
+import { rejectedReviewMs, shopFinish } from "@/lib/shopHandover";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 
 /**
@@ -239,7 +240,8 @@ export type LapseNotice = {
   next: string;
 };
 
-type LapseOrder = Pick<Order, "readyBy" | "readyAt" | "productionReassignmentEligible">;
+type LapseOrder = Pick<Order, "readyBy" | "readyAt" | "productionReassignmentEligible"> &
+  Partial<Pick<Order, "state" | "supplierId" | "handoverFlow" | "shopHandover">>;
 
 /**
  * The panel a late job carries, from the record and the live job.
@@ -250,6 +252,11 @@ type LapseOrder = Pick<Order, "readyBy" | "readyAt" | "productionReassignmentEli
  * `held` is a job the shop has been told to stop — a declined deadline, a
  * refund. The record still stands, but "finish the job" would contradict the
  * hold drawn above it, so the next step yields to it.
+ *
+ * On the newer handover (`lib/shopHandover.ts`) GRIDGO's review is not the
+ * shop's time: the clock stops when the finished photos go, stays stopped
+ * while GRIDGO reviews, and an approval makes that moment the finish. A review
+ * GRIDGO sent back is left out of the count too.
  */
 export function lapseNotice(
   lapse: ProductionLapse,
@@ -258,9 +265,22 @@ export function lapseNotice(
   held = false,
 ): LapseNotice {
   const definition = tierDefinition(lapse.tier);
-  const finished = Boolean(order.readyAt);
+  const sent = shopFinish({
+    state: order.state ?? "",
+    supplierId: order.supplierId ?? null,
+    handoverFlow: order.handoverFlow,
+    shopHandover: order.shopHandover,
+    readyAt: order.readyAt,
+  });
+  // Paused: the photos are with GRIDGO and the clock is stopped, not finished.
+  const paused = Boolean(sent?.pending);
+  const finished = Boolean(order.readyAt) || Boolean(sent && !sent.pending);
   const deadline = Date.parse(lapse.deadlineAt);
-  const end = finished ? Date.parse(order.readyAt as string) : now.getTime();
+  const stoppedAt = sent?.at ?? order.readyAt ?? null;
+  const rawEnd = stoppedAt && (finished || paused) ? Date.parse(stoppedAt) : now.getTime();
+  const end = Number.isFinite(rawEnd)
+    ? rawEnd - rejectedReviewMs({ state: order.state ?? "", supplierId: order.supplierId ?? null, handoverFlow: order.handoverFlow, shopHandover: order.shopHandover }, rawEnd)
+    : rawEnd;
   const lateMs = Number.isFinite(deadline) && Number.isFinite(end) ? end - deadline : NaN;
   const howLate = lateMs > 0 ? formatLateness(lateMs) : null;
 
@@ -272,14 +292,19 @@ export function lapseNotice(
   const against = renewed
     ? `the renewed ready-by time you agreed with the client, ${formatDeadlineFull(lapse.deadlineAt)}`
     : `the ready-by time on this job, ${formatDeadlineFull(lapse.deadlineAt)}`;
-  const measured = howLate
-    ? `${finished ? "Ready" : "Now"} ${howLate} ${finished ? "after" : "past"} ${against}.`
-    : `Measured against ${against}.`;
+  const measured = paused
+    ? howLate
+      ? `${howLate[0].toUpperCase()}${howLate.slice(1)} past ${against} when you sent the finished photos. The clock is paused while GRIDGO reviews them.`
+      : `Measured against ${against}. The clock is paused while GRIDGO reviews your finished photos.`
+    : howLate
+      ? `${finished ? "Ready" : "Now"} ${howLate} ${finished ? "after" : "past"} ${against}.`
+      : `Measured against ${against}.`;
 
   const rate = formatRate(lapse.rateBps);
   const share = `${rate} of what GRIDGO still owes you on this job`;
   // Unfinished and below severe, the tier — and its rate — can still rise.
-  const canRise = !finished && lapse.tier !== "severe" && lapse.status !== "closed" && lapse.status !== "applied";
+  const canRise =
+    !finished && !paused && lapse.tier !== "severe" && lapse.status !== "closed" && lapse.status !== "applied";
 
   let penalty: string;
   let deduction: DeductionView | null = null;
@@ -342,7 +367,9 @@ export function lapseNotice(
         ? "Nothing more is needed from your shop on this."
         : finished
           ? "If something outside your shop caused the delay, tell Operations from this job."
-          : held
+          : paused
+            ? "GRIDGO is reviewing your finished photos. Nothing more is counted against your shop while it does."
+            : held
             ? "Work on this job is on hold, so there is nothing to finish for now. Follow the note above; this record stays as it is."
             : "Finish the job and mark it ready. If something outside your shop is holding it up, tell Operations now.",
   };

@@ -16,6 +16,7 @@ import { useThemeColors } from "@/hooks/useTheme";
 import { formatPhp, type Order } from "@/lib/api";
 import { formatDeadlineFull, formatTimelineAt } from "@/lib/dates";
 import { custodyForOrder } from "@/lib/handoff";
+import { handoverFlowOf } from "@/lib/shopHandover";
 import { earningsSplit, milestoneViews, payoutPlanCopy, settlementPayoutViews } from "@/lib/milestones";
 import { unreleasedMinor } from "@/lib/payout";
 import {
@@ -329,6 +330,6 @@ function SectionBody({
       );
     }
     case "history":
-      return <JobTimeline timeline={order.timeline} />;
+      return <JobTimeline timeline={order.timeline} flow={handoverFlowOf(order)} />;
   }
 }

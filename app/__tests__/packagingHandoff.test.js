@@ -20,6 +20,7 @@ jest.mock("expo-router", () => ({
   router: { replace: (...args) => mockReplace(...args), push: (...args) => mockPush(...args), back: jest.fn() },
   useLocalSearchParams: () => ({ id: "job" }),
   useFocusEffect: jest.fn(),
+  useNavigation: () => ({ setOptions: jest.fn() }),
 }));
 jest.mock("@/components/FlowScreen", () => ({
   FlowScreen: ({ children, footer }) => require("react").createElement("View", null, children, footer),

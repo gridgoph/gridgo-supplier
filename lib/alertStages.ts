@@ -110,7 +110,8 @@ function stageIndexForType(type: string | undefined): number {
   if (type === PICKUP_ISSUE_ALERT) return 2;
   if (type.includes("delivered") || type.includes("payout") || type.includes("issue")) return 3;
   if (type.includes("pickup") || type.includes("dispatch") || type.includes("rider")) return 2;
-  if (type.includes("production") || type.includes("printing")) return 1;
+  // GRIDGO's review of the finished products is the end of production on the newer handover.
+  if (type.includes("production") || type.includes("printing") || type.includes("finished")) return 1;
   if (type.includes("assign") || type.includes("payment") || type.includes("downpayment")) {
     return 0;
   }
