@@ -2,7 +2,7 @@ import { useAlertsStore } from "@/store/alerts";
 import { useToasts } from "@/store/toasts";
 import { useAccountDeletion } from "@/store/accountDeletion";
 import { useShopHours } from "@/store/shopHours";
-import { useShopPlan } from "@/store/shopPlan";
+import { afterShopPlanLoads, useShopPlan } from "@/store/shopPlan";
 import { usePrivacyRequests } from "@/store/privacyRequests";
 import { liveGeneration, setLiveOwner } from "@/lib/live";
 import { create } from "zustand";
@@ -343,7 +343,10 @@ useSession.subscribe((state, previous) => {
   usePrivacyRequests.getState().reset();
   useAccountDeletion.getState().reset();
   useShopHours.getState().reset();
-  // Phone-only closures carry no account. They belong to whoever was signed in,
-  // so they leave with that shop rather than being offered to the next one.
-  if (previous.user) useShopPlan.getState().clearBlackouts();
+  // Phone-only closures carry no account. They leave with the shop that was
+  // signed in, and the next shop claims only what is left unclaimed.
+  afterShopPlanLoads(() => {
+    if (previous.user) useShopPlan.getState().clearBlackouts();
+    if (next) useShopPlan.getState().claimBlackouts(next);
+  });
 });

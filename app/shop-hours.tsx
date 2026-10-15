@@ -28,7 +28,8 @@ import {
 } from "@/lib/shopHours";
 import { saveSchedule } from "@/store/shopSchedule";
 import { useShopHours } from "@/store/shopHours";
-import { useShopPlan } from "@/store/shopPlan";
+import { phoneOnlyClosuresFor, useShopPlan } from "@/store/shopPlan";
+import { useSession } from "@/store/session";
 import { askConfirm } from "@/store/sheets";
 
 /**
@@ -47,7 +48,10 @@ export default function ShopHoursScreen() {
   const saving = useShopHours((s) => s.saving);
   const load = useShopHours((s) => s.load);
   const save = useShopHours((s) => s.save);
-  const phoneOnly = useShopPlan((s) => s.blackouts);
+  const userId = useSession((s) => s.user?.id ?? null);
+  const blackouts = useShopPlan((s) => s.blackouts);
+  const ownerId = useShopPlan((s) => s.ownerId);
+  const phoneOnly = phoneOnlyClosuresFor({ blackouts, ownerId }, userId);
   const clearPhoneOnly = useShopPlan((s) => s.clearBlackouts);
   // The open/closed line and the extension's choices follow the clock.
   const now = useNow(30_000);
