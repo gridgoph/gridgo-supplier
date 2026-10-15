@@ -1,3 +1,4 @@
+import { buildDistribution } from "@/lib/buildDistribution";
 import { releasePushDownloadUrl } from "@/lib/releasePush";
 import { invalidate, liveGeneration, subscribeLive } from "@/lib/live";
 import { useRouter, useRootNavigationState, type Href } from "expo-router";
@@ -180,7 +181,7 @@ export function usePushNotifications(): void {
     const route = (identifier: string, data: unknown, title?: string | null) => {
       if (routed.current.has(identifier)) return;
       routed.current.add(identifier);
-      const download = releasePushDownloadUrl(data, title);
+      const download = releasePushDownloadUrl(data, title, buildDistribution());
       if (download) {
         pending.current = null;
         // An update is public and can rescue a signed-out install too.
