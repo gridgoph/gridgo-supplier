@@ -11,7 +11,7 @@ import {
   uploadFile,
   type UploadItem,
 } from "@/lib/files";
-import { canPickOnWeb, pickFileOnWeb } from "@/lib/webFilePick";
+import { canPickOnWeb, pickFileOnWeb, pickFilesOnWeb, type WebPickedAsset } from "@/lib/webFilePick";
 
 /**
  * Picking a file and getting it stored.
@@ -20,6 +20,24 @@ import { canPickOnWeb, pickFileOnWeb } from "@/lib/webFilePick";
  * but still being saved, to stored — and only the last of those carries a
  * `fileId` the rest of the app is allowed to use.
  */
+type PickedFile = {
+  uri: string;
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  file?: File;
+};
+
+function fromWeb(picked: WebPickedAsset, fallbackName: string): PickedFile {
+  return {
+    uri: picked.uri,
+    fileName: picked.name || fallbackName,
+    mimeType: picked.mimeType,
+    sizeBytes: picked.size,
+    file: picked.file,
+  };
+}
+
 export function useFileUpload(purpose: StoredFile["purpose"]) {
   const [items, setItems] = useState<UploadItem[]>([]);
   const counter = useRef(0);
@@ -71,6 +89,31 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
 
       setItems((current) => [...current, item]);
       await send(item);
+    },
+    [send],
+  );
+
+  /**
+   * Several files at once. Every one goes on the list straight away so the
+   * shop sees the whole batch, then they send one after another: a phone on
+   * mobile data moves one photo faster than five at once, and one that fails
+   * keeps its own reason and retry without touching the others.
+   */
+  const acceptMany = useCallback(
+    async (inputs: PickedFile[]) => {
+      const queued: UploadItem[] = [];
+      const added = inputs.map((input) => {
+        counter.current += 1;
+        const item = newUploadItem({ key: `up_${counter.current}`, ...input });
+        if (item.sizeBytes != null && item.sizeBytes > MAX_PROOF_BYTES) {
+          return { ...item, stage: "failed" as const, error: tooLargeMessage(item.sizeBytes) };
+        }
+        queued.push(item);
+        return item;
+      });
+      if (!added.length) return;
+      setItems((current) => [...current, ...added]);
+      for (const item of queued) await send(item);
     },
     [send],
   );
@@ -179,6 +222,64 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
     });
   }, [accept]);
 
+  /** Several photos from the gallery in one go. `limit` caps the pick (0: no cap). */
+  const pickImages = useCallback(
+    async (limit = 0) => {
+      if (canPickOnWeb()) {
+        const picked = await pickFilesOnWeb("image/*");
+        const capped = limit > 0 ? picked.slice(0, limit) : picked;
+        await acceptMany(capped.map((p, i) => fromWeb(p, `evidence-${counter.current + i + 1}.jpg`)));
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.8,
+        allowsMultipleSelection: true,
+        selectionLimit: limit,
+        orderedSelection: true,
+      });
+      if (result.canceled) return;
+      const assets = limit > 0 ? result.assets.slice(0, limit) : result.assets;
+      await acceptMany(
+        assets.map((asset, i) => ({
+          uri: asset.uri,
+          fileName: asset.fileName || `evidence-${counter.current + i + 1}.jpg`,
+          mimeType: asset.mimeType ?? null,
+          sizeBytes: asset.fileSize ?? null,
+        })),
+      );
+    },
+    [acceptMany],
+  );
+
+  /** Several PDFs or images from the phone's files in one go. */
+  const pickDocuments = useCallback(
+    async (limit = 0) => {
+      if (canPickOnWeb()) {
+        const picked = await pickFilesOnWeb("application/pdf,image/*");
+        const capped = limit > 0 ? picked.slice(0, limit) : picked;
+        await acceptMany(capped.map((p, i) => fromWeb(p, `evidence-${counter.current + i + 1}`)));
+        return;
+      }
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["application/pdf", "image/*"],
+        copyToCacheDirectory: true,
+        multiple: true,
+      });
+      if (result.canceled) return;
+      const assets = limit > 0 ? result.assets.slice(0, limit) : result.assets;
+      await acceptMany(
+        assets.map((asset) => ({
+          uri: asset.uri,
+          fileName: asset.name,
+          mimeType: asset.mimeType ?? null,
+          sizeBytes: asset.size ?? null,
+        })),
+      );
+    },
+    [acceptMany],
+  );
+
   const retry = useCallback(
     async (key: string) => {
       const item = items.find((i) => i.key === key);
@@ -197,14 +298,26 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
     [patch],
   );
 
+  /**
+   * Why GRIDGO would not attach a stored file, or null to clear it before
+   * trying again. The file stays stored, so filing it again sends no bytes.
+   */
+  const noteAttachError = useCallback(
+    (key: string, error: string | null) => patch(key, { error }),
+    [patch],
+  );
+
   return {
     items,
     busy: isUploadBusy(items),
     takePhoto,
     pickImage,
     pickDocument,
+    pickImages,
+    pickDocuments,
     retry,
     remove,
     markAttached,
+    noteAttachError,
   };
 }

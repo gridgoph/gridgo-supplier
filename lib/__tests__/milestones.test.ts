@@ -2,11 +2,13 @@ import type { Order, PayoutMilestone } from "@/lib/api";
 import {
   earningsSplit,
   isShopProof,
+  MAX_PROOFS_PER_STAGE,
   milestoneDefinition,
   milestoneViews,
   nextShopProof,
   payoutPlanCopy,
   payoutPlanOf,
+  proofTarget,
 } from "@/lib/milestones";
 
 type Status = PayoutMilestone["status"];
@@ -261,5 +263,59 @@ describe("late-production deductions", () => {
   it("reads a stage without the field as nothing taken", () => {
     expect(earningsSplit(order()).lateDeductionMinor).toBe(0);
     expect(milestoneViews(order())[0].lateDeductionMinor).toBe(0);
+  });
+});
+
+describe("adding more proof photos", () => {
+  function withStart(patch: Partial<PayoutMilestone>, extra: Partial<Order> = {}): Order {
+    const stages = escrow({ production_started: patch.status ?? "pof_attached" });
+    stages[0] = { ...stages[0], ...patch };
+    return order({ payoutMilestones: stages, ...extra });
+  }
+
+  it("draws a picture GRIDGO listed twice only once", () => {
+    const start = milestoneViews(withStart({ pofFileIds: ["file_a", "file_b", "file_a"] }))[0];
+    expect(start.pofFileIds).toEqual(["file_a", "file_b"]);
+    expect(start.proofCount).toBe(2);
+  });
+
+  it("takes more photos on a part that already has its proof, and after release", () => {
+    const filed = milestoneViews(withStart({ status: "pof_attached" }))[0];
+    expect(filed.canAddProof).toBe(false);
+    expect(filed.canFileMore).toBe(true);
+    const released = milestoneViews(withStart({ status: "released" }))[0];
+    expect(released.stage).toBe("released");
+    expect(released.canFileMore).toBe(true);
+  });
+
+  it("stops at the 50-photo limit but still names the part as the shop's", () => {
+    const ids = Array.from({ length: MAX_PROOFS_PER_STAGE }, (_, i) => `file_${i}`);
+    const full = milestoneViews(withStart({ pofFileIds: ids }))[0];
+    expect(MAX_PROOFS_PER_STAGE).toBe(50);
+    expect(full.canFileMore).toBe(false);
+    expect(full.takesProof).toBe(true);
+    expect(proofTarget(withStart({ pofFileIds: ids }), "production_started")?.code).toBe("production_started");
+  });
+
+  it("never takes the shop's photos on the rider's part or the window", () => {
+    const views = milestoneViews(withStart({}, { state: "delivered" }));
+    expect(views.find((v) => v.code === "delivered")?.canFileMore).toBe(false);
+    expect(views.find((v) => v.code === "issue_window")?.canFileMore).toBe(false);
+    expect(proofTarget(withStart({}, { state: "delivered" }), "delivered")?.code).toBe("production_started");
+  });
+
+  it("takes nothing before production, during a refund, or on a job let go", () => {
+    expect(milestoneViews(withStart({ status: "pending_pof", pofFileIds: [] }, { state: "accepted" }))[0].canFileMore).toBe(false);
+    expect(milestoneViews(withStart({}, { refundHold: true }))[0].canFileMore).toBe(false);
+    expect(
+      milestoneViews(withStart({}, { shopRecovery: { status: "offered" } as unknown as Order["shopRecovery"] }))[0].canFileMore,
+    ).toBe(false);
+    expect(proofTarget(withStart({}, { refundHold: true }), "production_started")).toBeNull();
+  });
+
+  it("still takes photos while a client's claim holds the money", () => {
+    const held = milestoneViews(withStart({}, { payoutHold: true }))[0];
+    expect(held.stage).toBe("held");
+    expect(held.canFileMore).toBe(true);
   });
 });

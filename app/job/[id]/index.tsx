@@ -435,6 +435,9 @@ export default function JobWorkspaceScreen() {
             defaultOpen={defaultBriefSection(job)}
             proofReloadVersion={proofReloadVersion}
             handoffExtra={handoffExtra}
+            onAddProof={(code) =>
+              router.push({ pathname: "/job/[id]/fulfilment", params: { id: job.id, milestone: code } })
+            }
           />
         </View>
 

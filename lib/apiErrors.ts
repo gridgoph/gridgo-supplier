@@ -23,7 +23,7 @@ export class ApiError extends Error {
 export const supplierAccountNotFoundMessage =
   "No supplier account is connected to this sign-in. Apply as a shop, or ask Operations to check your invitation.";
 
-function apiErrorCode(error: unknown): string {
+export function apiErrorCode(error: unknown): string {
   if (!(error instanceof ApiError)) return "";
   const body = error.body;
   return typeof body === "object" && body && "error" in body
@@ -206,6 +206,8 @@ const MESSAGES: Record<string, string> = {
   milestone_not_found:
     "That part of the job is no longer there. Pull down to refresh and try again.",
   pof_required: "GRIDGO needs your evidence for this part before it can release it.",
+  proof_limit_reached:
+    "This part already has 50 photos, the most GRIDGO keeps. Message the GRIDGO Team if they need more.",
   packing_photo_required: "Add a photo of the finished prints packed and ready before marking Ready for dispatch.",
   packing_photo_upload_not_allowed: "This job has moved past packing. Refresh the job to see its latest step.",
   production_photo_required:

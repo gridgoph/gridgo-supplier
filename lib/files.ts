@@ -144,6 +144,8 @@ const UPLOAD_MESSAGES: Record<string, string> = {
   milestone_not_found:
     "That part of the job is no longer there. Pull down to refresh and try again.",
   file_not_ready: "That upload did not finish. Send the file again.",
+  proof_limit_reached:
+    "This part already has 50 photos, the most GRIDGO keeps. Message the GRIDGO Team if they need more.",
   file_already_attached:
     "That file already backs another part of the job. Take a new photo for this one.",
   file_not_found: "GRIDGO no longer has that file. Send it again.",

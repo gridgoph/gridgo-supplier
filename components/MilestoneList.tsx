@@ -1,13 +1,9 @@
-import { useEffect, useState } from "react";
-import { FileCheck } from "lucide-react-native";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { PayoutReceipt } from "@/components/PayoutReceipt";
-import { SamplePhoto } from "@/components/SamplePhoto";
+import { ProofPhotoStrip, proofCountLabel } from "@/components/ProofPhotos";
 import { StatusChip } from "@/components/StatusChip";
-import { formatPhp, getFile, type StoredFile } from "@/lib/api";
-import { isProofImage, proofDocumentKind } from "@/lib/files";
-import { useThemeColors } from "@/hooks/useTheme";
+import { formatPhp } from "@/lib/api";
 import type { MilestoneView } from "@/lib/milestones";
 
 type Props = {
@@ -19,6 +15,8 @@ type Props = {
    * not: a sentence per part, repeated, is noise rather than guidance.
    */
   showDetail?: boolean;
+  /** Opens the proof screen for one part. Offered only where the shop can add evidence. */
+  onAddProof?: (code: MilestoneView["code"]) => void;
 };
 
 /**
@@ -33,7 +31,7 @@ type Props = {
  * the shop can distinguish evidence filed from money released. Earnings lists
  * omit previews; file classification is shared with UploadList via lib/files.
  */
-export function MilestoneList({ milestones, showDetail = false, proofReloadVersion = 0 }: Props) {
+export function MilestoneList({ milestones, showDetail = false, proofReloadVersion = 0, onAddProof }: Props) {
   if (!milestones.length) return null;
 
   return (
@@ -85,15 +83,13 @@ export function MilestoneList({ milestones, showDetail = false, proofReloadVersi
             {showDetail ? (
               <Text className="text-caption text-text-secondary">{milestone.detail}</Text>
             ) : null}
-            {showDetail && milestone.proofOwner === "shop" && milestone.pofFileIds.length
-              ? milestone.pofFileIds.map((fileId) => (
-                  <FiledProof
-                    key={`${fileId}:${proofReloadVersion}`}
-                    fileId={fileId}
-                    altText={`${milestone.label} evidence`}
-                  />
-                ))
-              : null}
+            {showDetail ? (
+              <StageProofs
+                milestone={milestone}
+                reloadVersion={proofReloadVersion}
+                onAddProof={onAddProof}
+              />
+            ) : null}
             {/*
               What GRIDGO sent, once this part is released: the wallet's own
               confirmation and its reference, so a shop matching its GCash
@@ -117,36 +113,48 @@ export function MilestoneList({ milestones, showDetail = false, proofReloadVersi
   );
 }
 
-function FiledProof({ fileId, altText }: { fileId: string; altText: string }) {
-  const colors = useThemeColors();
-  const [file, setFile] = useState<StoredFile | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    let active = true;
-    void getFile(fileId).then(
-      (value) => { if (active) setFile(value); },
-      () => { if (active) setFailed(true); },
-    );
-    return () => { active = false; };
-  }, [fileId]);
-
-  if (!file) {
-    return <Text className="text-caption text-text-muted">{failed ? "This evidence will not load" : "Loading evidence…"}</Text>;
-  }
-  const document = {
-    fileName: file.originalFilename,
-    mimeType: file.detectedContentType || file.declaredContentType,
-  };
-  if (isProofImage(document)) {
-    return <SamplePhoto fileId={fileId} altText={altText} gutter="tight" />;
-  }
+/**
+ * The evidence on file for one part, as a strip that scrolls however many
+ * there are. The shop's own parts offer more while GRIDGO takes them; the
+ * rider's delivery evidence is the rider's, so it is shown and nothing more.
+ * Legacy retention rides on that same delivery evidence and is not drawn again.
+ */
+function StageProofs({
+  milestone,
+  reloadVersion,
+  onAddProof,
+}: {
+  milestone: MilestoneView;
+  reloadVersion: number;
+  onAddProof?: Props["onAddProof"];
+}) {
+  const shop = milestone.proofOwner === "shop";
+  if (!shop && milestone.proofOwner !== "rider") return null;
+  const count = milestone.pofFileIds.length;
+  const canAdd = shop && milestone.canFileMore && count > 0 && Boolean(onAddProof);
+  if (!count) return null;
   return (
-    <View className="flex-row items-center gap-3 rounded-field border border-outline bg-surface p-3">
-      <FileCheck size={20} color={colors.success} strokeWidth={2} />
-      <View className="min-w-0 flex-1">
-        <Text className="text-body text-text-primary">{file.originalFilename}</Text>
-        <Text className="text-caption text-text-muted">{proofDocumentKind(document)}</Text>
+    <View className="gap-2 pt-1" testID={`stage-proofs-${milestone.code}`}>
+      <View className="flex-row items-center justify-between gap-3">
+        <Text className="min-w-0 flex-1 text-caption text-text-muted">
+          {shop ? proofCountLabel(count) : `${count === 1 ? "1 photo" : `${count} photos`} from the rider`}
+        </Text>
+        {canAdd ? (
+          <Pressable
+            onPress={() => onAddProof?.(milestone.code)}
+            accessibilityRole="button"
+            accessibilityLabel={`Add photos to the ${milestone.label.toLowerCase()} evidence`}
+            className="gg-touch justify-center"
+          >
+            <Text className="text-body font-medium text-text-primary underline">Add photos</Text>
+          </Pressable>
+        ) : null}
       </View>
+      <ProofPhotoStrip
+        fileIds={milestone.pofFileIds}
+        label={shop ? `${milestone.label} evidence` : "Delivery evidence"}
+        reloadVersion={reloadVersion}
+      />
     </View>
   );
 }
