@@ -100,6 +100,16 @@ describe("MilestoneList", () => {
     ]);
   });
 
+  it("draws only the first few tiles of a long strip, so fifty photos are not fifty reads", async () => {
+    const ids = Array.from({ length: 20 }, (_, i) => `file_${i}`);
+    await render(<MilestoneList milestones={[view({ pofFileIds: ids, proofCount: 20 })]} showDetail />);
+
+    expect(await screen.findByText("20 photos on file")).toBeTruthy();
+    const drawn = screen.getAllByTestId("proof-tile").length;
+    expect(drawn).toBeGreaterThan(0);
+    expect(drawn).toBeLessThan(20);
+  });
+
   it("offers more photos on the shop's own part while GRIDGO takes them", async () => {
     const onAddProof = jest.fn();
     await render(<MilestoneList milestones={[view()]} showDetail onAddProof={onAddProof} />);

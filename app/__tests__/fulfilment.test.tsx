@@ -124,7 +124,7 @@ it("leaves the invoice reminder off the printing evidence", async () => {
   await view.unmount();
 });
 
-it("files a plan-2 start-of-production proof and moves it from the queue to the sheet", async () => {
+it("files a plan-2 start-of-production proof and moves it from the queue to the grid", async () => {
   const job = escrow();
   (api.getOrder as jest.Mock).mockResolvedValue(job);
   (api.attachFulfilmentProof as jest.Mock).mockResolvedValue(answered(job, ["file_1"]));
@@ -141,7 +141,7 @@ it("files a plan-2 start-of-production proof and moves it from the queue to the 
   expect(await screen.findByText(/1 photo filed\. The GRIDGO Team reviews the evidence/)).toBeTruthy();
   expect(mockUpload.remove).toHaveBeenCalledWith("photo");
 
-  // The next read of the job agrees; the photo is on the sheet once and the queue is empty.
+  // The next read of the job agrees; the photo is in the grid once and the queue is empty.
   (api.getOrder as jest.Mock).mockResolvedValue(answered(job, ["file_1"]).order);
   await act(async () => { invalidate("orders"); });
   await waitFor(() => expect(api.getOrder).toHaveBeenCalledTimes(2));
@@ -200,6 +200,14 @@ it("stops at the 50-photo limit in plain words", async () => {
   expect(api.attachFulfilmentProof).toHaveBeenCalledTimes(1);
   expect(await screen.findAllByText(/This part already has 50 photos, the most GRIDGO keeps/)).toBeTruthy();
   expect(screen.queryByText(/proof_limit_reached|409/)).toBeNull();
+  // GRIDGO's count is read again; once it shows the part full, nothing is offered to file.
+  await waitFor(() => expect(api.getOrder).toHaveBeenCalledTimes(2));
+  (api.getOrder as jest.Mock).mockResolvedValue(
+    escrow({ status: "pof_attached", pofFileIds: Array.from({ length: 50 }, (_, i) => `file_${i}`) }),
+  );
+  await act(async () => { invalidate("orders"); });
+  expect(await screen.findByText("50 photos on file")).toBeTruthy();
+  expect(screen.queryByLabelText(/^File \d/)).toBeNull();
   await view.unmount();
 });
 
@@ -272,5 +280,19 @@ it("says a start photo also opens packing", async () => {
   );
   const view = await render(<FulfilmentProofScreen />);
   expect(await screen.findByText(/A photo also counts as the production photo you need before packing/)).toBeTruthy();
+  await view.unmount();
+});
+
+it("draws the first twelve photos of a full part and the rest on request", async () => {
+  mockItems = [];
+  const ids = Array.from({ length: 20 }, (_, i) => `file_${i}`);
+  (api.getOrder as jest.Mock).mockResolvedValue(escrow({ status: "pof_attached", pofFileIds: ids }));
+  const view = await render(<FulfilmentProofScreen />);
+  expect(await screen.findByText("20 photos on file")).toBeTruthy();
+  await layOutGrid();
+  await waitFor(() => expect(screen.getAllByTestId("proof-tile")).toHaveLength(12));
+  await fireEvent.press(screen.getByText("Show all 20 photos"));
+  await waitFor(() => expect(screen.getAllByTestId("proof-tile")).toHaveLength(20));
+  expect(screen.queryByText("Show all 20 photos")).toBeNull();
   await view.unmount();
 });

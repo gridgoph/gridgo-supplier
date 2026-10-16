@@ -1,8 +1,9 @@
 import { FileCheck, FileWarning, ImageOff, Paperclip, RotateCcw, Trash2 } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { FlatList, Image, Pressable, Text, View } from "react-native";
 
 import { SamplePhotoViewer } from "@/components/SamplePhotoViewer";
+import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { useSignedLink } from "@/hooks/useSignedLink";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -10,12 +11,12 @@ import { getFile, type StoredFile } from "@/lib/api";
 import { isProofImage, proofDocumentKind, uploadStageLabel, type UploadItem } from "@/lib/files";
 
 /**
- * A payout part's evidence as a contact sheet: every file GRIDGO lists for it,
+ * A payout part's evidence as a grid of plates: every file GRIDGO lists for it,
  * in the order it was first filed, each drawn once.
  *
  * GRIDGO already lists a picture once however many times it was uploaded
  * (gridgo-api `docs/OPERATIONAL_MODEL_V2_API.md#payout-proofs`), so the
- * sheet draws `pofFileIds` as they come and never adds the shop's own pending
+ * grid draws `pofFileIds` as they come and never adds the shop's own pending
  * uploads to it — a photo is either on file here or waiting in the queue
  * below, never both.
  *
@@ -25,8 +26,25 @@ import { isProofImage, proofDocumentKind, uploadStageLabel, type UploadItem } fr
 
 const GAP = 8;
 const COLUMNS = 3;
+/** Tiles drawn before "Show all": a part can hold 50, and each tile is two reads. */
+const FIRST_ROWS = 4;
 
-type SheetProps = {
+/**
+ * A stored file's name and type never change, so one read serves every tile
+ * that draws it, on every screen. A failed read is forgotten, so the next
+ * visit — or a pull-to-refresh — asks again.
+ */
+const metadata = new Map<string, Promise<StoredFile>>();
+function fileMetadata(fileId: string): Promise<StoredFile> {
+  const held = metadata.get(fileId);
+  if (held) return held;
+  const read = getFile(fileId);
+  metadata.set(fileId, read);
+  read.catch(() => metadata.delete(fileId));
+  return read;
+}
+
+type ProofPhotosProps = {
   fileIds: string[];
   /** What each picture is, for anyone who cannot see it ("Start of production evidence"). */
   label: string;
@@ -35,52 +53,68 @@ type SheetProps = {
 };
 
 /** Every proof on file, wrapped three across. The page around it scrolls. */
-export function ProofPhotoGrid({ fileIds, label, reloadVersion = 0 }: SheetProps) {
+export function ProofPhotoGrid({ fileIds, label, reloadVersion = 0 }: ProofPhotosProps) {
   const [width, setWidth] = useState(0);
+  const [all, setAll] = useState(false);
   const size = width > 0 ? Math.floor((width - GAP * (COLUMNS - 1)) / COLUMNS) : 0;
+  const first = FIRST_ROWS * COLUMNS;
+  const shown = all ? fileIds : fileIds.slice(0, first);
   return (
-    <View
-      testID="proof-grid"
-      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-      accessibilityRole="list"
-      accessibilityLabel={proofCountLabel(fileIds.length)}
-      style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}
-    >
-      {size > 0
-        ? fileIds.map((fileId, index) => (
-            <ProofTile
-              key={`${fileId}:${reloadVersion}`}
-              fileId={fileId}
-              size={size}
-              alt={`${label} ${index + 1} of ${fileIds.length}`}
-            />
-          ))
-        : null}
+    <View className="gap-3">
+      <View
+        testID="proof-grid"
+        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+        accessibilityRole="list"
+        accessibilityLabel={proofCountLabel(fileIds.length)}
+        style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}
+      >
+        {size > 0
+          ? shown.map((fileId, index) => (
+              <ProofTile
+                key={`${fileId}:${reloadVersion}`}
+                fileId={fileId}
+                size={size}
+                alt={`${label} ${index + 1} of ${fileIds.length}`}
+              />
+            ))
+          : null}
+      </View>
+      {shown.length < fileIds.length ? (
+        <SecondaryButton label={`Show all ${fileIds.length} photos`} onPress={() => setAll(true)} />
+      ) : null}
     </View>
   );
 }
 
-/** The same files as one scrolling row, for a job screen that has other things to say. */
-export function ProofPhotoStrip({ fileIds, label, reloadVersion = 0 }: SheetProps) {
+/**
+ * The same files as one scrolling row, for a job screen that has other things
+ * to say. Virtualised: only the tiles near the row's edge are drawn, so a part
+ * with fifty photos asks for the handful a shop can see.
+ */
+export function ProofPhotoStrip({ fileIds, label, reloadVersion = 0 }: ProofPhotosProps) {
   if (!fileIds.length) return null;
   return (
-    <ScrollView
+    <FlatList
       horizontal
+      data={fileIds}
+      keyExtractor={(fileId) => `${fileId}:${reloadVersion}`}
+      extraData={reloadVersion}
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ gap: GAP }}
+      initialNumToRender={5}
+      maxToRenderPerBatch={5}
+      windowSize={3}
+      ItemSeparatorComponent={StripGap}
       accessibilityRole="list"
       accessibilityLabel={proofCountLabel(fileIds.length)}
-    >
-      {fileIds.map((fileId, index) => (
-        <ProofTile
-          key={`${fileId}:${reloadVersion}`}
-          fileId={fileId}
-          size={80}
-          alt={`${label} ${index + 1} of ${fileIds.length}`}
-        />
-      ))}
-    </ScrollView>
+      renderItem={({ item: fileId, index }) => (
+        <ProofTile fileId={fileId} size={80} alt={`${label} ${index + 1} of ${fileIds.length}`} />
+      )}
+    />
   );
+}
+
+function StripGap() {
+  return <View style={{ width: GAP }} />;
 }
 
 /** "1 photo on file", "12 photos on file". */
@@ -95,7 +129,7 @@ function ProofTile({ fileId, size, alt }: { fileId: string; size: number; alt: s
 
   useEffect(() => {
     let active = true;
-    void getFile(fileId).then(
+    void fileMetadata(fileId).then(
       (value) => {
         if (active) setFile(value);
       },

@@ -19,7 +19,7 @@ import { WHY_WE_ASK } from "@/lib/legal";
 import { useJob } from "@/hooks/useJob";
 import { askConfirm } from "@/store/sheets";
 
-/** What the last filing did, said once above the sheet. */
+/** What the last filing did, said once above the grid. */
 type FiledNote = { filed: number; repeats: number; released: boolean };
 
 /**
@@ -32,9 +32,9 @@ type FiledNote = { filed: number; repeats: number; released: boolean };
  *
  * A part takes as many pictures as the shop wants to show, before or after it
  * is released, up to {@link MAX_PROOFS_PER_STAGE}
- * (gridgo-api `docs/OPERATIONAL_MODEL_V2_API.md#payout-proofs`). The sheet at
+ * (gridgo-api `docs/OPERATIONAL_MODEL_V2_API.md#payout-proofs`). The grid at
  * the top is GRIDGO's list, each picture once; the queue under it is this
- * phone's, and a photo leaves the queue in the same moment it joins the sheet,
+ * phone's, and a photo leaves the queue in the same moment it joins the grid,
  * so nothing is ever drawn twice.
  *
  * Uploading and filing stay two separate things: a file is stored when GRIDGO
@@ -54,7 +54,7 @@ export default function FulfilmentProofScreen() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [filedNote, setFiledNote] = useState<FiledNote | null>(null);
   // The order GRIDGO answered the last attach with, until the next read of
-  // this job replaces it: the sheet shows a filed photo the moment the queue
+  // this job replaces it: the grid shows a filed photo the moment the queue
   // lets go of it.
   const [answered, setAnswered] = useState<{ base: api.Order; order: api.Order } | null>(null);
   // The part is fixed for the visit once chosen, so filing its first photo
@@ -116,18 +116,20 @@ export default function FulfilmentProofScreen() {
         latest = result.order;
         const stage = result.order.payoutMilestones?.find((m) => m.code === target.code);
         // GRIDGO attaches a picture the part already lists but does not list it
-        // again; the sheet already shows it, so the queue simply lets it go.
+        // again; the grid already shows it, so the queue simply lets it go.
         if (stage && !(stage.pofFileIds ?? []).includes(item.fileId)) repeats += 1;
         else filed += 1;
-        // Leaving the queue and joining the sheet land in the same render.
+        // Leaving the queue and joining the grid land in the same render.
         upload.remove(item.key);
         if (base) setAnswered({ base, order: result.order });
       } catch (e) {
         const message = humanizeApiError(e, offlineMessage("file this photo"));
         upload.noteAttachError(item.key, message);
-        // Past the limit every other photo would be refused the same way.
+        // Past the limit every other photo would be refused the same way, and
+        // the grid is behind GRIDGO's count (another phone filed too), so read it again.
         if (apiErrorCode(e) === "proof_limit_reached") {
           setFileError(message);
+          void reload();
           break;
         }
       }
@@ -163,7 +165,8 @@ export default function FulfilmentProofScreen() {
       }
       actionError={fileError}
       footer={
-        target && availability === "available" && ready.length ? (
+        // A full part would refuse the filing, so there is nothing to press.
+        target?.canFileMore && availability === "available" && ready.length ? (
           <>
             <PrimaryButton
               label={filing ? "Filing…" : `File ${count(ready.length)}`}
