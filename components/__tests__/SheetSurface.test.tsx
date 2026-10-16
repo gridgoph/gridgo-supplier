@@ -6,10 +6,17 @@ import { SheetSurface, sheetBottomPadding } from "@/components/SheetSurface";
 import { spacing } from "@/constants/theme";
 
 describe("sheet bottom padding", () => {
-  it("adds one page step on top of the system inset so the last action clears the home bar", () => {
-    expect(sheetBottomPadding(0)).toBe(spacing.xl);
-    expect(sheetBottomPadding(24)).toBe(24 + spacing.xl);
-    expect(sheetBottomPadding(34)).toBe(34 + spacing.xl);
+  it("adds one page step on top of the system inset off iOS so the last action clears the gesture bar", () => {
+    expect(sheetBottomPadding(0, "android")).toBe(spacing.xl);
+    expect(sheetBottomPadding(24, "android")).toBe(24 + spacing.xl);
+    expect(sheetBottomPadding(34, "android")).toBe(34 + spacing.xl);
+  });
+
+  it("leaves the home indicator to UIKit on iOS, which already adds it below the sheet's detent", () => {
+    expect(sheetBottomPadding(34, "ios")).toBe(spacing.xl);
+    expect(sheetBottomPadding(0, "ios")).toBe(spacing.xl);
+    expect(sheetBottomPadding(34, "android")).toBe(34 + spacing.xl);
+    expect(sheetBottomPadding(34, "web")).toBe(34 + spacing.xl);
   });
 
   it("applies that padding on the surface, not a class that NativeWind can clobber", async () => {
@@ -29,6 +36,7 @@ describe("sheet bottom padding", () => {
     );
 
     const style = StyleSheet.flatten(screen.getByTestId("sheet-surface").props.style) ?? {};
-    expect(style.paddingBottom).toBe(34 + spacing.xl);
+    // jest-expo renders as iOS, where UIKit owns the home-indicator inset.
+    expect(style.paddingBottom).toBe(spacing.xl);
   });
 });
