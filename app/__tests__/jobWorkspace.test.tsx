@@ -791,3 +791,29 @@ describe("job workspace before packaging", () => {
     expect(within(history).queryByText(/GRIDGO/)).toBeNull();
   });
 });
+
+describe("job workspace on an Express job", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("tags the job and says what Express promised", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(job({ state: "production", express: true }));
+
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByText("Express")).toBeTruthy();
+    expect(
+      screen.getByText("GRIDGO promised this order for the client's deadline under Express, even if that is today."),
+    ).toBeTruthy();
+  });
+
+  it("says nothing about Express on an ordinary job", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(job({ state: "production" }));
+
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByTestId("job-brief")).toBeTruthy();
+    expect(screen.queryByText("Express")).toBeNull();
+  });
+});

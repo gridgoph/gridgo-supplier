@@ -174,3 +174,29 @@ describe("review and take-down on the wall", () => {
     await view.unmount();
   });
 });
+
+describe("the Express tag", () => {
+  it("marks a listing with Express on, on the wall and on the list", async () => {
+    const tile = await render(
+      <ListingCard listing={{ ...listing, express: true }} catalog={null} services={[]} shopApproved onPress={() => undefined} />,
+    );
+    expect(screen.getByText("Express")).toBeTruthy();
+    await tile.unmount();
+
+    const row = await render(
+      <ListingRow listing={{ ...listing, express: true }} catalog={null} services={[]} shopApproved onPress={() => undefined} />,
+    );
+    expect(screen.getByText("Express")).toBeTruthy();
+    await row.unmount();
+  });
+
+  it("draws nothing for a listing with Express off or from an older GRIDGO", async () => {
+    for (const express of [false, null, undefined]) {
+      const tile = await render(
+        <ListingCard listing={{ ...listing, express }} catalog={null} services={[]} shopApproved onPress={() => undefined} />,
+      );
+      expect(screen.queryByText("Express")).toBeNull();
+      await tile.unmount();
+    }
+  });
+});

@@ -1,5 +1,6 @@
 import * as api from "@/lib/api";
-import { apiErrorBlockers, humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import { apiErrorBlockers, humanizeApiError, isCatalogItemStale, offlineMessage } from "@/lib/apiErrors";
+import { EXPRESS_STALE } from "@/lib/express";
 import { fileFormatName } from "@/data/fileFormats";
 import { invalidate } from "@/lib/live";
 import {
@@ -238,6 +239,7 @@ export type ListingPatch = {
   subcategoryCode?: string;
   /** The platform's `active`; "on the board" everywhere a shop can see. */
   active?: boolean;
+
   sortOrder?: number;
 };
 
@@ -262,6 +264,27 @@ export async function saveListing(
     if (!saved) throw new api.ApiError(502, { error: "unreadable" });
     return saved;
   });
+}
+
+/**
+ * Express, on its own: only `express` with the listing's version, never the
+ * held words, and it never opens review (gridgo-api `docs/EXPRESS_API.md`).
+ * A stale version is worded for the switch, which reloads rather than asking
+ * the shop to pull down.
+ */
+export async function setExpress(listing: Listing, on: boolean): Promise<BoardOutcome<Listing>> {
+  try {
+    const saved = normalizeListing(
+      await api.updateCatalogItem(listing.id, listing.version, { express: on }),
+    );
+    if (!saved) return { status: "failed", message: UNREADABLE_LISTING };
+    invalidate("catalog");
+    return { status: "ok", value: saved };
+  } catch (error) {
+    if (isRouteAbsent(error)) return { status: "not_open_yet" };
+    if (isCatalogItemStale(error)) return { status: "failed", message: EXPRESS_STALE };
+    return { status: "failed", message: humanizeApiError(error, offlineMessage("change Express")) };
+  }
 }
 
 /**
