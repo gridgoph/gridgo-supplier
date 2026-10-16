@@ -23,6 +23,8 @@ import { PICKUP_CHAT_NOTICE, pickupChatHref } from "@/lib/pickupChat";
 import { jobScreenHref } from "@/lib/productionNudge";
 import { isLapseAlert } from "@/lib/productionLapse";
 import { SUPPORT_MESSAGE_PUSH_TYPE } from "@/lib/push";
+import { installChannel } from "@/lib/buildDistribution";
+import { openRelease, releaseNoticeOpen } from "@/lib/releasePush";
 import { isRefundAlert } from "@/lib/refund";
 import { SHOP_HOURS_NOTICE, SHOP_HOURS_ROUTE } from "@/lib/shopHours";
 import { isAlertUnread, useAlertsStore, visibleAlerts } from "@/store/alerts";
@@ -238,6 +240,10 @@ export default function NotificationsScreen() {
     const listingHref = listingAlertHref(alert);
     // The inbox row names its support thread (the push does not).
     const supportThread = alert.threadId ?? undefined;
+    // A Play or TestFlight release notice opens its store. The APK notice
+    // keeps its inbox behaviour; the update card above offers the download.
+    const release = releaseNoticeOpen(alert, alert.title, installChannel());
+    const storeRelease = release && release.target !== "apk_download" ? release : null;
     return (
       <AlertCard
         key={alert.id}
@@ -248,7 +254,9 @@ export default function NotificationsScreen() {
         onDelete={() => void confirmDelete(alert)}
         job={job}
         onOpen={
-          listingHref
+          storeRelease
+            ? () => void openRelease(storeRelease)
+            : listingHref
             ? () => router.push(listingHref)
             : alert.orderId && alert.type === PICKUP_CHAT_NOTICE
               ? () => router.push(pickupChatHref(alert.orderId as string))

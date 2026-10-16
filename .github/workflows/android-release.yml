@@ -543,6 +543,7 @@ jobs:
       # reads them back (scripts/play-release-notes.mjs). Testers see what
       # changed; the versionCode is the run number, so each upload is newer.
       - name: Submit the Play bundle to the internal testing track
+        id: play_submit
         if: github.event.inputs.play_bundle == 'true' && github.event.inputs.submit_to_play == 'true'
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -605,6 +606,20 @@ jobs:
             cat "$notes"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Play testers hear of this version only now that Play has it; the APK
+      # notice above never reaches a Play install (gridgo-api
+      # docs/RELEASE_ANNOUNCEMENTS_API.md). Advisory: the upload has already
+      # succeeded, so a failed announcement never fails the run.
+      - name: Announce the Play release
+        if: steps.play_submit.outcome == 'success'
+        continue-on-error: true
+        env:
+          RELEASE_ANNOUNCE_TOKEN: ${{ secrets.RELEASE_ANNOUNCE_TOKEN }}
+          RELEASE_APP: supplier
+          RELEASE_CHANNEL: play
+          RELEASE_VERSION: ${{ steps.config.outputs.version }}
+        run: node scripts/announce-release.mjs
 
       # The notes this release carried now belong to its version: they move
       # under "## <version> (<label>)" in WHATS_NEW.md and leave whats-new/, so

@@ -137,7 +137,14 @@ jobs:
             const fs = require("fs");
             const builds = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
             const build = Array.isArray(builds) ? builds[0] : builds;
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `id=${build.id}\n`);
+            // app.json holds the iPhone version at MAJOR.MINOR.0 and EAS raises
+            // only the build number, so the release notice names
+            // MAJOR.MINOR.<build number>: the Android rule, and a new version
+            // for every upload (GRIDGO sends each version once).
+            const line = /^(\d+)\.(\d+)\./.exec(build.appVersion ?? "");
+            const number = String(build.appBuildVersion ?? "");
+            const version = line && /^[1-9]\d*$/.test(number) ? `${line[1]}.${line[2]}.${number}` : "";
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `id=${build.id}\nversion=${version}\n`);
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
               "### GRIDGO Supplier iPhone build",
               "",
@@ -156,6 +163,7 @@ jobs:
       # in App Store Connect, so it comes from a repository variable and is
       # written into this runner's copy of eas.json for the upload alone.
       - name: Upload to TestFlight
+        id: testflight
         if: inputs.submit_to_testflight
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -177,6 +185,20 @@ jobs:
             echo
             echo "Uploaded to App Store Connect. It appears in TestFlight once Apple has processed it (usually 5 to 30 minutes)."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # TestFlight testers hear of this version only once it is uploaded; the
+      # APK notice never reaches an iPhone (gridgo-api
+      # docs/RELEASE_ANNOUNCEMENTS_API.md). Advisory: the upload has already
+      # succeeded, so a failed announcement never fails the run.
+      - name: Announce the TestFlight release
+        if: steps.testflight.outcome == 'success'
+        continue-on-error: true
+        env:
+          RELEASE_ANNOUNCE_TOKEN: ${{ secrets.RELEASE_ANNOUNCE_TOKEN }}
+          RELEASE_APP: supplier
+          RELEASE_CHANNEL: ios
+          RELEASE_VERSION: ${{ steps.build.outputs.version }}
+        run: node scripts/announce-release.mjs
 
       - name: Remove the App Store Connect key
         if: always()

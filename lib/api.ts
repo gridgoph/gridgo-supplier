@@ -10,6 +10,7 @@ import { parseCall, parseCalls, type OrderCall } from "@/lib/orderCall";
 import { pickupChatOf, type PickupChatMessage, type PickupChatSummary } from "@/lib/pickupChat";
 import { parseRiderApproach, type RiderApproach } from "@/lib/riderApproach";
 import { pushTokenProvider, type DevicePlatform, type PushTokenProvider } from "@/lib/push";
+import { installChannel } from "@/lib/buildDistribution";
 
 export { ApiError } from "@/lib/apiErrors";
 
@@ -601,6 +602,9 @@ export type Notification = {
   orderState?: string;
   /** Broadcast picture. Public HTTPS link or `/public/announcement-images/<fileId>`. */
   imageUrl?: string | null;
+  /** A release notice's install channel and store (`lib/releasePush.ts`). */
+  releaseChannel?: string | null;
+  storeTarget?: string | null;
   read: boolean;
   at: string;
 };
@@ -1143,6 +1147,17 @@ export async function logout(deviceToken?: string | null): Promise<void> {
 }
 
 /**
+ * The `POST /devices` body, signed in or not. `installChannel` says how this
+ * build was installed, so a release notice reaches it only once its own store
+ * has the version; registration runs on every launch, so an install that
+ * predates the field reports it on its next one.
+ */
+function deviceBody(token: string, platform: DevicePlatform, tokenProvider: PushTokenProvider) {
+  const channel = installChannel(platform);
+  return { token, platform, appRole: "supplier", tokenProvider, ...(channel ? { installChannel: channel } : {}) };
+}
+
+/**
  * Register this installation's FCM token against the signed-in shop.
  *
  * Idempotent and cheap by design, so it is called on every launch and on every
@@ -1159,7 +1174,7 @@ export async function registerDevice(
 ): Promise<{ device: Device; created: boolean; reassigned: boolean }> {
   return request<{ device: Device; created: boolean; reassigned: boolean }>("/devices", {
     method: "POST",
-    body: JSON.stringify({ token, platform, appRole: "supplier", tokenProvider }),
+    body: JSON.stringify(deviceBody(token, platform, tokenProvider)),
   });
 }
 
@@ -1199,7 +1214,7 @@ export async function registerDeviceUnclaimed(
       signal: controller.signal,
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ token, platform, appRole: "supplier", tokenProvider }),
+      body: JSON.stringify(deviceBody(token, platform, tokenProvider)),
     });
     if (!res.ok) {
       const text = await res.text();

@@ -1,9 +1,9 @@
-import { buildDistribution } from "@/lib/buildDistribution";
-import { releasePushDownloadUrl } from "@/lib/releasePush";
+import { installChannel } from "@/lib/buildDistribution";
+import { openRelease, releaseNoticeOpen } from "@/lib/releasePush";
 import { invalidate, liveGeneration, subscribeLive } from "@/lib/live";
 import { useRouter, useRootNavigationState, type Href } from "expo-router";
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { AppState, Linking } from "react-native";
+import { AppState } from "react-native";
 
 import { accountHold } from "@/lib/accountHold";
 import * as api from "@/lib/api";
@@ -218,11 +218,12 @@ export function usePushNotifications(): void {
       const key = pushTapKey(identifier, parsePushData(data));
       if (routed.current.has(key)) return;
       routed.current.add(key);
-      const download = releasePushDownloadUrl(data, title, buildDistribution());
-      if (download) {
+      const release = releaseNoticeOpen(data, title, installChannel());
+      if (release) {
         pending.current = null;
-        // An update is public and can rescue a signed-out install too.
-        void Linking.openURL(download).catch(() => undefined);
+        // An update is public and can rescue a signed-out install too. A store
+        // notice opens that store, never the side-load download.
+        void openRelease(release);
         void Notifications?.clearLastNotificationResponseAsync?.().catch(() => undefined);
         return;
       }
