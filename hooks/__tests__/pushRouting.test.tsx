@@ -1,4 +1,4 @@
-import { Linking } from "react-native";
+import { Linking, Platform } from "react-native";
 import { useAlertsStore } from "@/store/alerts";
 import {act,renderHook} from "@testing-library/react-native";
 import {usePushNotifications} from "@/hooks/usePushNotifications";
@@ -23,7 +23,10 @@ beforeEach(()=>{
   mockLast.mockResolvedValue(response);
   (api.listNotifications as jest.Mock).mockResolvedValue([{id:"n",userId:"owner",title:"Decision",orderId:"o"}]);
 });
-afterEach(()=>jest.useRealTimers());
+const realOS=Platform.OS;
+afterEach(()=>{jest.useRealTimers();Object.defineProperty(Platform,"OS",{value:realOS,configurable:true});});
+/** The release tests are about an Android install; the jest preset runs as iOS. */
+const onAndroid=()=>Object.defineProperty(Platform,"OS",{value:"android",configurable:true});
 it("waits for a real navigator then opens a pending applicant's authorized decision once",async()=>{
   const view=await renderHook(()=>usePushNotifications());
   await act(async()=>{jest.advanceTimersByTime(100);});
@@ -78,6 +81,7 @@ it("keeps a newer screen reconciliation when an older foreground push read retur
 
 
 it.each(["cold start", "background"])("opens release download while signed out from %s", async mode => {
+  onAndroid();
   const open = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
   useSession.setState({ user: null });
   const release = { notification: { request: { identifier: "release-tap", content: {
@@ -94,6 +98,46 @@ it.each(["cold start", "background"])("opens release download while signed out f
   expect(open).toHaveBeenCalledTimes(1);
   expect(jest.requireMock("expo-notifications").clearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
   expect(mockPush).not.toHaveBeenCalled();
+  await view.unmount();
+  open.mockRestore();
+});
+
+it("opens Google Play, never the APK download, from a Play notice on a Play build", async () => {
+  onAndroid();
+  process.env.EXPO_PUBLIC_APP_DISTRIBUTION = "play";
+  const open = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+  useSession.setState({ user: null });
+  mockLast.mockResolvedValue({ notification: { request: { identifier: "play-tap", content: {
+    title: "GRIDGO Supplier 1.0.123 is on the Play Store",
+    data: { type: "announcement", releaseChannel: "play", storeTarget: "play_store" },
+  } } } });
+  const view = await renderHook(() => usePushNotifications());
+  await act(async () => { jest.advanceTimersByTime(100); });
+  expect(open).toHaveBeenCalledTimes(1);
+  expect(open).toHaveBeenCalledWith("market://details?id=ph.gridgo.supplier");
+  expect(mockPush).not.toHaveBeenCalled();
+  await view.unmount();
+  open.mockRestore();
+  delete process.env.EXPO_PUBLIC_APP_DISTRIBUTION;
+});
+
+it("opens TestFlight from a TestFlight notice on an iPhone, and ignores the APK notice there", async () => {
+  Object.defineProperty(Platform, "OS", { value: "ios", configurable: true });
+  const open = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+  useSession.setState({ user: null });
+  mockLast.mockResolvedValue(null);
+  const view = await renderHook(() => usePushNotifications());
+  const onTap = jest.requireMock("expo-notifications").addNotificationResponseReceivedListener.mock.calls.at(-1)[0];
+  await act(async () => {
+    onTap({ notification: { request: { identifier: "apk-tap", content: {
+      title: "GRIDGO Supplier 1.0.123 is ready", data: { type: "announcement", releaseChannel: "apk", storeTarget: "apk_download" },
+    } } } });
+    onTap({ notification: { request: { identifier: "ios-tap", content: {
+      title: "GRIDGO Supplier 1.0.123 is in TestFlight", data: { type: "announcement", releaseChannel: "ios", storeTarget: "testflight" },
+    } } } });
+  });
+  await act(async () => { jest.advanceTimersByTime(100); });
+  expect(open.mock.calls).toEqual([["itms-beta://"]]);
   await view.unmount();
   open.mockRestore();
 });

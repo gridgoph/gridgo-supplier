@@ -305,3 +305,43 @@ it("opens the exact Operations thread an inbox message names, and chat history w
   fireEvent.press(screen.getByText("Older message from Operations"));
   await waitFor(() => expect(router.push).toHaveBeenLastCalledWith("/chat"));
 });
+
+it("opens TestFlight from an inbox release notice on an iPhone, and leaves the APK notice in the inbox", async () => {
+  // The jest preset runs as iOS, so this install reports `ios`.
+  const { Linking } = jest.requireActual<typeof import("react-native")>("react-native");
+  const open = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+  useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, localOnly: false });
+  api.listNotifications.mockResolvedValue([
+    {
+      id: "ntf_ios",
+      userId: "user_supplier",
+      type: "announcement",
+      releaseChannel: "ios",
+      storeTarget: "testflight",
+      title: "GRIDGO Supplier 1.0.123 is in TestFlight",
+      body: "Update in TestFlight for the latest fixes and features.",
+      read: false,
+      at: "2026-10-16T01:00:00.000Z",
+    },
+    {
+      id: "ntf_apk",
+      userId: "user_supplier",
+      type: "announcement",
+      releaseChannel: "apk",
+      storeTarget: "apk_download",
+      title: "GRIDGO Supplier 1.0.122 is ready",
+      body: "Update now for the latest fixes and features.",
+      read: true,
+      at: "2026-10-15T01:00:00.000Z",
+    },
+  ]);
+  api.listJobs.mockResolvedValue([]);
+
+  await render(<AlertsScreen />);
+
+  fireEvent.press(await screen.findByText("GRIDGO Supplier 1.0.122 is ready"));
+  fireEvent.press(screen.getByText("GRIDGO Supplier 1.0.123 is in TestFlight"));
+  await waitFor(() => expect(open).toHaveBeenCalledWith("itms-beta://"));
+  expect(open).toHaveBeenCalledTimes(1);
+  open.mockRestore();
+});
