@@ -82,7 +82,7 @@ describe("app.config stamps app.json without disturbing it", () => {
 
     expect(resolved.slug).toBe(appJson.expo.slug);
     // Plus the iPhone store settings, first so their mods run last (iOS only).
-    expect(resolved.plugins).toEqual(["./plugins/withIosStoreBuild", ...appJson.expo.plugins]);
+    expect(resolved.plugins).toEqual(["./plugins/withIosStoreBuild", ...(appJson.expo.plugins ?? [])]);
     expect(resolved.android?.package).toBe(appJson.expo.android?.package);
     expect(resolved.version).toBe(appJson.expo.version);
   });
