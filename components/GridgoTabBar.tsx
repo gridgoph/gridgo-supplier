@@ -21,6 +21,14 @@ import { TAB_TOUR_STEPS } from "@/lib/tour";
    80dp column on top of it as well: 80 + 34 + 8 = 122pt against the platform's
    83. That is the "tab bar sits too high" report.
 
+   The exact 49pt row then drew the opposite report (16 Oct 2026, on an
+   iPhone, first in gridgo-client): with 4pt above the glyph, a list scrolled
+   under the bar met the icons with no gap at all. A card's surface is the
+   bar's surface, so the hairline alone cannot separate them in Dark — only air
+   can, which is what Android's 20dp does. The iOS row is therefore 57pt: the
+   same 12pt above the glyph that Android declares, still nothing added under
+   the labels.
+
    **Android.** Material 3's navigation bar container is 80dp with 12dp above
    the item and 16dp below it, and `NavigationBarDefaults.windowInsets` adds the
    bottom system-bar inset *beneath* that container rather than inside it. So
@@ -43,8 +51,8 @@ import { TAB_TOUR_STEPS } from "@/lib/tour";
    gap stands in, so labels are never flush against the physical edge.
 
    Resulting bar heights, content column plus whatever sits under it:
-     iOS, home indicator     49 + 34 = 83pt   (UIKit exactly)
-     iOS, no indicator       49 +  8 = 57pt
+     iOS, home indicator     57 + 34 = 91pt
+     iOS, no indicator       57 +  8 = 65pt
      Android, gesture nav    80 + 24 = 104dp
      Android, three-button   80 + 48 = 128dp
      Android/web, no inset   80 +  8 =  88dp
@@ -73,8 +81,9 @@ export type TabBarMetrics = {
  */
 export function tabBarMetrics(platformOS: string): TabBarMetrics {
   if (platformOS === "ios") {
-    // 4 + 24 icon + 2 + 16 label + 3 = 49, the HIG row exactly.
-    return { columnHeight: 49, itemPaddingTop: 4, itemGap: 2, itemPaddingBottom: 3 };
+    // 12 + 24 icon + 2 + 16 label + 3 = 57: the HIG's 49pt row with the air
+    // above the glyph that keeps a scrolled list off the icons.
+    return { columnHeight: 57, itemPaddingTop: 12, itemGap: 2, itemPaddingBottom: 3 };
   }
   // Material 3: 80dp container, 12dp above the item, 16dp below it, 24dp icon.
   return { columnHeight: 80, itemPaddingTop: 12, itemGap: 4, itemPaddingBottom: 16 };
@@ -269,7 +278,7 @@ function TabItem({ name, label, focused, onPress }: TabItemProps) {
               taller than the 16px the type scale promises, which pushes the
               glyph away from its icon and shoves the icon up into the hairline.
               Off, the box is the 16px it claims to be on every platform — which
-              is what makes the column exactly 49pt and 80dp.
+              is what makes the column exactly 57pt and 80dp.
             */
             style={{
               includeFontPadding: false,

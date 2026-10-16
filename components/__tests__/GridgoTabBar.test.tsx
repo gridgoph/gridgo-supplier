@@ -168,11 +168,13 @@ describe("GridgoTabBar", () => {
    * by accident rather than by construction.
    */
   describe("content row", () => {
-    it("is the HIG's 49pt row on iOS, built from its own parts", () => {
+    it("is a 57pt row on iOS: the HIG's 49 plus air above the glyph", () => {
       const m = tabBarMetrics("ios");
-      expect(m.columnHeight).toBe(49);
-      // 4 + 24 icon + 2 + 16 label + 3 = 49.
-      expect(m.itemPaddingTop + TAB_ICON_SIZE + m.itemGap + 16 + m.itemPaddingBottom).toBe(49);
+      expect(m.columnHeight).toBe(57);
+      // 12 + 24 icon + 2 + 16 label + 3 = 57. The 4pt above the glyph that the
+      // HIG row left let a scrolled list touch the icons (16 Oct 2026).
+      expect(m.itemPaddingTop).toBe(12);
+      expect(m.itemPaddingTop + TAB_ICON_SIZE + m.itemGap + 16 + m.itemPaddingBottom).toBe(57);
     });
 
     it("is Material 3's 80dp container on Android, built from its own parts", () => {
@@ -233,8 +235,8 @@ describe("GridgoTabBar", () => {
       const ios = tabBarMetrics("ios").columnHeight;
       const android = tabBarMetrics("android").columnHeight;
 
-      expect(ios + tabBarPaddingBottom(34)).toBe(83); // UIKit exactly
-      expect(ios + tabBarPaddingBottom(0)).toBe(57);
+      expect(ios + tabBarPaddingBottom(34)).toBe(91); // nothing added under the labels
+      expect(ios + tabBarPaddingBottom(0)).toBe(65);
       expect(android + tabBarPaddingBottom(24)).toBe(104); // MD3 + gesture inset
       expect(android + tabBarPaddingBottom(48)).toBe(128); // MD3 + three-button
       expect(android + tabBarPaddingBottom(0)).toBe(88); // unchanged from before
