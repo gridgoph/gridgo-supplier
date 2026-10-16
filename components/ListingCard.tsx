@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 
+import { ExpressChip } from "@/components/ExpressChip";
 import { HuntedName } from "@/components/HuntedName";
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { StandingChips, standingCaption } from "@/components/listing/StandingChips";
@@ -13,6 +14,7 @@ import {
   type Listing,
   type ServiceLine,
 } from "@/lib/listings";
+import { isExpressListing } from "@/lib/express";
 import type { ListingReadiness } from "@/lib/readiness";
 import type { ServiceCatalog } from "@/lib/taxonomy";
 
@@ -67,6 +69,7 @@ export function ListingCard({
   const caption = standingCaption(standing);
   const first = listing.photos[0];
   const cap = printerCapLine(listing);
+  const express = isExpressListing(listing);
 
   return (
     <View collapsable={false} className="rounded-card border border-outline bg-surface">
@@ -80,7 +83,7 @@ export function ListingCard({
         onPress={onPress}
         onLongPress={onRemove}
         accessibilityRole="button"
-        accessibilityLabel={`${listing.name || "Untitled listing"}. ${standing.label}.${standing.revision ? ` ${standing.revision.label}.` : ""}`}
+        accessibilityLabel={`${listing.name || "Untitled listing"}.${express ? " Express." : ""} ${standing.label}.${standing.revision ? ` ${standing.revision.label}.` : ""}`}
         accessibilityHint={onRemove ? "Press and hold to remove this listing." : undefined}
         accessibilityActions={onRemove ? [{ name: "remove", label: "Remove this listing" }] : undefined}
         onAccessibilityAction={(event) => {
@@ -106,6 +109,11 @@ export function ListingCard({
           <Text className="text-body text-text-primary" numberOfLines={1}>
             {priceLine(listing)}
           </Text>
+          {express ? (
+            <View className="flex-row">
+              <ExpressChip />
+            </View>
+          ) : null}
           <View className="mt-1">
             <StandingChips standing={standing} />
           </View>
