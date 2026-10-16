@@ -10,7 +10,8 @@ import {
   type BoardContext,
   type Listing,
 } from "@/lib/listings";
-import { applyDraft, type ListingDraft } from "@/lib/listingDraft";
+import { applyDraft, colourHold, colourOn, type ListingDraft } from "@/lib/listingDraft";
+import { COLOUR_PRICES_NEEDED, readColourDraft } from "@/lib/colourPricing";
 import {
   DEFAULT_DAY_MINUTES,
   DEFAULT_WORKING_DAYS,
@@ -76,6 +77,25 @@ export function aboutBlocker(listing: Listing, name: string): string | null {
 export function priceReady(price: string): boolean {
   const money = parseMoney(price);
   return money.ok && money.minor != null;
+}
+
+/**
+ * What stops the Price step's Proceed, or null. A listing priced by colour
+ * needs a readable table with at least one tier priced; any other listing
+ * needs its one price.
+ */
+export function priceBlocker(draft: ListingDraft): string | null {
+  if (colourOn(draft)) {
+    const hold = colourHold(draft);
+    if (hold) return hold;
+    const read = readColourDraft(draft.colour);
+    return read.ok && read.pricing.sizes.some((size) => Object.keys(size.prices).length)
+      ? null
+      : COLOUR_PRICES_NEEDED;
+  }
+  if (priceReady(draft.price)) return null;
+  const money = parseMoney(draft.price);
+  return money.ok ? "Set your price before it can go on the board." : money.error;
 }
 
 /**

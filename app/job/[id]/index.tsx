@@ -48,6 +48,7 @@ import {
   instructionsReadAt,
   itemInstructions,
 } from "@/lib/orderChanges";
+import { correctableColourLines, readColourQuote } from "@/lib/colourPricing";
 import { packagingCheck } from "@/lib/packagingReadiness";
 import { lapseForOrder, lapseNotice } from "@/lib/productionLapse";
 import { refundNotice, refundStanding } from "@/lib/refund";
@@ -248,6 +249,9 @@ export default function JobWorkspaceScreen() {
   const change = release ? null : currentChangeRequest(job);
   const earlierChanges = change ? changeRequestsOf(job).filter((row) => row.id !== change.id) : [];
   const requestChange = () => router.push({ pathname: "/job/[id]/change", params: { id: job.id } });
+  // A colour correction is a change request, so it opens exactly when one may be asked.
+  const colourLines = canChange ? correctableColourLines(job) : [];
+  const correctColour = () => router.push({ pathname: "/job/[id]/colour", params: { id: job.id } });
 
   function messageOperations() {
     router.push({ pathname: "/report", params: { orderId: job!.id, title: job!.title } });
@@ -400,7 +404,13 @@ export default function JobWorkspaceScreen() {
         {/* The job's change request, and where the client's answer stands. */}
         {change ? (
           <View className="mt-6">
-            <ChangeRequestPanel request={change} earlier={earlierChanges} />
+            <ChangeRequestPanel
+              request={change}
+              earlier={earlierChanges}
+              originalColour={readColourQuote(
+                job.productionItems?.find((item) => item.id === change.lineItemId)?.colourPricing,
+              )}
+            />
           </View>
         ) : null}
 
@@ -469,7 +479,7 @@ export default function JobWorkspaceScreen() {
         */}
         {counterIssue || release ? null : (
           <View className="mt-8 gap-3">
-            {canAskForTime || canCancel || (canChange && !showNotes) ? (
+            {canAskForTime || canCancel || (canChange && !showNotes) || colourLines.length ? (
               <Text className="text-overline text-text-muted">RUNNING INTO TROUBLE?</Text>
             ) : null}
             {/* Beside the notes when they are on screen; here when the job has none. */}
@@ -478,6 +488,15 @@ export default function JobWorkspaceScreen() {
                 <SecondaryButton label="Request a change" onPress={requestChange} />
                 <Text className="text-caption text-text-muted">
                   Ask the client to approve a different spec or an extra. Nothing changes until they do.
+                </Text>
+              </View>
+            ) : null}
+            {colourLines.length ? (
+              <View className="gap-1">
+                <SecondaryButton label="Correct the colour price" onPress={correctColour} />
+                <Text className="text-caption text-text-muted">
+                  A page clearly in another colour tier? Ask the client to approve the corrected price before you
+                  print it.
                 </Text>
               </View>
             ) : null}

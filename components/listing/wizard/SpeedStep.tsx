@@ -5,7 +5,7 @@ import { ListingSection } from "@/components/listing/ListingSection";
 import { PRODUCTION_TIME_HINT, ProductionTimeField } from "@/components/listing/ProductionTimeField";
 import { PriceTierEditor } from "@/components/listing/TierEditor";
 import { asksQuantity, unitLine, type BoardContext, type Listing } from "@/lib/listings";
-import { applyDraft, PACK_STEP, type ListingDraft } from "@/lib/listingDraft";
+import { applyDraft, colourOn, PACK_STEP, type ListingDraft } from "@/lib/listingDraft";
 import { productionWindow } from "@/lib/listingWizard";
 import type { ProductionTime } from "@/lib/productionDays";
 
@@ -47,7 +47,8 @@ export function SpeedStep({ listing, working, context, onChange }: Props) {
         </ListingSection>
       ) : null}
 
-      {asksQuantity(working.pricingUnit) ? (
+      {/* A colour price is the whole sheet rate: bulk breaks are not applied on top. */}
+      {asksQuantity(working.pricingUnit) && !colourOn(working) ? (
         <ListingSection title="BULK BREAKS">
           <PriceTierEditor
             tiers={working.priceTiers}

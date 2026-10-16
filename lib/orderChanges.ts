@@ -1,6 +1,7 @@
 import type { Notification, Order, ProductionItem } from "@/lib/api";
 import { formatPhp } from "@/lib/money";
 import { orderProductionItems } from "@/lib/productionSpecs";
+import { readColourQuote, type ColourQuote } from "@/lib/colourPricing";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 
 /**
@@ -74,6 +75,8 @@ export type ChangeRequest = {
   /** The client's note as it stood when the shop asked. */
   originalInstructions: string;
   payout: ChangePayout | null;
+  /** The shop's corrected colour pages, when the change is a colour correction. */
+  colourCorrection: ColourQuote | null;
 };
 
 export type ItemInstructions = {
@@ -117,6 +120,7 @@ export function normalizeChangeRequest(value: unknown): ChangeRequest | null {
     createdAt: text(raw.createdAt),
     originalInstructions: text(raw.originalInstructions),
     payout: payout && payoutStatus ? { status: payoutStatus, amountMinor: amount(payout.amountMinor) } : null,
+    colourCorrection: readColourQuote(raw.colourCorrection),
   };
 }
 

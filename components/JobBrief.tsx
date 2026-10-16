@@ -5,6 +5,7 @@ import Animated, { FadeIn, LinearTransition, useReducedMotion } from "react-nati
 
 import { ArtworkPanel } from "@/components/ArtworkPanel";
 import { CountLedger } from "@/components/CounterCheckPanel";
+import { ColourPricingSpec } from "@/components/ColourPricingSpec";
 import { ExactColoursSpec } from "@/components/ExactColoursSpec";
 import { ItemNote } from "@/components/ItemNote";
 import { PrintLayoutSpec } from "@/components/PrintLayoutSpec";
@@ -31,6 +32,7 @@ import {
   type JobBriefSectionId,
 } from "@/lib/jobBrief";
 import { showsAttachmentList } from "@/lib/artworkAttachments";
+import { colourLines } from "@/lib/colourPricing";
 import { orderArtwork } from "@/lib/orderArtwork";
 import { counterCheck } from "@/lib/pickupCheck";
 import { progressPhotoViews } from "@/lib/productionPhoto";
@@ -160,6 +162,7 @@ function SectionBody({
     case "make": {
       const items = orderProductionItems(order);
       const details = jobDetailsOf(order);
+      const colour = colourLines(order);
       return (
         <View className="gap-3">
           {items.map((item) => {
@@ -185,6 +188,11 @@ function SectionBody({
                 ))}
                 {material ? <SpecRow label="Material" value={material} muted={material === NOT_SPECIFIED} /> : null}
                 <PrintLayoutSpec item={item} />
+                {colour
+                  .filter((line) => line.item.id === item.id)
+                  .map((line) => (
+                    <ColourPricingSpec key={line.item.id} line={line} />
+                  ))}
                 <ExactColoursSpec item={item} />
                 <ItemNote item={item} />
               </View>

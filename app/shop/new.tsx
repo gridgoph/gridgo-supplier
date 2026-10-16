@@ -17,6 +17,7 @@ import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import {
   applyDraft,
   draftFrom,
+  colourHold,
   formatsMoved,
   listingSavePatch,
   sameDraft,
@@ -27,7 +28,7 @@ import {
   artworkBlocker,
   createListingName,
   pickReady,
-  priceReady,
+  priceBlocker,
   productionWindow,
   speedReady,
   wizardStepIndex,
@@ -319,6 +320,11 @@ export default function NewListingScreen() {
         setActionError(money.error);
         return false;
       }
+      const held = colourHold(working);
+      if (held) {
+        setActionError(held);
+        return false;
+      }
       const window = productionWindow(
         working,
         context?.inheritedTurnaround ?? null,
@@ -495,9 +501,9 @@ export default function NewListingScreen() {
       return;
     }
     if (step === "price") {
-      if (!priceReady(working.price)) {
-        const money = parseMoney(working.price);
-        setActionError(money.ok ? "Set your price before it can go on the board." : money.error);
+      const blocker = priceBlocker(working);
+      if (blocker) {
+        setActionError(blocker);
         return;
       }
       if (!(await persist())) return;
@@ -610,7 +616,7 @@ export default function NewListingScreen() {
     if (step === "pick") return pickIsReady;
     if (!listing || !working || !context) return false;
     if (step === "about") return aboutBlocker(listing, working.name) == null;
-    if (step === "price") return priceReady(working.price);
+    if (step === "price") return priceBlocker(working) == null;
     if (step === "speed") return speedReady(listing, working, context);
     if (step === "steps") return merged ? hasRequiredSpec(merged) : false;
     if (step === "artwork") return artworkBlocker(listing, working, context) == null;
@@ -844,8 +850,8 @@ export default function NewListingScreen() {
         />
       ) : null}
 
-      {step === "price" && working ? (
-        <PriceStep working={working} onChange={setDraft} />
+      {step === "price" && listing && working ? (
+        <PriceStep listing={listing} working={working} onChange={setDraft} />
       ) : null}
 
       {step === "speed" && listing && working && context ? (

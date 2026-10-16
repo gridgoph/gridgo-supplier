@@ -166,6 +166,16 @@ const MESSAGES: Record<string, string> = {
   invalid_change_line: "That item is no longer on this job. Refresh the job and pick it again.",
   invalid_change_amount: "Enter the extra as an amount in pesos, or leave it empty for no extra.",
   invalid_print_layouts: "GRIDGO did not recognise one of the print layouts. Refresh the listing and mark them again.",
+  // Colour pricing (gridgo-api docs/COLOUR_PRICING_API.md). Same words as the web dashboard.
+  invalid_colour_pricing:
+    "GRIDGO could not read your colour prices. Name each paper size once, like A3 or 20x30, and enter prices in pesos or leave a tier blank.",
+  colour_pricing_requires_per_page: "Pricing by colour works per page only. Set the pricing unit to per page first.",
+  colour_pricing_requires_print_layout:
+    "Pricing by colour needs at least one print layout, so GRIDGO knows how each page sits on the paper. Mark one under Artwork.",
+  invalid_colour_correction:
+    "GRIDGO could not read the corrected pages. Give every page a reading from 0 to 100% and a price in pesos, then send it again.",
+  colour_correction_refund_required:
+    "These prices come to less than the client paid. A lower price is a refund: contact the GRIDGO Team, who refund the client through Operations.",
   change_request_idempotency_conflict: "This request was already sent with different details. Go back to the job and check it.",
   change_deadline_operations_required:
     "A late-production deduction already applies to this job, so GRIDGO handles changes to it. Report a problem with this job.",
