@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.256 (Fix)
+
+- Jobs and listings have a back button again on iPhone, and Alerts shows only the updates for how you installed the app.
+
 ## 1.0.251 (New feature)
 
 - Price per-page work by how much strong colour each page has, and send a colour correction for the client to approve.
