@@ -28,9 +28,14 @@ type Props = {
  * Bottom padding is the system inset plus one page step: the last action is a
  * real target, not a kiss against the home indicator. Measuring only
  * `max(inset, 16)` sat Sign out on the gesture zone on a gesture-nav phone.
+ *
+ * iOS is the exception: UIKit already places the sheet's content above the
+ * home indicator and adds that inset below the measured detent (painted in the
+ * surface colour by `sheetScreenOptions`). Adding it here as well left a tall
+ * empty strip under the last action.
  */
-export function sheetBottomPadding(insetBottom: number): number {
-  return insetBottom + spacing.xl;
+export function sheetBottomPadding(insetBottom: number, os: typeof Platform.OS = Platform.OS): number {
+  return (os === "ios" ? 0 : insetBottom) + spacing.xl;
 }
 
 export function SheetSurface({ title, body, children, footer }: Props) {

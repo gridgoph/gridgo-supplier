@@ -47,6 +47,22 @@ describe("shared stack chrome", () => {
     });
   });
 
+  it.each(["light", "dark"] as const)(
+    "paints the whole iOS sheet in the %s surface so the home-indicator band matches it",
+    (scheme) => {
+      const previous = Platform.OS;
+      Platform.OS = "ios";
+      try {
+        expect(sheetScreenOptions(scheme)).toMatchObject({
+          contentStyle: { backgroundColor: colors[scheme].surface },
+        });
+      } finally {
+        Platform.OS = previous;
+      }
+      expect(sheetScreenOptions(scheme)).toMatchObject({ contentStyle: { backgroundColor: "transparent" } });
+    },
+  );
+
   it.each(["ios", "web"] as const)("keeps %s native overrides absent", (platform) => {
     const previous = Platform.OS;
     Platform.OS = platform;
