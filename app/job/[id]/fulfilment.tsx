@@ -108,6 +108,7 @@ export default function FulfilmentProofScreen() {
     let latest: api.Order | null = null;
     let filed = 0;
     let repeats = 0;
+    let full = false;
     for (const item of ready) {
       if (!item.fileId) continue;
       upload.noteAttachError(item.key, null);
@@ -126,9 +127,10 @@ export default function FulfilmentProofScreen() {
         const message = humanizeApiError(e, offlineMessage("file this photo"));
         upload.noteAttachError(item.key, message);
         // Past the limit every other photo would be refused the same way, and
-        // the grid is behind GRIDGO's count (another phone filed too), so read it again.
+        // the grid is behind GRIDGO's count (another phone filed too), so read
+        // it again. The photo's own row says why; the screen says the part is full.
         if (apiErrorCode(e) === "proof_limit_reached") {
-          setFileError(message);
+          full = true;
           void reload();
           break;
         }
@@ -139,7 +141,7 @@ export default function FulfilmentProofScreen() {
       const stageNow = latest?.payoutMilestones?.find((m) => m.code === target.code);
       setFiledNote({ filed, repeats, released: stageNow ? stageNow.status === "released" : released });
     }
-    if (filed + repeats < ready.length) {
+    if (!full && filed + repeats < ready.length) {
       setFileError((current) => current ?? "Some photos were not filed. Each one says why; file them again when you are ready.");
     }
   }

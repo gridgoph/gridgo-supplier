@@ -198,7 +198,12 @@ it("stops at the 50-photo limit in plain words", async () => {
   await fireEvent.press(await screen.findByLabelText("File 2 photos"));
   // The second would be refused the same way, so it is not sent.
   expect(api.attachFulfilmentProof).toHaveBeenCalledTimes(1);
-  expect(await screen.findAllByText(/This part already has 50 photos, the most GRIDGO keeps/)).toBeTruthy();
+  expect(mockUpload.noteAttachError).toHaveBeenCalledWith(
+    "one",
+    "This part already has 50 photos, the most GRIDGO keeps. Message the GRIDGO Team if they need more.",
+  );
+  // Said once, on the photo it stopped; not again as a screen-wide failure.
+  expect(screen.queryByText(/Some photos were not filed/)).toBeNull();
   expect(screen.queryByText(/proof_limit_reached|409/)).toBeNull();
   // GRIDGO's count is read again; once it shows the part full, nothing is offered to file.
   await waitFor(() => expect(api.getOrder).toHaveBeenCalledTimes(2));
