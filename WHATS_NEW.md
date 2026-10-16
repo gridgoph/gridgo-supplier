@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.234 (New feature)
+
+- Turn on Express for a listing so clients can pick any deadline from today. Express jobs carry a tag.
+
 ## 1.0.230 (New feature)
 
 - Add as many proof photos as you like to each payout part, pick several at once, and see each photo once.
