@@ -23,7 +23,7 @@ export function sanitizePercentInput(text: string): string {
 export function PercentField({ value, onChange, accessibilityLabel, editable = true }: Props) {
   const colors = useThemeColors();
   return (
-    <View className={editable ? "gg-field flex-row items-center" : "gg-field gg-disabled flex-row items-center"}>
+    <View className={editable ? "gg-field flex-row items-center pe-6" : "gg-field gg-disabled flex-row items-center pe-6"}>
       <TextInput
         value={value}
         onChangeText={(text) => onChange(sanitizePercentInput(text))}
@@ -33,7 +33,7 @@ export function PercentField({ value, onChange, accessibilityLabel, editable = t
         accessibilityLabel={accessibilityLabel}
         placeholder="0"
         placeholderTextColor={colors.textMuted}
-        className="flex-1 text-body text-text-primary"
+        className="min-w-0 flex-1 text-body text-text-primary"
         style={singleLineFieldTextStyle}
       />
       <Text className="text-body text-text-muted">%</Text>

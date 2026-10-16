@@ -4,6 +4,7 @@ import {
   correctionBaseline,
   correctionDraft,
   correctionProblem,
+  correctionStart,
   lowestSheetRate,
   pageLine,
   paperReading,
@@ -174,8 +175,17 @@ describe("a colour correction", () => {
     expect(correctionProblem(read, 27000)).toBeNull();
   });
 
-  it("measures a second correction against the one the client agreed to", () => {
+  it("measures a second correction against the one the client agreed to, page for page", () => {
     expect(correctionBaseline(quote, { correctedLineSubtotalMinor: 36000 })).toBe(36000);
+    const agreedPages = [{ ...quote.pages[0], strongColourBps: 1800, tier: "up_to_25" as const, sheetPriceMinor: 6000 }];
+    const start = correctionStart(quote, { pages: agreedPages });
+    expect(start.pages.map((page) => [page.page, page.strongColourBps, page.sheetPriceMinor])).toEqual([
+      [1, 1800, 6000],
+      [2, 1800, 6000],
+    ]);
+    const unchanged = readCorrection(start, correctionDraft(start), 36000);
+    expect(unchanged).toMatchObject({ ok: true, changed: false, extraMinor: 0 });
+    expect(correctionStart(quote, null)).toBe(quote);
   });
 
   it("refuses an unchanged correction and turns a lower one into a refund", () => {

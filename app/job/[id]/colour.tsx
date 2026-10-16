@@ -19,6 +19,7 @@ import {
   correctionBaseline,
   correctionDraft,
   correctionProblem,
+  correctionStart,
   percentToBps,
   readCorrection,
   sheetsLine,
@@ -60,11 +61,13 @@ export default function ColourCorrectionScreen() {
   const [lineId, setLineId] = useState<string | null>(lineParam ?? null);
   const line = lines.find((entry) => entry.item.id === lineId) ?? lines[0] ?? null;
   const quote = line?.quote ?? null;
+  // The pages a correction starts from: the one the client last agreed to, else GRIDGO's reading.
+  const start = quote && line ? correctionStart(quote, line.agreed) : null;
 
   // What the shop typed, for one line; another line starts again from GRIDGO's reading.
   const [typed, setTyped] = useState<{ lineId: string; rows: CorrectionDraftRow[] } | null>(null);
   const rows =
-    line && quote ? (typed?.lineId === line.item.id ? typed.rows : correctionDraft(quote)) : [];
+    line && start ? (typed?.lineId === line.item.id ? typed.rows : correctionDraft(start)) : [];
   const [reason, setReason] = useState("");
   const [showErrors, setShowErrors] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -76,15 +79,17 @@ export default function ColourCorrectionScreen() {
   const limit = quote?.a3LimitBps;
   /** The shop's own rate per tier on this paper, from the pages GRIDGO priced. */
   const knownRates = new Map<string, number>();
-  for (const page of quote?.pages ?? []) {
+  for (const page of start?.pages ?? []) {
     if (page.tier && page.sheetPriceMinor != null) knownRates.set(page.tier, page.sheetPriceMinor);
   }
 
   const allowed = job ? canRequestChange(job) && Boolean(line) : true;
   const baseline = quote && line ? correctionBaseline(quote, line.agreed) : null;
-  const read = quote && rows.length ? readCorrection(quote, rows, baseline ?? 0) : null;
+  const read = start && rows.length ? readCorrection(start, rows, baseline ?? 0) : null;
   const draftProblem = read ? correctionProblem(read, baseline) : null;
   const reasonProblem = changeReasonError(reason);
+  // A lower total is said at once: it is a refund, not something to fix before sending.
+  const lowered = Boolean(read?.ok && read.extraMinor < 0);
 
   function tierOf(percent: string) {
     const bps = percentToBps(percent);
@@ -263,7 +268,7 @@ export default function ColourCorrectionScreen() {
             />
             <TotalRow
               label="Extra for your shop"
-              value={read?.ok && baseline != null ? formatPhp(read.extraMinor) : "—"}
+              value={read?.ok && baseline != null && read.extraMinor >= 0 ? formatPhp(read.extraMinor) : "—"}
               divided
               strong
             />
@@ -273,7 +278,7 @@ export default function ColourCorrectionScreen() {
             increase before the job takes the new price. Your extra is paid with your last payout part.
           </Text>
 
-          {showErrors && draftProblem ? (
+          {(showErrors || lowered) && draftProblem ? (
             <Text className="text-body text-error" accessibilityRole="alert">
               {draftProblem}
             </Text>

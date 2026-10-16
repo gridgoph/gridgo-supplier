@@ -253,6 +253,44 @@ describe("correcting the colour price", () => {
     await view.unmount();
   });
 
+  it("starts a second correction from the one the client agreed to, and says a lower total at once", async () => {
+    const agreed = {
+      id: "change_1",
+      appliedAt: "2026-10-16T09:00:00Z",
+      version: 1,
+      quantity: 3,
+      totalSheets: 6,
+      quantityMode: "document_sets",
+      originalLineSubtotalMinor: 27000,
+      correctedLineSubtotalMinor: 36000,
+      pages: [
+        { fileId: "file_pdf", page: 1, strongColourBps: 1800, tier: "up_to_25", sheetPriceMinor: 6000 },
+        { fileId: "file_pdf", page: 2, strongColourBps: 1800, tier: "up_to_25", sheetPriceMinor: 6000 },
+      ],
+    };
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        productionItems: job().productionItems!.map((item) => ({ ...item, agreedColourCorrection: agreed })),
+      }),
+    );
+    const view = await render(<ColourCorrectionScreen />);
+
+    expect((await screen.findByLabelText("Page 1 strong colour percent")).props.value).toBe("18");
+    expect(screen.getByLabelText("Page 1 your price a sheet").props.value).toBe("60.00");
+    expect(screen.getByText("GRIDGO measured 0%, ₱30.00 a sheet")).toBeTruthy();
+    expect(screen.getAllByText("₱360.00")).toHaveLength(2);
+    expect(screen.queryByText(/A lower price is a refund/)).toBeNull();
+
+    await fireEvent.changeText(screen.getByLabelText("Page 1 your price a sheet"), "50");
+    expect(screen.getByText(/A lower price is a refund/)).toBeTruthy();
+    expect(screen.queryByText(/₱-/)).toBeNull();
+
+    await fireEvent.changeText(screen.getByLabelText("Page 1 your price a sheet"), "60");
+    await fireEvent.changeText(screen.getByLabelText("Page 2 your price a sheet"), "80");
+    expect(screen.getByText("₱60.00")).toBeTruthy();
+    await view.unmount();
+  });
+
   it("says why GRIDGO refused, in the shop's words", async () => {
     (getOrder as jest.Mock).mockResolvedValue(job());
     (requestOrderChange as jest.Mock).mockRejectedValueOnce(

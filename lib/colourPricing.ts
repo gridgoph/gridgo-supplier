@@ -552,6 +552,21 @@ export function movedPages(original: ColourQuote | null, correction: ColourQuote
 
 export type CorrectionDraftRow = { fileId: string; page: number; percent: string; price: string };
 
+/**
+ * What a new correction starts from and is compared with: the pages of the
+ * latest correction the client agreed to, or GRIDGO's reading when there is
+ * none. GRIDGO measures a second correction against the first, so starting a
+ * second one from the original reading would ask for a refund of the first.
+ */
+export function correctionStart(
+  quote: ColourQuote,
+  agreed: Pick<ColourQuote, "pages"> | null | undefined,
+): ColourQuote {
+  if (!agreed?.pages.length) return quote;
+  const latest = new Map(agreed.pages.map((page) => [`${page.fileId}:${page.page}`, page]));
+  return { ...quote, pages: quote.pages.map((page) => latest.get(`${page.fileId}:${page.page}`) ?? page) };
+}
+
 export function correctionDraft(quote: ColourQuote): CorrectionDraftRow[] {
   return quote.pages.map((page) => ({
     fileId: page.fileId,
