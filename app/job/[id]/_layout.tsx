@@ -2,7 +2,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack } from "expo-router";
 
 import { radius } from "@/constants/theme";
-import { stackScreenOptions } from "@/lib/navigationOptions";
+import { nestedStackScreenOptions } from "@/lib/navigationOptions";
 import { useThemeName } from "@/hooks/useTheme";
 
 /**
@@ -23,7 +23,7 @@ export default function JobLayout() {
   const { top } = useSafeAreaInsets();
 
   return (
-    <Stack screenOptions={stackScreenOptions(scheme, top)}>
+    <Stack screenOptions={nestedStackScreenOptions(scheme, top)}>
       <Stack.Screen name="index" options={{ title: "Job" }} />
       <Stack.Screen name="accept" options={{ title: "Accept job" }} />
       <Stack.Screen name="decline" options={{ title: "Decline job" }} />
