@@ -13,6 +13,7 @@ import { refundStanding } from "@/lib/refund";
 import { unreleasedMinor } from "@/lib/payout";
 import { orderProductionItems, readableSpec } from "@/lib/productionSpecs";
 import { printLayoutFacts, PRINT_LAYOUT_LABEL } from "@/lib/printLayout";
+import { exactColourCount } from "@/lib/colorTargets";
 
 /**
  * The job brief: everything a shop weighs before it accepts or declines, folded
@@ -133,9 +134,12 @@ export function makeSummary(order: BriefOrder): string {
   // A closed row still says the client wrote something nobody picked from a list.
   const noted = hasSpecialInstructions(order) ? " · special instructions" : "";
   const items = orderProductionItems(order);
+  // Named colours are agreed spec the shop must match; a closed row says they are there.
+  const named = exactColourCount(items);
+  const colours = named ? ` · ${plural(named, "exact colour", "exact colours")}` : "";
   if (items.length > 1) {
     const pieces = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-    return `${plural(items.length, "item", "items")} · ${plural(pieces, "piece", "pieces")}${noted}`;
+    return `${plural(items.length, "item", "items")} · ${plural(pieces, "piece", "pieces")}${colours}${noted}`;
   }
   const [item] = items;
   const spec = item.structuredSpec ?? {};
@@ -145,7 +149,7 @@ export function makeSummary(order: BriefOrder): string {
     typeof spec.material === "string" && spec.material ? readableSpec(spec.material) : null,
     layoutSummary(item),
   ].filter(Boolean);
-  return parts.join(" · ") + noted;
+  return parts.join(" · ") + colours + noted;
 }
 
 /** "Actual size, centred (edges cut off)": the layout is agreed spec, and a cut is the one fact to see closed. */

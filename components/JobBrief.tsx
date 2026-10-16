@@ -5,6 +5,7 @@ import Animated, { FadeIn, LinearTransition, useReducedMotion } from "react-nati
 
 import { ArtworkPanel } from "@/components/ArtworkPanel";
 import { CountLedger } from "@/components/CounterCheckPanel";
+import { ExactColoursSpec } from "@/components/ExactColoursSpec";
 import { ItemNote } from "@/components/ItemNote";
 import { PrintLayoutSpec } from "@/components/PrintLayoutSpec";
 import { JobTimeline } from "@/components/JobTimeline";
@@ -178,6 +179,7 @@ function SectionBody({
                 ))}
                 {material ? <SpecRow label="Material" value={material} muted={material === NOT_SPECIFIED} /> : null}
                 <PrintLayoutSpec item={item} />
+                <ExactColoursSpec item={item} />
                 <ItemNote item={item} />
               </View>
             );
