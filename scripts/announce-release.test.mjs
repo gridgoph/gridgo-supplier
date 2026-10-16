@@ -32,3 +32,27 @@ test('HTTP failures and network errors become warnings without leaking errors or
 test('an idempotent retry is success', async () => {
   assert.equal((await announceRelease(env, async () => ({ ok: true, status: 200 }))).level, 'notice');
 });
+test('the APK release keeps its body; Play and TestFlight name their channel', async () => {
+  const bodies = [];
+  const transport = async (_url, options) => { bodies.push(JSON.parse(options.body)); return { ok: true, status: 201 }; };
+  await announceRelease(env, transport);
+  await announceRelease({ ...env, RELEASE_CHANNEL: 'apk' }, transport);
+  await announceRelease({ ...env, RELEASE_CHANNEL: 'play' }, transport);
+  await announceRelease({ ...env, RELEASE_CHANNEL: 'ios' }, transport);
+  assert.deepEqual(bodies, [
+    { app: 'client', version: '1.0.123' },
+    { app: 'client', version: '1.0.123', channel: 'apk' },
+    { app: 'client', version: '1.0.123', channel: 'play' },
+    { app: 'client', version: '1.0.123', channel: 'ios' },
+  ]);
+});
+test('a store failure names that store, not the APK', async () => {
+  const result = await announceRelease({ ...env, RELEASE_CHANNEL: 'ios' }, async () => ({ ok: false, status: 502 }));
+  assert.equal(result.level, 'warning');
+  assert.match(result.message, /TestFlight upload is already published/);
+});
+test('an unknown channel is refused without a request', async () => {
+  const result = await announceRelease({ ...env, RELEASE_CHANNEL: 'web' }, () => { throw new Error('must not call'); });
+  assert.equal(result.level, 'warning');
+  assert.match(result.message, /RELEASE_CHANNEL/);
+});

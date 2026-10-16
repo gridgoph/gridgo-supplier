@@ -49,6 +49,23 @@ describe("ios-testflight.yml", () => {
     );
   });
 
+  it("announces the TestFlight version only after the upload succeeds, and never fails the run", () => {
+    const announce = step("Announce the TestFlight release");
+    expect(step("Upload to TestFlight")).toMatch(/id: testflight\n/);
+    expect(step("Build the iPhone app on EAS")).toContain("`${line[1]}.${line[2]}.${number}`");
+    expect(step("Build the iPhone app on EAS")).toContain("version=${version}");
+    expect(announce).toMatch(/if: steps\.testflight\.outcome == 'success'\n/);
+    expect(announce).toContain("continue-on-error: true");
+    expect(announce).toContain("RELEASE_CHANNEL: ios");
+    expect(announce).toContain("RELEASE_APP: supplier");
+    expect(announce).toContain("RELEASE_VERSION: ${{ steps.build.outputs.version }}");
+    expect(announce).toContain("secrets.RELEASE_ANNOUNCE_TOKEN");
+    expect(announce).toContain("node scripts/announce-release.mjs");
+    expect(workflow.indexOf("- name: Upload to TestFlight")).toBeLessThan(
+      workflow.indexOf("- name: Announce the TestFlight release"),
+    );
+  });
+
   it("pins the eas-cli that eas.json asks for", () => {
     const pinned = /EAS_CLI: eas-cli@(\S+)/.exec(workflow)?.[1];
     expect(pinned).toBeDefined();

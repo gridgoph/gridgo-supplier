@@ -311,11 +311,26 @@ describe("the release carries its What's new notes", () => {
 
 describe("release push follows both successful publishes", () => {
   it("announces the released version only on a push to main", () => {
-    const index = apkSteps.findIndex(step => step.includes("scripts/announce-release.mjs"));
+    // The APK notice names no channel, so its body is unchanged.
+    const index = apkSteps.findIndex(step => step.includes("scripts/announce-release.mjs") && !step.includes("RELEASE_CHANNEL"));
     expect(index).toBeGreaterThan(apkSteps.findIndex(step => step.includes("gh release create")));
     const step = apkSteps[index];
     expect(step).toMatch(/if: github.event_name == 'push' && github.ref == 'refs\/heads\/main'/);
     expect(step).not.toMatch(/always\(\)|failure\(\)|!cancelled\(\)/);
+    expect(step).toContain("continue-on-error: true");
+    expect(step).toContain("secrets.RELEASE_ANNOUNCE_TOKEN");
+    expect(step).toContain("steps.config.outputs.version");
+    expect(step).toContain("RELEASE_APP: supplier");
+  });
+
+  it("announces a Play version only after its upload to Play succeeds, and never fails the run", () => {
+    const submitted = apkSteps.findIndex(step => step.includes("eas-cli@"));
+    expect(apkSteps[submitted]).toContain("id: play_submit");
+    const index = apkSteps.findIndex(step => step.includes("RELEASE_CHANNEL: play"));
+    expect(index).toBeGreaterThan(submitted);
+    const step = apkSteps[index];
+    expect(step).toContain("scripts/announce-release.mjs");
+    expect(step).toMatch(/if: steps\.play_submit\.outcome == 'success'\n/);
     expect(step).toContain("continue-on-error: true");
     expect(step).toContain("secrets.RELEASE_ANNOUNCE_TOKEN");
     expect(step).toContain("steps.config.outputs.version");
