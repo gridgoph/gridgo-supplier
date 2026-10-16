@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 import { MilestoneList } from "@/components/MilestoneList";
 import type { MilestoneView } from "@/lib/milestones";
@@ -35,6 +35,8 @@ function view(partial: Partial<MilestoneView> = {}): MilestoneView {
     proofName: "printing",
     proofCount: 1,
     canAddProof: false,
+    canFileMore: true,
+    takesProof: true,
     pofFileIds: ["file_print"],
     receiptFileId: null,
     reference: null,
@@ -73,23 +75,54 @@ describe("MilestoneList", () => {
     expect(screen.queryByLabelText("Open the wallet transfer evidence for Printing")).toBeNull();
   });
 
-  it("shows filed shop proof photographs on the job", async () => {
+  it("shows filed shop proof photographs on the job, with a count", async () => {
     await render(<MilestoneList milestones={[view()]} showDetail />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Printing evidence").props.source).toEqual({
+      expect(screen.getByLabelText("Printing evidence 1 of 1").props.source).toEqual({
         uri: "https://example.test/file_print.jpg",
       });
     });
+    expect(screen.getByText("1 photo on file")).toBeTruthy();
+  });
+
+  it("draws every proof on file once, in GRIDGO's order", async () => {
+    await render(
+      <MilestoneList milestones={[view({ pofFileIds: ["file_a", "file_b", "file_c"], proofCount: 3 })]} showDetail />,
+    );
+
+    expect(await screen.findByText("3 photos on file")).toBeTruthy();
+    await waitFor(() => expect(screen.getAllByTestId("proof-tile-image")).toHaveLength(3));
+    expect(screen.getAllByTestId("proof-tile-image").map((node) => node.props.source.uri)).toEqual([
+      "https://example.test/file_a.jpg",
+      "https://example.test/file_b.jpg",
+      "https://example.test/file_c.jpg",
+    ]);
+  });
+
+  it("offers more photos on the shop's own part while GRIDGO takes them", async () => {
+    const onAddProof = jest.fn();
+    await render(<MilestoneList milestones={[view()]} showDetail onAddProof={onAddProof} />);
+
+    fireEvent.press(screen.getByLabelText("Add photos to the printing evidence"));
+    expect(onAddProof).toHaveBeenCalledWith("printing");
+  });
+
+  it("offers no more photos on a part that is full or stopped", async () => {
+    await render(
+      <MilestoneList milestones={[view({ canFileMore: false })]} showDetail onAddProof={jest.fn()} />,
+    );
+
+    expect(screen.queryByText("Add photos")).toBeNull();
   });
 
   it("does not show proof photographs on a payout list of several jobs", async () => {
     await render(<MilestoneList milestones={[view()]} />);
 
-    expect(screen.queryByLabelText("Printing evidence")).toBeNull();
+    expect(screen.queryByLabelText("Printing evidence 1 of 1")).toBeNull();
   });
 
-  it("does not show the rider's delivery evidence as a shop proof photo", async () => {
+  it("shows the rider's delivery evidence read-only", async () => {
     await render(
       <MilestoneList
         milestones={[
@@ -99,13 +132,18 @@ describe("MilestoneList", () => {
             proofOwner: "rider",
             proofName: "delivery",
             pofFileIds: ["file_rider"],
+            canFileMore: false,
+            takesProof: false,
           }),
         ]}
         showDetail
+        onAddProof={jest.fn()}
       />,
     );
 
-    expect(screen.queryByLabelText("Delivered evidence")).toBeNull();
+    expect(await screen.findByText("1 photo from the rider")).toBeTruthy();
+    await waitFor(() => expect(screen.getByLabelText("Delivery evidence 1 of 1")).toBeTruthy());
+    expect(screen.queryByText("Add photos")).toBeNull();
   });
 });
 
@@ -142,11 +180,12 @@ it("shows a plan-2 start-of-production photo, and lists the parts in the order g
   );
 
   await waitFor(() => {
-    expect(screen.getByLabelText("Start of production evidence").props.source).toEqual({
+    expect(screen.getByLabelText("Start of production evidence 1 of 1").props.source).toEqual({
       uri: "https://example.test/file_start.jpg",
     });
   });
-  expect(screen.queryByLabelText("Delivered evidence")).toBeNull();
+  // The rider's delivery evidence is drawn as the rider's, never as the shop's.
+  expect(screen.queryByLabelText("Delivered evidence 1 of 1")).toBeNull();
   const shares = screen.getAllByText(/% of this job$/).map((node) => node.props.children.join(""));
   expect(shares).toEqual(["40% of this job", "35% of this job", "25% of this job"]);
 });
@@ -155,5 +194,5 @@ it("renders a stored PDF as a document even when its name suggests an image", as
   await render(<MilestoneList milestones={[view({ pofFileIds: ["file_pdf"] })]} showDetail />);
   expect(await screen.findByText("PDF")).toBeTruthy();
   expect(screen.getByText("file_pdf.jpg")).toBeTruthy();
-  expect(screen.queryByLabelText("Printing evidence")).toBeNull();
+  expect(screen.queryByLabelText("Printing evidence 1 of 1")).toBeNull();
 });

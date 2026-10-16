@@ -219,10 +219,18 @@ export type MilestoneView = {
   /** The proof in a button: "Add {proofName} proof". */
   proofName: string;
   proofCount: number;
-  /** Proof of Fulfilment files GRIDGO holds for this part. */
+  /** Proof of Fulfilment files GRIDGO holds for this part, each picture once. */
   pofFileIds: string[];
-  /** True when this shop can file the evidence right now. */
+  /** True when this part still waits on the shop's first piece of evidence. */
   canAddProof: boolean;
+  /**
+   * True when the shop may add more evidence to this part right now — before
+   * or after release, up to {@link MAX_PROOFS_PER_STAGE}. Wider than
+   * `canAddProof`: a part that already has its proof can still take more.
+   */
+  canFileMore: boolean;
+  /** True when GRIDGO takes the shop's evidence for this part now, whether or not it has room left. */
+  takesProof: boolean;
   /** The wallet receipt Operations kept when this part was sent. Null until released with one. */
   receiptFileId: string | null;
   /** The wallet's reference for that transfer. Null until released with one. */
@@ -269,12 +277,35 @@ export function payoutHoldReason(order: Pick<Order, "payoutHold" | "refundHold" 
   return null;
 }
 
+/**
+ * The most distinct pictures GRIDGO keeps on one payout part
+ * (gridgo-api `docs/OPERATIONAL_MODEL_V2_API.md#payout-proofs`). Past it an
+ * attach is `409 proof_limit_reached`; a picture already listed never counts.
+ */
+export const MAX_PROOFS_PER_STAGE = 50;
+
+/**
+ * Whether GRIDGO takes more evidence for one of the shop's own parts. It
+ * takes it before or after release, but not while a refund, a declined
+ * deadline request or a job the shop let go has stopped the work, and not on
+ * a part a settlement replaced.
+ */
+function takesShopProof(order: Order, milestone: PayoutMilestone, owner: ProofOwner): boolean {
+  if (owner !== "shop" || milestone.status === "superseded") return false;
+  if (!PRODUCING.has(order.state)) return false;
+  if (refundStanding(order) !== "none") return false;
+  if (order.shopRecovery && order.shopRecovery.status !== "accepted") return false;
+  return !order.rescheduleRequest?.workHeld;
+}
+
 export function viewMilestone(order: Order, milestone: PayoutMilestone): MilestoneView {
   const definition = milestoneDefinition(milestone.code, milestone);
   const hold = payoutHoldReason(order);
-  const pofFileIds = milestone.pofFileIds ?? [];
+  // GRIDGO lists each picture once; an id repeated by an older API is still drawn once.
+  const pofFileIds = [...new Set(milestone.pofFileIds ?? [])];
   const proofCount = pofFileIds.length;
   const owner = definition.proofOwner;
+  const takesProof = takesShopProof(order, milestone, owner);
 
   const base = {
     code: milestone.code,
@@ -289,6 +320,8 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
     proofName: definition.proofName,
     proofCount,
     pofFileIds,
+    takesProof,
+    canFileMore: takesProof && proofCount < MAX_PROOFS_PER_STAGE,
     receiptFileId: milestone.status === "released" ? (milestone.receiptFileId ?? null) : null,
     reference: milestone.status === "released" ? (milestone.reference ?? null) : null,
   };
@@ -439,6 +472,25 @@ export function milestoneViews(order: Order): MilestoneView[] {
 /** The next proof this shop owes on a job, or null when it owes none. */
 export function nextShopProof(order: Order): MilestoneView | null {
   return milestoneViews(order).find((view) => view.canAddProof) ?? null;
+}
+
+/**
+ * The part the proof screen files against: the one it was opened for when it
+ * takes the shop's evidence, else the next one owed, else the first with room
+ * for more, else a full one — so the screen can say it is full rather than
+ * that there is nothing to file. Null when no part of this job takes the
+ * shop's evidence right now.
+ */
+export function proofTarget(order: Order, code: string | undefined): MilestoneView | null {
+  const views = milestoneViews(order);
+  const named = code ? views.find((view) => view.code === code) : undefined;
+  if (named?.takesProof) return named;
+  return (
+    views.find((view) => view.canAddProof && view.canFileMore) ??
+    views.find((view) => view.canFileMore) ??
+    views.find((view) => view.takesProof) ??
+    null
+  );
 }
 
 export function findMilestoneView(
