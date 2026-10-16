@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.251 (New feature)
+
+- Price per-page work by how much strong colour each page has, and send a colour correction for the client to approve.
+
 ## 1.0.247 (Fix)
 
 - On iPhone, the bottom tabs have room above them, so lists no longer run into the icons.
