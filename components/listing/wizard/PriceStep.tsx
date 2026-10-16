@@ -5,15 +5,40 @@ import { OptionList } from "@/components/controls/OptionList";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import { Stepper } from "@/components/controls/Stepper";
 import { ListingSection } from "@/components/listing/ListingSection";
-import { MEASURE_UNITS, PRICING_UNITS, measurementKind, unitChoiceLabel } from "@/lib/listings";
-import { measureUnitFor, needsMeasure, packageQtyFor, unitHint, type ListingDraft } from "@/lib/listingDraft";
+import { PagePricingField, pagePricingApplies } from "@/components/listing/PagePricingField";
+import {
+  MEASURE_UNITS,
+  PRICING_UNITS,
+  awaitsFirstApproval,
+  measurementKind,
+  paperChoices,
+  unitChoiceLabel,
+  type Listing,
+} from "@/lib/listings";
+import {
+  measureUnitFor,
+  needsMeasure,
+  packageQtyFor,
+  unitHint,
+  type ListingDraft,
+} from "@/lib/listingDraft";
+import { printLayoutsNote, samePrintLayouts } from "@/lib/printLayout";
 
 type Props = {
+  /** The listing as GRIDGO holds it: its size choices and saved print layouts. */
+  listing: Listing;
   working: ListingDraft;
   onChange: (next: ListingDraft) => void;
 };
 
-export function PriceStep({ working, onChange }: Props) {
+export function PriceStep({ listing, working, onChange }: Props) {
+  const priceField = (
+    <MoneyField
+      value={working.price}
+      onChange={(value) => onChange({ ...working, price: value })}
+      accessibilityLabel="Your price"
+    />
+  );
   return (
     <ListingSection
       title="PRICE"
@@ -36,11 +61,23 @@ export function PriceStep({ working, onChange }: Props) {
         }
         accessibilityLabel="How this listing is priced"
       />
-      <MoneyField
-        value={working.price}
-        onChange={(value) => onChange({ ...working, price: value })}
-        accessibilityLabel="Your price"
-      />
+      {pagePricingApplies(working) ? (
+        <PagePricingField
+          working={working}
+          onChange={onChange}
+          sizeLabels={paperChoices(listing)}
+          askLayouts={!listing.printLayouts.length}
+          layoutsNote={printLayoutsNote({
+            layouts: working.printLayouts,
+            changed: !samePrintLayouts(working.printLayouts, listing.printLayouts),
+            hasApprovedVersion: !awaitsFirstApproval(listing),
+            pendingReview: listing.reviewStatus === "pending",
+          })}
+          priceField={priceField}
+        />
+      ) : (
+        priceField
+      )}
 
       {needsMeasure(working.pricingUnit) ? (
         <View className="gap-2">

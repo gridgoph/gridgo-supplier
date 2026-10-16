@@ -19,7 +19,7 @@ function relative(file: string): string {
 }
 
 /** Anything that opens a soft keyboard when it is tapped. */
-const OPENS_A_KEYBOARD = /<(TextInput|TextField|PasswordField|NoteField|MoneyField)\b/;
+const OPENS_A_KEYBOARD = /<(TextInput|TextField|PasswordField|NoteField|MoneyField|PercentField)\b/;
 
 /**
  * Somewhere in this file's own tree, the keyboard is accounted for: either the
@@ -56,6 +56,8 @@ const HANDLED_BY_ITS_CALLERS = [
   "components/JobDocketRail.tsx",
   "components/FormatPlusField.tsx",
   "components/listing/TierEditor.tsx",
+  "components/listing/ColourPricingField.tsx",
+  "components/listing/PagePricingField.tsx",
   "components/listing/wizard/AboutStep.tsx",
   "components/listing/wizard/PriceStep.tsx",
   "components/listing/wizard/SpeedStep.tsx",
@@ -95,6 +97,10 @@ const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
   { component: "SpeedTierEditor", users: /<SpeedTierEditor\b/, least: 1 },
   { component: "AboutStep", users: /<AboutStep\b/, least: 1 },
   { component: "PriceStep", users: /<PriceStep\b/, least: 1 },
+  // The colour tier table sits in the page-pricing block, which sits in the
+  // wizard's Price step and the listing screen's Price section.
+  { component: "ColourPricingField", users: /<ColourPricingField\b/, least: 1 },
+  { component: "PagePricingField", users: /<PagePricingField\b/, least: 2 },
   { component: "SpeedStep", users: /<SpeedStep\b/, least: 1 },
   { component: "StepsStep", users: /<StepsStep\b/, least: 1 },
   { component: "ArtworkStep", users: /<ArtworkStep\b/, least: 1 },

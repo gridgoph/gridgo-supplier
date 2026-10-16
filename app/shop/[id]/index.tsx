@@ -27,6 +27,7 @@ import { ListingStandingPanel } from "@/components/listing/ListingStandingPanel"
 import { ListingSection as Section } from "@/components/listing/ListingSection";
 import { PrinterCapField } from "@/components/listing/PrinterCapField";
 import { PrintLayoutField } from "@/components/listing/PrintLayoutField";
+import { PagePricingField, pagePricingApplies } from "@/components/listing/PagePricingField";
 import { PRODUCTION_TIME_HINT, ProductionTimeField } from "@/components/listing/ProductionTimeField";
 import { SampleStrip } from "@/components/listing/SampleStrip";
 import { PriceTierEditor, SpeedTierEditor } from "@/components/listing/TierEditor";
@@ -41,6 +42,8 @@ import { fileFormatName, linkFormatInvitation } from "@/data/fileFormats";
 import { spacing } from "@/constants/theme";
 import {
   applyDraft,
+  colourHold,
+  colourOn,
   draftFrom,
   formatsMoved,
   listingSavePatch,
@@ -65,6 +68,7 @@ import {
   unitLine,
   measurementKind,
   needsPrinterCap,
+  paperChoices,
   PRICING_UNITS,
   priceLine,
   unitChoiceLabel,
@@ -263,6 +267,11 @@ export default function ListingScreen() {
       const money = parseMoney(working.price);
       if (!money.ok) {
         setActionError(money.error);
+        return false;
+      }
+      const held = colourHold(working);
+      if (held) {
+        setActionError(held);
         return false;
       }
 
@@ -517,6 +526,13 @@ export default function ListingScreen() {
     : null;
   const dayMinutes = listing.productionDayMinutes ?? undefined;
   const ownWindow = productionWindow(working, context.inheritedTurnaround, dayMinutes);
+  const priceField = (
+    <MoneyField
+      value={working.price}
+      onChange={(value) => setDraft({ ...working, price: value })}
+      accessibilityLabel="Your price"
+    />
+  );
 
   return (
     <View className="gg-screen">
@@ -667,11 +683,28 @@ export default function ListingScreen() {
               }
               accessibilityLabel="How this listing is priced"
             />
-            <MoneyField
-              value={working.price}
-              onChange={(value) => setDraft({ ...working, price: value })}
-              accessibilityLabel="Your price"
-            />
+            {/*
+              A per-page listing is priced the same every page or by colour;
+              by colour, the one price field gives way to the tier table.
+            */}
+            {pagePricingApplies(working) ? (
+              <PagePricingField
+                working={working}
+                onChange={setDraft}
+                sizeLabels={paperChoices(listing)}
+                askLayouts={!listing.printLayouts.length}
+                layoutsNote={printLayoutsNote({
+                  layouts: working.printLayouts,
+                  changed: !samePrintLayouts(working.printLayouts, listing.printLayouts),
+                  hasApprovedVersion: !awaitsFirstApproval(listing),
+                  pendingReview: listing.reviewStatus === "pending",
+                })}
+                priceField={priceField}
+                disabled={busy}
+              />
+            ) : (
+              priceField
+            )}
 
             {working.pricingUnit === "per_package" ? (
               <View className="gap-2">
@@ -753,7 +786,8 @@ export default function ListingScreen() {
               </View>
             ) : null}
 
-            {asksQuantity(working.pricingUnit) ? (
+            {/* A colour price is the whole sheet rate: bulk breaks are not applied on top. */}
+            {asksQuantity(working.pricingUnit) && !colourOn(working) ? (
               <PriceTierEditor
                 tiers={working.priceTiers}
                 unitLabel={unitLine(merged)}

@@ -1,6 +1,7 @@
 import {
   Banknote,
   CircleCheck,
+  CircleHelp,
   CirclePause,
   CircleX,
   Clock,
@@ -28,6 +29,7 @@ export type StatusTone = "success" | "warning" | "error" | "info" | "neutral";
 const ICONS = {
   banknote: Banknote,
   "circle-check": CircleCheck,
+  "circle-help": CircleHelp,
   "triangle-alert": TriangleAlert,
   "circle-x": CircleX,
   "circle-pause": CirclePause,

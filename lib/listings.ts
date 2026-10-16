@@ -18,6 +18,13 @@ import {
 } from "@/lib/productionDays";
 import { listingOwnSteps, type ListingReadiness } from "@/lib/readiness";
 import { readPrintLayouts, type PrintLayoutCode } from "@/lib/printLayout";
+import {
+  COLOUR_PRICES_NEEDED,
+  lowestSheetRate,
+  readColourPricing,
+  readPaperSize,
+  type ListingColourPricing,
+} from "@/lib/colourPricing";
 
 /**
  * The shop's board — what clients see.
@@ -213,6 +220,12 @@ export type SpecOption = {
   priceMultiplierBps: number | null;
   active: boolean;
   sortOrder: number;
+  /**
+   * The paper this option prints on, when it is bound to a paper field: the
+   * binding's value, else the label. The binding wins, as in GRIDGO's print
+   * layout and colour pricing (a "20x30 / A2" option bound to A2 is A2).
+   */
+  paper?: string | null;
 };
 
 /** "x2", "x1.5" — a multiplier in the words a shop writes it in. */
@@ -279,6 +292,18 @@ export type Listing = {
    * once and never enters review. Null from a GRIDGO that predates it.
    */
   express?: boolean | null;
+  /**
+   * Priced per sheet by each page's strong colour, from the shop's own tier
+   * table (`colourPricing`). Read through `lib/colourPricing.ts`. Fixed-price
+   * listings keep it false.
+   */
+  pricedByColour?: boolean;
+  /** Prints in one colour (blueprint, monochrome): a client with a colour file is warned. */
+  oneColour?: boolean;
+  /** The shop's price per sheet for each colour tier and paper size. */
+  colourPricing?: ListingColourPricing | null;
+  /** False from a GRIDGO that predates colour pricing: nothing is shown or sent. */
+  colourSupported?: boolean;
   /** The least the shop will run. */
   minimumOrderQuantity: number | null;
   priceTiers: PriceTier[];
@@ -440,7 +465,19 @@ function readOption(raw: Raw, index: number): SpecOption | null {
     priceMultiplierBps: num(pick(raw, "priceMultiplierBps", "price_multiplier_bps")) ?? null,
     active: pick(raw, "active") !== false,
     sortOrder: num(pick(raw, "sortOrder", "sort_order")) ?? index,
+    paper: optionPaper(raw, label),
   };
+}
+
+/** Spec bindings that name the paper a size option prints on. */
+const PAPER_BINDING_FIELDS = new Set(["size", "paper_size", "item_size", "dimensions"]);
+
+function optionPaper(raw: Raw, label: string): string | null {
+  const binding = pick(raw, "specBinding", "spec_binding");
+  if (!isRecord(binding) || !PAPER_BINDING_FIELDS.has(String(binding.fieldCode))) return null;
+  const bound = str(pick(binding, "value", "valueCode"));
+  if (bound && readPaperSize(bound)) return bound;
+  return readPaperSize(label) ? label : null;
 }
 
 function readGroup(raw: Raw, index: number): SpecGroup | null {
@@ -576,6 +613,10 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     printerMaxWidthFeet: readPrinterCap(pick(raw, "printerMaxWidthFeet", "printer_max_width_feet")),
     printLayouts: readPrintLayouts(pick(raw, "printLayouts", "print_layouts")),
     express: typeof raw.express === "boolean" ? raw.express : null,
+    pricedByColour: pick(raw, "pricedByColour", "priced_by_colour") === true,
+    oneColour: pick(raw, "oneColour", "one_colour") === true,
+    colourPricing: readColourPricing(pick(raw, "colourPricing", "colour_pricing")),
+    colourSupported: typeof pick(raw, "pricedByColour", "priced_by_colour") === "boolean",
     minimumOrderQuantity: num(pick(raw, "minimumOrderQuantity", "minimum_order_quantity")),
     priceTiers: readPriceTiers(pick(raw, "priceTiers", "price_tiers")),
     speedTiers: readSpeedTiers(pick(raw, "speedTiers", "speed_tiers")),
@@ -712,7 +753,10 @@ export function pickLine(group: SpecGroup): string {
 }
 
 /** The unit, in the words a shop and a client both use. */
-export function unitLine(listing: Pick<Listing, "pricingUnit" | "packageQty" | "measureUnit">): string {
+export function unitLine(
+  listing: Pick<Listing, "pricingUnit" | "packageQty" | "measureUnit"> & Pick<Partial<Listing>, "pricedByColour">,
+): string {
+  if (listing.pricedByColour) return "per sheet";
   switch (listing.pricingUnit) {
     case "per_package":
       return listing.packageQty ? `per pack of ${listing.packageQty}` : "per pack";
@@ -782,6 +826,8 @@ function readSpeedTiers(value: unknown): SpeedTier[] {
  * not a sale.
  */
 export function fromPriceMinor(listing: Listing): number {
+  // A colour listing's base price is not a sheet price; its lowest tier is.
+  if (listing.pricedByColour) return lowestSheetRate(listing.colourPricing ?? null) ?? 0;
   const required = specs(listing).filter((group) => group.required);
   const additions = required.reduce((total, group) => {
     const active = group.options.filter((option) => option.active);
@@ -791,8 +837,16 @@ export function fromPriceMinor(listing: Listing): number {
   return Math.max(0, listing.basePriceMinor + additions);
 }
 
+/** Paper names the listing's size choices are bound to, for its colour table. */
+export function paperChoices(listing: Listing): string[] {
+  return specs(listing).flatMap((group) =>
+    group.options.flatMap((option) => (option.active && option.paper ? [option.paper] : [])),
+  );
+}
+
 /** True when a required step can push the price above the base. */
 export function hasPriceRange(listing: Listing): boolean {
+  if (listing.pricedByColour) return true;
   return specs(listing).some(
     (group) =>
       group.required &&
@@ -801,6 +855,12 @@ export function hasPriceRange(listing: Listing): boolean {
 }
 
 export function priceLine(listing: Listing): string {
+  if (listing.pricedByColour) {
+    const lowest = lowestSheetRate(listing.colourPricing ?? null);
+    return lowest == null
+      ? "Priced by colour, no sheet prices yet"
+      : `From ${formatPhp(lowest)} per sheet, priced by colour`;
+  }
   const from = fromPriceMinor(listing);
   const money = formatPhp(from);
   return hasPriceRange(listing) ? `From ${money} ${unitLine(listing)}` : `${money} ${unitLine(listing)}`;
@@ -943,7 +1003,9 @@ export function editorGuidance(listing: Listing, context: BoardContext): string[
   if (!listing.description.trim()) {
     out.push("Say what this is, so a client knows what they are ordering.");
   }
-  if (listing.basePriceMinor === 0) {
+  if (listing.pricedByColour) {
+    if (lowestSheetRate(listing.colourPricing ?? null) == null) out.push(COLOUR_PRICES_NEEDED);
+  } else if (listing.basePriceMinor === 0) {
     out.push(PRICE_NEEDED);
   }
   if (listing.pricingUnit === "per_package" && (listing.packageQty ?? 0) < 2) {

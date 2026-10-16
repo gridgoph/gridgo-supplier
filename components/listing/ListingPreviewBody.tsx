@@ -97,6 +97,15 @@ export function ListingPreviewBody({
           </Text>
           <Text className="text-body text-text-secondary">{unitLine(listing)}</Text>
         </View>
+        {listing.pricedByColour ? (
+          <Text className="text-caption text-text-secondary">
+            Each page is priced by how much strong colour it has, measured on the paper the client picks.
+          </Text>
+        ) : listing.oneColour ? (
+          <Text className="text-caption text-text-secondary">
+            Prints in one colour. A client sending a colour file is told before they order.
+          </Text>
+        ) : null}
         <Text className="text-body text-text-secondary">
           {readyInLine(turnaround, effectiveMinimumTurnaround(listing))}
         </Text>
