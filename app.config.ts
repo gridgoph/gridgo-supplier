@@ -135,6 +135,83 @@ export function googleServicesFile(
   return fileExists(local) ? local : undefined;
 }
 
+/**
+ * Where the iPhone build's `GoogleService-Info.plist` comes from.
+ *
+ * iPhone push goes through Firebase Cloud Messaging, so the iOS build needs
+ * Firebase's config for `ph.gridgo.supplier`. Like `google-services.json` it is
+ * the captain's and is **never committed**; it reaches a build as
+ * configuration:
+ *
+ * - `GOOGLE_SERVICE_INFO_PLIST` names a path. On EAS Build that is a *file*
+ *   environment variable, whose value on the build machine is the path of the
+ *   uploaded file;
+ * - otherwise a `GoogleService-Info.plist` dropped in the repo root is used;
+ * - otherwise the key is omitted, and `plugins/withIosStoreBuild.js` leaves
+ *   Firebase out of the build: push on that iPhone is simply unavailable.
+ *
+ * A named path that is missing is an error **on an EAS build machine**, where
+ * a quiet fallback would ship an app that never receives anything. Anywhere
+ * else it is ignored: eas-cli also evaluates this file on the machine that
+ * starts the build, where a secret file variable is not readable.
+ */
+export function googleServiceInfoFile(
+  envPath: string | null | undefined,
+  projectRoot: string,
+  onEasBuilder: boolean,
+  fileExists: (path: string) => boolean = existsSync,
+): string | undefined {
+  const named = (envPath ?? "").trim();
+  if (named) {
+    const path = resolve(projectRoot, named);
+    if (fileExists(path)) return path;
+    if (onEasBuilder) {
+      throw new Error(
+        `GOOGLE_SERVICE_INFO_PLIST points at "${named}", which does not exist. ` +
+          "An iPhone build without Firebase would install and never receive an alert.",
+      );
+    }
+    return undefined;
+  }
+
+  const local = resolve(projectRoot, "GoogleService-Info.plist");
+  return fileExists(local) ? local : undefined;
+}
+
+/**
+ * What an App Store build is missing, by variable name only.
+ *
+ * The iPhone build runs on EAS Build, so its `EXPO_PUBLIC_*` values come from
+ * the EAS project's `production` environment rather than from GitHub secrets.
+ * `.github/workflows/android-release.yml` refuses a release APK without them;
+ * this is the same refusal for the store build, made on the build machine
+ * before anything is compiled. Values are never echoed.
+ *
+ * Empty for every other build: a development build, a preview build, a local
+ * `expo start`, and anything Android.
+ */
+export function iosStoreBuildProblems(
+  env: Record<string, string | undefined>,
+): string[] {
+  if (env.EAS_BUILD_PLATFORM !== "ios" || env.EAS_BUILD_PROFILE !== "production") {
+    return [];
+  }
+  const problems: string[] = [];
+  if (!(env.EXPO_PUBLIC_API_URL ?? "").trim().startsWith("https://")) {
+    problems.push("EXPO_PUBLIC_API_URL must be the deployed https:// API");
+  }
+  if (!(env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "").trim().startsWith("pk_live_")) {
+    problems.push("EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY must be the live Clerk key (pk_live_*)");
+  }
+  if (!(env.EXPO_PUBLIC_CARTO_API_KEY ?? "").trim()) {
+    problems.push("EXPO_PUBLIC_CARTO_API_KEY is missing");
+  }
+  if (!(env.GOOGLE_SERVICE_INFO_PLIST ?? "").trim()) {
+    problems.push("GOOGLE_SERVICE_INFO_PLIST (the Firebase file for iPhone push) is missing");
+  }
+  return problems;
+}
+
 /** One release as bundled into `extra.whatsNewHistory`; read by `lib/whatsNewHistory.ts`. */
 export type BundledRelease = { version: string; kind: string; notes: string[] };
 
@@ -176,6 +253,17 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   );
 
   const googleServices = googleServicesFile(process.env.GOOGLE_SERVICES_JSON, __dirname);
+  const storeProblems = iosStoreBuildProblems(process.env);
+  if (storeProblems.length) {
+    throw new Error(
+      `The App Store build is missing EAS environment variables (production):\n- ${storeProblems.join("\n- ")}`,
+    );
+  }
+  const googleServiceInfo = googleServiceInfoFile(
+    process.env.GOOGLE_SERVICE_INFO_PLIST,
+    __dirname,
+    process.env.EAS_BUILD === "true",
+  );
   const clerkKey = clerkPublishableKey(process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
   return {
@@ -183,6 +271,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     name,
     slug,
     version: versionName,
+    // First on purpose: a mod registered earlier runs later, so the iOS store
+    // settings see what expo-audio and the rest have already written.
+    plugins: ["./plugins/withIosStoreBuild", ...(config.plugins ?? [])],
     extra: {
       ...config.extra,
       ...(clerkKey ? { clerkPublishableKey: clerkKey } : {}),
@@ -191,6 +282,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         process.env.GRIDGO_BUILD_NUMBER,
         versionName,
       ),
+    },
+    ios: {
+      ...config.ios,
+      // Spread for the same reason as `googleServicesFile` below.
+      ...(googleServiceInfo ? { googleServicesFile: googleServiceInfo } : {}),
     },
     android: {
       ...config.android,

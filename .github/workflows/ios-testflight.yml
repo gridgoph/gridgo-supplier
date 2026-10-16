@@ -1,0 +1,183 @@
+name: iOS TestFlight
+
+# Builds the iPhone app and uploads it to TestFlight. Manual only.
+#
+# An iPhone build needs Xcode on macOS and these runners are Linux, so the
+# build itself runs on EAS Build (Expo's macOS machines) with the `production`
+# profile in eas.json: an App Store build whose buildNumber EAS raises by one
+# every time. EAS Submit then uploads that build to App Store Connect, where it
+# reaches TestFlight's internal testers once Apple has processed it. Nothing
+# here touches the App Store listing or submits for review.
+#
+# The build machine reads its configuration from the EAS project's
+# `production` environment, never from this runner:
+# - EXPO_PUBLIC_API_URL, EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and
+#   EXPO_PUBLIC_CARTO_API_KEY are copied there from the repository secrets the
+#   Android release already uses, so both platforms ship the same values.
+# - GOOGLE_SERVICE_INFO_PLIST is an EAS *file* variable holding the Firebase
+#   file for iPhone push. It is never in this repository or in GitHub.
+# app.config.ts refuses the build on the EAS machine if any of them is missing.
+#
+# The App Store Connect API key lets EAS make the signing certificate and
+# provisioning profile and upload the build. It is written to a mode-600 file
+# under $RUNNER_TEMP, never printed, and removed when the job ends.
+
+on:
+  workflow_dispatch:
+    inputs:
+      submit_to_testflight:
+        description: Upload the finished build to TestFlight. Off builds only.
+        type: boolean
+        default: true
+
+# One iPhone build at a time; a second run waits rather than cancelling one
+# that is already on EAS.
+concurrency:
+  group: ios-testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  testflight:
+    name: iPhone build and TestFlight upload
+    runs-on: ubuntu-latest
+    # The free EAS queue can hold a build for a long time before it starts.
+    timeout-minutes: 300
+    env:
+      # Pinned with the Android Play upload, so a new eas-cli cannot change
+      # what this job builds or uploads.
+      EAS_CLI: eas-cli@24.12.1
+      EXPO_APPLE_TEAM_ID: G8SXSQ49F8
+      EXPO_APPLE_TEAM_TYPE: INDIVIDUAL
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check the secrets
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_APP_ID: ${{ vars.ASC_APP_ID }}
+          SUBMIT: ${{ inputs.submit_to_testflight }}
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_CARTO_API_KEY: ${{ secrets.EXPO_PUBLIC_CARTO_API_KEY }}
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in EXPO_TOKEN ASC_API_KEY_P8 ASC_KEY_ID ASC_ISSUER_ID \
+            EXPO_PUBLIC_API_URL EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY EXPO_PUBLIC_CARTO_API_KEY; do
+            [ -n "${!name:-}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::missing repository secret(s):$missing"
+            exit 1
+          fi
+          if [ "$SUBMIT" = "true" ] && [ -z "${ASC_APP_ID:-}" ]; then
+            echo "::error::missing repository variable ASC_APP_ID (the app's Apple ID in App Store Connect, App Information)"
+            exit 1
+          fi
+          # Same rule as the release APK: only a live key may reach a store.
+          case "$EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY" in
+            pk_live_*) ;;
+            *) echo "::error::EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is not a live Clerk key"; exit 1 ;;
+          esac
+
+      - name: Check the app configuration
+        run: npx expo config --type public > /dev/null
+
+      - name: Stage the App Store Connect key
+        env:
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$RUNNER_TEMP/asc_api_key.p8"
+          printf '%s\n' "$ASC_API_KEY_P8" > "$key"
+          echo "EXPO_ASC_API_KEY_PATH=$key" >> "$GITHUB_ENV"
+
+      # The build runs on EAS, which never sees this runner's environment. The
+      # values are public (they are inlined into the app), so they are set as
+      # sensitive variables, which keeps them out of EAS logs.
+      - name: Copy the public configuration to EAS
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          EXPO_PUBLIC_CARTO_API_KEY: ${{ secrets.EXPO_PUBLIC_CARTO_API_KEY }}
+        run: |
+          set -euo pipefail
+          for name in EXPO_PUBLIC_API_URL EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY EXPO_PUBLIC_CARTO_API_KEY; do
+            npx --yes "$EAS_CLI" env:set production --name "$name" --value "${!name}" \
+              --type string --visibility sensitive --non-interactive > /dev/null
+            echo "Set $name on EAS (production)"
+          done
+
+      - name: Build the iPhone app on EAS
+        id: build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          npx --yes "$EAS_CLI" build --platform ios --profile production \
+            --non-interactive --wait --json > "$RUNNER_TEMP/build.json"
+          node -e '
+            const fs = require("fs");
+            const builds = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const build = Array.isArray(builds) ? builds[0] : builds;
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `id=${build.id}\n`);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+              "### GRIDGO Supplier iPhone build",
+              "",
+              "| | |",
+              "|---|---|",
+              `| Version | \`${build.appVersion ?? "?"}\` |`,
+              `| Build number | \`${build.appBuildVersion ?? "?"}\` |`,
+              `| Status | ${build.status ?? "?"} |`,
+              `| EAS build | https://expo.dev/accounts/felyciaaa/projects/gridgo-supplier/builds/${build.id} |`,
+              `| Commit | \`${process.env.GITHUB_SHA}\` |`,
+              "",
+            ].join("\n"));
+          ' "$RUNNER_TEMP/build.json"
+
+      # The app's Apple ID is not secret but is only known once the app exists
+      # in App Store Connect, so it comes from a repository variable and is
+      # written into this runner's copy of eas.json for the upload alone.
+      - name: Upload to TestFlight
+        if: inputs.submit_to_testflight
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_APP_ID: ${{ vars.ASC_APP_ID }}
+          BUILD_ID: ${{ steps.build.outputs.id }}
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("fs");
+            const eas = JSON.parse(fs.readFileSync("eas.json", "utf8"));
+            eas.submit.production.ios.ascAppId = process.env.ASC_APP_ID;
+            fs.writeFileSync("eas.json", JSON.stringify(eas, null, 2) + "\n");
+          '
+          npx --yes "$EAS_CLI" submit --platform ios --profile production \
+            --id "$BUILD_ID" --non-interactive --wait
+          {
+            echo
+            echo "Uploaded to App Store Connect. It appears in TestFlight once Apple has processed it (usually 5 to 30 minutes)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the App Store Connect key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/asc_api_key.p8"

@@ -85,8 +85,8 @@ A Google Play build ignores that tap's download and leaves the push in the inbox
 
 The side-load APK is unchanged: every push to `main` still builds it, puts it on the
 download page, publishes the GitHub Release and broadcasts the release push. The Play
-bundle is an extra build that you start by hand. For now you upload it to Play Console
-yourself.
+bundle is an extra build that you start by hand. You upload it to Play Console yourself,
+or let the run upload it to internal testing (see below).
 
 1. In GitHub, open **Actions → Android release APK → Run workflow**. Choose `main`,
    select **play_bundle**, and run it.
@@ -98,9 +98,9 @@ yourself.
 That run builds `./gradlew bundleRelease` with the same upload key and public
 configuration as the APK. `scripts/verify-release-apk.sh` checks it the same way: the
 signer must match the keystore alias, and the API URL, Clerk and CARTO keys must be
-inlined in `base/assets/index.android.bundle`. The run publishes nothing: no APK, no
-landing-site upload, no GitHub Release, no release push and no What's new record. The
-artifact is kept for 30 days.
+inlined in `base/assets/index.android.bundle`. Unless **submit_to_play** is selected,
+the run publishes nothing: no APK, no landing-site upload, no GitHub Release, no release
+push and no What's new record. The artifact is kept for 30 days.
 
 The run sets `EXPO_PUBLIC_APP_DISTRIBUTION=play` when it builds. Google Play does not
 allow an app installed from Play to offer an APK from somewhere else. With the flag set,
@@ -118,8 +118,77 @@ a newer one. A **Re-run** keeps the original run's number, so start a new run in
 GitHub restarts the count if the workflow file is renamed or replaced, so keep the file
 where it is.
 
-**Later: `eas submit`.** [EAS Submit](https://docs.expo.dev/submit/android/) can upload
-the same artifact to a Play track instead of you. It needs a Google Play service account
-key, stored as a secret, with release permission in Play Console. Google also requires the
-first upload of an app to be made by hand, and that is what the steps above do. It is not
-wired up yet.
+**Upload to the internal testing track automatically.** Select **submit_to_play** as well
+as **play_bundle** when you run the workflow. The run builds and verifies the bundle as
+above and keeps the artifact. Then [EAS Submit](https://docs.expo.dev/submit/android/)
+uploads that same `.aab` to Play's **internal testing** track with release status
+`completed` (`eas.json`, profile `production`). The run summary says when the bundle was
+submitted. **submit_to_play** does nothing without **play_bundle**, and the APK path is
+unchanged.
+
+- The build still runs in GitHub Actions with the upload key. EAS only uploads the file.
+  No keystore goes to Expo.
+- The run never uploads to production and never promotes a release. To move a build to
+  another track, promote it by hand in Play Console.
+- The step needs two repository secrets: `EXPO_TOKEN` (an Expo access token for the
+  `felyciaaa` account) and `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` (the Play service account's
+  JSON key, with release permission for testing tracks). The key is written to a mode-600
+  file under `$RUNNER_TEMP`, outside the workspace, for that step only. It is never
+  printed, and it is removed when the step ends.
+- `eas-cli` is pinned in the workflow. The app is linked to its EAS project
+  (`@felyciaaa/gridgo-supplier`) through `owner` and `extra.eas.projectId` in `app.json`.
+- `eas submit` carries no release notes, so the same step then sets them on that release
+  with the Google Play Developer API, using the same service account
+  (`scripts/play-release-notes.mjs`). The notes are the version's What's new (the pending
+  `whats-new/` notes, or the newest release in `WHATS_NEW.md`), newest first, in whole
+  lines within Play's 500-character limit for en-US. The script reads the notes back from
+  Play, and the run summary shows them.
+- The versionCode is the run number, so every upload is newer than the last one and
+  testers get it as an automatic update.
+- If the submission fails, the run fails, but the artifact is still there to upload by hand.
+
+## iPhone build and TestFlight
+
+The iPhone app builds on [EAS Build](https://docs.expo.dev/build/introduction/), because
+an iOS build needs Xcode on macOS. **Actions → iOS TestFlight → Run workflow** builds the
+`production` profile in `eas.json` (an App Store build; EAS raises the build number by one
+each time) and then uploads it to App Store Connect with EAS Submit. Untick
+**submit_to_testflight** to build only. The run summary links the EAS build. Nothing
+reaches the App Store listing or review from here.
+
+What the iPhone build has that Android does not:
+
+- **Sign in with Apple** on Sign in, above Google (`components/AppleSignInButton.ios.tsx`,
+  `lib/appleSignIn.ts`). Like Google, it only proves who the person is: the session goes
+  through the same supplier door, so a person with no shop goes on to apply. Android and
+  the web draw nothing.
+- **Push through Firebase.** The API sends through FCM, which cannot address the APNs token
+  expo-notifications returns on iOS, so the iPhone registers Firebase's FCM token instead
+  (`lib/firebaseMessaging.ios.ts`). `@react-native-firebase` is linked on iOS only
+  (`react-native.config.js`); Android push is unchanged. A build without
+  `GoogleService-Info.plist` leaves Firebase out and registers the APNs token as before.
+- **App Store settings** in `app.json` and `plugins/withIosStoreBuild.js`: iPhone only (no
+  iPad), a GRIDGO sentence for every permission, no background audio mode (the call
+  microphone stays), the export-compliance answer, and dynamic frameworks for Firebase.
+
+The workflow needs, once:
+
+| Where | Name | What |
+|---|---|---|
+| GitHub secret | `EXPO_TOKEN` | Already used by the Play upload. |
+| GitHub secret | `ASC_API_KEY_P8` | App Store Connect API key (Users and Access → Integrations → Team Keys, role App Manager): the `.p8` file's text. |
+| GitHub secret | `ASC_KEY_ID` | That key's Key ID. |
+| GitHub secret | `ASC_ISSUER_ID` | The Issuer ID shown above the key list. |
+| GitHub variable | `ASC_APP_ID` | The app's Apple ID (App Store Connect → the app → App Information). Not secret. |
+| EAS, `production` environment | `GOOGLE_SERVICE_INFO_PLIST` | **File** variable, visibility Secret: the Firebase `GoogleService-Info.plist` for `ph.gridgo.supplier`. Never commit it. |
+
+`EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` and `EXPO_PUBLIC_CARTO_API_KEY`
+come from the repository secrets the Android release already uses; the workflow copies them
+to the EAS `production` environment before each build, because the EAS machine never sees
+GitHub's environment. On the EAS machine, `app.config.ts` refuses a store build that is
+missing any of them or the Firebase file (`iosStoreBuildProblems`). The App Store Connect
+key lets EAS create the distribution certificate and provisioning profile on the first run.
+
+To try the iPhone build locally, drop `GoogleService-Info.plist` in the repo root (it is
+gitignored) or point `GOOGLE_SERVICE_INFO_PLIST` at it, then `npx expo prebuild -p ios` on
+a Mac. Sign in with Apple and Firebase need a development build; Expo Go has neither.

@@ -1,0 +1,31 @@
+{
+  "cli": {
+    "version": ">= 24.12.1",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "production": {
+      "environment": "production",
+      "distribution": "store",
+      "node": "24.21.0",
+      "ios": {
+        "autoIncrement": true
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "$GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_PATH",
+        "track": "internal",
+        "releaseStatus": "completed"
+      },
+      "ios": {
+        "ascApiKeyPath": "$EXPO_ASC_API_KEY_PATH",
+        "ascApiKeyIssuerId": "$EXPO_ASC_ISSUER_ID",
+        "ascApiKeyId": "$EXPO_ASC_KEY_ID",
+        "appleTeamId": "G8SXSQ49F8"
+      }
+    }
+  }
+}

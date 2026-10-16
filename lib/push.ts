@@ -134,6 +134,22 @@ export function devicePlatform(os: string = Platform.OS): DevicePlatform | null 
   return null;
 }
 
+/** Who issued a push token: Firebase Cloud Messaging, or Apple's APNs directly. */
+export type PushTokenProvider = "fcm" | "apns";
+
+/**
+ * The `tokenProvider` a token from expo-notifications carries.
+ *
+ * Expo returns Android's FCM token and iOS's **native APNs** token. The server
+ * reads an omitted provider as `fcm` on every platform, so an iOS token sent
+ * without `apns` is filed as an FCM token and never delivered. An iPhone build
+ * with Firebase does not come here: it registers Firebase's FCM token as `fcm`
+ * (`fetchToken` in `store/push.ts`).
+ */
+export function pushTokenProvider(platform: DevicePlatform): PushTokenProvider {
+  return platform === "ios" ? "apns" : "fcm";
+}
+
 /**
  * The `data` map of an FCM message, as this app may read it.
  *

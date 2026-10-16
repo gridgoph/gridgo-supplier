@@ -9,7 +9,7 @@ import { readPublishedFormats } from "@/lib/fileFormatResolve";
 import { parseCall, parseCalls, type OrderCall } from "@/lib/orderCall";
 import { pickupChatOf, type PickupChatMessage, type PickupChatSummary } from "@/lib/pickupChat";
 import { parseRiderApproach, type RiderApproach } from "@/lib/riderApproach";
-import type { DevicePlatform } from "@/lib/push";
+import { pushTokenProvider, type DevicePlatform, type PushTokenProvider } from "@/lib/push";
 
 export { ApiError } from "@/lib/apiErrors";
 
@@ -1150,10 +1150,11 @@ export async function logout(deviceToken?: string | null): Promise<void> {
 export async function registerDevice(
   token: string,
   platform: DevicePlatform,
+  tokenProvider: PushTokenProvider = pushTokenProvider(platform),
 ): Promise<{ device: Device; created: boolean; reassigned: boolean }> {
   return request<{ device: Device; created: boolean; reassigned: boolean }>("/devices", {
     method: "POST",
-    body: JSON.stringify({ token, platform, appRole: "supplier", tokenProvider: platform === "ios" ? "apns" : "fcm" }),
+    body: JSON.stringify({ token, platform, appRole: "supplier", tokenProvider }),
   });
 }
 
@@ -1185,6 +1186,7 @@ export async function registerDevice(
 export async function registerDeviceUnclaimed(
   token: string,
   platform: DevicePlatform,
+  tokenProvider: PushTokenProvider = pushTokenProvider(platform),
 ): Promise<void> {
   const controller = new AbortController();
   await withDeadline((async () => {
@@ -1192,7 +1194,7 @@ export async function registerDeviceUnclaimed(
       signal: controller.signal,
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ token, platform, appRole: "supplier", tokenProvider: platform === "ios" ? "apns" : "fcm" }),
+      body: JSON.stringify({ token, platform, appRole: "supplier", tokenProvider }),
     });
     if (!res.ok) {
       const text = await res.text();
