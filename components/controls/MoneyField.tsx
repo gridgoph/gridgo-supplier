@@ -10,6 +10,8 @@ type Props = {
   onChange: (value: string) => void;
   accessibilityLabel: string;
   editable?: boolean;
+  /** What an empty field means. "0.00" unless blank has its own meaning. */
+  placeholder?: string;
 };
 
 /**
@@ -18,7 +20,7 @@ type Props = {
  * The peso sign belongs to the app, the keypad is numeric, and anything that is
  * not a digit or a decimal point never reaches the value.
  */
-export function MoneyField({ value, onChange, accessibilityLabel, editable = true }: Props) {
+export function MoneyField({ value, onChange, accessibilityLabel, editable = true, placeholder = "0.00" }: Props) {
   const colors = useThemeColors();
 
   return (
@@ -37,7 +39,7 @@ export function MoneyField({ value, onChange, accessibilityLabel, editable = tru
         keyboardType="decimal-pad"
         inputMode="decimal"
         accessibilityLabel={accessibilityLabel}
-        placeholder="0.00"
+        placeholder={placeholder}
         placeholderTextColor={colors.textMuted}
         className="flex-1 text-body text-text-primary"
         style={singleLineFieldTextStyle}

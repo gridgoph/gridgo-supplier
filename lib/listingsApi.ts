@@ -1,4 +1,5 @@
 import * as api from "@/lib/api";
+import type { ColourPricingPayload } from "@/lib/colourPricing";
 import { apiErrorBlockers, humanizeApiError, isCatalogItemStale, offlineMessage } from "@/lib/apiErrors";
 import { EXPRESS_STALE } from "@/lib/express";
 import { fileFormatName } from "@/data/fileFormats";
@@ -239,6 +240,11 @@ export type ListingPatch = {
   subcategoryCode?: string;
   /** The platform's `active`; "on the board" everywhere a shop can see. */
   active?: boolean;
+  /** Colour pricing (`lib/colourPricing.ts`). Never both true. */
+  pricedByColour?: boolean;
+  oneColour?: boolean;
+  /** The whole tier table, replaced as a set. Omitted to keep it. */
+  colourPricing?: ColourPricingPayload;
 
   sortOrder?: number;
 };

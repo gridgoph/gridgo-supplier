@@ -1,4 +1,4 @@
-import { aboutBlocker, artworkBlocker, pickReady, priceReady, productionWindow, speedReady } from "@/lib/listingWizard";
+import { aboutBlocker, artworkBlocker, pickReady, priceBlocker, priceReady, productionWindow, speedReady } from "@/lib/listingWizard";
 import { sameDay, workingDays } from "@/lib/productionDays";
 import { draftFrom } from "@/lib/listingDraft";
 import type { Listing } from "@/lib/listings";
@@ -100,5 +100,23 @@ describe("wizard gates", () => {
         { inheritedTurnaround: { unit: "days" as const, days: 2 }, inheritedFormatCodes: ["pdf"] },
       ),
     ).toBeNull();
+  });
+});
+
+describe("priceBlocker", () => {
+  const perPage = { ...draftFrom(listing), pricingUnit: "per_page" as const, pricedByColour: false, printLayouts: ["fit_to_paper" as const] };
+
+  it("asks a fixed listing for its one price", () => {
+    expect(priceBlocker(perPage)).toBe("Set your price before it can go on the board.");
+    expect(priceBlocker({ ...perPage, price: "30" })).toBeNull();
+  });
+
+  it("asks a colour listing for one priced tier, never its one price", () => {
+    const colour = { ...perPage, pricedByColour: true };
+    expect(priceBlocker(colour)).toBe("Add at least one paper size with its colour prices.");
+    expect(priceBlocker({ ...colour, colour: [{ key: "a", paperSize: "A1", prices: {} }] })).toBe(
+      "Price at least one colour tier on one paper size before it can go on the board.",
+    );
+    expect(priceBlocker({ ...colour, colour: [{ key: "a", paperSize: "A1", prices: { none: "0" } }] })).toBeNull();
   });
 });

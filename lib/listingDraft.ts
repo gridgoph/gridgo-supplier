@@ -5,6 +5,13 @@ import {
   type Listing,
 } from "@/lib/listings";
 import type { ListingPatch } from "@/lib/listingsApi";
+import {
+  COLOUR_LAYOUT_NEEDED,
+  colourDraftFrom,
+  readColourDraft,
+  sameColourDraft,
+  type ColourDraft,
+} from "@/lib/colourPricing";
 import { parseMoney } from "@/lib/money";
 import { samePrintLayouts, type PrintLayoutCode } from "@/lib/printLayout";
 import { listingTimeFields, sameTime, timeFields, timeKey, type ProductionTime } from "@/lib/productionDays";
@@ -44,6 +51,11 @@ export type ListingDraft = {
   subcategoryCode: string;
   fileFormatMode: Listing["fileFormatMode"];
   formatCodes: string[];
+  /** Null from a GRIDGO without colour pricing: nothing is shown or sent. */
+  pricedByColour: boolean | null;
+  oneColour: boolean;
+  /** The tier table as typed; a blank price is a tier not offered. */
+  colour: ColourDraft;
 };
 
 export function draftFrom(listing: Listing): ListingDraft {
@@ -68,6 +80,9 @@ export function draftFrom(listing: Listing): ListingDraft {
     subcategoryCode: listing.subcategoryCode,
     fileFormatMode: listing.fileFormatMode,
     formatCodes: listing.formatCodes,
+    pricedByColour: listing.colourSupported ? listing.pricedByColour === true : null,
+    oneColour: listing.oneColour === true,
+    colour: colourDraftFrom(listing.colourPricing ?? null),
   };
 }
 
@@ -93,7 +108,10 @@ export function sameDraft(left: ListingDraft, right: ListingDraft): boolean {
     sameTime(left.minimumTurnaround, right.minimumTurnaround) &&
     left.subcategoryCode === right.subcategoryCode &&
     left.fileFormatMode === right.fileFormatMode &&
-    left.formatCodes.join(",") === right.formatCodes.join(",")
+    left.formatCodes.join(",") === right.formatCodes.join(",") &&
+    left.pricedByColour === right.pricedByColour &&
+    left.oneColour === right.oneColour &&
+    sameColourDraft(left.colour, right.colour)
   );
 }
 
@@ -134,6 +152,16 @@ export function applyDraft(listing: Listing, draft: ListingDraft): Listing {
     subcategoryCode: draft.subcategoryCode,
     fileFormatMode: draft.fileFormatMode,
     formatCodes: draft.formatCodes,
+    ...(draft.pricedByColour == null
+      ? {}
+      : (() => {
+          const read = readColourDraft(draft.colour);
+          return {
+            pricedByColour: colourOn(draft),
+            oneColour: oneColourOn(draft),
+            colourPricing: colourOn(draft) && read.ok ? read.pricing : listing.colourPricing,
+          };
+        })()),
   };
 }
 
@@ -172,8 +200,48 @@ export function listingSavePatch(
       ? listingTimeFields(working.minimumTurnaround, working.turnaround)
       : listingTimeFields(null, null)),
     subcategoryCode: working.subcategoryCode,
+    ...colourPatch(working),
     ...(onTheBoard == null ? {} : { active: onTheBoard }),
   };
+}
+
+/** Priced by colour only per page: any other unit sends it off. */
+export function colourOn(draft: Pick<ListingDraft, "pricedByColour" | "pricingUnit">): boolean {
+  return draft.pricedByColour === true && draft.pricingUnit === "per_page";
+}
+
+/**
+ * The one-colour warning belongs to a fixed-price per-page listing. A flag
+ * kept on any other listing would warn clients by a rule nobody can see.
+ */
+export function oneColourOn(draft: Pick<ListingDraft, "pricedByColour" | "pricingUnit" | "oneColour">): boolean {
+  return !colourOn(draft) && draft.pricingUnit === "per_page" && draft.oneColour;
+}
+
+/**
+ * The colour fields a save sends. The table goes only while the listing is
+ * priced by colour; switched off, it is left out so the shop's prices are kept
+ * for when it comes back. A GRIDGO without colour pricing gets none of them.
+ */
+export function colourPatch(
+  draft: ListingDraft,
+): Pick<ListingPatch, "pricedByColour" | "oneColour" | "colourPricing"> {
+  if (draft.pricedByColour == null) return {};
+  if (!colourOn(draft)) return { pricedByColour: false, oneColour: oneColourOn(draft) };
+  const read = readColourDraft(draft.colour);
+  return { pricedByColour: true, oneColour: false, ...(read.ok ? { colourPricing: read.pricing } : {}) };
+}
+
+/**
+ * Why a colour-priced draft cannot be sent yet: GRIDGO would refuse it, so it
+ * is held on the phone with the first thing to fix. Null when it can go.
+ */
+export function colourHold(draft: ListingDraft): string | null {
+  if (!colourOn(draft)) return null;
+  const read = readColourDraft(draft.colour);
+  if (!read.ok) return read.problem.message;
+  if (!draft.printLayouts.length) return COLOUR_LAYOUT_NEEDED;
+  return null;
 }
 
 export function formatsMoved(working: ListingDraft, baseline: Listing): boolean {

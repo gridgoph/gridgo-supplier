@@ -153,6 +153,7 @@ describe("change requests", () => {
         createdAt: "2026-10-15T07:26:00Z",
         originalInstructions: "Add a clear plastic cover on each booklet.",
         payout: null,
+        colourCorrection: null,
       },
     ]);
     expect(normalizeChangeRequest({ changeRequest: raw({ status: "declined" }) })?.status).toBe("declined");

@@ -211,6 +211,19 @@ export type ProductionItem = {
   colorTargets?: unknown[];
   /** The colours GRIDGO read from each uploaded file on the line. Read through `lib/colorTargets.ts`. */
   artworkColors?: unknown[];
+  /**
+   * Copies of each page or sets of the whole document; both mean selected
+   * pages × quantity sheets. Null on lines that never chose.
+   */
+  quantityMode?: string | null;
+  totalSheets?: number | null;
+  /**
+   * Each page's strong colour, tier and the shop's own sheet rate, frozen at
+   * checkout as price evidence. Read through `lib/colourPricing.ts`.
+   */
+  colourPricing?: unknown;
+  /** The latest colour correction the client agreed to on this line. */
+  agreedColourCorrection?: unknown;
 };
 
 /** One design link on an order line, snapshotted at checkout. HTTPS by contract. */
@@ -541,6 +554,11 @@ export type Settings = {
   };
   /** GRIDGO's own review and delivery hours. Read through `operatingWeekOf` in `lib/shopHours.ts`. */
   operatingHours?: unknown;
+  /**
+   * What counts as strong colour on a printed page, and the A3 monochrome
+   * limit (`lib/colourPricing.ts`). Absent from an API older than colour pricing.
+   */
+  colourDetection?: { a3MonochromeMaxBps?: number };
 };
 
 /** Stored file metadata. `fileId` is the only durable identity a client keeps. */
@@ -1360,7 +1378,14 @@ export async function getMyRescheduleRequests(): Promise<unknown> {
  */
 export async function requestOrderChange(
   orderId: string,
-  body: { lineItemId?: string; reason: string; proposedSpec: string; extraPrincipalMinor: number },
+  body: {
+    lineItemId?: string;
+    reason: string;
+    proposedSpec?: string;
+    extraPrincipalMinor?: number;
+    /** A shop's corrected colour pages; GRIDGO derives the extra from them. */
+    colourCorrection?: { pages: { fileId: string; page: number; strongColourBps: number; sheetPriceMinor: number }[] };
+  },
   idempotencyKey: string,
 ): Promise<unknown> {
   return request<unknown>(`/orders/${orderId}/change-requests`, {
