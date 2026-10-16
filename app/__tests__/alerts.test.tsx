@@ -306,7 +306,7 @@ it("opens the exact Operations thread an inbox message names, and chat history w
   await waitFor(() => expect(router.push).toHaveBeenLastCalledWith("/chat"));
 });
 
-it("opens TestFlight from an inbox release notice on an iPhone, and leaves the APK notice in the inbox", async () => {
+it("opens TestFlight from an inbox release notice on an iPhone, and does not list the APK notice", async () => {
   // The jest preset runs as iOS, so this install reports `ios`.
   const { Linking } = jest.requireActual<typeof import("react-native")>("react-native");
   const open = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
@@ -339,8 +339,9 @@ it("opens TestFlight from an inbox release notice on an iPhone, and leaves the A
 
   await render(<AlertsScreen />);
 
-  fireEvent.press(await screen.findByText("GRIDGO Supplier 1.0.122 is ready"));
-  fireEvent.press(screen.getByText("GRIDGO Supplier 1.0.123 is in TestFlight"));
+  fireEvent.press(await screen.findByText("GRIDGO Supplier 1.0.123 is in TestFlight"));
+  // Another channel's notice is hidden here, never deleted (`belongsToInstall`).
+  expect(screen.queryByText("GRIDGO Supplier 1.0.122 is ready")).toBeNull();
   await waitFor(() => expect(open).toHaveBeenCalledWith("itms-beta://"));
   expect(open).toHaveBeenCalledTimes(1);
   open.mockRestore();

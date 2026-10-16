@@ -1,6 +1,6 @@
 import { Linking } from "react-native";
 import { installChannel } from "../buildDistribution";
-import { openRelease, releaseNoticeOpen } from "../releasePush";
+import { belongsToInstall, openRelease, releaseNoticeChannel, releaseNoticeOpen } from "../releasePush";
 
 const APK = "https://gridgo.talasora.com/downloads/gridgo-supplier.apk";
 const legacyTitle = "GRIDGO Supplier 1.0.123 is ready";
@@ -56,6 +56,44 @@ describe("releaseNoticeOpen", () => {
       expect(releaseNoticeOpen({ type: "announcement" }, title, "apk")).toBeNull();
     }
     expect(releaseNoticeOpen({ type: "order_updated" }, legacyTitle, "apk")).toBeNull();
+  });
+});
+
+describe("releaseNoticeChannel", () => {
+  it("reads the channel GRIDGO names, or the store target's when only that is sent", () => {
+    expect(releaseNoticeChannel(notice("ios", "testflight"), null)).toBe("ios");
+    expect(releaseNoticeChannel(notice("play", "play_store"), null)).toBe("play");
+    expect(releaseNoticeChannel({ type: "announcement", storeTarget: "testflight" }, null)).toBe("ios");
+  });
+
+  it("counts a notice from before channels as an APK notice", () => {
+    expect(releaseNoticeChannel({ type: "announcement" }, legacyTitle)).toBe("apk");
+  });
+
+  it("is not a release notice otherwise", () => {
+    expect(releaseNoticeChannel({ type: "announcement" }, "Holiday hours")).toBeNull();
+    expect(releaseNoticeChannel({ type: "order_updated" }, legacyTitle)).toBeNull();
+    expect(releaseNoticeChannel(null, legacyTitle)).toBeNull();
+  });
+});
+
+describe("belongsToInstall", () => {
+  const tf = { ...notice("ios", "testflight"), title: "GRIDGO Supplier 1.0.5 is in TestFlight" };
+  const legacy = { type: "announcement", title: legacyTitle };
+
+  it("keeps every release notice to its own channel, the tap included", () => {
+    for (const channel of ["apk", "play", "ios"] as const) {
+      expect(belongsToInstall(tf, channel)).toBe(channel === "ios");
+      expect(belongsToInstall(legacy, channel)).toBe(channel === "apk");
+      // What the inbox shows is what a tap can act on.
+      if (belongsToInstall(tf, channel)) expect(releaseNoticeOpen(tf, tf.title, channel)).not.toBeNull();
+      if (belongsToInstall(legacy, channel)) expect(releaseNoticeOpen(legacy, legacy.title, channel)).not.toBeNull();
+    }
+  });
+
+  it("keeps every other notice on every install", () => {
+    expect(belongsToInstall({ type: "announcement", title: "Holiday hours" }, "ios")).toBe(true);
+    expect(belongsToInstall({ type: "shop_job_assigned", title: legacyTitle }, null)).toBe(true);
   });
 });
 

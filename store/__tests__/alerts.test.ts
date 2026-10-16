@@ -2,6 +2,7 @@ import * as api from "@/lib/api";
 import { setLiveOwner } from "@/lib/live";
 import type { Notification } from "@/lib/api";
 import * as alertsApi from "@/lib/alertsApi";
+import * as buildDistribution from "@/lib/buildDistribution";
 import { isAlertUnread, useAlertsStore, visibleAlerts } from "@/store/alerts";
 
 function alert(id: string, read = false): Notification {
@@ -13,6 +14,16 @@ function alert(id: string, read = false): Notification {
     read,
     at: "2026-08-10T12:00:00.000Z",
   };
+}
+
+/** A release notice as GRIDGO writes it for one install channel. */
+function release(id: string, releaseChannel: string, storeTarget: string, title: string): Notification {
+  return { ...alert(id), type: "announcement", releaseChannel, storeTarget, title };
+}
+
+/** An APK notice written before channels: only its title says what it is. */
+function legacyRelease(id: string): Notification {
+  return { ...alert(id), type: "announcement", title: "GRIDGO Supplier 1.0.120 is ready" };
 }
 
 /** GRIDGO accepted the change. */
@@ -347,5 +358,66 @@ describe("alert writes racing with snapshots", () => {
     await write;
     expect(useAlertsStore.getState().dismissed).toEqual([]);
     expect(useAlertsStore.getState().unreadCount).toBe(1);
+  });
+});
+
+/**
+ * The captain's iPhone listed "1.0.185 is ready — Update now" APK notices
+ * beside the TestFlight ones. GRIDGO writes one notice per channel, and an
+ * account with no registered install still gets the APK one.
+ */
+describe("release notices for another install channel", () => {
+  const inbox = [
+    alert("job"),
+    { ...alert("staff"), type: "announcement", title: "Holiday hours" },
+    release("apk", "apk", "apk_download", "GRIDGO Supplier 1.0.185 is ready"),
+    release("play", "play", "play_store", "GRIDGO Supplier 1.0.185 is on the Play Store"),
+    release("ios", "ios", "testflight", "GRIDGO Supplier 1.0.5 is in TestFlight"),
+    legacyRelease("legacy"),
+  ];
+  const ids = (list: Notification[]) => list.map((item) => item.id);
+
+  beforeEach(() => {
+    useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, unreadIds: [] });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("shows an iPhone only the TestFlight notice", () => {
+    expect(ids(visibleAlerts(inbox, [], "ios"))).toEqual(["job", "staff", "ios"]);
+  });
+
+  it("shows a Play install only the Play notice", () => {
+    expect(ids(visibleAlerts(inbox, [], "play"))).toEqual(["job", "staff", "play"]);
+  });
+
+  it("shows an APK install the APK notice and the ones sent before channels", () => {
+    expect(ids(visibleAlerts(inbox, [], "apk"))).toEqual(["job", "staff", "apk", "legacy"]);
+  });
+
+  it("shows a build with no channel no release notice at all", () => {
+    expect(ids(visibleAlerts(inbox, [], null))).toEqual(["job", "staff"]);
+  });
+
+  it("hides a channel this app does not know", () => {
+    expect(ids(visibleAlerts([release("x", "huawei", "app_gallery", "GRIDGO Supplier 2.0.0")], [], "apk"))).toEqual([]);
+  });
+
+  it.each(["ios", "play", "apk"] as const)("keeps the %s badge to the rows that install shows", (channel) => {
+    jest.spyOn(buildDistribution, "installChannel").mockReturnValue(channel);
+    useAlertsStore.getState().syncFrom(inbox);
+    const shown = ids(visibleAlerts(inbox, []));
+    expect(useAlertsStore.getState().unreadIds).toEqual(shown);
+    expect(useAlertsStore.getState().unreadCount).toBe(shown.length);
+  });
+
+  it("hides another channel's notice without deleting it", () => {
+    jest.spyOn(buildDistribution, "installChannel").mockReturnValue("ios");
+    const remove = jest.spyOn(alertsApi, "remove");
+    useAlertsStore.getState().syncFrom(inbox);
+    expect(useAlertsStore.getState().deleted).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
   });
 });
