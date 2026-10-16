@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.247 (Fix)
+
+- On iPhone, the bottom tabs have room above them, so lists no longer run into the icons.
+
 ## 1.0.239 (Fix)
 
 - Update notices now open Google Play or TestFlight, and arrive only once your store has the new version.
