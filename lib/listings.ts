@@ -274,6 +274,11 @@ export type Listing = {
    * Empty: clients are not asked. Not limited by product type.
    */
   printLayouts: PrintLayoutCode[];
+  /**
+   * Express, the shop's own same-day switch (`lib/express.ts`). Applies at
+   * once and never enters review. Null from a GRIDGO that predates it.
+   */
+  express?: boolean | null;
   /** The least the shop will run. */
   minimumOrderQuantity: number | null;
   priceTiers: PriceTier[];
@@ -570,6 +575,7 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     minimumLengthMilli: num(pick(raw, "minimumLengthMilli", "minimum_length_milli")),
     printerMaxWidthFeet: readPrinterCap(pick(raw, "printerMaxWidthFeet", "printer_max_width_feet")),
     printLayouts: readPrintLayouts(pick(raw, "printLayouts", "print_layouts")),
+    express: typeof raw.express === "boolean" ? raw.express : null,
     minimumOrderQuantity: num(pick(raw, "minimumOrderQuantity", "minimum_order_quantity")),
     priceTiers: readPriceTiers(pick(raw, "priceTiers", "price_tiers")),
     speedTiers: readSpeedTiers(pick(raw, "speedTiers", "speed_tiers")),

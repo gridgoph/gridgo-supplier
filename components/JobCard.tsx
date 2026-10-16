@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 
+import { ExpressChip } from "@/components/ExpressChip";
 import { OrderReference } from "@/components/OrderReference";
 import { orderReferenceSpoken } from "@/lib/orderReference";
 import { StatusChip } from "@/components/StatusChip";
@@ -9,6 +10,7 @@ import { formatPhp, type Order } from "@/lib/api";
 import { isFulfilmentFinished, presentJobStatus } from "@/lib/jobState";
 import { deadlineUrgency } from "@/lib/urgency";
 import { acceptWindow, acceptWindowLine } from "@/lib/acceptWindow";
+import { isExpressOrder } from "@/lib/express";
 import { orderSpecSummary } from "@/lib/productionSpecs";
 import { shopRelease } from "@/lib/shopRecovery";
 import { useNow } from "@/hooks/useNow";
@@ -45,6 +47,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
   // Keep the recorded date, but finished or released work is no longer due.
   const urgency = deadlineUrgency(shopRelease(job) || isFulfilmentFinished(job) ? null : dueAt, now);
   const spec = orderSpecSummary(job);
+  const express = isExpressOrder(job);
   const price = job.supplierPriceMinor != null
     ? formatPhp(job.supplierPriceMinor)
     : "Price not recorded yet";
@@ -89,6 +92,11 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
           {job.readyBy ? "Ready by " : ""}{formatDeadlineFull(dueAt)}
           {urgency.level === "undated" ? "" : ` · ${urgency.label}`}
         </Text>
+        {express ? (
+          <View className="flex-row py-1">
+            <ExpressChip />
+          </View>
+        ) : null}
         {showSpec ? (
           <Text className="text-caption text-text-muted" numberOfLines={2}>
             {spec} · {price}
@@ -108,7 +116,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`${job.title}, ${orderReferenceSpoken(job.id) ?? `order ${job.id}`}, ${status.label}${
         urgency.level === "overdue" ? ", late" : ""
-      }`}
+      }${express ? ", Express" : ""}`}
       className="gg-touch"
     >
       {({ pressed }) => (

@@ -238,6 +238,8 @@ export type ListingPatch = {
   subcategoryCode?: string;
   /** The platform's `active`; "on the board" everywhere a shop can see. */
   active?: boolean;
+  /** Express. Sent on its own, never with the held words: it skips review. */
+  express?: boolean;
   sortOrder?: number;
 };
 

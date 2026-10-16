@@ -8,6 +8,7 @@ import { CounterCheckPanel } from "@/components/CounterCheckPanel";
 import { DangerButton } from "@/components/DangerButton";
 import { DeadlineRequestPanel } from "@/components/DeadlineRequestPanel";
 import { EmptyState } from "@/components/EmptyState";
+import { ExpressChip } from "@/components/ExpressChip";
 import { ForcedStepNotice } from "@/components/ForcedStepNotice";
 import { JobActionBar } from "@/components/JobActionBar";
 import { JobBrief } from "@/components/JobBrief";
@@ -29,6 +30,7 @@ import { SpecialInstructionsPanel } from "@/components/SpecialInstructionsPanel"
 import { StatusChip } from "@/components/StatusChip";
 import { acceptWindow } from "@/lib/acceptWindow";
 import { formatDeadlineFull } from "@/lib/dates";
+import { EXPRESS_JOB_NOTE, isExpressOrder } from "@/lib/express";
 import { defaultBriefSection, hasHandoff, workspaceBriefSections } from "@/lib/jobBrief";
 import {
   actionsForJob,
@@ -289,6 +291,14 @@ export default function JobWorkspaceScreen() {
           </View>
           <Text className="text-h1 text-text-primary">{job.title}</Text>
           <Text className="text-caption text-text-muted">Order {job.id}</Text>
+          {isExpressOrder(job) ? (
+            <View className="gap-1.5">
+              <View className="flex-row">
+                <ExpressChip />
+              </View>
+              <Text className="text-body text-text-secondary">{EXPRESS_JOB_NOTE}</Text>
+            </View>
+          ) : null}
           {clientDate ? (
             <Text className="text-body-lg text-text-secondary">
               {job.promisedDate ? "Promised" : "Client needs it by"}{" "}

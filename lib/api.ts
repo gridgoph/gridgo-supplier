@@ -311,6 +311,11 @@ export type Order = {
   readyBy?: string | null;
   /** When the shop marked the job ready. Late production is measured to this. */
   readyAt?: string | null;
+  /**
+   * Checkout promised this order under Express (`lib/express.ts`). Fixed at
+   * checkout; absent on orders placed before Express, which reads as false.
+   */
+  express?: boolean;
   /** Client-visible print subtotal. Includes commission the shop cannot see. */
   subtotalMinor?: number;
   totalMinor: number;

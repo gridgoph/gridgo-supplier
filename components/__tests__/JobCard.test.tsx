@@ -139,3 +139,18 @@ it.each(["cancelled", "fulfilled_with_refund"] as const)(
     expect(screen.queryByRole("button", { name: /late/i })).toBeNull();
   },
 );
+
+describe("Express", () => {
+  it("tags a job checkout promised under Express, and says so aloud", async () => {
+    await render(<JobCard job={{ ...job, express: true }} onPress={() => undefined} />);
+    expect(screen.getByText("Express")).toBeTruthy();
+    expect(screen.getByLabelText(/, Express$/)).toBeTruthy();
+  });
+
+  it("leaves an ordinary job, and one placed before Express, untagged", async () => {
+    await render(<JobCard job={{ ...job, express: false }} />);
+    expect(screen.queryByText("Express")).toBeNull();
+    await render(<JobCard job={job} />);
+    expect(screen.queryByText("Express")).toBeNull();
+  });
+});

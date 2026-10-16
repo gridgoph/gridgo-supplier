@@ -22,6 +22,7 @@ import { MoneyField } from "@/components/controls/MoneyField";
 import { NoteField } from "@/components/controls/NoteField";
 import { OptionList } from "@/components/controls/OptionList";
 import { DestinationRow } from "@/components/listing/DestinationRow";
+import { ExpressField } from "@/components/listing/ExpressField";
 import { ListingStandingPanel } from "@/components/listing/ListingStandingPanel";
 import { ListingSection as Section } from "@/components/listing/ListingSection";
 import { PrinterCapField } from "@/components/listing/PrinterCapField";
@@ -134,6 +135,8 @@ export default function ListingScreen() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [expressPending, setExpressPending] = useState<boolean | null>(null);
+  const [expressError, setExpressError] = useState<string | null>(null);
 
   // The reload guard and the leaving-the-screen save both need to know whether
   // there are unsaved words, from callbacks that must not re-subscribe on every
@@ -317,6 +320,27 @@ export default function ListingScreen() {
     },
     [persist],
   );
+
+  /**
+   * Express saves on its own, at once: only `express` with the listing's
+   * version, so it never carries half-typed words and never opens review. The
+   * held words stay held, and the reload hands the next save the new version.
+   * A refusal leaves the switch where GRIDGO has it and says why under it.
+   */
+  async function saveExpress(next: boolean) {
+    if (!listing || busy) return;
+    setBusy(true);
+    setExpressPending(next);
+    setExpressError(null);
+    const saved = await saveListing(listing, { express: next });
+    if (saved.status === "ok") {
+      await reload();
+    } else {
+      setExpressError(saved.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : saved.message);
+    }
+    setExpressPending(null);
+    setBusy(false);
+  }
 
   /** Put it up, after the photo policies if this submission has not passed them. */
   async function putOnBoard() {
@@ -798,6 +822,15 @@ export default function ListingScreen() {
             dayMinutes={dayMinutes}
             onChange={(next) => setDraft({ ...working, speedTiers: next })}
           />
+          {listing.express != null ? (
+            <ExpressField
+              on={listing.express}
+              pending={expressPending}
+              disabled={busy}
+              error={expressError}
+              onChange={(next) => void saveExpress(next)}
+            />
+          ) : null}
         </Section>
 
         {/* 5. Steps */}
