@@ -21,6 +21,18 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.221 (New feature)
+
+- Read GRIDGO's terms in Account, agree to them when they change, and ask to see, fix or delete your data.
+- Set production time in hours for same-day jobs, and see what a job still needs before it can be packaged.
+- Messages from your rider and Operations ring on your phone, and tapping one opens that conversation.
+- Newer jobs: send finished photos for review, then pack in front of the rider once the unpacked check passes.
+- A job now lists every file and design link the client sent for each item, with their labels and the main file marked.
+- Read and tick a client's special instructions before accepting, and ask for a change when they cost more.
+- Set your open days and hours, closure dates, close for a while, or stay open later today.
+- Mark which print layouts a listing offers, and see the client's chosen layout and page fit on each job.
+- Jobs show the exact colours the client named, beside the colours GRIDGO read from each file.
+
 ## 1.0.197 (Fix)
 
 - Photos sent to Operations in chat now upload correctly on Android.
