@@ -202,6 +202,14 @@ export type ProductionItem = {
   printLayout?: string | null;
   /** GRIDGO's fit check, snapshotted at checkout. Read through `lib/printLayout.ts`. */
   printLayoutCheck?: unknown;
+  /**
+   * The client's exact colours (Pantone, CMYK or hex, each with a label),
+   * agreed at checkout; `[]` or absent on lines without any and older orders.
+   * Read through `lib/colorTargets.ts`.
+   */
+  colorTargets?: unknown[];
+  /** The colours GRIDGO read from each uploaded file on the line. Read through `lib/colorTargets.ts`. */
+  artworkColors?: unknown[];
 };
 
 /** One design link on an order line, snapshotted at checkout. HTTPS by contract. */

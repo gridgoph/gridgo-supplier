@@ -10,6 +10,11 @@ jest.mock("@/components/ArtworkPanel", () => ({
   },
 }));
 
+jest.mock("@/lib/api", () => ({
+  ...jest.requireActual("@/lib/api"),
+  getFile: jest.fn(async (fileId: string) => ({ fileId, originalFilename: fileId === "file_front" ? "front.pdf" : "logo.jpg" })),
+}));
+
 function order(partial: Partial<Order> = {}): Order {
   return {
     id: "ord_1",
@@ -95,6 +100,62 @@ describe("JobBrief", () => {
     expect(screen.getByText("24x36 / A1")).toBeTruthy();
     expect(screen.getByText("A0 (841 × 1189 mm)")).toBeTruthy();
     expect(screen.getByText(/^Their page is bigger than 24x36 \/ A1/)).toBeTruthy();
+  });
+
+  it("states the client's exact colours with the colours GRIDGO read from each file", async () => {
+    const colours = order({
+      productionItems: [{
+        id: "oli_1",
+        itemName: "Club shirts",
+        quantity: 30,
+        pricingUnit: null,
+        packageQty: null,
+        measurement: null,
+        structuredSpec: { size: "Medium" },
+        options: [],
+        artworkFileId: "file_front",
+        mockupFileId: null,
+        artworkAttachments: [{ kind: "file", fileId: "file_front" }, { kind: "file", fileId: "file_logo" }],
+        colorTargets: [
+          { label: "School maroon", format: "pantone", value: "PANTONE 201 C", cmyk: null, hex: null, swatchHex: "#9D2235", swatchApproximate: true },
+          { label: "Crest gold", format: "pantone", value: "PANTONE 7406 C", cmyk: null, hex: null, swatchHex: null, swatchApproximate: null },
+          { label: "Logo blue", format: "hex", value: "#1A5FB4", cmyk: null, hex: "#1A5FB4", swatchHex: "#1A5FB4", swatchApproximate: false },
+        ],
+        artworkColors: [
+          {
+            fileId: "file_front",
+            colors: {
+              version: 1,
+              status: "partial",
+              reasons: ["embedded_images_not_read"],
+              colors: [{ kind: "spot", name: "PANTONE 201 C", space: "cmyk", cmyk: { c: 0, m: 100, y: 63, k: 29 }, hex: "#B5003A", uses: 3, shareBps: null }],
+            },
+          },
+          { fileId: "file_logo", colors: { version: 1, status: "unknown", reasons: ["not_read_for_this_file_type"], colors: [] } },
+        ],
+      }],
+    });
+
+    await render(<JobBrief order={colours} defaultOpen="make" />);
+
+    expect(screen.getByText("30 × Club shirts · Medium · 3 exact colours")).toBeTruthy();
+    expect(screen.getByText("Exact colours")).toBeTruthy();
+    expect(screen.getByText("Client's approximate swatch")).toBeTruthy();
+    expect(screen.getByText("Pantone code only, no swatch")).toBeTruthy();
+    expect(screen.getByText("Screen colour")).toBeTruthy();
+    expect(await screen.findByText("In front.pdf")).toBeTruthy();
+    expect(screen.getByText("Spot colour")).toBeTruthy();
+    expect(screen.getByText("Pictures placed in the PDF were not read.")).toBeTruthy();
+    expect(screen.getByText("logo.jpg")).toBeTruthy();
+    expect(screen.getByText("We could not read the colours in this file.")).toBeTruthy();
+    expect(screen.getByText(/Work from the codes and values the client named\.$/)).toBeTruthy();
+  });
+
+  it("adds nothing to a job whose client named no colours", async () => {
+    await render(<JobBrief order={order({ productionItems: [{ id: "oli_1", itemName: "Flyers", quantity: 500, pricingUnit: null, packageQty: null, measurement: null, structuredSpec: {}, options: [], artworkFileId: "file_art", mockupFileId: null, colorTargets: [], artworkColors: [{ fileId: "file_art", colors: { status: "read", reasons: [], colors: [] } }] }] })} defaultOpen="make" />);
+
+    expect(screen.getByText("500 × Flyers")).toBeTruthy();
+    expect(screen.queryByTestId("exact-colours")).toBeNull();
   });
 
   it("adds nothing to a job whose product has no layout choice", async () => {
