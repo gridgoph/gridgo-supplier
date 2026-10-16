@@ -8,6 +8,11 @@ name: Android release APK
 # instead, as an Actions artifact for the captain to upload to Play Console by
 # hand. That run never touches the APK path: no APK, no landing-site upload,
 # no GitHub Release, no release push. See README.md "Google Play bundle".
+#
+# submit_to_play, together with play_bundle, also hands that verified AAB to
+# EAS Submit for Google Play's internal testing track (eas.json). Builds stay
+# here with the upload key; EAS only uploads. Never production, never a
+# promotion: the captain promotes by hand in Play Console.
 
 on:
   push:
@@ -23,6 +28,12 @@ on:
         description: >-
           Build a signed Google Play bundle (AAB) as an Actions artifact instead
           of the APK. Publishes nothing, and ignores publish_release.
+        type: boolean
+        default: false
+      submit_to_play:
+        description: >-
+          With play_bundle only: also upload the verified AAB to Google Play's
+          internal testing track with EAS Submit. Ignored without play_bundle.
         type: boolean
         default: false
 
@@ -52,6 +63,9 @@ jobs:
 
       - name: Check release announcement delivery
         run: node --test scripts/announce-release.test.mjs
+
+      - name: Check the Play release notes
+        run: node --test scripts/play-release-notes.test.mjs
 
       # The only check that resolves every config plugin out of node_modules.
       # Metro never reads expo.plugins and neither does jest, which is how a
@@ -142,10 +156,12 @@ jobs:
           npx expo config --type public --json > "$RUNNER_TEMP/app.config.json"
           version="$(node -p "require('$RUNNER_TEMP/app.config.json').version")"
           code="$(node -p "require('$RUNNER_TEMP/app.config.json').android.versionCode")"
+          package="$(node -p "require('$RUNNER_TEMP/app.config.json').android.package")"
           stem="gridgo-supplier-$version-${GITHUB_SHA::7}"
           {
             echo "version=$version"
             echo "code=$code"
+            echo "package=$package"
             echo "stem=$stem"
             echo "apk=$stem.apk"
             echo "aab=$stem.aab"
@@ -477,6 +493,7 @@ jobs:
           VERSION: ${{ steps.config.outputs.version }}
           CODE: ${{ steps.config.outputs.code }}
           AAB: ${{ steps.config.outputs.aab }}
+          SUBMIT: ${{ github.event.inputs.submit_to_play }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/play"
@@ -494,7 +511,11 @@ jobs:
             echo "| Signature | upload key, verified against the keystore alias |"
             echo "| Updates | self-update prompt and side-load links off (Play build) |"
             echo
-            echo "Upload it in Play Console under Testing > Internal testing. Nothing was published."
+            if [ "$SUBMIT" = "true" ]; then
+              echo "EAS Submit uploads it to the internal testing track below."
+            else
+              echo "Upload it in Play Console under Testing > Internal testing. Nothing was published."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       # The bundle is the whole point of this run, so a failed upload fails it.
@@ -506,6 +527,84 @@ jobs:
           path: ${{ runner.temp }}/play/*.aab
           if-no-files-found: error
           retention-days: 30
+
+      # Only after the AAB is verified and kept as an artifact, so a failed
+      # submission still leaves the bundle to upload by hand. The track and
+      # release status live in eas.json (internal, completed) and nowhere else.
+      #
+      # The service-account key is written outside the workspace, mode 600,
+      # and eas.json reads its path from GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_PATH.
+      # Its content is never echoed; the trap removes it however the step ends,
+      # and the cleanup step below removes it again. eas-cli is pinned, so a
+      # new release cannot change what this step uploads.
+      #
+      # eas submit carries no release notes, so the same key then sets the
+      # version's What's new on that release through Play's edits API and
+      # reads them back (scripts/play-release-notes.mjs). Testers see what
+      # changed; the versionCode is the run number, so each upload is newer.
+      - name: Submit the Play bundle to the internal testing track
+        if: github.event.inputs.play_bundle == 'true' && github.event.inputs.submit_to_play == 'true'
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          AAB: ${{ steps.config.outputs.aab }}
+          CODE: ${{ steps.config.outputs.code }}
+          VERSION: ${{ steps.config.outputs.version }}
+          PACKAGE: ${{ steps.config.outputs.package }}
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in EXPO_TOKEN GOOGLE_PLAY_SERVICE_ACCOUNT_JSON; do
+            [ -n "${!name:-}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::missing repository secret(s):$missing"
+            exit 1
+          fi
+
+          umask 077
+          key="$RUNNER_TEMP/play-service-account.json"
+          trap 'rm -f "$key"' EXIT
+          printf '%s' "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" > "$key"
+          chmod 600 "$key"
+          unset GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+          # Checked quietly: a JSON parse error would quote part of the key.
+          if ! node -e '
+            try {
+              const k = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+              if (k.type !== "service_account" || !k.client_email || !k.private_key) process.exit(1);
+            } catch {
+              process.exit(1);
+            }
+          ' "$key" 2>/dev/null; then
+            echo "::error::GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is not a Google service-account key"
+            exit 1
+          fi
+          export GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_PATH="$key"
+
+          npx --yes eas-cli@24.12.1 submit \
+            --platform android \
+            --profile production \
+            --path "$RUNNER_TEMP/play/$AAB" \
+            --non-interactive \
+            --wait
+
+          notes="$RUNNER_TEMP/play-release-notes.txt"
+          PLAY_SERVICE_ACCOUNT_KEY_PATH="$key" \
+          PLAY_PACKAGE="$PACKAGE" \
+          PLAY_VERSION_CODE="$CODE" \
+          PLAY_VERSION="$VERSION" \
+            node scripts/play-release-notes.mjs | tee "$notes"
+
+          {
+            echo
+            echo "Submitted \`$AAB\` (versionCode $CODE) to Google Play's **internal testing** track with EAS Submit."
+            echo "Promote it to another track by hand in Play Console."
+            echo
+            echo '```'
+            cat "$notes"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # The notes this release carried now belong to its version: they move
       # under "## <version> (<label>)" in WHATS_NEW.md and leave whats-new/, so
@@ -540,5 +639,6 @@ jobs:
           rm -f "$RUNNER_TEMP/release.jks" \
                 "$HOME/.gradle/gradle.properties" \
                 "$RUNNER_TEMP/google-services.json" \
+                "$RUNNER_TEMP/play-service-account.json" \
                 "$RUNNER_TEMP/deploy_key" \
                 "$RUNNER_TEMP/deploy_known_hosts"
