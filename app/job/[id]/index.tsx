@@ -3,20 +3,29 @@ import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 
 import { AcceptWindowPanel } from "@/components/AcceptWindowPanel";
+import { ChangeRequestPanel } from "@/components/ChangeRequestPanel";
 import { CounterCheckPanel } from "@/components/CounterCheckPanel";
 import { DangerButton } from "@/components/DangerButton";
 import { DeadlineRequestPanel } from "@/components/DeadlineRequestPanel";
 import { EmptyState } from "@/components/EmptyState";
+import { ForcedStepNotice } from "@/components/ForcedStepNotice";
 import { JobActionBar } from "@/components/JobActionBar";
 import { JobBrief } from "@/components/JobBrief";
 import { JourneyTrack } from "@/components/JourneyTrack";
 import { LatenessPanel } from "@/components/LatenessPanel";
+import { PackagingChecklist } from "@/components/PackagingChecklist";
+import { MissedCallNotice } from "@/components/MissedCallNotice";
+import { PickupCallRow } from "@/components/PickupCallRow";
+import { PickupChatRow } from "@/components/PickupChatRow";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { PushEnableCard } from "@/components/PushEnableCard";
 import { RefundNoticePanel } from "@/components/RefundNoticePanel";
+import { RiderApproachPanel } from "@/components/RiderApproachPanel";
+import { RiderPackingPanel } from "@/components/RiderPackingPanel";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { ShopReleasePanel } from "@/components/ShopReleasePanel";
+import { SpecialInstructionsPanel } from "@/components/SpecialInstructionsPanel";
 import { StatusChip } from "@/components/StatusChip";
 import { acceptWindow } from "@/lib/acceptWindow";
 import { formatDeadlineFull } from "@/lib/dates";
@@ -25,18 +34,39 @@ import {
   actionsForJob,
   presentJobStatus,
   routeForAction,
-  waitingOn,
+  waitingOnJob,
   type SupplierAction,
 } from "@/lib/jobState";
 import { keptAfterSettlement, payoutPlanOf } from "@/lib/milestones";
+import {
+  canRequestChange,
+  changeRequestsOf,
+  changeWindowOpen,
+  currentChangeRequest,
+  instructionsReadAt,
+  itemInstructions,
+} from "@/lib/orderChanges";
+import { packagingCheck } from "@/lib/packagingReadiness";
 import { lapseForOrder, lapseNotice } from "@/lib/productionLapse";
 import { refundNotice, refundStanding } from "@/lib/refund";
 import { canRequestNewDeadline, rescheduleNotice } from "@/lib/reschedule";
 import { canCancelJob, shopRelease } from "@/lib/shopRecovery";
-import { counterCheck } from "@/lib/pickupCheck";
+import { counterCheck, countTargets } from "@/lib/pickupCheck";
+import {
+  finishedStage,
+  forcedSteps,
+  handoverFlowOf,
+  isForcedByGridgo,
+  riderPacking,
+  shopFinish,
+} from "@/lib/shopHandover";
+import { pickupChatHref, pickupChatOf } from "@/lib/pickupChat";
+import { callsSupported } from "@/lib/callRuntime";
+import { callHref, latestMissedCall, pickupCallAvailability } from "@/lib/orderCall";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useViewing } from "@/store/toasts";
 import { useJob } from "@/hooks/useJob";
+import { useOrderCalls } from "@/hooks/useOrderCalls";
 import { useProductionLapses } from "@/hooks/useProductionLapses";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -51,6 +81,9 @@ export default function JobWorkspaceScreen() {
   const colors = useThemeColors();
   const { job, loading, error, reload } = useJob(id);
   const lapses = useProductionLapses();
+  // Calling is open only while the rider is on the way; read the shop's calls only then.
+  const callWindowOpen = pickupCallAvailability(job).kind === "open";
+  const calls = useOrderCalls(id, callWindowOpen);
   const [proofReloadVersion, setProofReloadVersion] = useState(0);
   // Bumped when the hour to answer runs out on screen, so the steps go with it.
   const [, setExpiredAt] = useState(0);
@@ -136,7 +169,11 @@ export default function JobWorkspaceScreen() {
   const urgency = deadlineUrgency(
     refundStanding(job) === "none" && !release && !requestStopped ? job.promisedDate || job.deadline : null,
   );
-  const waiting = waitingOn(job.state, payoutPlanOf(job));
+  const waiting = waitingOnJob(job, payoutPlanOf(job));
+  // The newer handover: GRIDGO's review of the finished photos, and the counter once a rider is there.
+  const flow = handoverFlowOf(job);
+  const finished = finishedStage(job);
+  const reviewPaused = Boolean(shopFinish(job)?.pending);
   // A refund stops the job and speaks over whose move it is.
   const refund = refundNotice(job, keptAfterSettlement(job));
   const handoff = hasHandoff(job) && refundStanding(job) === "none" && !release && !requestStopped;
@@ -150,8 +187,65 @@ export default function JobWorkspaceScreen() {
   // A held job's late card yields its next step to the hold; a job the shop let go has no late card here.
   const lateness = lapse && !release ? lapseNotice(lapse, job, undefined, requestStopped || refundStanding(job) !== "none") : null;
 
+  /*
+    The rider collecting this job: where they are on the way, and the
+    conversation with them. The map is drawn only while they are travelling to
+    the shop — GRIDGO stops sharing the position at pick-up, and so does this.
+    The conversation outlives the Pickup row by a day after delivery, so once
+    that row is gone its entry moves down beside the other ways out.
+  */
+  const pickupChat = pickupChatOf(job);
+  const riderOnTheWay = job.state === "rider_assigned" && !counterIssue && !release && refundStanding(job) === "none";
+  const counter = riderOnTheWay ? riderPacking(job) : null;
+  const chatRow = pickupChat ? (
+    <PickupChatRow chat={pickupChat} onPress={() => router.push(pickupChatHref(job.id))} />
+  ) : null;
+  /*
+    A call with the rider, beside the messages, from the moment they accept
+    the pickup until they collect it (`lib/orderCall.ts`). A stopped or
+    released job has nobody coming, so nothing is offered.
+  */
+  const callable = callWindowOpen && !release && refundStanding(job) === "none";
+  const callRider = () =>
+    router.push(callHref({ orderId: job.id, mode: "start", name: pickupChat?.riderFirstName ?? null }));
+  const callRow = callable ? (
+    <PickupCallRow riderFirstName={pickupChat?.riderFirstName ?? null} supported={callsSupported()} onPress={callRider} />
+  ) : null;
+  const missedCall = callable ? latestMissedCall(calls) : null;
+  const handoffExtra =
+    riderOnTheWay || chatRow ? (
+      <>
+        {riderOnTheWay ? (
+          <RiderApproachPanel
+            orderId={job.id}
+            shopPin={job.pickup ?? null}
+            riderFirstName={pickupChat?.riderFirstName ?? null}
+            onPickedUp={() => void reload()}
+          />
+        ) : null}
+        {chatRow ? (
+          <View className={riderOnTheWay ? "border-t border-outline-subtle pt-1" : undefined}>{chatRow}</View>
+        ) : null}
+        {callRow ? <View className="border-t border-outline-subtle pt-1">{callRow}</View> : null}
+      </>
+    ) : null;
+
+  // What GRIDGO still needs before packaging, shown before the button is pressed.
+  const packaging = packagingCheck(job);
   const canAskForTime = canRequestNewDeadline(job);
   const canCancel = canCancelJob(job);
+  /*
+    The client's special instructions, in front of the work from the offer
+    until the job is ready; after that they live under each item in the
+    docket. A job that is stopped or let go has no work to put them in front of.
+  */
+  const notes = itemInstructions(job);
+  const stopped = Boolean(release) || refundStanding(job) !== "none";
+  const showNotes = notes.some((note) => note.text) && changeWindowOpen(job) && !stopped;
+  const canChange = canRequestChange(job);
+  const change = release ? null : currentChangeRequest(job);
+  const earlierChanges = change ? changeRequestsOf(job).filter((row) => row.id !== change.id) : [];
+  const requestChange = () => router.push({ pathname: "/job/[id]/change", params: { id: job.id } });
 
   function messageOperations() {
     router.push({ pathname: "/report", params: { orderId: job!.id, title: job!.title } });
@@ -201,7 +295,9 @@ export default function JobWorkspaceScreen() {
               {formatDeadlineFull(clientDate)}
             </Text>
           ) : null}
-          {urgency.level !== "undated" ? (
+          {reviewPaused ? (
+            <Text className="text-body text-text-muted">Production time paused while GRIDGO reviews</Text>
+          ) : urgency.level !== "undated" ? (
             <Text
               className={
                 urgency.level === "overdue"
@@ -226,8 +322,15 @@ export default function JobWorkspaceScreen() {
           </View>
         ) : null}
 
+        {/* The rider tried to reach the shop: said before anything else on the job. */}
+        {missedCall ? (
+          <View className="mt-6">
+            <MissedCallNotice missed={missedCall} onCallBack={callRider} />
+          </View>
+        ) : null}
+
         <View className="mt-6">
-          <JourneyTrack state={job.state} />
+          <JourneyTrack state={job.state} flow={flow} />
         </View>
 
         {/*
@@ -253,10 +356,48 @@ export default function JobWorkspaceScreen() {
           <View className="mt-6">
             <DeadlineRequestPanel request={deadlineRequest} />
           </View>
+        ) : packaging && (!packaging.allowed || flow === "rider_packs") ? (
+          <View className="mt-6">
+            <PackagingChecklist check={packaging} stage={finished} onMessageOperations={messageOperations} />
+          </View>
+        ) : counter ? (
+          <View className="mt-6">
+            <RiderPackingPanel
+              counter={counter}
+              title={waiting.title}
+              body={waiting.body}
+              targets={countTargets(job)}
+            />
+          </View>
         ) : !primary ? (
           <View className="gg-panel mt-6 gap-1">
             <Text className="text-body font-medium text-text-primary">{waiting.title}</Text>
             <Text className="text-body text-text-secondary">{waiting.body}</Text>
+          </View>
+        ) : null}
+
+        {showNotes ? (
+          <View className="mt-6">
+            <SpecialInstructionsPanel
+              notes={notes}
+              readAt={instructionsReadAt(job)}
+              offer={job.state === "supplier_assigned"}
+              onRequestChange={canChange ? requestChange : undefined}
+            />
+          </View>
+        ) : null}
+
+        {/* The job's change request, and where the client's answer stands. */}
+        {change ? (
+          <View className="mt-6">
+            <ChangeRequestPanel request={change} earlier={earlierChanges} />
+          </View>
+        ) : null}
+
+        {/* A step GRIDGO forced past a missing check, with its reason. */}
+        {isForcedByGridgo(job) ? (
+          <View className="mt-6">
+            <ForcedStepNotice steps={forcedSteps(job)} />
           </View>
         ) : null}
 
@@ -293,6 +434,7 @@ export default function JobWorkspaceScreen() {
             sections={workspaceBriefSections(job)}
             defaultOpen={defaultBriefSection(job)}
             proofReloadVersion={proofReloadVersion}
+            handoffExtra={handoffExtra}
           />
         </View>
 
@@ -305,14 +447,26 @@ export default function JobWorkspaceScreen() {
         */}
         {!primary ? <PushEnableCard spacing="above" /> : null}
 
+        {/* Delivered, the Pickup row is gone; the day the messages stay readable starts here. */}
+        {chatRow && !hasHandoff(job) ? <View className="gg-card mt-6 py-2">{chatRow}</View> : null}
+
         {/*
           Last, and charcoal: the way out when the job itself is what is wrong.
           The report carries this job's reference, so Operations starts from it.
         */}
         {counterIssue || release ? null : (
           <View className="mt-8 gap-3">
-            {canAskForTime || canCancel ? (
+            {canAskForTime || canCancel || (canChange && !showNotes) ? (
               <Text className="text-overline text-text-muted">RUNNING INTO TROUBLE?</Text>
+            ) : null}
+            {/* Beside the notes when they are on screen; here when the job has none. */}
+            {canChange && !showNotes ? (
+              <View className="gap-1">
+                <SecondaryButton label="Request a change" onPress={requestChange} />
+                <Text className="text-caption text-text-muted">
+                  Ask the client to approve a different spec or an extra. Nothing changes until they do.
+                </Text>
+              </View>
             ) : null}
             {canAskForTime ? (
               <View className="gap-1">

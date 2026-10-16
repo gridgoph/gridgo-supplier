@@ -23,8 +23,9 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { Screen } from "@/components/Screen";
 import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";
-import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import { humanizeApiError, offlineMessage, supportThreadUnavailable } from "@/lib/apiErrors";
 import { isAtChatEnd, shouldRepinOnResize } from "@/lib/chatScroll";
+import { CHAT_LIST_ROUTE } from "@/lib/chatThreads";
 import {
   SUPPORT_CHAT_IMAGE_MAX_COUNT,
   pickChatImages,
@@ -33,6 +34,8 @@ import {
 } from "@/lib/chatImages";
 import { openSupportChatStream } from "@/lib/supportChatStream";
 import { useSupportChatStore } from "@/store/supportChat";
+import { WhyWeAsk } from "@/components/legal/WhyWeAsk";
+import { WHY_WE_ASK } from "@/lib/legal";
 
 /**
  * One Operations conversation. The shop already has Alerts for job news; this
@@ -50,6 +53,12 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
   const [messages, setMessages] = useState<api.SupportChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * A named thread this shop cannot open — removed, or not theirs. A tapped
+   * support push lands here when its conversation is gone, so it says so and
+   * leads to chat history instead of a composer posting into nothing.
+   */
+  const [gone, setGone] = useState(false);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -77,6 +86,7 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
 
   const load = useCallback(async () => {
     setError(null);
+    setGone(false);
     try {
       if (threadId) {
         const detail = await api.getSupportChatThread(threadId);
@@ -100,7 +110,8 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
         setUnreadCount(me.unreadCount ?? 0);
       }
     } catch (err) {
-      setError(humanizeApiError(err, offlineMessage("open Operations")));
+      if (threadId && supportThreadUnavailable(err)) setGone(true);
+      else setError(humanizeApiError(err, offlineMessage("open Operations")));
     } finally {
       setLoading(false);
     }
@@ -262,7 +273,7 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
               <Text className="text-h2 text-text-primary">Operations</Text>
               <Text className="text-body text-text-secondary">GRIDGO operations</Text>
             </View>
-            {activeId ? (
+            {activeId && !gone ? (
               <Pressable
                 onPress={() => setDetailsOpen(true)}
                 accessibilityRole="button"
@@ -292,7 +303,14 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
             scrollEventThrottle={32}
             onLayout={keepEndInView}
           >
-            {!loading && messages.length === 0 ? (
+            {gone ? (
+              <EmptyState
+                title="This conversation is no longer available"
+                body="It was closed or removed. Your other conversations with Operations are in chat history."
+                secondaryLabel="Open chat history"
+                onSecondary={() => router.replace(CHAT_LIST_ROUTE)}
+              />
+            ) : !loading && messages.length === 0 ? (
               <EmptyState
                 title="No messages yet"
                 body="Ask about a job, a payout, or anything the desk needs to settle. They write back here."
@@ -336,10 +354,15 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
               })
             )}
           </ScrollView>
+          {gone ? null : (
+            <>
           {pending.length ? (
-            <Text className="text-caption text-text-muted">
-              {pending.length === 1 ? pending[0].name : `${pending.length} photos ready to send`}
-            </Text>
+            <View className="gap-1">
+              <Text className="text-caption text-text-muted">
+                {pending.length === 1 ? pending[0].name : `${pending.length} photos ready to send`}
+              </Text>
+              <WhyWeAsk>{WHY_WE_ASK.chatPhoto}</WhyWeAsk>
+            </View>
           ) : null}
           <View className="flex-row items-end gap-2">
             <Pressable
@@ -391,6 +414,8 @@ export function SupportChatConversation({ threadId }: { threadId?: string }) {
               <Send size={18} color={colors.accentOn} strokeWidth={2} />
             </Pressable>
           </View>
+            </>
+          )}
             </>
           )}
         </View>

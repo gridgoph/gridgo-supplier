@@ -15,6 +15,7 @@ import { probeStorage, storedUploads, type UploadItem, type StorageAvailability 
 import { findMilestoneView, milestoneDefinition, nextShopProof, type MilestoneView } from "@/lib/milestones";
 import { needsProductionPhoto } from "@/lib/productionPhoto";
 import { useFileUpload } from "@/hooks/useFileUpload";
+import { WHY_WE_ASK } from "@/lib/legal";
 import { useJob } from "@/hooks/useJob";
 import { askConfirm } from "@/store/sheets";
 
@@ -197,6 +198,7 @@ export default function FulfilmentProofScreen() {
           <FieldShell
             label={definition.proofLabel}
             hint={definition.proofHint}
+            why={WHY_WE_ASK.proofPhoto}
             error={
               showErrors && !latest
                 ? "Add a photo and let it finish saving before you file it."

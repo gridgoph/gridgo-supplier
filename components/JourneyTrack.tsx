@@ -1,9 +1,12 @@
 import { Text, View } from "react-native";
 
-import { JOB_JOURNEY, journeyIndex } from "@/lib/jobState";
+import { JOB_JOURNEY, journeyIndex, journeyLabel } from "@/lib/jobState";
+import type { HandoverFlow } from "@/lib/shopHandover";
 
 type Props = {
   state: string;
+  /** The job's handover: on the newer one, packing belongs to the pickup step. */
+  flow?: HandoverFlow;
 };
 
 /**
@@ -13,11 +16,11 @@ type Props = {
  * honest. The track stays monochrome: the screen's one yellow element is its
  * primary action, never a progress bar.
  */
-export function JourneyTrack({ state }: Props) {
+export function JourneyTrack({ state, flow = "legacy" }: Props) {
   const index = journeyIndex(state);
   if (index < 0) return null;
 
-  const step = JOB_JOURNEY[index];
+  const label = journeyLabel(JOB_JOURNEY[index].id, flow);
   const total = JOB_JOURNEY.length;
 
   return (
@@ -25,13 +28,13 @@ export function JourneyTrack({ state }: Props) {
       className="gap-2"
       accessibilityRole="progressbar"
       accessibilityValue={{ min: 1, max: total, now: index + 1 }}
-      accessibilityLabel={`Step ${index + 1} of ${total}, ${step.label}`}
+      accessibilityLabel={`Step ${index + 1} of ${total}, ${label}`}
     >
       <View className="flex-row items-center justify-between gap-3">
         <Text className="text-overline text-text-muted">
           STEP {index + 1} OF {total}
         </Text>
-        <Text className="text-caption font-medium text-text-primary">{step.label}</Text>
+        <Text className="text-caption font-medium text-text-primary">{label}</Text>
       </View>
       <View className="flex-row gap-1" aria-hidden>
         {JOB_JOURNEY.map((entry, i) => (

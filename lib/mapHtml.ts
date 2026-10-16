@@ -1,9 +1,10 @@
 /**
  * The Leaflet document the shop pins its own location in.
  *
- * One map, one pin, and nothing else — this app's only use of a map is the
- * point GRIDGO measures delivery distance from, so the document deliberately
- * cannot draw a second marker, a route, or a service area.
+ * One map, one pin, and nothing else — the point GRIDGO measures delivery
+ * distance from, so the document deliberately cannot draw a second marker, a
+ * route, or a service area. The rider on the way to the shop is a separate,
+ * watch-only document (`lib/approachMapHtml.ts`).
  *
  * Tiles are OpenStreetMap (light) and Carto dark (night), the same stack the
  * rider app ships. Attribution is a licence condition and is always visible.

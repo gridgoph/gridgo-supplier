@@ -1,83 +1,81 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { DangerButton } from "@/components/DangerButton";
+import { ErrorNotice } from "@/components/ErrorNotice";
 import { FormScrollView } from "@/components/FormScrollView";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { DateTimeField } from "@/components/controls/DateTimeField";
 import { FieldShell } from "@/components/controls/FieldShell";
-import { NoteField } from "@/components/controls/NoteField";
-import { OptionList } from "@/components/controls/OptionList";
-import {
-  BLACKOUT_REASONS,
-  blackoutSpanLabel,
-  validateBlackout,
-  type BlackoutReasonId,
-} from "@/lib/blackouts";
 import { fromDayKey, toDayKey } from "@/lib/day";
+import {
+  closureLabel,
+  closureLengthLabel,
+  manilaClock,
+  sameClosure,
+  validateClosure,
+  withClosure,
+  withoutClosure,
+  type Closure,
+} from "@/lib/shopHours";
 import { askConfirm } from "@/store/sheets";
-import { newBlackoutId, useShopPlan } from "@/store/shopPlan";
+import { saveSchedule } from "@/store/shopSchedule";
+import { useShopHours } from "@/store/shopHours";
 
 /**
- * One shop closure: the days you are shut and why.
+ * One run of closure dates, saved with GRIDGO.
  *
- * Both dates come from the platform calendar rather than a typed string, so a
- * closure can never be saved as text the schedule cannot read.
+ * Both dates come from the platform calendar rather than a typed string. A
+ * closure is known by its dates — GRIDGO keeps no id for one — so changing it
+ * replaces that run, and nothing is sent until the action below is pressed.
  */
 export default function ShopClosureScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
-  const blackouts = useShopPlan((s) => s.blackouts);
-  const addBlackout = useShopPlan((s) => s.addBlackout);
-  const updateBlackout = useShopPlan((s) => s.updateBlackout);
-  const removeBlackout = useShopPlan((s) => s.removeBlackout);
+  const { start, end } = useLocalSearchParams<{ start?: string; end?: string }>();
+  const hours = useShopHours((s) => s.hours);
+  const saving = useShopHours((s) => s.saving);
+  const load = useShopHours((s) => s.load);
 
-  const existing = useMemo(
-    () => (id ? (blackouts.find((b) => b.id === id) ?? null) : null),
-    [blackouts, id],
-  );
-
-  const today = toDayKey(new Date());
-  const [startDay, setStartDay] = useState(existing?.startDay ?? today);
-  const [endDay, setEndDay] = useState(existing?.endDay ?? today);
-  const [reason, setReason] = useState<BlackoutReasonId>(existing?.reason ?? "holiday");
-  const [note, setNote] = useState(existing?.note ?? "");
+  const existing: Closure | null =
+    start && end ? (hours?.closures.find((c) => sameClosure(c, { startDay: start, endDay: end })) ?? null) : null;
+  const today = manilaClock(new Date()).dayKey;
+  const [startDay, setStartDay] = useState(existing?.startDay ?? start ?? today);
+  const [endDay, setEndDay] = useState(existing?.endDay ?? end ?? today);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!hours) void load();
+  }, [hours, load]);
+
   async function remove() {
-    if (!existing) return;
+    if (!existing || !hours) return;
     const confirmed = await askConfirm({
-      question: `Remove the closure on ${blackoutSpanLabel(existing)}?`,
-      consequence:
-        "Your schedule will treat those days as open again and stop warning you about them.",
+      question: `Remove the closure on ${closureLabel(existing)}?`,
+      consequence: "GRIDGO will count those dates as open days again when it times new jobs.",
       confirmLabel: "Remove closure",
       cancelLabel: "Keep it",
       destructive: true,
     });
     if (!confirmed) return;
-    removeBlackout(existing.id);
-    router.back();
+    const refused = await saveSchedule({ closures: withoutClosure(hours.closures, existing) });
+    if (refused) setError(refused);
+    else router.back();
   }
 
-  function save() {
-    const problem = validateBlackout({ startDay, endDay }, blackouts, existing?.id);
+  async function save() {
+    if (!hours) return;
+    const candidate = { startDay, endDay };
+    const problem = validateClosure(candidate, hours.closures, existing);
     if (problem) {
       setError(problem);
       return;
     }
-    if (existing) {
-      updateBlackout(existing.id, { startDay, endDay, reason, note: note.trim() });
-    } else {
-      addBlackout({
-        id: newBlackoutId(),
-        startDay,
-        endDay,
-        reason,
-        note: note.trim(),
-      });
-    }
-    router.back();
+    const refused = await saveSchedule({ closures: withClosure(hours.closures, candidate, existing) });
+    if (refused) setError(refused);
+    else router.back();
   }
+
+  const candidate = { startDay, endDay };
 
   return (
     <View className="gg-screen">
@@ -90,36 +88,31 @@ export default function ShopClosureScreen() {
       */}
       <FormScrollView contentClassName="gg-page pb-16 pt-4">
         <View className="gap-2">
-          <Text className="text-h2 text-text-primary">
-            {existing ? "Edit closure" : "Add a closure"}
-          </Text>
+          <Text className="text-h2 text-text-primary">{existing ? "Change closure dates" : "Add closure dates"}</Text>
           <Text className="text-body text-text-secondary">
-            Your schedule marks these days and warns you before you promise a job on one. Closures
-            stay on this device — GRIDGO cannot route work around them yet.
+            GRIDGO does not count these dates when it times a job, and clients see your shop as closed on them.
+            Jobs you already accepted keep their dates.
           </Text>
         </View>
 
         <View className="mt-8 gap-6">
-          <FieldShell label="First day closed">
+          <FieldShell label="First closed date">
             <DateTimeField
               value={fromDayKey(startDay)}
               mode="date"
+              minimumDate={fromDayKey(existing && existing.startDay < today ? existing.startDay : today) ?? undefined}
               onChange={(next) => {
                 const key = toDayKey(next);
                 setStartDay(key);
                 if (key > endDay) setEndDay(key);
                 setError(null);
               }}
-              accessibilityLabel="First day closed"
-              placeholder="Choose the first closed day"
+              accessibilityLabel="First closed date"
+              placeholder="Choose the first closed date"
             />
           </FieldShell>
 
-          <FieldShell
-            label="Last day closed"
-            hint="Same day for a single-day closure."
-            error={error}
-          >
+          <FieldShell label="Last closed date" hint="The same date for a one-day closure.">
             <DateTimeField
               value={fromDayKey(endDay)}
               mode="date"
@@ -128,39 +121,31 @@ export default function ShopClosureScreen() {
                 setEndDay(toDayKey(next));
                 setError(null);
               }}
-              accessibilityLabel="Last day closed"
-              placeholder="Choose the last closed day"
+              accessibilityLabel="Last closed date"
+              placeholder="Choose the last closed date"
             />
           </FieldShell>
 
-          <FieldShell label="Reason">
-            <OptionList
-              options={BLACKOUT_REASONS.map((r) => ({ value: r.id, label: r.label }))}
-              value={reason}
-              onChange={setReason}
-              accessibilityLabel="Reason for closing"
-            />
-          </FieldShell>
-
-          <FieldShell label="Note (optional)" hint="Only you see this.">
-            <NoteField
-              value={note}
-              onChange={setNote}
-              placeholder="Press service booked for the morning."
-              accessibilityLabel="Closure note"
-              maxLength={120}
-            />
-          </FieldShell>
+          {endDay >= startDay ? (
+            <Text className="text-body text-text-primary">
+              Closed {closureLabel(candidate)} — {closureLengthLabel(candidate)}.
+            </Text>
+          ) : null}
         </View>
+
+        {error ? (
+          <View className="mt-6">
+            <ErrorNotice message={error} />
+          </View>
+        ) : null}
 
         <View className="mt-8 gap-3">
           <PrimaryButton
-            label={existing ? "Save closure" : "Add closure"}
-            onPress={save}
+            label={saving ? "Saving…" : existing ? "Save closure dates" : "Add closure dates"}
+            disabled={saving || !hours}
+            onPress={() => void save()}
           />
-          {existing ? (
-            <DangerButton label="Remove closure" onPress={() => void remove()} />
-          ) : null}
+          {existing ? <DangerButton label="Remove closure" onPress={() => void remove()} /> : null}
         </View>
       </FormScrollView>
     </View>

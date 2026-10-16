@@ -9,6 +9,7 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { PasswordField } from "@/components/controls/PasswordField";
 import { TextField } from "@/components/controls/TextField";
+import { WHY_WE_ASK } from "@/lib/legal";
 import { hasProblems, shopStepProblems, stepAt } from "@/lib/onboardingSteps";
 import { useSignupDraft } from "@/store/signupDraft";
 
@@ -107,6 +108,7 @@ export default function ShopIdentityStep() {
       <FieldShell
         label="Mobile number"
         hint="The rider collecting from you gets this number."
+        why={WHY_WE_ASK.phone}
         error={problem("phone")}
       >
         <TextField

@@ -1,6 +1,8 @@
 import type { Notification, Order } from "@/lib/api";
 import { presentPickupIssueNotice } from "@/lib/pickupCheck";
 import { presentListingAlert } from "@/lib/listingReview";
+import { presentChangeAlert } from "@/lib/orderChanges";
+import { presentCallAlert } from "@/lib/orderCall";
 import { presentLapseAlert } from "@/lib/productionLapse";
 import { presentRefundAlert } from "@/lib/refund";
 import { presentRescheduleAlert } from "@/lib/reschedule";
@@ -16,8 +18,9 @@ export const PICKUP_ISSUE_ALERT = "shop_pickup_issue_changed";
  * (`lib/refund.ts`). A late-production notice carries a raw timestamp
  * (`lib/productionLapse.ts`). A job a shop let go and a deadline request both
  * arrive in words written for the client (`lib/shopRecovery.ts`,
- * `lib/reschedule.ts`). A listing review or take-down notice is said in the
- * board's words (`lib/listingReview.ts`).
+ * `lib/reschedule.ts`), and so does a change request (`lib/orderChanges.ts`). A listing review or take-down notice is said in the
+ * board's words (`lib/listingReview.ts`). A call from the rider arrives in
+ * GRIDGO's generic "order" words (`lib/orderCall.ts`).
  */
 export function presentAlertBody(alert: Pick<Notification, "type" | "body">): string {
   const rewritten = rewrite(alert);
@@ -32,10 +35,12 @@ export function presentAlertTitle(alert: Pick<Notification, "type" | "title" | "
 
 function rewrite(alert: Pick<Notification, "type" | "body">): { title: string; body: string } | null {
   return (
+    presentCallAlert(alert) ??
     presentRefundAlert(alert) ??
     presentLapseAlert(alert) ??
     presentShopRecoveryAlert(alert) ??
     presentRescheduleAlert(alert) ??
+    presentChangeAlert(alert) ??
     presentListingAlert(alert)
   );
 }
@@ -107,7 +112,8 @@ function stageIndexForType(type: string | undefined): number {
   if (type === PICKUP_ISSUE_ALERT) return 2;
   if (type.includes("delivered") || type.includes("payout") || type.includes("issue")) return 3;
   if (type.includes("pickup") || type.includes("dispatch") || type.includes("rider")) return 2;
-  if (type.includes("production") || type.includes("printing")) return 1;
+  // GRIDGO's review of the finished products is the end of production on the newer handover.
+  if (type.includes("production") || type.includes("printing") || type.includes("finished")) return 1;
   if (type.includes("assign") || type.includes("payment") || type.includes("downpayment")) {
     return 0;
   }

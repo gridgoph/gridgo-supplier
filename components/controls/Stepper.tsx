@@ -14,6 +14,11 @@ type Props = {
   /** Spoken name of what is being counted. */
   accessibilityLabel: string;
   disabled?: boolean;
+  /**
+   * Drawn instead of the bare number when the steps are not a count — a
+   * production time steps from "9½ hours" to "1 working day".
+   */
+  display?: { value: string; unit: string };
 };
 
 /**
@@ -32,6 +37,7 @@ export function Stepper({
   unit,
   accessibilityLabel,
   disabled,
+  display,
 }: Props) {
   const colors = useThemeColors();
   const atMin = value <= min;
@@ -47,7 +53,7 @@ export function Stepper({
       className="h-12 flex-row items-center justify-between rounded-field border border-outline bg-surface px-1"
       accessibilityRole="adjustable"
       accessibilityLabel={accessibilityLabel}
-      accessibilityValue={{ min, max, now: value }}
+      accessibilityValue={display ? { text: `${display.value} ${display.unit}` } : { min, max, now: value }}
     >
       <StepButton
         icon="minus"
@@ -57,8 +63,10 @@ export function Stepper({
         color={disabled || atMin ? colors.textMuted : colors.textPrimary}
       />
       <View className="flex-row items-baseline gap-1">
-        <Text className="text-h3 text-text-primary">{value}</Text>
-        {unit ? <Text className="text-caption text-text-muted">{unit}</Text> : null}
+        <Text className="text-h3 text-text-primary">{display ? display.value : value}</Text>
+        {display || unit ? (
+          <Text className="text-caption text-text-muted">{display ? display.unit : unit}</Text>
+        ) : null}
       </View>
       <StepButton
         icon="plus"

@@ -50,15 +50,19 @@ export async function pickChatImages(): Promise<Array<{
   }));
 }
 
-export async function uploadChatImage(asset: {
-  uri: string;
-  name: string;
-  mimeType: string;
-}): Promise<string> {
+export async function uploadChatImage(
+  asset: {
+    uri: string;
+    name: string;
+    mimeType: string;
+  },
+  // Operations chat by default; the pick-up chat with a rider names its own.
+  purpose: string = SUPPORT_CHAT_IMAGE_PURPOSE,
+): Promise<string> {
   const token = await api.getAuthToken();
   if (!token) throw new Error("Sign in again to send this photo.");
   const form = new FormData();
-  form.append("purpose", SUPPORT_CHAT_IMAGE_PURPOSE);
+  form.append("purpose", purpose);
   if (Platform.OS === "web") {
     const photo = await fetch(asset.uri);
     form.append("file", await photo.blob(), asset.name);

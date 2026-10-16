@@ -21,6 +21,16 @@ describe("launchHref", () => {
     expect(launchHref(identity, pendingShop)).not.toBe("/access");
   });
 
+  it("puts terms waiting to be agreed before the floor, pending or approved", () => {
+    expect(launchHref({ kind: "supplier" }, approvedShop, "blocked")).toBe("/legal/review");
+    expect(launchHref({ kind: "supplier" }, pendingShop, "blocked")).toBe("/legal/review");
+    expect(launchHref({ kind: "supplier" }, approvedShop, "clear")).toBe("/(tabs)/home");
+    // A signed-out phone never meets the agreement screen.
+    expect(launchHref({ kind: "signed_out" } as IdentityState, null, "blocked")).toBe(
+      "/(auth)/welcome",
+    );
+  });
+
   it("sends an approved supplier to Home", () => {
     expect(launchHref({ kind: "supplier" }, approvedShop)).toBe("/(tabs)/home");
   });

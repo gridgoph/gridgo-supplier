@@ -1,5 +1,5 @@
 import type { Order, SupplierService } from "@/lib/api";
-import type { Blackout } from "@/lib/blackouts";
+import type { Closure } from "@/lib/shopHours";
 import {
   DEFAULT_WORKING_DAYS,
   calendarPlaceLabel,
@@ -56,8 +56,8 @@ describe("what makes a day full", () => {
 });
 
 describe("the month's grid", () => {
-  const grid = (jobs: Order[] = [], capacity: number | null = 500, blackouts: Blackout[] = []) =>
-    monthGrid({ month: MARCH, jobs, services: [service(capacity)], blackouts, now: NOW });
+  const grid = (jobs: Order[] = [], capacity: number | null = 500, closures: Closure[] = []) =>
+    monthGrid({ month: MARCH, jobs, services: [service(capacity)], closures, now: NOW });
 
   it("is always six rows, so the page does not jump between months", () => {
     expect(grid()).toHaveLength(42);
@@ -96,13 +96,10 @@ describe("the month's grid", () => {
   });
 
   it("lets a shop's own closure beat a day that would otherwise be free", () => {
-    const holiday: Blackout = {
-      id: "b1", startDay: "2026-03-12", endDay: "2026-03-13",
-      reason: "holiday", note: "Town fiesta",
-    };
+    const holiday: Closure = { startDay: "2026-03-12", endDay: "2026-03-13" };
     const days = grid([], 500, [holiday]);
     expect(dayOf(days, "2026-03-12").state).toBe("closed");
-    expect(dayOf(days, "2026-03-12").closedReason).toBe("Town fiesta");
+    expect(dayOf(days, "2026-03-12").closedReason).toBe("Closure date");
     expect(dayOf(days, "2026-03-14").state).toBe("vacant");
   });
 
@@ -144,8 +141,8 @@ describe("what a day says when a shop taps it", () => {
 });
 
 describe("how a day is drawn", () => {
-  const grid = (jobs: Order[] = [], capacity: number | null = 500, blackouts: Blackout[] = []) =>
-    monthGrid({ month: MARCH, jobs, services: [service(capacity)], blackouts, now: NOW });
+  const grid = (jobs: Order[] = [], capacity: number | null = 500, closures: Closure[] = []) =>
+    monthGrid({ month: MARCH, jobs, services: [service(capacity)], closures, now: NOW });
 
   it("paints neighbouring months quiet, not as this month's work", () => {
     const outside = grid().find((day) => !day.inMonth);

@@ -7,14 +7,18 @@ import { AddPrepStepButton, PrepStepRow } from "@/components/PrepStepEditor";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import { ListingSection } from "@/components/listing/ListingSection";
+import { PrintLayoutField } from "@/components/listing/PrintLayoutField";
 import { fileFormatName, linkFormatInvitation, type PublishedFileFormat } from "@/data/fileFormats";
-import { LISTING_CAPS, type BoardContext, type PrepStep } from "@/lib/listings";
+import { LISTING_CAPS, awaitsFirstApproval, type BoardContext, type Listing, type PrepStep } from "@/lib/listings";
+import { PRINT_LAYOUTS_HINT, printLayoutsNote, samePrintLayouts } from "@/lib/printLayout";
 import { PREP_STEPS_NOT_OPEN_YET } from "@/lib/listingsApi";
 import { linkFileOptions, uploadedFileOptions } from "@/lib/fileFormatResolve";
 import type { ListingDraft } from "@/lib/listingDraft";
 import { useThemeColors } from "@/hooks/useTheme";
 
 type Props = {
+  /** The listing as GRIDGO holds it, to tell a changed layout set from a saved one. */
+  listing: Listing;
   working: ListingDraft;
   context: BoardContext;
   formats: readonly PublishedFileFormat[];
@@ -29,6 +33,7 @@ type Props = {
 };
 
 export function ArtworkStep({
+  listing,
   working,
   context,
   formats,
@@ -154,6 +159,20 @@ export function ArtworkStep({
               : "Your category has no artwork set yet. Choose it here, or set it once in Services you offer."}
           </Text>
         )}
+      </ListingSection>
+
+      <ListingSection title="PRINT LAYOUTS" hint={PRINT_LAYOUTS_HINT}>
+        <PrintLayoutField
+          value={working.printLayouts}
+          onChange={(next) => onChange({ ...working, printLayouts: next })}
+          note={printLayoutsNote({
+            layouts: working.printLayouts,
+            changed: !samePrintLayouts(working.printLayouts, listing.printLayouts),
+            hasApprovedVersion: !awaitsFirstApproval(listing),
+            pendingReview: listing.reviewStatus === "pending",
+          })}
+          disabled={busy}
+        />
       </ListingSection>
     </>
   );

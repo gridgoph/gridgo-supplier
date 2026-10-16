@@ -20,13 +20,13 @@ import { StatTile } from "@/components/StatTile";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
-import { blackoutOnDay } from "@/lib/blackouts";
+import { closureOnDay, openWeekdaysMondayFirst } from "@/lib/shopHours";
 import { monthGrid } from "@/lib/queueCalendar";
 import { QueueCalendar } from "@/components/QueueCalendar";
 import { shopDailyCapacity } from "@/lib/capacity";
 import { buildSchedule, SCHEDULE_RANGES, type ScheduleRange } from "@/lib/schedule";
 import { useSession } from "@/store/session";
-import { useShopPlan } from "@/store/shopPlan";
+import { useShopHours } from "@/store/shopHours";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 
@@ -38,7 +38,15 @@ import { useThemeColors } from "@/hooks/useTheme";
  */
 export default function ScheduleScreen() {
   const colors = useThemeColors();
-  const blackouts = useShopPlan((s) => s.blackouts);
+  // GRIDGO's own hours mark closed weekdays and closure dates; a phone-only
+  // closure never does, because GRIDGO would still time work across it.
+  const shopHours = useShopHours((s) => s.hours);
+  const loadShopHours = useShopHours((s) => s.load);
+  const closures = useMemo(() => shopHours?.closures ?? [], [shopHours]);
+  const workingDays = useMemo(
+    () => (shopHours?.week.length ? openWeekdaysMondayFirst(shopHours.week) : undefined),
+    [shopHours],
+  );
   const shopLabel = useSession((s) => s.user?.shop?.label ?? null);
   const [jobs, setJobs] = useState<api.Order[]>([]);
   const [services, setServices] = useState<api.SupplierService[]>([]);
@@ -81,7 +89,8 @@ export default function ScheduleScreen() {
   useFocusEffect(
     useCallback(() => {
       void reload();
-    }, [reload]),
+      void loadShopHours();
+    }, [reload, loadShopHours]),
   );
 
   const schedule = useMemo(() => buildSchedule(jobs, range, now), [jobs, range, now]);
@@ -89,8 +98,8 @@ export default function ScheduleScreen() {
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [viewMonth, setViewMonth] = useState(() => new Date());
   const calendarDays = useMemo(
-    () => monthGrid({ month: viewMonth, jobs, services, blackouts, now }),
-    [viewMonth, jobs, services, blackouts, now],
+    () => monthGrid({ month: viewMonth, jobs, services, closures, workingDays, now }),
+    [viewMonth, jobs, services, closures, workingDays, now],
   );
   const hasAnything =
     schedule.days.some((d) => d.jobs.length > 0) ||
@@ -215,7 +224,7 @@ export default function ScheduleScreen() {
               day={day}
               now={now}
               dailyCapacity={dailyCapacity}
-              closure={blackoutOnDay(blackouts, day.dayKey)}
+              closure={closureOnDay(closures, day.dayKey)}
               onOpenJob={openJob}
             />
           ))}
@@ -237,10 +246,8 @@ export default function ScheduleScreen() {
         ) : null}
 
         <View className="mt-10 gap-2">
-          <SecondaryButton
-            label="Capacity & closures"
-            onPress={() => router.push("/capacity")}
-          />
+          <SecondaryButton label="Shop hours & closures" onPress={() => router.push("/shop-hours")} />
+          <SecondaryButton label="Capacity" onPress={() => router.push("/capacity")} />
           {dailyCapacity == null ? (
             <Text className="text-caption text-text-muted">
               Set a daily capacity so this screen can warn you before a day is oversold.

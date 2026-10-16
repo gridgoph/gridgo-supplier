@@ -33,6 +33,8 @@ import { useAlertStream } from "@/hooks/useAlertStream";
 import { useAppUpdateCheck } from "@/hooks/useAppUpdateCheck";
 import { useSupportChatUnread } from "@/hooks/useSupportChatUnread";
 import { useAppFonts } from "@/hooks/useAppFonts";
+import { useIncomingCallScreen } from "@/hooks/useIncomingCallScreen";
+import { useLegalGate } from "@/hooks/useLegalGate";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { usePushPromptCheck } from "@/hooks/usePushPromptCheck";
 import { useHydrateTheme, useThemeColors, useThemeName } from "@/hooks/useTheme";
@@ -41,6 +43,7 @@ import { sheetScreenOptions, stackScreenOptions } from "@/lib/navigationOptions"
 import { resolveClerkPublishableKey } from "@/lib/clerk";
 import { bounceToIsolatedDevWebHost, GRIDGO_DEV_WEB_HOST } from "@/lib/devWebHost";
 import { useAppUpdate } from "@/store/appUpdate";
+import { legalGateFor, useLegalConsent } from "@/store/legalConsent";
 import { usePushPrompt } from "@/store/pushPrompt";
 import { isMatchable, isSignedIn, useSession } from "@/store/session";
 
@@ -164,6 +167,11 @@ export default function RootLayout() {
  * app the guard traps them in. Job, payout and catalogue stay matchable —
  * those routes have nothing a waiting shop can do. Settings stays reachable
  * from both so a waiting shop is not locked out of its own theme and sign-out.
+ *
+ * Terms waiting to be agreed (`GET /me/legal/pending` says `blocking`) close
+ * every ordinary screen, pending or approved, behind `legal/review`. Reading
+ * the documents, asking about the shop's own data, deleting the account and
+ * signing out stay open: none of them may wait behind a checkbox.
  */
 function RootStack({ introDone }: { introDone: boolean }) {
   const { top } = useSafeAreaInsets();
@@ -177,6 +185,13 @@ function RootStack({ introDone }: { introDone: boolean }) {
   // Unassigned Clerk stays on apply so Send can enroll. Loading stays on the
   // door too — dropping it unmounted welcome and left a black canvas.
   const signedOut = authDoorOpen(identity, user);
+  // Whether GRIDGO has terms waiting for this shop, on every sign-in and every
+  // return to the app. Launch and the guards below read the answer.
+  useLegalGate();
+  const legal = useLegalConsent((s) => legalGateFor(s, user?.id));
+  const legalBlocked = signedIn && legal === "blocked";
+  // The ordinary signed-in app: open unless terms are waiting.
+  const floorOpen = signedIn && !legalBlocked;
 
   // Live alerts for as long as there is a session to receive them.
   useAlertStream(signedIn);
@@ -186,19 +201,24 @@ function RootStack({ introDone }: { introDone: boolean }) {
   // once. It never raises the permission dialog — only a tap on
   // `PushEnableCard` or on the explainer below does that.
   usePushNotifications();
+  // A rider's call opens the call screen over whatever is on screen.
+  useIncomingCallScreen(matchable && !legalBlocked);
   // Both sheets wait for the opening and for the session to settle, because
   // the stack below is re-keyed when a restored session arrives and would take
   // a sheet pushed earlier with it. And one sheet at a time: the notifications
   // explainer waits for an update sheet, and an update found while the
   // explainer is up waits for it to close.
-  const settled = introDone && identity.kind !== "loading" && !sessionWait;
+  // A signed-in shop also waits for its terms: the explainer opens over Home,
+  // and the agreement screen may be about to take Home's place.
+  const settled =
+    introDone && identity.kind !== "loading" && !sessionWait && (!signedIn || legal !== "unknown");
   const updateWaiting = useAppUpdate((s) => s.sheetOpen || s.completed !== null || s.offer !== null);
   const pushPromptOpen = usePushPrompt((s) => s.sheetOpen);
   // A newer APK, or the first launch of one.
   useAppUpdateCheck(settled && !pushPromptOpen);
   // What phone notifications are for, before Android asks — see
   // `lib/pushPrompt.ts` for when.
-  usePushPromptCheck(settled && !updateWaiting);
+  usePushPromptCheck(settled && !updateWaiting && !legalBlocked);
 
   return (
     <SessionShell>
@@ -213,6 +233,15 @@ function RootStack({ introDone }: { introDone: boolean }) {
         hear there is a new version. See `hooks/useAppUpdateCheck`.
       */}
       <Stack.Screen name="app-update" options={sheetScreenOptions(scheme)} />
+      {/*
+        One legal document, by its version. Public: apply links to it before
+        there is an account, and the agreement screen opens it while the rest
+        of the app is closed.
+      */}
+      <Stack.Screen
+        name="legal/[versionId]"
+        options={{ title: "Legal", headerBackButtonDisplayMode: "minimal" }}
+      />
 
       <Stack.Protected guard={signedOut}>
         <Stack.Screen name="(auth)/welcome" options={{ headerShown: false }} />
@@ -226,7 +255,50 @@ function RootStack({ introDone }: { introDone: boolean }) {
         <Stack.Screen name="access" options={{ headerShown: false, title: "Supplier access" }} />
       </Stack.Protected>
 
-      <Stack.Protected guard={signedIn && !matchable}>
+      {/*
+        Terms waiting to be agreed. While they are, this is the only signed-in
+        screen besides the documents, the shop's data and sign-out, and it has
+        no back: the guards below have closed what it would go back to.
+      */}
+      <Stack.Protected guard={legalBlocked}>
+        <Stack.Screen
+          name="legal/review"
+          options={{ headerShown: false, title: "Terms", gestureEnabled: false }}
+        />
+      </Stack.Protected>
+
+      {/*
+        Open to every signed-in shop, including one with terms still to agree
+        to: reading the documents, asking about its own data and deleting the
+        account must never wait behind a checkbox.
+      */}
+      <Stack.Protected guard={signedIn}>
+        <Stack.Screen
+          name="legal/index"
+          options={{ title: "Legal & Privacy", headerBackButtonDisplayMode: "minimal" }}
+        />
+        <Stack.Screen
+          name="privacy/index"
+          options={{ title: "Your data", headerBackButtonDisplayMode: "minimal" }}
+        />
+        <Stack.Screen
+          name="privacy/request"
+          options={{ title: "Your data", headerBackButtonDisplayMode: "minimal" }}
+        />
+        {/*
+          Reached from Your data and from Danger zone on Your shop details. It
+          asks for the password (or an emailed code) before anything is sent.
+        */}
+        <Stack.Screen
+          name="delete-account"
+          options={{
+            title: "Delete account",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+      </Stack.Protected>
+
+      <Stack.Protected guard={floorOpen && !matchable}>
         <Stack.Screen
           name="accreditation"
           options={{
@@ -236,7 +308,7 @@ function RootStack({ introDone }: { introDone: boolean }) {
         />
       </Stack.Protected>
 
-      <Stack.Protected guard={signedIn}>
+      <Stack.Protected guard={floorOpen}>
         {/*
           The floor mounts for every signed-in shop. A pending account still
           needs a Home that says Operations is reviewing it — gating tabs on
@@ -313,6 +385,34 @@ function RootStack({ introDone }: { introDone: boolean }) {
           }}
         />
         {/*
+          Hours sit behind the floor guard like the pin: a waiting shop sets
+          when it opens before its first job is timed on it.
+        */}
+        <Stack.Screen
+          name="shop-hours"
+          options={{
+            title: "Shop hours",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
+          A closure used to be presented as a modal, which is why it drew its
+          own "Cancel" in the header — a modal is dismissed, not navigated back
+          from. The captain wants the chevron every other screen in this app
+          has, and nothing here needed the modal: both entry points push it, it
+          has no dismiss guard, and its date picker is its own sheet route
+          either way. So it is an ordinary pushed screen and takes the stack's
+          own back control, rather than a modal wearing a chevron it should not
+          have.
+        */}
+        <Stack.Screen
+          name="shop-closure"
+          options={{
+            title: "Closure dates",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
           The shop's own name and number sit behind the same guard, and for a
           sharper version of the same reason: Operations rings that number to
           progress the application, so a waiting shop is the one that most needs
@@ -363,17 +463,6 @@ function RootStack({ introDone }: { introDone: boolean }) {
           }}
         />
         {/*
-          Reached only from Danger zone on Your shop details. It asks for the
-          password (or an emailed code) before anything is sent.
-        */}
-        <Stack.Screen
-          name="delete-account"
-          options={{
-            title: "Delete account",
-            headerBackButtonDisplayMode: "minimal",
-          }}
-        />
-        {/*
           The board itself is a tab now; this group is what opens on top of it —
           adding a listing, and the editor with its samples and preview. It sits
           under the signed-in guard rather than the matchable one because
@@ -399,7 +488,7 @@ function RootStack({ introDone }: { introDone: boolean }) {
         <Stack.Screen name="push-prompt" options={sheetScreenOptions(scheme)} />
       </Stack.Protected>
 
-      <Stack.Protected guard={matchable}>
+      <Stack.Protected guard={matchable && !legalBlocked}>
         {/*
           Pushed screens sit above the tab shell and must share the same guard —
           a tabs-only guard would leave job/payout/design-system reachable after
@@ -411,6 +500,21 @@ function RootStack({ introDone }: { introDone: boolean }) {
         */}
         {/* The job stack draws its own headers for the workspace and its flows. */}
         <Stack.Screen name="job/[id]" options={{ headerShown: false }} />
+        {/*
+          A call with the rider takes the whole screen, over whatever was open,
+          and owns its way out: the red button. Swiping it away would leave a
+          microphone open behind the shop's back.
+        */}
+        <Stack.Screen
+          name="call"
+          options={{
+            title: "Call",
+            headerShown: false,
+            presentation: "fullScreenModal",
+            animation: "fade",
+            gestureEnabled: false,
+          }}
+        />
         <Stack.Screen
           name="payout"
           options={{
@@ -428,7 +532,7 @@ function RootStack({ introDone }: { introDone: boolean }) {
         <Stack.Screen
           name="capacity"
           options={{
-            title: "Capacity & closures",
+            title: "Capacity",
             headerBackButtonDisplayMode: "minimal",
           }}
         />
@@ -441,23 +545,6 @@ function RootStack({ introDone }: { introDone: boolean }) {
         />
         {/* The catalogue draws its own headers for the list and one category. */}
         <Stack.Screen name="services" options={{ headerShown: false }} />
-        {/*
-          A closure used to be presented as a modal, which is why it drew its
-          own "Cancel" in the header — a modal is dismissed, not navigated back
-          from. The captain wants the chevron every other screen in this app
-          has, and nothing here needed the modal: both entry points push it, it
-          has no dismiss guard, and its date picker is its own sheet route
-          either way. So it is an ordinary pushed screen and takes the stack's
-          own back control, rather than a modal wearing a chevron it should not
-          have.
-        */}
-        <Stack.Screen
-          name="shop-closure"
-          options={{
-            title: "Shop closure",
-            headerBackButtonDisplayMode: "minimal",
-          }}
-        />
         <Stack.Screen
           name="design-system"
           options={{

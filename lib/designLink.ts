@@ -1,13 +1,14 @@
-import type { ArtworkLink, Order } from "@/lib/api";
+import type { ArtworkLink, Order, ProductionItem } from "@/lib/api";
 
 /**
  * Design links: the client's artwork kept on Canva, Google Drive, Dropbox or
  * WeTransfer rather than uploaded as a file.
  *
  * `docs/ORDER_MATCH_API.md#artwork-design-links` in gridgo-api is the
- * contract. An order line carries `artworkLinks: [{ formatCode, url }]`, up to
- * three, beside or instead of `artworkFileId`, and this shop sees only its own
- * job's lines. Two rules shape what a screen may say:
+ * contract. An order line carries `artworkLinks: [{ formatCode, url, label? }]`
+ * beside or instead of uploaded files (ten attachments a line, files and links
+ * together, in `artworkAttachments`), and this shop sees only its own job's
+ * lines. Two rules shape what a screen may say:
  *
  * - A link **is** artwork. A job whose only artwork is a link must never read
  *   "No print file" — that is a shop told it has nothing to print while the
@@ -90,25 +91,47 @@ export function linkDisplay(url: string): string {
 }
 
 /**
- * Every design link on the order, line by line, each address once.
+ * One stored link as a shop may be shown it, or null when it is not one.
  *
  * Only HTTPS survives: the contract stores nothing else, and a link this app
  * hands to the phone's browser must not be able to launch anything but a page.
  */
+export function toDesignLink(raw: unknown, itemName?: string): DesignLink | null {
+  if (!raw || typeof raw !== "object") return null;
+  const { url, formatCode: code, label } = raw as Partial<ArtworkLink>;
+  if (typeof url !== "string" || !parseHttps(url)) return null;
+  const formatCode = typeof code === "string" ? code : "other_link";
+  const trimmed = typeof label === "string" ? label.trim() : "";
+  return {
+    formatCode,
+    url,
+    provider: linkProvider({ formatCode, url }),
+    ...(trimmed ? { label: trimmed } : {}),
+    ...(itemName ? { itemName } : {}),
+  };
+}
+
+/**
+ * A line's links in the client's order: from `artworkAttachments` when GRIDGO
+ * sends it (it carries the labels), else the older `artworkLinks`.
+ */
+function lineLinks(item: ProductionItem): unknown[] {
+  if (Array.isArray(item.artworkAttachments)) {
+    return item.artworkAttachments.filter((entry) => entry && entry.kind === "link");
+  }
+  return Array.isArray(item.artworkLinks) ? item.artworkLinks : [];
+}
+
+/** Every design link on the order, line by line, each address once. */
 export function orderDesignLinks(order: Pick<Order, "productionItems">): DesignLink[] {
   const links: DesignLink[] = [];
   const seen = new Set<string>();
   for (const item of order.productionItems ?? []) {
-    for (const link of Array.isArray(item.artworkLinks) ? item.artworkLinks : []) {
-      if (!link || typeof link.url !== "string" || !parseHttps(link.url) || seen.has(link.url)) continue;
+    for (const raw of lineLinks(item)) {
+      const link = toDesignLink(raw, item.itemName);
+      if (!link || seen.has(link.url)) continue;
       seen.add(link.url);
-      const formatCode = typeof link.formatCode === "string" ? link.formatCode : "other_link";
-      links.push({
-        formatCode,
-        url: link.url,
-        provider: linkProvider({ formatCode, url: link.url }),
-        ...(item.itemName ? { itemName: item.itemName } : {}),
-      });
+      links.push(link);
     }
   }
   return links;

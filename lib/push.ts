@@ -37,6 +37,10 @@
  *   an answer and the job has stopped.
  * - **A payout released, and an issue raised against the shop's work.** Money
  *   arriving, and money being held.
+ * - **A message from the rider collecting a job, or from Operations.** Neither
+ *   is read with the app closed unless the phone says so (gridgo-client#231).
+ *   The server rings once per conversation per five minutes, so a burst is one
+ *   sound, not ten.
  *
  * Deliberately **not** on that list: ordinary state changes the shop will read
  * the next time it opens the app (a client's downpayment confirmed, a job
@@ -46,6 +50,9 @@
  */
 
 import { Platform } from "react-native";
+
+import { CHAT_LIST_ROUTE, isChatThreadId } from "@/lib/chatThreads";
+import { SHOP_HOURS_NOTICE, SHOP_HOURS_ROUTE } from "@/lib/shopHours";
 
 /**
  * The Android channel the server names in every message.
@@ -68,12 +75,48 @@ export const PUSH_CHANNEL_ID = "gridgo_default";
 export const PUSH_PRODUCTION_NUDGE_CHANNEL_ID = "gridgo_production_nudge";
 export const PRODUCTION_NUDGE_SOUND = "notification_alert.mp3";
 
-/** Channel presentation. Importance is high — these are SLA-bearing updates. */
+/**
+ * Channel presentation. Importance is high — these are SLA-bearing updates and
+ * messages from a rider at the counter — so they sound, vibrate and show a
+ * banner. The sound is Android's default, which is what a channel gets when no
+ * `sound` is passed; `sound: "default"` would be read as a custom file name.
+ */
 export const PUSH_CHANNEL = {
   name: "Job and payout alerts",
   description:
-    "New work offered to your shop, evidence a payout is waiting on, pickups, and what your jobs have paid.",
+    "New work offered to your shop, messages from your rider and Operations, evidence a payout is waiting on, pickups, and what your jobs have paid.",
 } as const;
+
+/**
+ * Whether the channel installed on this phone actually makes a sound.
+ *
+ * The server asks for the default sound on every chat push, but on Android 8+
+ * the **channel** decides, and its sound and importance belong to the person
+ * once it exists: re-creating it does not undo a shop that set it to Silent,
+ * and no payload can. So the app reads the installed channel back and says so
+ * when it is quiet or off, with the way to the one screen that can change it.
+ *
+ * - `audible` — default importance or higher, with a sound.
+ * - `silent` — it shows, but makes no sound (low importance, or sound removed).
+ * - `off` — the shop turned this channel off (importance none).
+ * - `unknown` — iOS, web, Expo Go, or an answer that cannot be read.
+ *
+ * Importance is compared against the module's own enum values, passed in, so
+ * this stays pure and the numbering is never copied here.
+ */
+export type ChannelAudibility = "audible" | "silent" | "off" | "unknown";
+
+export function channelAudibility(
+  channel: { importance?: number | null; sound?: string | null } | null | undefined,
+  levels: { none: number; default: number },
+): ChannelAudibility {
+  if (!channel || typeof channel.importance !== "number") return "unknown";
+  if (channel.importance === levels.none) return "off";
+  // Below "none" is the enum's unknown/unspecified: nothing to say.
+  if (channel.importance < levels.none) return "unknown";
+  if (channel.importance < levels.default) return "silent";
+  return channel.sound == null ? "silent" : "audible";
+}
 
 /** The `platform` value `POST /devices` accepts. */
 export type DevicePlatform = "android" | "ios" | "web";
@@ -101,6 +144,10 @@ export function devicePlatform(os: string = Platform.OS): DevicePlatform | null 
  * and GRIDGO's commission cannot appear here even if a future notification
  * record carries them. Nothing else in the payload is contractual, so nothing
  * else is read.
+ *
+ * A support reply carries no thread ID here on purpose: the tap reads it back
+ * from `PATCH /notifications/:id`, which only the notification's owner can do
+ * (gridgo-api `docs/REALTIME_EVENTS.md#chat-push-delivery-and-app-follow-up`).
  */
 export type PushData = {
   notificationId: string | null;
@@ -130,6 +177,31 @@ export function parsePushData(raw: unknown): PushData {
 }
 
 /**
+ * The key a tap is remembered by, so it opens its screen once.
+ *
+ * The server's `notificationId` when the push carries one: a cold-start replay
+ * and the live listener can hand the same tap over under different native
+ * identifiers. The native identifier otherwise (a local or older push).
+ */
+export function pushTapKey(identifier: string, data: PushData): string {
+  return data.notificationId ? `notification:${data.notificationId}` : `response:${identifier}`;
+}
+
+/**
+ * Operations wrote in one of the shop's support threads. The push names no
+ * thread, so a tap reads it back from `PATCH /notifications/:notificationId`.
+ */
+export const SUPPORT_MESSAGE_PUSH_TYPE = "support_message";
+
+/**
+ * The exact support thread a notice opens, or the chat history when it names
+ * none — never a guess at the newest thread, which may be another conversation.
+ */
+export function supportThreadRoute(threadId: string | null | undefined): string {
+  return isChatThreadId(threadId ?? undefined) ? `/chat/${threadId}` : CHAT_LIST_ROUTE;
+}
+
+/**
  * Where a tapped notification opens. **App-specific** — the client and rider
  * apps map the same payload onto their own routes.
  *
@@ -146,9 +218,22 @@ export function parsePushData(raw: unknown): PushData {
  * unknown `type` and is always a screen that can explain itself. That list is a
  * pushed screen rather than a tab now; the route moved with it. The push
  * carries no order state, so the job screen fetches the job as it always does.
+ *
+ * A reply from Operations opens that exact conversation, from the `threadId`
+ * the owner's own notification names (`usePushNotifications` reads it); without
+ * one it opens the chat history.
  */
-export function pushTargetRoute(data: PushData): string {
-  return data.orderId ? `/job/${data.orderId}` : "/alerts";
+export function pushTargetRoute(data: PushData, threadId: string | null = null): string {
+  if (data.type === SUPPORT_MESSAGE_PUSH_TYPE) return supportThreadRoute(threadId);
+  if (data.type === SHOP_HOURS_NOTICE) return SHOP_HOURS_ROUTE;
+  if (!data.orderId) return "/alerts";
+  // A message from the rider collecting the job opens the conversation itself;
+  // its back control leads to the job (`app/job/[id]/messages.tsx`).
+  if (data.type === "pickup_chat_message") return `/job/${data.orderId}/messages`;
+  // A rider's call opens the call screen, which rings only if the call still is;
+  // a missed one opens the job, where "Missed call from …" offers to call back.
+  if (data.type === "order_call_incoming") return `/call?orderId=${encodeURIComponent(data.orderId)}&mode=incoming`;
+  return `/job/${data.orderId}`;
 }
 
 /**
@@ -181,7 +266,7 @@ export function readPushPermission(response: {
 }
 
 /** What the enable card should do, if anything. */
-export type PushOffer = "hidden" | "ask" | "settings" | "retry";
+export type PushOffer = "hidden" | "ask" | "settings" | "retry" | "silent" | "muted";
 
 /**
  * Whether to offer phone notifications, and how.
@@ -199,6 +284,11 @@ export type PushOffer = "hidden" | "ask" | "settings" | "retry";
  * a working one, and simply never rings. Nothing else in the app would ever say
  * so, so the card stays on screen and says it.
  *
+ * `silent` and `muted` are a granted phone whose GRIDGO channel the shop has
+ * quietened (`channelAudibility`): the push arrives and nobody hears it, which
+ * is how a rider's message at the counter went unnoticed. Only the channel's
+ * own settings screen can change that, so the card says so and opens it.
+ *
  * **Signed out is an offer, not a silence** — this is the one rule that differs
  * from the client app. A granted phone still registers unclaimed so GRIDGO can
  * announce an update. Sign-in itself does not draw the card; if a signed-out
@@ -212,10 +302,14 @@ export function pushOffer(input: {
   permission: PushPermission;
   /** A permission ask or a registration call failed. */
   failed?: boolean;
+  /** The installed Android channel, read back (`channelAudibility`). */
+  channel?: ChannelAudibility;
 }): PushOffer {
   if (!input.supported) return "hidden";
   if (!input.signedIn) return input.permission === "undetermined" ? "ask" : "hidden";
   if (input.failed) return input.permission === "blocked" ? "settings" : "retry";
+  if (input.permission === "granted" && input.channel === "off") return "muted";
+  if (input.permission === "granted" && input.channel === "silent") return "silent";
   if (input.permission === "granted" || input.permission === "unknown") return "hidden";
   return input.permission === "blocked" ? "settings" : "ask";
 }
@@ -253,6 +347,20 @@ export function pushOfferCopy(
       action: "Try again",
     };
   }
+  if (offer === "silent") {
+    return {
+      title: "GRIDGO notifications make no sound",
+      body: "Job offers and messages from your rider and Operations arrive silently, so you can miss them. In notification settings, turn Sound on for Job and payout alerts.",
+      action: "Open notification settings",
+    };
+  }
+  if (offer === "muted") {
+    return {
+      title: "Job and payout alerts are turned off",
+      body: "This phone hides GRIDGO's job offers and messages. In notification settings, turn Job and payout alerts on and allow sound.",
+      action: "Open notification settings",
+    };
+  }
   if (offer === "settings") {
     return {
       title: "Notifications are off for GRIDGO",
@@ -262,7 +370,7 @@ export function pushOfferCopy(
   }
   return {
     title: "Get these on your phone",
-    body: "We will notify this phone when GRIDGO offers your shop work, when a payout is waiting on your evidence, when a rider is at your counter, when a job pays, and for production reminders when a job on the press has not moved — even with GRIDGO closed.",
+    body: "We will notify this phone when GRIDGO offers your shop work, when a payout is waiting on your evidence, when a rider is at your counter, when your rider or Operations sends you a message, when a job pays, and for production reminders when a job on the press has not moved — even with GRIDGO closed.",
     action: "Turn on notifications",
   };
 }

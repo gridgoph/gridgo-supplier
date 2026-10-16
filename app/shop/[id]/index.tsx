@@ -25,7 +25,8 @@ import { DestinationRow } from "@/components/listing/DestinationRow";
 import { ListingStandingPanel } from "@/components/listing/ListingStandingPanel";
 import { ListingSection as Section } from "@/components/listing/ListingSection";
 import { PrinterCapField } from "@/components/listing/PrinterCapField";
-import { PRODUCTION_DAYS_HINT, ProductionDaysField } from "@/components/listing/ProductionDaysField";
+import { PrintLayoutField } from "@/components/listing/PrintLayoutField";
+import { PRODUCTION_TIME_HINT, ProductionTimeField } from "@/components/listing/ProductionTimeField";
 import { SampleStrip } from "@/components/listing/SampleStrip";
 import { PriceTierEditor, SpeedTierEditor } from "@/components/listing/TierEditor";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
@@ -92,7 +93,8 @@ import {
   type BoardOutcome,
 } from "@/lib/listingsApi";
 import { listingFoot, SUBMITTED_NOTICE } from "@/lib/listingReview";
-import { productionDays } from "@/lib/listingWizard";
+import { PRINT_LAYOUTS_HINT, printLayoutsNote, samePrintLayouts } from "@/lib/printLayout";
+import { productionWindow } from "@/lib/listingWizard";
 import { linkFileOptions, uploadedFileOptions } from "@/lib/fileFormatResolve";
 import { parseMoney } from "@/lib/money";
 import { resolveCategoryCode } from "@/lib/taxonomy";
@@ -488,7 +490,8 @@ export default function ListingScreen() {
       ) ??
       null)
     : null;
-  const ownWindow = productionDays(working, context.inheritedTurnaroundDays);
+  const dayMinutes = listing.productionDayMinutes ?? undefined;
+  const ownWindow = productionWindow(working, context.inheritedTurnaround, dayMinutes);
 
   return (
     <View className="gg-screen">
@@ -753,7 +756,7 @@ export default function ListingScreen() {
         </TourTarget>
 
         {/* 4. Production time */}
-        <Section title="PRODUCTION TIME" hint={PRODUCTION_DAYS_HINT}>
+        <Section title="PRODUCTION TIME" hint={PRODUCTION_TIME_HINT}>
           <SegmentedControl
             options={[
               { value: "inherit", label: "Your usual time" },
@@ -764,12 +767,12 @@ export default function ListingScreen() {
               // Its own time starts from the usual one, so "Just this listing"
               // never saves a listing with no production time at all.
               setDraft(
-                value === "override" && working.turnaroundDays == null
+                value === "override" && working.turnaround == null
                   ? {
                       ...working,
                       turnaroundMode: value,
-                      minimumTurnaroundDays: ownWindow.min,
-                      turnaroundDays: ownWindow.max,
+                      minimumTurnaround: ownWindow.min,
+                      turnaround: ownWindow.max,
                     }
                   : { ...working, turnaroundMode: value },
               )
@@ -777,22 +780,22 @@ export default function ListingScreen() {
             accessibilityLabel="How long this listing takes"
           />
           {working.turnaroundMode === "override" ? (
-            <ProductionDaysField
-              minDays={ownWindow.min}
-              maxDays={ownWindow.max}
-              onChange={({ minDays, maxDays }) =>
-                setDraft({ ...working, minimumTurnaroundDays: minDays, turnaroundDays: maxDays })
-              }
+            <ProductionTimeField
+              min={ownWindow.min}
+              max={ownWindow.max}
+              dayMinutes={dayMinutes}
+              onChange={({ min, max }) => setDraft({ ...working, minimumTurnaround: min, turnaround: max })}
             />
           ) : (
             <Text className="text-caption text-text-muted">
-              {context.inheritedTurnaroundDays
-                ? `${readyInLine(context.inheritedTurnaroundDays)}, the time on your accreditation for this category.`
-                : "Your shop has no usual time on this category yet. Set the working days here, or add one in Services you offer."}
+              {context.inheritedTurnaround
+                ? `${readyInLine(context.inheritedTurnaround)}, the time on your accreditation for this category.`
+                : "Your shop has no usual time on this category yet. Set the production time here, or add one in Services you offer."}
             </Text>
           )}
           <SpeedTierEditor
             tiers={working.speedTiers}
+            dayMinutes={dayMinutes}
             onChange={(next) => setDraft({ ...working, speedTiers: next })}
           />
         </Section>
@@ -1041,7 +1044,22 @@ export default function ListingScreen() {
           )}
         </Section>
 
-        {/* 9. On the board */}
+        {/* 9. Print layouts */}
+        <Section title="PRINT LAYOUTS" hint={PRINT_LAYOUTS_HINT}>
+          <PrintLayoutField
+            value={working.printLayouts}
+            onChange={(next) => setDraft({ ...working, printLayouts: next })}
+            note={printLayoutsNote({
+              layouts: working.printLayouts,
+              changed: !samePrintLayouts(working.printLayouts, listing.printLayouts),
+              hasApprovedVersion: !awaitsFirstApproval(listing),
+              pendingReview: listing.reviewStatus === "pending",
+            })}
+            disabled={busy}
+          />
+        </Section>
+
+        {/* 10. On the board */}
         <Section title="ON THE BOARD">
           <Text className="text-body text-text-secondary">
             {boardSentence(merged, standing.kind === "suspended", verdict, approved)}

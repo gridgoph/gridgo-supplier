@@ -4,7 +4,8 @@ import { formatDeadlineFull } from "@/lib/dates";
 
 import JobWorkspaceScreen from "@/app/job/[id]/index";
 import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
-import { getFile, getMyProductionLapses, getOrder } from "@/lib/api";
+import { getFile, getMyProductionLapses, getOrder, getRiderApproach, listCalls } from "@/lib/api";
+import { router } from "expo-router";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), navigate: jest.fn() },
@@ -16,10 +17,24 @@ jest.mock("expo-router", () => ({
   },
 }));
 
+// The rider-on-the-way map asks OSRM for a road; a test never reaches the internet.
+jest.mock("@/lib/osrm", () => ({
+  ...jest.requireActual("@/lib/osrm"),
+  fetchRoute: jest.fn(async (from: { lat: number; lng: number }, to: { lat: number; lng: number }) =>
+    jest.requireActual("@/lib/osrm").fallbackRoute(from, to),
+  ),
+}));
+
 jest.mock("@/lib/api", () => ({
   ...jest.requireActual("@/lib/api"),
   getOrder: jest.fn(),
+  getRiderApproach: jest.fn(async () => ({
+    ping: { lat: 7.09, lng: 125.6, at: new Date().toISOString() },
+    shop: { lat: 7.0731, lng: 125.6128 },
+    hidden: null,
+  })),
   getMyProductionLapses: jest.fn(async () => ({ lapses: [] })),
+  listCalls: jest.fn(async () => []),
   getFile: jest.fn(async (fileId: string) => ({
     fileId,
     originalFilename: `${fileId}.jpg`,
@@ -526,5 +541,244 @@ describe("job workspace client date", () => {
     await render(<JobWorkspaceScreen />);
     const dates = await screen.findAllByText(`${label} ${formatDeadlineFull(promisedDate || deadline)}`);
     expect(dates[0].props.className).toBe("text-body-lg text-text-secondary");
+  });
+});
+
+describe("job workspace with a rider collecting it", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const riderOnTheWay = (partial: Partial<Order> = {}) =>
+    job({
+      state: "rider_assigned",
+      riderId: "user_rider",
+      pickup: { lat: 7.0731, lng: 125.6128, label: "Shop" },
+      pickupChat: { status: "open", unread: 2, closesAt: null, riderFirstName: "Jun" },
+      ...partial,
+    });
+
+  it("opens the Pickup row on the rider's way to the shop, with the conversation and its new messages", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay());
+    await render(<JobWorkspaceScreen />);
+
+    const pickup = await screen.findByTestId("job-brief-handoff");
+    expect(await within(pickup).findByTestId("rider-approach")).toBeTruthy();
+    expect(await within(pickup).findByText(/^Jun is about \d+ min away$/)).toBeTruthy();
+    expect(within(pickup).getByText("Updated just now")).toBeTruthy();
+    expect(within(pickup).getByText("Message Jun")).toBeTruthy();
+    expect(within(pickup).getByText("2 new")).toBeTruthy();
+    expect(getRiderApproach).toHaveBeenCalledWith("ord_1");
+
+    await fireEvent.press(within(pickup).getByTestId("pickup-chat-row"));
+    expect(router.push).toHaveBeenCalledWith({ pathname: "/job/[id]/messages", params: { id: "ord_1" } });
+  });
+
+  it("drops the map once the rider has it, and keeps the conversation", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay({ state: "picked_up" }));
+    await render(<JobWorkspaceScreen />);
+
+    const pickup = await screen.findByTestId("job-brief-handoff");
+    expect(within(pickup).getByText("Message Jun")).toBeTruthy();
+    expect(within(pickup).queryByTestId("rider-approach")).toBeNull();
+    expect(getRiderApproach).not.toHaveBeenCalled();
+  });
+
+  it("keeps the delivered conversation reachable after the Pickup row is gone", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      riderOnTheWay({
+        state: "delivered",
+        pickupChat: { status: "read_only", unread: 0, closesAt: "2026-10-09T02:00:00.000Z", riderFirstName: "Jun" },
+      }),
+    );
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByText("Messages with Jun")).toBeTruthy();
+    expect(screen.queryByTestId("job-brief-handoff")).toBeNull();
+    expect(screen.queryByTestId("rider-approach")).toBeNull();
+  });
+
+  it("offers a call to the rider beside the messages while they are on the way", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay());
+    await render(<JobWorkspaceScreen />);
+
+    const pickup = await screen.findByTestId("job-brief-handoff");
+    expect(within(pickup).getByText("Call Jun")).toBeTruthy();
+    // Jest has no WebRTC module, like Expo Go: the row says where the app that can call is.
+    expect(within(pickup).getByText("Calls need the latest GRIDGO app from the download page")).toBeTruthy();
+    expect(screen.queryByText(/(\+?63|0)9\d{2}/)).toBeNull();
+
+    await fireEvent.press(within(pickup).getByTestId("pickup-call-row"));
+    expect(router.push).toHaveBeenCalledWith({ pathname: "/call", params: { orderId: "ord_1", mode: "start", name: "Jun" } });
+    expect(listCalls).toHaveBeenCalledWith("ord_1");
+  });
+
+  it("closes calling at pick-up while the messages stay", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay({ state: "picked_up" }));
+    await render(<JobWorkspaceScreen />);
+
+    const pickup = await screen.findByTestId("job-brief-handoff");
+    expect(within(pickup).getByText("Message Jun")).toBeTruthy();
+    expect(within(pickup).queryByTestId("pickup-call-row")).toBeNull();
+    expect(listCalls).not.toHaveBeenCalled();
+  });
+
+  it("draws no call before a rider accepts the pickup", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay({ pickupChat: undefined }));
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByTestId("rider-approach")).toBeTruthy();
+    expect(screen.queryByTestId("pickup-call-row")).toBeNull();
+  });
+
+  it("says who called when a call was missed, and offers to call back", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay());
+    (listCalls as jest.Mock).mockResolvedValue([
+      {
+        id: "e115b493-dee1-448f-b6ba-a9868f448df2",
+        orderId: "ord_1",
+        pair: "pickup",
+        state: "missed",
+        caller: { firstName: "Jun", role: "rider" },
+        callee: { firstName: "Shop", role: "supplier" },
+        mine: false,
+        createdAt: new Date(Date.now() - 60_000).toISOString(),
+        ringExpiresAt: new Date(Date.now() - 30_000).toISOString(),
+        acceptedAt: null,
+        endedAt: new Date(Date.now() - 30_000).toISOString(),
+        leaseExpiresAt: null,
+      },
+    ]);
+    await render(<JobWorkspaceScreen />);
+
+    const notice = await screen.findByTestId("missed-call-notice");
+    expect(within(notice).getByText("Missed call from Jun")).toBeTruthy();
+    await fireEvent.press(within(notice).getByText("Call back"));
+    expect(router.push).toHaveBeenCalledWith({ pathname: "/call", params: { orderId: "ord_1", mode: "start", name: "Jun" } });
+  });
+
+  it("shows no conversation when GRIDGO sends none", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(riderOnTheWay({ pickupChat: undefined }));
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByTestId("rider-approach")).toBeTruthy();
+    expect(screen.queryByTestId("pickup-chat-row")).toBeNull();
+  });
+});
+
+// Report 6C695C15: a shop could not package a job and was never told why.
+describe("job workspace before packaging", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const PRODUCTION_PHOTO =
+    "Attach at least one production progress photo before marking this job packed or ready for dispatch. A start-of-production photo counts.";
+  const PACKING_PHOTO = "Add a photo of the finished prints packed and ready before marking Ready for dispatch.";
+  const CLAIM =
+    "This order cannot be packaged for pickup while a claim holds payouts. Operations must clear the claim first.";
+  const readiness = (missing: { code: string; message: string }[]) => ({
+    ready_for_dispatch: { allowed: missing.length === 0, missing, receiptScan: { required: false, attached: false } },
+  });
+  const filled = { material: "130gsm gloss", zone: "Nearby", promisedDate: "2026-08-12T02:00:00.000Z", missing: [] };
+
+  it("lists what GRIDGO still needs, in its own words, before the step is pressed", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        payoutMilestones: escrow({ production_started: "released" }, { production_started: ["file_start"] }),
+        payoutPlanVersion: 2,
+        productionProgress: { status: "photos_available", photos: [{ fileId: "file_start", at: null }] },
+        packingProgress: { status: "waiting_for_photo", photos: [] },
+        transitionReadiness: readiness([{ code: "packing_photo_required", message: PACKING_PHOTO }]),
+        jobDetails: filled,
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    const list = await screen.findByTestId("packaging-checklist");
+    expect(within(list).getByText("1 of 2 photos on the job.")).toBeTruthy();
+    expect(within(list).getByLabelText(/^Production photo, Done/)).toBeTruthy();
+    expect(within(list).getByLabelText(/^Packing photo, Needed/)).toBeTruthy();
+    expect(within(list).getByText(PACKING_PHOTO)).toBeTruthy();
+    // Optional, said as optional, never a thing that is missing.
+    expect(within(list).getByText("Not needed. It never holds up packing.")).toBeTruthy();
+    expect(within(screen.getByTestId("job-action-bar")).getByText("Add a packing photo")).toBeTruthy();
+  });
+
+  it("offers no packaging step while a claim holds the job, and says who clears it", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        payoutMilestones: escrow({ production_started: "released" }, { production_started: ["file_start"] }),
+        payoutPlanVersion: 2,
+        productionProgress: { status: "photos_available", photos: [{ fileId: "file_start", at: null }] },
+        packingProgress: { status: "photos_available", photos: [{ fileId: "file_pack", at: null }] },
+        transitionReadiness: readiness([{ code: "claim_hold_active", message: CLAIM }]),
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    const list = await screen.findByTestId("packaging-checklist");
+    expect(within(list).getByText("Both photos are on the job. Something else is holding it too.")).toBeTruthy();
+    expect(within(list).getByLabelText(/^Client claim open, Waiting on Operations/)).toBeTruthy();
+    expect(within(list).getByText(CLAIM)).toBeTruthy();
+    expect(screen.queryByText("Package for pickup")).toBeNull();
+    fireEvent.press(within(list).getByText("Message Operations"));
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: "/report",
+      params: { orderId: "ord_1", title: "Barangay tarpaulin" },
+    });
+  });
+
+  it("draws no checklist once GRIDGO would take the step", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        payoutMilestones: escrow({ production_started: "released" }, { production_started: ["file_start"] }),
+        payoutPlanVersion: 2,
+        productionProgress: { status: "photos_available", photos: [{ fileId: "file_start", at: null }] },
+        packingProgress: { status: "photos_available", photos: [{ fileId: "file_pack", at: null }] },
+        transitionReadiness: readiness([]),
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByText("Package for pickup")).toBeTruthy();
+    expect(screen.queryByTestId("packaging-checklist")).toBeNull();
+  });
+
+  it("shows the zone and date GRIDGO filled, and says Not specified for what it could not", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(
+      job({
+        readyBy: null,
+        jobDetails: { material: "Not specified", zone: "Not specified", promisedDate: "2026-08-12T02:00:00.000Z", missing: ["material", "zone"] },
+        productionItems: [
+          {
+            id: "line_1", itemName: "Brochures", quantity: 100, pricingUnit: null, packageQty: null, measurement: null,
+            structuredSpec: { size: "A4" }, options: [], artworkFileId: null, mockupFileId: null,
+          },
+        ],
+        timeline: [{ at: "2026-08-07T00:00:00.000Z", state: "production", note: "Proof filed for production_started" }],
+      }),
+    );
+
+    await render(<JobWorkspaceScreen />);
+
+    if (!screen.queryByTestId("job-brief-make")) {
+      fireEvent.press(await screen.findByRole("button", { name: /^What to make/ }));
+    }
+    const make = await screen.findByTestId("job-brief-make");
+    expect(within(make).getByText("Material")).toBeTruthy();
+    expect(within(make).getByText("Not specified")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: /^Where and when/ }));
+    const delivery = await screen.findByTestId("job-brief-delivery");
+    expect(within(delivery).getByText("Zone")).toBeTruthy();
+    expect(within(delivery).getByText(formatDeadlineFull("2026-08-12T02:00:00.000Z"))).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: /^What happened so far/ }));
+    const history = await screen.findByTestId("job-brief-history");
+    // No internal payout label, and an unnamed row is not attributed to GRIDGO.
+    expect(within(history).getByText("Proof filed for Start of production")).toBeTruthy();
+    expect(within(history).queryByText(/GRIDGO/)).toBeNull();
   });
 });

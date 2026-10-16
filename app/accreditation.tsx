@@ -13,7 +13,9 @@ import { StatusChip } from "@/components/StatusChip";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 import { PUBLISHED_CATALOG } from "@/data/serviceCatalog";
 import type { VerificationStatus } from "@/lib/api";
+import { WHY_WE_ASK } from "@/lib/legal";
 import { chooseFile, takePhoto, type PickOutcome } from "@/lib/pickFile";
+import { WhyWeAsk } from "@/components/legal/WhyWeAsk";
 import { VERIFICATION_DOCUMENTS } from "@/lib/verification";
 import { describeDocumentQueue, useAccreditationDocs } from "@/store/accreditationDocs";
 import type { DocumentKind } from "@/store/signupDraft";
@@ -123,6 +125,7 @@ export default function AccreditationScreen() {
         {/* The one thing a waiting shop can still act on. */}
         <View className="mt-6 gap-2">
           <Text className="text-overline text-text-muted">YOUR PAPERS</Text>
+          {outstanding.length ? <WhyWeAsk>{WHY_WE_ASK.papers}</WhyWeAsk> : null}
           {queue ? (
             <View className="gg-panel gap-1">
               <Text className="text-body font-medium text-text-primary">{queue.title}</Text>

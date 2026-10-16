@@ -1,5 +1,5 @@
 /** Silent refresh hints. Never contains domain data or grants access. */
-export const LIVE_RESOURCES = ["orders", "jobs", "approvals", "escalations", "claims", "dispatch", "payouts", "notifications", "identity", "catalog", "services", "availability", "settings", "location", "credits"] as const;
+export const LIVE_RESOURCES = ["orders", "jobs", "approvals", "escalations", "claims", "dispatch", "payouts", "notifications", "identity", "catalog", "services", "availability", "settings", "location", "credits", "calls"] as const;
 export type LiveResource = typeof LIVE_RESOURCES[number];
 export type Invalidation = { resource: LiveResource; id?: string };
 type Listener = (resource: LiveResource | "*") => void;

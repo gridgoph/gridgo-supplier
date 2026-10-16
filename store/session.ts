@@ -1,11 +1,16 @@
 import { useAlertsStore } from "@/store/alerts";
 import { useToasts } from "@/store/toasts";
+import { useAccountDeletion } from "@/store/accountDeletion";
+import { useShopHours } from "@/store/shopHours";
+import { afterShopPlanLoads, useShopPlan } from "@/store/shopPlan";
+import { usePrivacyRequests } from "@/store/privacyRequests";
 import { liveGeneration, setLiveOwner } from "@/lib/live";
 import { create } from "zustand";
 
 import type { User } from "@/lib/api";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import { APPLY_CONSENT_REFUSED, isLegalRefusal } from "@/lib/legal";
 import { sessionWaitHold } from "@/lib/sessionWait";
 import { releaseClerkSession } from "@/lib/clerkSignIn";
 import { serializeDeviceMutation, usePush } from "@/store/push";
@@ -211,8 +216,11 @@ export const useSession = create<SessionState>((set, get) => ({
     } catch (e) {
       set({
         loading: false,
-        error:
-          e instanceof api.ApiError
+        // GRIDGO refused the agreement itself — a version changed while the
+        // shop read, most likely. Nothing was enrolled; apply asks again.
+        error: isLegalRefusal(e)
+          ? APPLY_CONSENT_REFUSED
+          : e instanceof api.ApiError
             ? humanizeApiError(
                 e,
                 "GRIDGO could not open your shop account. Check your details and try again.",
@@ -331,4 +339,14 @@ useSession.subscribe((state, previous) => {
   setLiveOwner(next);
   useAlertsStore.getState().bindOwner(next);
   useToasts.getState().clear();
+  // One shop's privacy requests are never drawn for the next one on this phone.
+  usePrivacyRequests.getState().reset();
+  useAccountDeletion.getState().reset();
+  useShopHours.getState().reset();
+  // Phone-only closures carry no account. They leave with the shop that was
+  // signed in, and the next shop claims only what is left unclaimed.
+  afterShopPlanLoads(() => {
+    if (previous.user) useShopPlan.getState().clearBlackouts();
+    if (next) useShopPlan.getState().claimBlackouts(next);
+  });
 });

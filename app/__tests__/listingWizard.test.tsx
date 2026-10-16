@@ -91,11 +91,12 @@ function listingWith(overrides: Partial<Listing> = {}): Listing {
     minimumHeightMilli: null,
     minimumLengthMilli: null,
     printerMaxWidthFeet: null,
+    printLayouts: [],
     minimumOrderQuantity: null,
     priceTiers: [],
     speedTiers: [],
     turnaroundMode: "inherit",
-    turnaroundDays: null,
+    turnaround: null,
     fileFormatMode: "inherit",
     formatCodes: [],
     onTheBoard: false,
@@ -254,8 +255,8 @@ describe("Add a listing — later steps", () => {
     expect(await screen.findByLabelText("Pieces in a pack")).toBeTruthy();
     expect(screen.getByText(/Cheaper in bulk/)).toBeTruthy();
     expect(screen.getByLabelText("Smallest order you will take")).toBeTruthy();
-    expect(screen.getByLabelText("Minimum production time in working days")).toBeTruthy();
-    expect(screen.getByLabelText("Maximum production time in working days")).toBeTruthy();
+    expect(screen.getByLabelText("Soonest production time")).toBeTruthy();
+    expect(screen.getByLabelText("Latest production time")).toBeTruthy();
     expect(screen.queryByText(/Faster, for more/)).toBeNull();
     expect(screen.queryByText("Your usual time")).toBeNull();
   });
@@ -268,7 +269,7 @@ describe("Add a listing — later steps", () => {
         name: "Event flyers",
         basePriceMinor: 45000,
         turnaroundMode: "inherit",
-        turnaroundDays: null,
+        turnaround: null,
       }),
     );
     await render(<NewListingScreen />);
@@ -296,16 +297,16 @@ describe("Add a listing — later steps", () => {
         name: "Event flyers",
         basePriceMinor: 45000,
         turnaroundMode: "inherit",
-        turnaroundDays: null,
+        turnaround: null,
       }),
     );
     await render(<NewListingScreen />);
 
-    expect(await screen.findByText(/Working days, on your shop's open hours/)).toBeTruthy();
+    expect(await screen.findByText(/Hours for work you finish the same day/)).toBeTruthy();
     expect(screen.getByText(/A job that starts now is ready by/)).toBeTruthy();
     expect(screen.queryByText(/\d+ hours/)).toBeNull();
 
-    await fireEvent.press(screen.getByLabelText("Increase Maximum production time in working days"));
+    await fireEvent.press(screen.getByLabelText("Increase Latest production time"));
     expect(screen.getByText(/A job that starts now is ready between/)).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Proceed" }));
 
@@ -373,6 +374,32 @@ describe("Add a listing — later steps", () => {
     });
     expect(setFileFormats).not.toHaveBeenCalled();
     expect(await screen.findByText("Finalize your product")).toBeTruthy();
+  });
+
+  it("marks print layouts on the artwork step and sends them on Proceed", async () => {
+    openAt(
+      "artwork",
+      listingWith({
+        photos: [{ fileId: "file_1", sortOrder: 0, altText: null }],
+        name: "Floor plans",
+        basePriceMinor: 45000,
+        fileFormatMode: "inherit",
+        formatCodes: [],
+      }),
+    );
+    await render(<NewListingScreen />);
+
+    expect(await screen.findByText("PRINT LAYOUTS")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Actual size, in its original position"));
+    expect(screen.getByText("Clients must choose this layout before they can order this listing.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Proceed" }));
+
+    await waitFor(() =>
+      expect(saveListing).toHaveBeenCalledWith(
+        expect.objectContaining({ id: expect.any(String) }),
+        expect.objectContaining({ printLayouts: ["actual_size_original_position"] }),
+      ),
+    );
   });
 
   it("requires at least one format when the listing overrides artwork", async () => {

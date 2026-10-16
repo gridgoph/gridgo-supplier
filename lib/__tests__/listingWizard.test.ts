@@ -1,4 +1,5 @@
-import { aboutBlocker, artworkBlocker, pickReady, priceReady, productionDays, speedReady } from "@/lib/listingWizard";
+import { aboutBlocker, artworkBlocker, pickReady, priceReady, productionWindow, speedReady } from "@/lib/listingWizard";
+import { sameDay, workingDays } from "@/lib/productionDays";
 import { draftFrom } from "@/lib/listingDraft";
 import type { Listing } from "@/lib/listings";
 
@@ -16,11 +17,12 @@ const listing: Listing = {
   minimumHeightMilli: null,
   minimumLengthMilli: null,
   printerMaxWidthFeet: null,
+  printLayouts: [],
   minimumOrderQuantity: null,
   priceTiers: [],
   speedTiers: [],
   turnaroundMode: "inherit",
-  turnaroundDays: null,
+  turnaround: null,
   fileFormatMode: "inherit",
   formatCodes: [],
   onTheBoard: false,
@@ -63,15 +65,19 @@ describe("wizard gates", () => {
 
   it("treats a production window as ready when the soonest is not after the latest", () => {
     const draft = draftFrom(listing);
-    expect(productionDays(draft, 2)).toEqual({ min: 2, max: 2 });
-    expect(productionDays(draft, null)).toEqual({ min: 2, max: 2 });
-    expect(productionDays({ ...draft, minimumTurnaroundDays: 4, turnaroundDays: 2 }, null)).toEqual({ min: 2, max: 2 });
-    expect(speedReady(listing, draft, { inheritedTurnaroundDays: 2, inheritedFormatCodes: [] })).toBe(true);
+    expect(productionWindow(draft, workingDays(2))).toEqual({ min: workingDays(2), max: workingDays(2) });
+    expect(productionWindow(draft, null)).toEqual({ min: workingDays(2), max: workingDays(2) });
+    expect(
+      productionWindow({ ...draft, minimumTurnaround: workingDays(4), turnaround: workingDays(2) }, null),
+    ).toEqual({ min: workingDays(2), max: workingDays(2) });
+    // A same-day line passes its hours down to a listing that follows it.
+    expect(productionWindow(draft, sameDay(90))).toEqual({ min: sameDay(90), max: sameDay(90) });
+    expect(speedReady(listing, draft, { inheritedTurnaround: { unit: "days" as const, days: 2 }, inheritedFormatCodes: [] })).toBe(true);
     expect(
       speedReady(
         listing,
-        { ...draft, turnaroundMode: "override", minimumTurnaroundDays: 1, turnaroundDays: 3 },
-        { inheritedTurnaroundDays: 2, inheritedFormatCodes: [] },
+        { ...draft, turnaroundMode: "override", minimumTurnaround: sameDay(60), turnaround: workingDays(3) },
+        { inheritedTurnaround: { unit: "days" as const, days: 2 }, inheritedFormatCodes: [] },
       ),
     ).toBe(true);
   });
@@ -84,14 +90,14 @@ describe("wizard gates", () => {
 
   it("requires a format when the listing overrides artwork", () => {
     const draft = { ...draftFrom(listing), fileFormatMode: "override" as const, formatCodes: [] };
-    expect(artworkBlocker(listing, draft, { inheritedTurnaroundDays: 2, inheritedFormatCodes: ["pdf"] })).toContain(
+    expect(artworkBlocker(listing, draft, { inheritedTurnaround: { unit: "days" as const, days: 2 }, inheritedFormatCodes: ["pdf"] })).toContain(
       "artwork",
     );
     expect(
       artworkBlocker(
         listing,
         { ...draft, formatCodes: ["pdf"] },
-        { inheritedTurnaroundDays: 2, inheritedFormatCodes: ["pdf"] },
+        { inheritedTurnaround: { unit: "days" as const, days: 2 }, inheritedFormatCodes: ["pdf"] },
       ),
     ).toBeNull();
   });

@@ -11,7 +11,13 @@ import {
   type Listing,
 } from "@/lib/listings";
 import { applyDraft, type ListingDraft } from "@/lib/listingDraft";
-import { clampWindow, windowProblem } from "@/lib/productionDays";
+import {
+  DEFAULT_DAY_MINUTES,
+  DEFAULT_WORKING_DAYS,
+  clampWindow,
+  windowProblem,
+  type ProductionTime,
+} from "@/lib/productionDays";
 
 /**
  * The add-a-listing interview, in the order a shop walks it.
@@ -72,26 +78,23 @@ export function priceReady(price: string): boolean {
   return money.ok && money.minor != null;
 }
 
-/** A new listing with nothing set starts at two working days. */
-export const DEFAULT_PRODUCTION_DAYS = 2;
-
 /**
  * The window the production-time step shows: the listing's own, else its
  * category line's usual time, else two working days.
  */
-export function productionDays(
+export function productionWindow(
   draft: ListingDraft,
-  inheritedDays: number | null,
-): { min: number; max: number } {
-  const max = draft.turnaroundDays ?? inheritedDays ?? DEFAULT_PRODUCTION_DAYS;
-  const min = draft.minimumTurnaroundDays ?? max;
-  const window = clampWindow(min, max);
-  return { min: window.minDays, max: window.maxDays };
+  inherited: ProductionTime | null,
+  dayMinutes: number = DEFAULT_DAY_MINUTES,
+): { min: ProductionTime; max: ProductionTime } {
+  const max = draft.turnaround ?? inherited ?? DEFAULT_WORKING_DAYS;
+  return clampWindow(draft.minimumTurnaround ?? max, max, dayMinutes);
 }
 
 export function speedReady(listing: Listing, draft: ListingDraft, context: BoardContext): boolean {
-  const { min, max } = productionDays(draft, context.inheritedTurnaroundDays);
-  return windowProblem(min, max) == null;
+  const dayMinutes = listing.productionDayMinutes ?? DEFAULT_DAY_MINUTES;
+  const { min, max } = productionWindow(draft, context.inheritedTurnaround, dayMinutes);
+  return windowProblem(min, max, dayMinutes) == null;
 }
 
 export function speedGuidance(listing: Listing, draft: ListingDraft, context: BoardContext): string | null {

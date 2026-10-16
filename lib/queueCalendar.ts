@@ -17,7 +17,7 @@
  */
 
 import type { Order, SupplierService } from "@/lib/api";
-import { blackoutOnDay, blackoutReasonLabel, type Blackout } from "@/lib/blackouts";
+import { closureOnDay, type Closure } from "@/lib/shopHours";
 import { capacityForDay, loadByDay, shopDailyCapacity } from "@/lib/capacity";
 import { addDays, startOfDay, toDayKey } from "@/lib/day";
 
@@ -87,7 +87,7 @@ export function monthGrid({
   month,
   jobs,
   services,
-  blackouts = [],
+  closures = [],
   workingDays = DEFAULT_WORKING_DAYS,
   now = new Date(),
 }: {
@@ -95,7 +95,8 @@ export function monthGrid({
   month: Date;
   jobs: Order[];
   services: SupplierService[];
-  blackouts?: Blackout[];
+  /** GRIDGO's closure dates for the shop. */
+  closures?: Closure[];
   workingDays?: WorkingDays;
   now?: Date;
 }): CalendarDay[] {
@@ -114,9 +115,8 @@ export function monthGrid({
     const dayKey = toDayKey(date);
     const inMonth = date.getMonth() === first.getMonth();
 
-    const blackout = blackoutOnDay(blackouts, dayKey);
-    const closedReason = blackout
-      ? blackout.note || blackoutReasonLabel(blackout.reason)
+    const closedReason = closureOnDay(closures, dayKey)
+      ? "Closure date"
       : workingDays[mondayIndex(date)]
         ? null
         : "Not a working day";

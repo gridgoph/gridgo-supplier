@@ -10,7 +10,7 @@ import {
   type DeletionConfirmMethod,
   type ReverifySession,
 } from "@/lib/accountDeletion";
-import { requestAccountDeletion } from "@/lib/api";
+import { createPrivacyRequest, type PrivacyRequest } from "@/lib/api";
 
 /**
  * The Delete account screen's flow: confirm it is the account holder, then
@@ -37,6 +37,8 @@ type AccountDeletionState = {
   /** When the account holder last proved it was them, for a retried send. */
   confirmedAt: number | null;
   sent: boolean;
+  /** The privacy request the send created, for its answer-by date. */
+  request: PrivacyRequest | null;
   setSecret: (secret: string) => void;
   emailCode: (session: ReverifySession | null | undefined) => Promise<void>;
   submit: (
@@ -55,6 +57,7 @@ const initial = {
   error: null,
   confirmedAt: null,
   sent: false,
+  request: null,
 };
 
 export const useAccountDeletion = create<AccountDeletionState>((set, get) => ({
@@ -111,8 +114,11 @@ export const useAccountDeletion = create<AccountDeletionState>((set, get) => ({
 
     set({ busy: "sending" });
     try {
-      await requestAccountDeletion();
-      set({ sent: true, secret: "" });
+      // The privacy queue (`docs/LEGAL_API.md`), not the legacy
+      // `/me/account-deletion-request`: it is where See my data and Correct my
+      // data land too, with a due date and a record of what was kept.
+      const request = await createPrivacyRequest("deletion");
+      set({ sent: true, secret: "", request });
     } catch {
       set({ error: DELETION_REQUEST_FAILED });
     } finally {

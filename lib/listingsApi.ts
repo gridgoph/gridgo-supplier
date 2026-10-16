@@ -18,7 +18,8 @@ import {
   type SpecGroup,
   type SpeedTier,
 } from "@/lib/listings";
-import type { speedTierDaysField } from "@/lib/productionDays";
+import type { timeFields } from "@/lib/productionDays";
+import type { PrintLayoutCode } from "@/lib/printLayout";
 import {
   normalizeProductTypeRequest,
   normalizeProductTypeRequests,
@@ -218,15 +219,22 @@ export type ListingPatch = {
   minimumLengthMilli?: number | null;
   /** Whole feet. Null on every family that is not tarpaulin. */
   printerMaxWidthFeet?: number | null;
+  /** Replaced as a set, `[]` for none. Changing it opens listing review. */
+  printLayouts?: PrintLayoutCode[];
   minimumOrderQuantity?: number | null;
   /** Replaced as a set: removing a break removes it. */
   priceTiers?: Listing["priceTiers"];
-  /** Written through `speedTierDaysField` in `lib/productionDays.ts`. */
-  speedTiers?: (Omit<SpeedTier, "turnaroundDays"> & ReturnType<typeof speedTierDaysField>)[];
+  /** Each speed's time written through `timeFields` in `lib/productionDays.ts`. */
+  speedTiers?: (Omit<SpeedTier, "turnaround"> & ReturnType<typeof timeFields<"turnaround">>)[];
   turnaroundMode?: Listing["turnaroundMode"];
-  /** Whole working days, written through `listingDaysFields` in `lib/productionDays.ts`. */
+  /**
+   * Working days or same-day minutes, only the chosen unit's field per end,
+   * written through `listingTimeFields` in `lib/productionDays.ts`.
+   */
   turnaroundDays?: number | null;
+  turnaroundMinutes?: number | null;
   minimumTurnaroundDays?: number | null;
+  minimumTurnaroundMinutes?: number | null;
   subcategoryCode?: string;
   /** The platform's `active`; "on the board" everywhere a shop can see. */
   active?: boolean;

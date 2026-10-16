@@ -1,10 +1,13 @@
 import { ChevronDown } from "lucide-react-native";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import Animated, { FadeIn, LinearTransition, useReducedMotion } from "react-native-reanimated";
 
 import { ArtworkPanel } from "@/components/ArtworkPanel";
 import { CountLedger } from "@/components/CounterCheckPanel";
+import { ExactColoursSpec } from "@/components/ExactColoursSpec";
+import { ItemNote } from "@/components/ItemNote";
+import { PrintLayoutSpec } from "@/components/PrintLayoutSpec";
 import { JobTimeline } from "@/components/JobTimeline";
 import { MilestoneList } from "@/components/MilestoneList";
 import { ProgressPhotoStrip } from "@/components/ProgressPhotoStrip";
@@ -16,14 +19,18 @@ import { useThemeColors } from "@/hooks/useTheme";
 import { formatPhp, type Order } from "@/lib/api";
 import { formatDeadlineFull, formatTimelineAt } from "@/lib/dates";
 import { custodyForOrder } from "@/lib/handoff";
+import { handoverFlowOf } from "@/lib/shopHandover";
 import { earningsSplit, milestoneViews, payoutPlanCopy, settlementPayoutViews } from "@/lib/milestones";
 import { unreleasedMinor } from "@/lib/payout";
 import {
   DEFAULT_BRIEF_SECTIONS,
   distanceLabel,
   jobBriefSections,
+  jobDetailsOf,
+  NOT_SPECIFIED,
   type JobBriefSectionId,
 } from "@/lib/jobBrief";
+import { showsAttachmentList } from "@/lib/artworkAttachments";
 import { orderArtwork } from "@/lib/orderArtwork";
 import { counterCheck } from "@/lib/pickupCheck";
 import { progressPhotoViews } from "@/lib/productionPhoto";
@@ -37,6 +44,8 @@ type Props = {
   defaultOpen?: JobBriefSectionId | null;
   /** Bumped by pull-to-refresh so filed proof photographs are asked for again. */
   proofReloadVersion?: number;
+  /** Drawn at the foot of the Pickup row: the rider on the way and the chat with them. */
+  handoffExtra?: ReactNode;
 };
 
 /**
@@ -62,6 +71,7 @@ export function JobBrief({
   sections = DEFAULT_BRIEF_SECTIONS,
   defaultOpen = "make",
   proofReloadVersion = 0,
+  handoffExtra = null,
 }: Props) {
   const colors = useThemeColors();
   const reduceMotion = useReducedMotion();
@@ -113,7 +123,12 @@ export function JobBrief({
 
             {expanded ? (
               <Animated.View entering={entering} className="px-4 pb-4" testID={`job-brief-${row.id}`}>
-                <SectionBody id={row.id} order={order} proofReloadVersion={proofReloadVersion} />
+                <SectionBody
+                  id={row.id}
+                  order={order}
+                  proofReloadVersion={proofReloadVersion}
+                  handoffExtra={handoffExtra}
+                />
               </Animated.View>
             ) : null}
           </View>
@@ -128,26 +143,47 @@ function SectionBody({
   id,
   order,
   proofReloadVersion,
+  handoffExtra,
 }: {
   id: JobBriefSectionId;
   order: Order;
   proofReloadVersion: number;
+  handoffExtra: ReactNode;
 }) {
   switch (id) {
     case "make": {
       const items = orderProductionItems(order);
+      const details = jobDetailsOf(order);
       return (
         <View className="gap-3">
-          {items.map((item) => (
-            <View key={item.id}>
-              {items.length > 1 ? (
-                <Text className="pt-1 text-body font-medium text-text-primary">{item.itemName}</Text>
-              ) : null}
-              {productionSpecRows(item).map((spec, index) => (
-                <SpecRow key={`${spec.label}:${index}`} label={spec.label} value={spec.value} />
-              ))}
-            </View>
-          ))}
+          {items.map((item) => {
+            const rows = productionSpecRows(item);
+            // GRIDGO names the material even where the line's own spec did not;
+            // a line with none says so rather than leaving the row out.
+            const material =
+              details && !rows.some((row) => /^materials?$/i.test(row.label))
+                ? (items.length === 1 ? details.material : NOT_SPECIFIED)
+                : null;
+            return (
+              <View key={item.id}>
+                {items.length > 1 ? (
+                  <Text className="pt-1 text-body font-medium text-text-primary">{item.itemName}</Text>
+                ) : null}
+                {rows.map((spec, index) => (
+                  <SpecRow
+                    key={`${spec.label}:${index}`}
+                    label={spec.label}
+                    value={spec.value}
+                    muted={spec.value === NOT_SPECIFIED}
+                  />
+                ))}
+                {material ? <SpecRow label="Material" value={material} muted={material === NOT_SPECIFIED} /> : null}
+                <PrintLayoutSpec item={item} />
+                <ExactColoursSpec item={item} />
+                <ItemNote item={item} />
+              </View>
+            );
+          })}
         </View>
       );
     }
@@ -155,7 +191,11 @@ function SectionBody({
       return (
         <View className="gap-2">
           {/* A link-only job gets its own plain sentence from the panel instead. */}
-          {orderArtwork(order).some((file) => file.kind === "artwork") ? (
+          {showsAttachmentList(order) ? (
+            <Text className="text-caption text-text-muted">
+              Every file and design link the client sent, in their order. Tap one to open it at full size.
+            </Text>
+          ) : orderArtwork(order).some((file) => file.kind === "artwork") ? (
             <Text className="text-caption text-text-muted">
               The files you print from, as the client approved them. Open one to check it at full size.
             </Text>
@@ -174,13 +214,20 @@ function SectionBody({
       );
     case "delivery": {
       const distance = distanceLabel(order.deliveryDistanceMeters);
+      const details = jobDetailsOf(order);
+      const readyBy = order.readyBy || details?.promisedDate;
       return (
         <View>
-          {order.readyBy ? (
-            <SpecRow label="Have it ready by" value={formatDeadlineFull(order.readyBy)} />
+          {readyBy ? (
+            <SpecRow label="Have it ready by" value={formatDeadlineFull(readyBy)} />
+          ) : details ? (
+            <SpecRow label="Have it ready by" value={NOT_SPECIFIED} muted />
           ) : (
             <SpecRow label="Client needs it by" value={formatDeadlineFull(order.promisedDate || order.deadline)} />
           )}
+          {details ? (
+            <SpecRow label="Zone" value={details.zone} muted={details.zone === NOT_SPECIFIED} />
+          ) : null}
           <SpecRow label="Deliver to" value={order.address || "—"} />
           {distance ? <SpecRow label="Distance" value={distance} /> : null}
           <Text className="pt-3 text-caption text-text-muted">
@@ -289,10 +336,11 @@ function SectionBody({
               <CountLedger counts={check.counts} label="Counted at the counter" compact />
             </View>
           ) : null}
+          {handoffExtra ? <View className="gap-3 pt-2">{handoffExtra}</View> : null}
         </View>
       );
     }
     case "history":
-      return <JobTimeline timeline={order.timeline} />;
+      return <JobTimeline timeline={order.timeline} flow={handoverFlowOf(order)} />;
   }
 }

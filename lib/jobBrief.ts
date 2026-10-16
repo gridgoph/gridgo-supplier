@@ -6,10 +6,14 @@ import { primaryAction } from "@/lib/jobState";
 import { linkOnlySummary, orderDesignLinks } from "@/lib/designLink";
 import { earningsSplit, milestoneViews, nextShopProof, payoutPlanCopy } from "@/lib/milestones";
 import { orderArtwork } from "@/lib/orderArtwork";
+import { hasSpecialInstructions } from "@/lib/orderChanges";
+import { pickupChatOf } from "@/lib/pickupChat";
 import { progressPhotoSummary, showsProgressPhotos } from "@/lib/productionPhoto";
 import { refundStanding } from "@/lib/refund";
 import { unreleasedMinor } from "@/lib/payout";
 import { orderProductionItems, readableSpec } from "@/lib/productionSpecs";
+import { printLayoutFacts, PRINT_LAYOUT_LABEL } from "@/lib/printLayout";
+import { exactColourCount } from "@/lib/colorTargets";
 
 /**
  * The job brief: everything a shop weighs before it accepts or declines, folded
@@ -57,6 +61,7 @@ export const DEFAULT_BRIEF_SECTIONS: JobBriefSectionId[] = [
 type BriefOrder = Pick<
   Order,
   | "state"
+  | "pickupChat"
   | "riderId"
   | "payoutMilestones"
   | "payoutPlanVersion"
@@ -71,6 +76,8 @@ type BriefOrder = Pick<
   | "material"
   | "finish"
   | "productionItems"
+  | "specialInstructions"
+  | "specialInstructionLines"
   | "artworkFileIds"
   | "mockupFileIds"
   | "readyBy"
@@ -83,7 +90,40 @@ type BriefOrder = Pick<
   | "pickupChecklist"
   | "pickupCountItems"
   | "productionProgress"
+  | "jobDetails"
 >;
+
+/** What GRIDGO says for a job detail it could not fill from the order. */
+export const NOT_SPECIFIED = "Not specified";
+
+export type FilledJobDetails = {
+  material: string;
+  zone: string;
+  /** The date the shop is held to; null when GRIDGO could not fill it. */
+  promisedDate: string | null;
+  /** Which of the three were not on the order. */
+  missing: Set<string>;
+};
+
+/**
+ * Material, zone and the shop's date as GRIDGO filled them from the order's
+ * own snapshots (gridgo-api `docs/SUPPLIER_JOB_READINESS_API.md`, report
+ * 6C695C15). Null from an older GRIDGO, whose screens keep reading the order
+ * the way they did.
+ */
+export function jobDetailsOf(order: Pick<Order, "jobDetails">): FilledJobDetails | null {
+  const raw = order.jobDetails;
+  if (!raw || typeof raw !== "object") return null;
+  const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : NOT_SPECIFIED);
+  const missing = new Set(Array.isArray(raw.missing) ? raw.missing.filter((key) => typeof key === "string") : []);
+  const promised = text(raw.promisedDate);
+  return {
+    material: text(raw.material),
+    zone: text(raw.zone),
+    promisedDate: missing.has("promisedDate") || promised === NOT_SPECIFIED ? null : promised,
+    missing,
+  };
+}
 
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
@@ -91,10 +131,15 @@ function plural(count: number, one: string, many: string): string {
 
 /** "500 × Flyers · A5 · 130gsm gloss", or the count when the job has several items. */
 export function makeSummary(order: BriefOrder): string {
+  // A closed row still says the client wrote something nobody picked from a list.
+  const noted = hasSpecialInstructions(order) ? " · special instructions" : "";
   const items = orderProductionItems(order);
+  // Named colours are agreed spec the shop must match; a closed row says they are there.
+  const named = exactColourCount(items);
+  const colours = named ? ` · ${plural(named, "exact colour", "exact colours")}` : "";
   if (items.length > 1) {
     const pieces = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-    return `${plural(items.length, "item", "items")} · ${plural(pieces, "piece", "pieces")}`;
+    return `${plural(items.length, "item", "items")} · ${plural(pieces, "piece", "pieces")}${colours}${noted}`;
   }
   const [item] = items;
   const spec = item.structuredSpec ?? {};
@@ -102,8 +147,17 @@ export function makeSummary(order: BriefOrder): string {
     `${item.quantity} × ${item.itemName}`,
     typeof spec.size === "string" && spec.size ? readableSpec(spec.size) : null,
     typeof spec.material === "string" && spec.material ? readableSpec(spec.material) : null,
+    layoutSummary(item),
   ].filter(Boolean);
-  return parts.join(" · ");
+  return parts.join(" · ") + colours + noted;
+}
+
+/** "Actual size, centred (edges cut off)": the layout is agreed spec, and a cut is the one fact to see closed. */
+function layoutSummary(item: Parameters<typeof printLayoutFacts>[0]): string | null {
+  const facts = printLayoutFacts(item);
+  if (!facts) return null;
+  const label = PRINT_LAYOUT_LABEL[facts.layout];
+  return facts.notes.some((note) => note.tone === "cut_off") ? `${label} (edges cut off)` : label;
 }
 
 /** Print files and design links both count: a link is artwork, never "no print file". */
@@ -122,12 +176,15 @@ export function mockupSummary(order: BriefOrder): { summary: string; empty: bool
   return { summary: plural(count, "reference picture", "reference pictures"), empty: false };
 }
 
-/** The date the shop is held to first; the client's need-by only when GRIDGO has not set one. */
+/** The date the shop is held to first; the client's need-by only when GRIDGO has not set one. Then the zone. */
 export function deliverySummary(order: BriefOrder): string {
-  if (order.readyBy) return `Ready by ${formatDeadlineFull(order.readyBy)}`;
+  const details = jobDetailsOf(order);
+  const zone = details && details.zone !== NOT_SPECIFIED ? ` · ${details.zone}` : "";
+  const readyBy = order.readyBy || details?.promisedDate;
+  if (readyBy) return `Ready by ${formatDeadlineFull(readyBy)}${zone}`;
   const needBy = order.promisedDate || order.deadline;
-  if (needBy) return `Client needs it by ${formatDeadlineFull(needBy)}`;
-  return "Date not set yet";
+  if (needBy) return `Client needs it by ${formatDeadlineFull(needBy)}${zone}`;
+  return `Date not set yet${zone}`;
 }
 
 export function distanceLabel(meters: number | null | undefined): string | null {
@@ -170,7 +227,11 @@ export function earningsSummary(order: BriefOrder): string {
 
 /** Where the package is between the counter and the client, for the pickup row. */
 export function handoffSummary(order: BriefOrder): string {
-  return custodyForOrder(order).label;
+  const label = custodyForOrder(order).label;
+  // Folded, the row still says the rider wrote: it is the one thing on it the shop has not read.
+  const unread = pickupChatOf(order)?.unread ?? 0;
+  if (!unread) return label;
+  return `${label}, ${unread === 1 ? "1 new message" : `${unread} new messages`}`;
 }
 
 /** True once the package is ready to leave, until the client has it. */
@@ -242,7 +303,8 @@ export function defaultBriefSection(order: BriefOrder): JobBriefSectionId {
     step === "start_production" ||
     step === "ready_for_pickup" ||
     step === "add_production_photo" ||
-    step === "add_packing_photo"
+    step === "add_packing_photo" ||
+    step === "send_finished_photos"
   ) {
     return "make";
   }

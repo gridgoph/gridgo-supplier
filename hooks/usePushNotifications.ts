@@ -7,10 +7,19 @@ import { AppState, Linking } from "react-native";
 
 import { accountHold } from "@/lib/accountHold";
 import * as api from "@/lib/api";
+import { CHAT_LIST_ROUTE } from "@/lib/chatThreads";
 import { getNotificationsNative as notifications } from "@/lib/expoNotifications";
 import { playProductionNudgeSting } from "@/lib/nudgeSound";
-import { parsePushData, PUSH_FOREGROUND_BEHAVIOR, pushTargetRoute } from "@/lib/push";
+import {
+  parsePushData,
+  PUSH_FOREGROUND_BEHAVIOR,
+  pushTapKey,
+  pushTargetRoute,
+  SUPPORT_MESSAGE_PUSH_TYPE,
+} from "@/lib/push";
 import { useAlertsStore } from "@/store/alerts";
+import { useCall } from "@/store/call";
+import { CALL_INCOMING_NOTICE } from "@/lib/orderCall";
 import { shouldToast, useViewing } from "@/store/toasts";
 import { usePush } from "@/store/push";
 import { isMatchable, isSignedIn, useSession } from "@/store/session";
@@ -24,6 +33,14 @@ import { isMatchable, isSignedIn, useSession } from "@/store/session";
  * suppliers use lib/push's destination; pending suppliers open Alerts. Offline
  * taps remain pending for reconciliation, and account changes discard them.
  * Registration and token storage belong to store/push.
+ *
+ * A reply from Operations opens its exact conversation, for any signed-in shop
+ * (chat sits on the signed-in floor, not behind approval). The push carries no
+ * thread ID by contract, so the tap marks the notification read with
+ * `PATCH /notifications/:id`, which returns the owner's `threadId`; a deleted
+ * notification or one naming no thread lands on the chat history instead of a
+ * guessed thread. Each notification opens its screen once, however many times
+ * the platform reports the same tap (`pushTapKey`).
  */
 
 /**
@@ -104,7 +121,7 @@ export function usePushNotifications(): void {
   const sessionWait = useSession((s) => s.sessionWait);
   /** A tap waits for identity, then resolves its owned notification. */
   const pending = useRef<{identifier:string; data:unknown; owner:string|null} | null>(null);
-  /** Response identifiers already routed, so a tap opens its screen once. */
+  /** Taps already routed (`pushTapKey`), so a tap opens its screen once. */
   const routed = useRef(new Set<string>());
 
   async function spendPending(): Promise<void> {
@@ -114,9 +131,19 @@ export function usePushNotifications(): void {
     if (target.owner && target.owner !== session?.id) { pending.current = null; return; }
     const generation = liveGeneration();
     const data = parsePushData(target.data);
+    const support = data.type === SUPPORT_MESSAGE_PUSH_TYPE;
+    let threadId: string | null = null;
     try {
       // A device may carry an old owner's push. Never trust its orderId as access.
-      if (data.notificationId) {
+      if (data.notificationId && support) {
+        // Only the owner's own notification names the thread. Opening it is
+        // also reading it, so it is marked read in the same call.
+        const owned = await api.readNotification(data.notificationId);
+        data.orderId = owned.orderId ?? null;
+        data.type = owned.type ?? data.type;
+        threadId = owned.threadId ?? null;
+        void refreshUnread();
+      } else if (data.notificationId) {
         const items = await api.listNotifications();
         const owned = items.find((item) => item.id === data.notificationId);
         // Older notifications may be outside the inbox page. The authorized inbox is a safe fallback.
@@ -128,15 +155,22 @@ export function usePushNotifications(): void {
       if (generation !== liveGeneration() || pending.current !== target || !ready.current) return;
       pending.current = null;
       invalidate("*");
-      const destination = isMatchable(useSession.getState().user) ? pushTargetRoute(data) : "/alerts";
+      // Job screens sit behind approval; Operations chat does not.
+      const destination = data.type === SUPPORT_MESSAGE_PUSH_TYPE
+        ? pushTargetRoute(data, threadId)
+        : isMatchable(useSession.getState().user) ? pushTargetRoute(data) : "/alerts";
       router.push(destination as Href);
       const module = notifications();
       withoutNativeModule(() => module?.clearLastNotificationResponseAsync().catch(noop));
     } catch (error) {
-      // Offline taps stay pending until reconnect. Explicit revocation goes to the inbox only.
+      // Offline taps stay pending until reconnect. Explicit revocation goes to
+      // the inbox, or for a support reply to the chat history, never a guess.
       if (generation === liveGeneration() && pending.current === target && error instanceof api.ApiError && (error.status === 403 || error.status === 404)) {
         pending.current = null;
-        router.push("/alerts");
+        router.push(support ? CHAT_LIST_ROUTE : "/alerts");
+        // Spent: a cold start must not replay a tap that already landed.
+        const module = notifications();
+        withoutNativeModule(() => module?.clearLastNotificationResponseAsync().catch(noop));
       }
     }
   }
@@ -179,8 +213,11 @@ export function usePushNotifications(): void {
 
   useEffect(() => {
     const route = (identifier: string, data: unknown, title?: string | null) => {
-      if (routed.current.has(identifier)) return;
-      routed.current.add(identifier);
+      // The same notification can arrive as a background tap and again as the
+      // launch response, under two native identifiers; it opens once.
+      const key = pushTapKey(identifier, parsePushData(data));
+      if (routed.current.has(key)) return;
+      routed.current.add(key);
       const download = releasePushDownloadUrl(data, title, buildDistribution());
       if (download) {
         pending.current = null;
@@ -223,7 +260,10 @@ export function usePushNotifications(): void {
     // A push landing in the foreground shows nothing (see the handler above);
     // reconcile resources and the unread badge through their shared boundaries.
     const received = withoutNativeModule(() =>
-      Notifications?.addNotificationReceivedListener(() => {
+      Notifications?.addNotificationReceivedListener((notification) => {
+        // A rider calling while the app is open rings here rather than in the tray.
+        const data = parsePushData(notification?.request?.content?.data);
+        if (data.type === CALL_INCOMING_NOTICE && data.orderId) void useCall.getState().checkIncoming(data.orderId);
         invalidate("*");
         void refreshUnread();
       }),

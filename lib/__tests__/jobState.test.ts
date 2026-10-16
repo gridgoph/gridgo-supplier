@@ -13,6 +13,9 @@ import {
   primaryAction,
   routeForAction,
   waitingOn,
+  waitingOnJob,
+  presentTimelineState,
+  journeyLabel,
 } from "@/lib/jobState";
 import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
 
@@ -476,5 +479,93 @@ describe("jobs the shop let go or that wait on a deadline answer", () => {
   it("declines through its own route, with a reason, not a transition", () => {
     const order = job({ id: "o1", state: "supplier_assigned" });
     expect(findAction(order, "decline")?.targetState).toBeNull();
+  });
+});
+
+describe("the newer handover (rider packs, docs/SHOP_HANDOVER_API.md)", () => {
+  const SENT = { at: "2026-10-15T02:00:00.000Z", supplierId: "user_supplier", photoFileIds: ["f1"] };
+  const v2 = (partial: Partial<Order> & Pick<Order, "id" | "state">) =>
+    job({ handoverFlow: "rider_packs", payoutMilestones: escrow({ production_started: "released" }), ...partial });
+
+  it("asks for finished photos in production, never a packing photo or a packing step", () => {
+    const order = v2({
+      id: "o1",
+      state: "production",
+      productionProgress: { status: "waiting_for_photo", photos: [] },
+      packingProgress: { status: "waiting_for_photo", photos: [] },
+    });
+    const actions = actionsForJob(order);
+    expect(actions.map((a) => a.kind)).toEqual(["send_finished_photos"]);
+    expect(actions[0]).toMatchObject({ label: "Send finished photos", primary: true, targetState: null });
+    expect(routeForAction("send_finished_photos")).toBe("/job/[id]/finished");
+  });
+
+  it("puts an owed proof first and the finished photos second", () => {
+    const order = v2({ id: "o1", state: "production", payoutMilestones: escrow() });
+    expect(actionsForJob(order).map((a) => [a.kind, a.primary])).toEqual([
+      ["add_proof", true],
+      ["send_finished_photos", false],
+    ]);
+  });
+
+  it("offers nothing forward while GRIDGO reviews, and says the clock is paused", () => {
+    const order = v2({ id: "o1", state: "supplier_self_qc", shopHandover: { finished: SENT, review: null } });
+    expect(actionsForJob(order)).toEqual([]);
+    expect(presentJobStatus(order).label).toBe("GRIDGO reviewing");
+    expect(waitingOn("supplier_self_qc", 2, "rider_packs").body).toMatch(/production time is paused/);
+  });
+
+  it("offers Ready for rider pickup once approved, and tells the shop not to pack", () => {
+    const order = v2({
+      id: "o1",
+      state: "supplier_self_qc",
+      shopHandover: { finished: SENT, review: { at: "2026-10-15T03:00:00.000Z", decision: "approved", note: "" } },
+    });
+    const [step] = actionsForJob(order);
+    expect(step).toMatchObject({ kind: "ready_for_pickup", label: "Ready for rider pickup", targetState: "ready_for_dispatch" });
+    expect(step.consequence).toContain("Prepare packing materials. Do not pack yet; the rider checks the unpacked items first.");
+    expect(presentJobStatus(order).label).toBe("Approved");
+  });
+
+  it("asks for new photos after a review sent back", () => {
+    const rejected = { at: "2026-10-15T03:00:00.000Z", decision: "rejected", note: "Reprint two copies" };
+    const order = v2({
+      id: "o1",
+      state: "production",
+      shopHandover: { finished: null, review: rejected, attempts: [{ finished: SENT, review: rejected }] },
+    });
+    expect(primaryAction(order)?.label).toBe("Send new finished photos");
+    expect(presentJobStatus(order)).toMatchObject({ label: "Needs a fix", tone: "warning" });
+  });
+
+  it("follows the counter: the rider checks, the shop packs, the shop signs", () => {
+    const base = { id: "o1", state: "rider_assigned", riderId: "user_rider" } as const;
+    expect(presentJobStatus(v2(base)).label).toBe("Rider assigned");
+    const inspected = { status: "inspected", inspectionId: "i1", completedAt: "2026-10-15T05:00:00.000Z" };
+    const packing = v2({ ...base, pickupChecklist: inspected });
+    expect(presentJobStatus(packing).label).toBe("Pack it now");
+    expect(waitingOnJob(packing).title).toBe("Pack it now, in front of the rider");
+    const signing = v2({
+      ...base,
+      pickupChecklist: inspected,
+      shopHandover: { packingPhotos: [{ at: "2026-10-15T05:10:00.000Z", fileId: "p", inspectionId: "i1" }] },
+    });
+    expect(presentJobStatus(signing).label).toBe("Sign to hand over");
+    expect(waitingOnJob(signing).title).toBe("Sign on the rider's phone");
+  });
+
+  it("leaves a legacy job on the packing photo and Package for pickup", () => {
+    const legacy = filed({
+      id: "o1",
+      state: "production",
+      handoverFlow: "legacy",
+      productionProgress: { status: "photos_available", photos: [{ fileId: "f", at: null }] },
+      packingProgress: { status: "photos_available", photos: [{ fileId: "p", at: null }] },
+    });
+    expect(primaryAction(legacy)?.label).toBe("Package for pickup");
+    expect(presentTimelineState("supplier_self_qc")).toBe("Packaging");
+    expect(presentTimelineState("supplier_self_qc", "rider_packs")).toBe("Finished, with GRIDGO");
+    expect(journeyLabel("production")).toBe("Production & packing");
+    expect(journeyLabel("pickup", "rider_packs")).toBe("Pickup & packing");
   });
 });

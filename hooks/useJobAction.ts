@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 
 import * as api from "@/lib/api";
-import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import { humanizeApiError, offlineMessage, stepRefusal, type Requirement } from "@/lib/apiErrors";
 
 type RunOptions = {
   jobId: string;
@@ -16,6 +16,8 @@ type JobActionState = {
   error: string | null;
   /** The last refusal as GRIDGO sent it, for a caller that turns one into a step. Never shown. */
   failure: unknown;
+  /** Everything GRIDGO said was still missing when it refused the last step. */
+  missing: Requirement[];
   clearError: () => void;
   /** Resolves to the updated job, or null when the step did not go through. */
   run: (options: RunOptions) => Promise<api.Order | null>;
@@ -32,16 +34,22 @@ export function useJobAction(): JobActionState {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [failure, setFailure] = useState<unknown>(null);
+  const [missing, setMissing] = useState<Requirement[]>([]);
 
   const run = useCallback(async ({ jobId, targetState, note, extra }: RunOptions) => {
     setBusy(true);
     setError(null);
     setFailure(null);
+    setMissing([]);
     try {
       return await api.transitionOrder(jobId, targetState, { note, ...extra });
     } catch (e) {
       setFailure(e);
-      setError(humanizeApiError(e, offlineMessage("save this step")));
+      // A refusal is said in GRIDGO's own words, with what to do next; it is
+      // never "check your connection", and never one generic line for all of them.
+      const refusal = stepRefusal(e);
+      setError(refusal?.message ?? humanizeApiError(e, offlineMessage("save this step")));
+      setMissing(refusal?.missing ?? []);
       return null;
     } finally {
       setBusy(false);
@@ -52,9 +60,11 @@ export function useJobAction(): JobActionState {
     busy,
     error,
     failure,
+    missing,
     clearError: () => {
       setError(null);
       setFailure(null);
+      setMissing([]);
     },
     run,
   };

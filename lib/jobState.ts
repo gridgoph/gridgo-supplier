@@ -1,13 +1,22 @@
 import type { MilestoneCode, Order, PayoutPlanVersion } from "@/lib/api";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 import { acceptWindow } from "@/lib/acceptWindow";
-import { CURRENT_PAYOUT_PLAN, nextShopProof } from "@/lib/milestones";
+import { CURRENT_PAYOUT_PLAN, milestoneDefinition, nextShopProof } from "@/lib/milestones";
 import { counterCheck, presentCheckCodes } from "@/lib/pickupCheck";
 import { needsPackingPhoto } from "@/lib/packingPhoto";
+import { packagingCheck, packagingHeld } from "@/lib/packagingReadiness";
 import { needsProductionPhoto } from "@/lib/productionPhoto";
 import { presentRefundTimelineNote, refundStanding, refundStatus } from "@/lib/refund";
 import { rescheduleNotice } from "@/lib/reschedule";
 import { shopRelease } from "@/lib/shopRecovery";
+import {
+  DO_NOT_PACK_YET,
+  finishedStage,
+  handoverFlowOf,
+  riderPacking,
+  ridersPack,
+  type HandoverFlow,
+} from "@/lib/shopHandover";
 
 /**
  * Supplier-facing order state: plain labels, tones, and the steps the mobile
@@ -27,6 +36,8 @@ export type SupplierActionKind =
   | "ready_for_pickup"
   | "add_production_photo"
   | "add_packing_photo"
+  /** Newer handover: photograph the finished, unpacked products for GRIDGO's review. */
+  | "send_finished_photos"
   | "add_proof";
 
 export type SupplierAction = {
@@ -121,7 +132,10 @@ export function presentJobStatus(
     | "shopAcceptance"
     | "shopRecovery"
     | "rescheduleRequest"
-  >,
+    | "handoverFlow"
+    | "shopHandover"
+  > &
+    Partial<Pick<Order, "supplierId" | "riderId">>,
 ): StatePresentation {
   const refund = refundStatus(order);
   if (refund) return refund;
@@ -138,7 +152,33 @@ export function presentJobStatus(
       return { label: check.status, tone: check.tone, icon: check.icon };
     }
   }
-  return presentOrderState(order.state);
+  return ridersPack(order) ? presentRiderPacksStatus(order) ?? presentOrderState(order.state) : presentOrderState(order.state);
+}
+
+/**
+ * The chip on the newer handover, where the state alone says the wrong thing:
+ * `supplier_self_qc` is GRIDGO's review, not packing, and a rider at the
+ * counter is checking, then waiting on the shop to pack, then on its signature.
+ */
+function presentRiderPacksStatus(
+  order: Pick<Order, "state" | "handoverFlow" | "shopHandover" | "pickupChecklist"> &
+    Partial<Pick<Order, "supplierId" | "riderId">>,
+): StatePresentation | null {
+  const finished = finishedStage(order);
+  if (finished?.stage === "not_sent" && finished.correction) {
+    return { label: "Needs a fix", tone: "warning", icon: "triangle-alert" };
+  }
+  if (finished?.stage === "in_review" || finished?.stage === "with_gridgo") {
+    return { label: "GRIDGO reviewing", tone: "info", icon: "clock" };
+  }
+  if (finished?.stage === "approved") return { label: "Approved", tone: "success", icon: "circle-check" };
+  if (order.state === "ready_for_dispatch") {
+    return { label: "Ready for rider pickup", tone: "success", icon: "circle-check" };
+  }
+  const counter = riderPacking(order);
+  if (counter?.step === "pack") return { label: "Pack it now", tone: "warning", icon: "clock" };
+  if (counter?.step === "sign") return { label: "Sign to hand over", tone: "warning", icon: "square-pen" };
+  return null;
 }
 
 /**
@@ -222,6 +262,11 @@ export function actionsForJob(order: JobActionOrder, now: Date = new Date()): Su
     case "production":
     // Older clients may still leave a job at this state.
     case "supplier_self_qc":
+      if (ridersPack(order)) return riderPacksSteps(order, proofStep);
+      // A claim, or a stop the shop cannot lift, stands in the way: GRIDGO
+      // would refuse every packing step, so none is offered. The job's
+      // checklist says what is holding it and who can clear it.
+      if (packagingHeld(packagingCheck(order))) return proofStep ? [proofStep] : [];
       // GRIDGO will not let the job be packed without a photo of the work, so
       // the step that would be refused is replaced by the one that opens it.
       if (photoOwed) {
@@ -257,20 +302,60 @@ export function actionsForJob(order: JobActionOrder, now: Date = new Date()): Su
   }
 }
 
+/**
+ * The shop's steps before pickup on the newer handover (`lib/shopHandover.ts`).
+ *
+ * There is no packing photo and no packing at all yet: the shop sends photos
+ * of the finished, unpacked products, waits for GRIDGO's review, and only then
+ * marks the job ready for rider pickup — with packing materials prepared and
+ * the products still unpacked, because the rider checks them first.
+ */
+function riderPacksSteps(order: JobActionOrder, proofStep: SupplierAction | null): SupplierAction[] {
+  if (packagingHeld(packagingCheck(order))) return proofStep ? [proofStep] : [];
+  const finished = finishedStage(order);
+  if (finished?.stage === "not_sent") {
+    return demote(proofStep, {
+      kind: "send_finished_photos",
+      label: finished.correction ? "Send new finished photos" : "Send finished photos",
+      targetState: null,
+      primary: true,
+      consequence:
+        "GRIDGO checks photos of the finished, unpacked products before a rider is called. Your production time pauses while it reviews.",
+      resultLabel: "Sent for review",
+    });
+  }
+  if (finished?.stage === "approved") {
+    return demote(proofStep, {
+      kind: "ready_for_pickup",
+      label: "Ready for rider pickup",
+      targetState: "ready_for_dispatch",
+      primary: true,
+      consequence: `Riders are notified. ${DO_NOT_PACK_YET}`,
+      resultLabel: "Ready for rider pickup",
+    });
+  }
+  // GRIDGO is reviewing, or holds the step itself: nothing forward is the shop's.
+  return proofStep ? [proofStep] : [];
+}
+
 /** What `actionsForJob` reads. Every field but the state may be absent on an older API. */
 export type JobActionOrder = Pick<
   Order,
   | "state"
+  | "handoverFlow"
+  | "shopHandover"
   | "payoutMilestones"
   | "payoutHold"
   | "refundHold"
   | "refundDisposition"
   | "productionProgress"
   | "packingProgress"
+  | "transitionReadiness"
   | "shopAcceptance"
   | "shopRecovery"
   | "rescheduleRequest"
->;
+> &
+  Partial<Pick<Order, "supplierId">>;
 
 /** Put the outstanding proof first and hand the forward step the quiet slot. */
 function demote(proof: SupplierAction | null, forward: SupplierAction): SupplierAction[] {
@@ -289,7 +374,8 @@ export type SupplierActionRoute =
   | "/job/[id]/fulfilment"
   | "/job/[id]/advance"
   | "/job/[id]/handoff"
-  | "/job/[id]/progress-photo";
+  | "/job/[id]/progress-photo"
+  | "/job/[id]/finished";
 
 /** The flow screen an action opens. Nothing state-changing is a bare row tap. */
 export function routeForAction(kind: SupplierActionKind): SupplierActionRoute {
@@ -305,6 +391,8 @@ export function routeForAction(kind: SupplierActionKind): SupplierActionRoute {
       return "/job/[id]/handoff";
     case "add_production_photo":
       return "/job/[id]/progress-photo";
+    case "send_finished_photos":
+      return "/job/[id]/finished";
     default:
       return "/job/[id]/advance";
   }
@@ -341,6 +429,17 @@ export const JOB_JOURNEY = [
     states: ["issue_window_open", "completed", "payout_released"],
   },
 ] as const;
+
+/**
+ * The journey's step names on the newer handover, where packing moved from
+ * the shop's floor to the counter: production ends in GRIDGO's review, and the
+ * pickup is where the job is packed.
+ */
+export function journeyLabel(id: (typeof JOB_JOURNEY)[number]["id"], flow: HandoverFlow = "legacy"): string {
+  if (flow === "rider_packs" && id === "production") return "Production & review";
+  if (flow === "rider_packs" && id === "pickup") return "Pickup & packing";
+  return JOB_JOURNEY.find((step) => step.id === id)?.label ?? "";
+}
 
 /** Index into `JOB_JOURNEY`, or -1 when the job left the supplier's path. */
 export function journeyIndex(state: string): number {
@@ -396,7 +495,12 @@ export function needsSupplierAction(
 export function waitingOn(
   state: string,
   plan: PayoutPlanVersion = CURRENT_PAYOUT_PLAN,
+  flow: HandoverFlow = "legacy",
 ): { title: string; body: string } {
+  if (flow === "rider_packs") {
+    const newer = riderPacksWaiting(state);
+    if (newer) return newer;
+  }
   switch (state) {
     case "supplier_accepted":
     case "awaiting_downpayment":
@@ -453,6 +557,60 @@ export function waitingOn(
   }
 }
 
+/** Whose move it is on the newer handover, where it differs from the older one. */
+function riderPacksWaiting(state: string): { title: string; body: string } | null {
+  switch (state) {
+    case "supplier_self_qc":
+      return {
+        title: "GRIDGO is checking your finished products",
+        body: "Operations is reviewing your photos of the finished, unpacked products. Your production time is paused until it answers. Do not pack yet.",
+      };
+    case "ready_for_dispatch":
+      return {
+        title: "Waiting on a rider",
+        body: `Riders have been notified. ${DO_NOT_PACK_YET}`,
+      };
+    case "rider_assigned":
+      return {
+        title: "Rider on the way",
+        body: "Keep the products unpacked and your packing materials ready. The rider checks the unpacked products first, then you pack in front of them and sign on their phone.",
+      };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Whose move it is on this job: `waitingOn` for the job's own handover, with
+ * the counter's current step when a rider is there on the newer one.
+ */
+export function waitingOnJob(
+  order: Pick<Order, "state" | "handoverFlow" | "shopHandover" | "pickupChecklist"> &
+    Partial<Pick<Order, "supplierId" | "riderId">>,
+  plan: PayoutPlanVersion = CURRENT_PAYOUT_PLAN,
+): { title: string; body: string } {
+  const counter = riderPacking(order);
+  if (counter?.step === "pack") {
+    return {
+      title: "Pack it now, in front of the rider",
+      body: "Every check on the unpacked products passed. Pack the job at the counter while the rider watches; the rider photographs the packed job.",
+    };
+  }
+  if (counter?.step === "sign") {
+    return {
+      title: "Sign on the rider's phone",
+      body: "The rider photographed the packed job. Your signature on their phone hands it over; until then it stays with your shop.",
+    };
+  }
+  if (counter?.arrivedPacked) {
+    return {
+      title: "Unpack it for the rider's check",
+      body: "Keep the products unpacked until every check passes. Then you pack in front of the rider and sign on their phone.",
+    };
+  }
+  return waitingOn(order.state, plan, handoverFlowOf(order));
+}
+
 /** Timeline row label — actor-facing, never the raw user id alone. */
 export function presentTimelineActor(by: unknown): string {
   if (typeof by !== "string" || !by.trim()) return "GRIDGO";
@@ -465,7 +623,10 @@ export function presentTimelineActor(by: unknown): string {
   return by;
 }
 
-export function presentTimelineState(state: string): string {
+export function presentTimelineState(state: string, flow: HandoverFlow = "legacy"): string {
+  // On the newer handover this state is GRIDGO's review of the finished products, not packing.
+  if (flow === "rider_packs" && state === "supplier_self_qc") return "Finished, with GRIDGO";
+  if (flow === "rider_packs" && state === "ready_for_dispatch") return "Ready for rider pickup";
   return presentOrderState(state).label;
 }
 
@@ -478,5 +639,15 @@ export function presentTimelineState(state: string): string {
  * escalated: visible_defects" — and those are the ones a shop cannot read.
  */
 export function presentTimelineNote(note: string): string {
-  return presentRefundTimelineNote(presentCheckCodes(note));
+  return presentRefundTimelineNote(presentCheckCodes(note)).replace(
+    PAYOUT_STAGE_CODES,
+    (code) => milestoneDefinition(code as MilestoneCode).label,
+  );
 }
+
+/**
+ * Payout stage codes an older GRIDGO left in a note ("Proof filed for
+ * production_started"). GRIDGO now writes the stage's own name; this keeps an
+ * older note from showing a shop the internal label (report 6C695C15).
+ */
+const PAYOUT_STAGE_CODES = /\b(production_started|packaging_qc|issue_window)\b/g;

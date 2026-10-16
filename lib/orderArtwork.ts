@@ -1,4 +1,5 @@
 import type { Order, StoredFile } from "@/lib/api";
+import { itemAttachments } from "@/lib/artworkAttachments";
 
 export type ArtworkReference = { fileId: string; kind: "artwork" | "mockup"; itemName?: string };
 
@@ -12,7 +13,10 @@ export function orderArtwork(order: Pick<Order, "artworkFileIds" | "mockupFileId
     files.push({ fileId, kind, ...(itemName ? { itemName } : {}) });
   }
   for (const item of order.productionItems ?? []) {
-    add(item.artworkFileId, "artwork", item.itemName);
+    // Every file the client attached to the line, main file first.
+    for (const entry of itemAttachments(item)) {
+      if (entry.kind === "file") add(entry.fileId, "artwork", item.itemName);
+    }
     add(item.mockupFileId, "mockup", item.itemName);
   }
   for (const id of order.artworkFileIds ?? []) add(id, "artwork");

@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, useWindowDim
 
 import { MapFrame, type MapFrameHandle } from "@/components/MapFrame";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { WhyWeAsk } from "@/components/legal/WhyWeAsk";
 import { multilineFieldTextStyle, singleLineFieldTextStyle, spacing } from "@/constants/theme";
 import {
   geocodeFailureMessage,
@@ -12,6 +13,7 @@ import {
   searchPlaces,
   type GeocodePlace,
 } from "@/lib/geocode";
+import { WHY_WE_ASK } from "@/lib/legal";
 import { buildShopMapHtml, type ShopMapEvent } from "@/lib/mapHtml";
 import { coordinateText, isFarFromDavao, isPlaced, PIN_CONSEQUENCE, type ShopPin } from "@/lib/shopLocation";
 import { useThemeColors, useThemeName } from "@/hooks/useTheme";
@@ -350,6 +352,7 @@ export function ShopLocationPicker({
           )}
 
           <Text className="text-caption text-text-muted">{PIN_CONSEQUENCE}</Text>
+          <WhyWeAsk>{WHY_WE_ASK.shopPin}</WhyWeAsk>
           {isFarFromDavao(pin) ? (
             <Text className="text-caption text-warning">
               That pin is outside Davao City. GRIDGO only dispatches riders here — check it

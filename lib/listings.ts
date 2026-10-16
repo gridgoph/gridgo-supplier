@@ -7,13 +7,17 @@ import {
   type ServiceCatalog,
 } from "@/lib/taxonomy";
 import {
-  readListingDays,
-  readServiceLineDays,
-  readSpeedTierDays,
-  readStarterDays,
-  workingDaysLabel,
+  readDayMinutes,
+  readListingTime,
+  readServiceLineTime,
+  readSpeedTierTime,
+  readStarterTime,
+  timeLabel,
+  timeMinutes,
+  type ProductionTime,
 } from "@/lib/productionDays";
 import { listingOwnSteps, type ListingReadiness } from "@/lib/readiness";
+import { readPrintLayouts, type PrintLayoutCode } from "@/lib/printLayout";
 
 /**
  * The shop's board — what clients see.
@@ -83,8 +87,8 @@ export type PriceTier = { minQuantity: number; unitPriceMinor: number };
 export type SpeedTier = {
   id: string;
   label: string;
-  /** Whole working days. */
-  turnaroundDays: number;
+  /** Hours for a same-day speed, working days for longer. */
+  turnaround: ProductionTime;
   priceMinor: number | null;
   surchargeMinor: number | null;
 };
@@ -265,15 +269,22 @@ export type Listing = {
    * leftover number after the kind of work changes.
    */
   printerMaxWidthFeet: number | null;
+  /**
+   * How a client's file may be placed on the paper (`lib/printLayout.ts`).
+   * Empty: clients are not asked. Not limited by product type.
+   */
+  printLayouts: PrintLayoutCode[];
   /** The least the shop will run. */
   minimumOrderQuantity: number | null;
   priceTiers: PriceTier[];
   speedTiers: SpeedTier[];
   turnaroundMode: TurnaroundMode;
-  /** Latest this listing takes, in working days. Null when it inherits. */
-  turnaroundDays: number | null;
-  /** Soonest this listing can be ready, in working days. Null when it inherits. */
-  minimumTurnaroundDays?: number | null;
+  /** Latest this listing takes. Null when it inherits. */
+  turnaround: ProductionTime | null;
+  /** Soonest this listing can be ready. Null when it inherits. */
+  minimumTurnaround?: ProductionTime | null;
+  /** The shop's working day in minutes, which a same-day time must stay under. Null when GRIDGO did not say. */
+  productionDayMinutes?: number | null;
   fileFormatMode: FileFormatMode;
   /** The listing's own set when it overrides; otherwise what GRIDGO echoed back. */
   formatCodes: string[];
@@ -352,7 +363,7 @@ export type ListingStarter = {
   subcategoryCode: string;
   pricingUnit: PricingUnit;
   packageQty: number | null;
-  turnaroundDays: number | null;
+  turnaround: ProductionTime | null;
   formatCodes: string[];
   /** What it brings, so the pick screen can say so before it is chosen. */
   specCount: number;
@@ -541,7 +552,7 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     str(pick(raw, "turnaroundMode", "turnaround_mode")) === "override" ? "override" : "inherit";
   const fileFormatMode: FileFormatMode =
     str(pick(raw, "fileFormatMode", "file_format_mode")) === "override" ? "override" : "inherit";
-  const days = readListingDays(raw);
+  const time = readListingTime(raw);
 
   return {
     id,
@@ -558,12 +569,14 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     minimumHeightMilli: num(pick(raw, "minimumHeightMilli", "minimum_height_milli")),
     minimumLengthMilli: num(pick(raw, "minimumLengthMilli", "minimum_length_milli")),
     printerMaxWidthFeet: readPrinterCap(pick(raw, "printerMaxWidthFeet", "printer_max_width_feet")),
+    printLayouts: readPrintLayouts(pick(raw, "printLayouts", "print_layouts")),
     minimumOrderQuantity: num(pick(raw, "minimumOrderQuantity", "minimum_order_quantity")),
     priceTiers: readPriceTiers(pick(raw, "priceTiers", "price_tiers")),
     speedTiers: readSpeedTiers(pick(raw, "speedTiers", "speed_tiers")),
     turnaroundMode,
-    turnaroundDays: days.maxDays,
-    minimumTurnaroundDays: days.minDays,
+    turnaround: time.max,
+    minimumTurnaround: time.min,
+    productionDayMinutes: readDayMinutes(raw),
     fileFormatMode,
     formatCodes: readFormatCodes(
       pick(raw, "formatCodes", "format_codes", "fileFormats", "acceptedFormats"),
@@ -640,7 +653,7 @@ export function normalizeStarters(body: unknown): ListingStarter[] {
             ? "per_package"
             : "per_unit",
         packageQty: num(pick(raw, "defaultPackageQty", "default_package_qty", "packageQty")),
-        turnaroundDays: readStarterDays(raw),
+        turnaround: readStarterTime(raw),
         formatCodes: readFormatCodes(
           pick(raw, "defaultFormatCodes", "default_format_codes", "formatCodes"),
         ),
@@ -741,18 +754,18 @@ function readSpeedTiers(value: unknown): SpeedTier[] {
   return value
     .map((row, index) => {
       if (!isRecord(row)) return null;
-      const turnaroundDays = readSpeedTierDays(row);
-      if (!turnaroundDays) return null;
+      const turnaround = readSpeedTierTime(row);
+      if (!turnaround) return null;
       return {
         id: str(pick(row, "id")) ?? `speed_${index}`,
-        label: str(pick(row, "label")) ?? workingDaysLabel(turnaroundDays),
-        turnaroundDays,
+        label: str(pick(row, "label")) ?? timeLabel(turnaround),
+        turnaround,
         priceMinor: num(pick(row, "priceMinor", "price_minor")),
         surchargeMinor: num(pick(row, "surchargeMinor", "surcharge_minor")),
       };
     })
     .filter((row): row is SpeedTier => row !== null)
-    .sort((left, right) => left.turnaroundDays - right.turnaroundDays);
+    .sort((left, right) => timeMinutes(left.turnaround) - timeMinutes(right.turnaround));
 }
 
 /**
@@ -787,17 +800,17 @@ export function priceLine(listing: Listing): string {
   return hasPriceRange(listing) ? `From ${money} ${unitLine(listing)}` : `${money} ${unitLine(listing)}`;
 }
 
-/** What the shop's usual time means for this listing, in working days. */
-export function effectiveTurnaroundDays(
+/** What the shop's usual time means for this listing. */
+export function effectiveTurnaround(
   listing: Listing,
-  inheritedDays: number | null,
-): number | null {
-  return listing.turnaroundMode === "override" ? listing.turnaroundDays : inheritedDays;
+  inherited: ProductionTime | null,
+): ProductionTime | null {
+  return listing.turnaroundMode === "override" ? listing.turnaround : inherited;
 }
 
 /** The soonest a client reads beside it, or null when there is no range to show. */
-export function effectiveMinimumDays(listing: Listing): number | null {
-  return listing.turnaroundMode === "override" ? (listing.minimumTurnaroundDays ?? null) : null;
+export function effectiveMinimumTurnaround(listing: Listing): ProductionTime | null {
+  return listing.turnaroundMode === "override" ? (listing.minimumTurnaround ?? null) : null;
 }
 
 export { readyInLine } from "@/lib/productionDays";
@@ -815,8 +828,8 @@ export function effectiveFormatCodes(
    -------------------------------------------------------------------------- */
 
 export type BoardContext = {
-  /** The service line's own production time in working days, used when this listing inherits it. */
-  inheritedTurnaroundDays: number | null;
+  /** The service line's own production time, used when this listing inherits it. */
+  inheritedTurnaround: ProductionTime | null;
   /** The service line's own accepted formats, used when this listing inherits. */
   inheritedFormatCodes: string[];
   /**
@@ -938,13 +951,10 @@ export function editorGuidance(listing: Listing, context: BoardContext): string[
   if ((listing.minimumWidthMilli == null) !== (listing.minimumHeightMilli == null)) {
     out.push("A smallest billable size needs both a width and a height.");
   }
-  if (
-    listing.turnaroundMode === "override" &&
-    (listing.turnaroundDays == null || listing.turnaroundDays <= 0)
-  ) {
-    out.push("Set how many working days this takes, or use your shop's usual time.");
-  } else if (effectiveTurnaroundDays(listing, context.inheritedTurnaroundDays) == null) {
-    out.push("Your shop has no usual production time yet. Set the working days for this listing.");
+  if (listing.turnaroundMode === "override" && !listing.turnaround) {
+    out.push("Set how long this takes, or use your shop's usual production time.");
+  } else if (effectiveTurnaround(listing, context.inheritedTurnaround) == null) {
+    out.push("Your shop has no usual production time yet. Set the production time for this listing.");
   }
 
   return out;
@@ -1315,8 +1325,8 @@ export type ServiceLine = {
   id: string;
   categoryCode: string;
   state: string;
-  /** The line's usual production time, in working days. */
-  turnaroundDays: number | null;
+  /** The line's usual production time. */
+  turnaround: ProductionTime | null;
   formatCodes: string[];
 };
 
@@ -1330,7 +1340,7 @@ export function normalizeServiceLines(body: unknown): ServiceLine[] {
         id,
         categoryCode,
         state: str(pick(raw, "state")) ?? "draft",
-        turnaroundDays: readServiceLineDays(raw),
+        turnaround: readServiceLineTime(raw),
         formatCodes: readFormatCodes(
           pick(raw, "acceptedFormats", "formatCodes", "accepted_formats", "fileFormats"),
         ),
@@ -1360,7 +1370,7 @@ export function boardContextFor(
 ): BoardContext {
   const line = serviceLineFor(listing, services);
   return {
-    inheritedTurnaroundDays: line?.turnaroundDays ?? null,
+    inheritedTurnaround: line?.turnaround ?? null,
     inheritedFormatCodes: line?.formatCodes ?? [],
     serviceLive: line ? line.state === "live" : null,
   };

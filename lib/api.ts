@@ -6,6 +6,9 @@ import { Platform } from "react-native";
 
 import type { PublishedFileFormat } from "@/data/fileFormats";
 import { readPublishedFormats } from "@/lib/fileFormatResolve";
+import { parseCall, parseCalls, type OrderCall } from "@/lib/orderCall";
+import { pickupChatOf, type PickupChatMessage, type PickupChatSummary } from "@/lib/pickupChat";
+import { parseRiderApproach, type RiderApproach } from "@/lib/riderApproach";
 import type { DevicePlatform } from "@/lib/push";
 
 export { ApiError } from "@/lib/apiErrors";
@@ -177,10 +180,49 @@ export type ProductionItem = {
    * Absent on an API older than the links; read through `lib/designLink.ts`.
    */
   artworkLinks?: ArtworkLink[];
+  /**
+   * Every file and design link the client sent for this line, in the client's
+   * order, each with an optional label ("Front", "Logo PDF"). Up to ten. The
+   * first file is `artworkFileId`, the main file. Absent on an API older than
+   * attachments; read through `lib/artworkAttachments.ts`.
+   */
+  artworkAttachments?: ArtworkAttachment[];
+  /**
+   * The client's special instructions for this item, contact details already
+   * masked by GRIDGO; empty when there are none. Read through `lib/orderChanges.ts`.
+   */
+  specialInstructions?: string;
+  /** The latest change the client agreed to for this item. */
+  agreedChange?: { id: string; proposedSpec: string; appliedAt: string } | null;
+  /**
+   * The print layout the client chose (a layout code), part of the agreed
+   * spec; null or absent for products without layouts and older orders.
+   * Read through `lib/printLayout.ts`, never as a raw code on screen.
+   */
+  printLayout?: string | null;
+  /** GRIDGO's fit check, snapshotted at checkout. Read through `lib/printLayout.ts`. */
+  printLayoutCheck?: unknown;
+  /**
+   * The client's exact colours (Pantone, CMYK or hex, each with a label),
+   * agreed at checkout; `[]` or absent on lines without any and older orders.
+   * Read through `lib/colorTargets.ts`.
+   */
+  colorTargets?: unknown[];
+  /** The colours GRIDGO read from each uploaded file on the line. Read through `lib/colorTargets.ts`. */
+  artworkColors?: unknown[];
 };
 
 /** One design link on an order line, snapshotted at checkout. HTTPS by contract. */
-export type ArtworkLink = { formatCode: string; url: string };
+export type ArtworkLink = { formatCode: string; url: string; label?: string };
+
+/**
+ * One entry of `artworkAttachments` (gridgo-api `docs/ORDER_MATCH_API.md`,
+ * "Multiple artwork attachments"). A file entry may carry a five-minute signed
+ * `downloadUrl`; it is absent when storage could not sign one.
+ */
+export type ArtworkAttachment =
+  | { kind: "file"; fileId: string; label?: string; downloadUrl?: string; downloadUrlExpiresAt?: string }
+  | ({ kind: "link"; label?: string } & ArtworkLink);
 
 /**
  * What the rider counts at the counter for one line, in pieces. GRIDGO derives
@@ -207,8 +249,33 @@ export type PickupChecklist = {
   evidenceFileIds?: string[];
   completedAt?: string | null;
   completedBy?: string | null;
+  /**
+   * Set on the newer handover (`handoverFlow: "rider_packs"`): the passing
+   * check of the unpacked products, before packing (status `inspected`), and
+   * kept on the record once the rider signs custody over.
+   */
+  inspectionId?: string | null;
+  inspectedAt?: string | null;
   escalationId?: string | null;
   handoffSignature?: { signerName: string; signedAt: string } | null;
+};
+
+/** One thing GRIDGO still needs before a step, with its own plain sentence. */
+export type MissingRequirement = { code: string; message: string };
+
+export type TransitionReadiness = {
+  allowed: boolean;
+  missing: MissingRequirement[];
+  /** Optional, and never in `missing`: a receipt scan never stops packing. */
+  receiptScan?: { required: boolean; attached: boolean } | null;
+};
+
+export type JobDetails = {
+  material: string;
+  zone: string;
+  promisedDate: string;
+  /** Which of the three GRIDGO could not fill: "material", "zone", "promisedDate". */
+  missing: string[];
 };
 
 export type Order = {
@@ -297,9 +364,36 @@ export type Order = {
   productionProgress?: ProductionProgress | null;
   /** Separate packed-work evidence required before dispatch. */
   packingProgress?: ProductionProgress | null;
+  /**
+   * What GRIDGO still needs before each packaging step, as of this read
+   * (gridgo-api `docs/SUPPLIER_JOB_READINESS_API.md`). A snapshot, not a
+   * reservation: the step itself is checked again. Absent on an older API.
+   * Read only through `lib/packagingReadiness.ts`.
+   */
+  transitionReadiness?: Partial<Record<"supplier_self_qc" | "ready_for_dispatch", TransitionReadiness>> | null;
+  /**
+   * Material, zone and the date the shop is held to, filled from the order's
+   * own snapshots; each missing one is exactly "Not specified" and named in
+   * `missing`. Absent on an older API. Read through `lib/jobBrief.ts`.
+   */
+  jobDetails?: JobDetails | null;
   deliveryPhotoFileIds?: string[];
   /** The rider's latest counter check. Absent until a rider has checked it. */
   pickupChecklist?: PickupChecklist | null;
+  /**
+   * Which handover this job runs on (gridgo-api `docs/SHOP_HANDOVER_API.md`):
+   * `rider_packs` — finished photos, GRIDGO's review, the rider checks the
+   * unpacked products and the shop packs in front of them — or the older
+   * `legacy` one. Absent on an older API, which is legacy. Read, together
+   * with `shopHandover` and `forcedSteps`, only through `lib/shopHandover.ts`.
+   */
+  handoverFlow?: "rider_packs" | "legacy" | null;
+  /** The handover's evidence record: submissions, reviews, inspections, packed photos. */
+  shopHandover?: unknown;
+  /** Steps GRIDGO forced past a missing check, with its reason. */
+  forcedSteps?: unknown;
+  /** True once GRIDGO has forced any step on this job. */
+  forcedByGridgo?: boolean;
   /** What the rider counts per line; null when GRIDGO cannot establish it. */
   pickupCountItems?: PickupCountItem[] | null;
   /**
@@ -320,6 +414,21 @@ export type Order = {
    * `lib/reschedule.ts`.
    */
   rescheduleRequest?: RescheduleRequest | null;
+  /**
+   * Special instructions and change requests (gridgo-api
+   * `docs/ORDER_CHANGES_API.md`). The notes this shop must tick before
+   * accepting, the tick once recorded, and every change request on the job.
+   * Read only through `lib/orderChanges.ts`.
+   */
+  specialInstructions?: string;
+  specialInstructionLines?: { lineItemId: string; text: string }[];
+  specialInstructionsAcknowledgement?: { supplierId?: string; at: string } | null;
+  changeRequests?: unknown;
+  /**
+   * The shop's conversation with the rider collecting this job, while GRIDGO
+   * keeps one. Read only through `pickupChatOf` in `lib/pickupChat.ts`.
+   */
+  pickupChat?: unknown;
   timeline: {
     at: string;
     state: string;
@@ -424,6 +533,8 @@ export type Settings = {
     moderateBps: number;
     severeBps: number;
   };
+  /** GRIDGO's own review and delivery hours. Read through `operatingWeekOf` in `lib/shopHours.ts`. */
+  operatingHours?: unknown;
 };
 
 /** Stored file metadata. `fileId` is the only durable identity a client keeps. */
@@ -436,6 +547,8 @@ export type StoredFile = {
     | "fulfilment_proof"
     /** A progress photo of the job on the floor. Records progress, moves no money. */
     | "production_photo"
+    /** The finished, unpacked products, for GRIDGO's review on the newer handover. */
+    | "finished_product_photo"
     | "packing_photo"
     | "delivery_photo"
     | "service_image"
@@ -473,6 +586,8 @@ export type Notification = {
   orderId?: string;
   /** Set when a Super Admin took one listing down. */
   catalogItemId?: string;
+  /** The support thread a `support_message` is about. Never in push data. */
+  threadId?: string | null;
   title: string;
   body: string;
   /** Current job title, when the alert is about a job the caller can see. */
@@ -538,10 +653,13 @@ export type SupplierService = {
   qtyMax: number | null;
   pricingBasis: string;
   referenceRateMinor: number;
-  /** Usual production time in working days. Read through `lib/productionDays.ts`. */
+  /** Usual production time: days for day-based work, else exact minutes. Read through `lib/productionDays.ts`. */
   turnaroundDays?: number | null;
-  /** An older GRIDGO's hours; kept for the release gap. */
+  turnaroundMinutes?: number | null;
+  /** Compatibility hours (`minutes / 60`) for older apps. */
   turnaroundHours?: number | null;
+  /** The shop's working day in minutes; a same-day time stays under it. */
+  productionDayMinutes?: number | null;
   capacityDaily: number | null;
   capacityWeekly: number | null;
   zones: string[];
@@ -566,8 +684,9 @@ export type SupplierService = {
 export type SupplierServicePatch = {
   capacityDaily?: number;
   capacityWeekly?: number;
-  /** Whole working days. */
-  turnaroundDays?: number;
+  /** Only the chosen unit is sent: whole working days, or same-day minutes (`timeFields`). */
+  turnaroundDays?: number | null;
+  turnaroundMinutes?: number | null;
   materialCodes?: string[];
   finishCodes?: string[];
 };
@@ -878,7 +997,9 @@ export async function login(email: string, password: string): Promise<{ token: s
  * Public shop application — `POST /auth/clerk/enroll/supplier`.
  *
  * Body is exact: extra fields (`role`, `password`, `email`, `categoryRanks`)
- * are rejected. Clerk owns the identity; this only files the shop profile.
+ * are rejected. Clerk owns the identity; this only files the shop profile and,
+ * from a build that speaks the legal library, the agreement the shop ticked
+ * (`legalConsentVersion` + `legalConsent`, gridgo-api `docs/LEGAL_API.md`).
  */
 export type SupplierEnrollment = {
   profile: {
@@ -888,6 +1009,13 @@ export type SupplierEnrollment = {
     location: ShopLocation;
   };
   serviceCategories: string[];
+  /**
+   * Omitted only against an API with no legal library, where the fields would
+   * mean nothing. Both travel together: the version is how GRIDGO knows the
+   * agreement is meant to be there.
+   */
+  legalConsentVersion?: typeof LEGAL_CONSENT_VERSION;
+  legalConsent?: EnrollmentConsentBody;
 };
 
 /**
@@ -927,6 +1055,20 @@ export async function enrollSupplier(
 /** Mark one owned notification read; lib/alertsApi owns deployment fallback. */
 export async function markNotificationRead(id: string): Promise<void> {
   await request(`/notifications/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ read: true }) });
+}
+
+/**
+ * Mark one notification read and return it as its owner sees it.
+ *
+ * A tapped support push resolves its conversation this way: the push carries
+ * no thread ID, and the returned row's `threadId` is only ever the owner's.
+ * A deleted or foreign notification is `404`.
+ */
+export async function readNotification(id: string): Promise<Notification> {
+  const result = await request<{ notification: Notification }>(`/notifications/${encodeURIComponent(id)}`, {
+    method: "PATCH", body: JSON.stringify({ read: true }),
+  });
+  return result.notification;
 }
 
 /** Mark a named set read; lib/alertsApi.markAllRead owns the visible-id invariant. */
@@ -1189,6 +1331,23 @@ export async function getMyRescheduleRequests(): Promise<unknown> {
   return request<unknown>("/me/reschedule-requests");
 }
 
+/**
+ * Ask the client to approve a change to the job (gridgo-api
+ * `docs/ORDER_CHANGES_API.md`). The same key and body replay the first
+ * answer; read it through `normalizeChangeRequest` in `lib/orderChanges.ts`.
+ */
+export async function requestOrderChange(
+  orderId: string,
+  body: { lineItemId?: string; reason: string; proposedSpec: string; extraPrincipalMinor: number },
+  idempotencyKey: string,
+): Promise<unknown> {
+  return request<unknown>(`/orders/${orderId}/change-requests`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(body),
+  });
+}
+
 /** Platform-wide settings. Read for the issue-window length, never assumed. */
 export async function getSettings(): Promise<Settings> {
   const result = await request<{ settings: Settings }>("/settings");
@@ -1340,6 +1499,30 @@ export async function attachProductionPhoto(
     method: "POST",
     body: JSON.stringify({ orderId }),
   });
+}
+
+/**
+ * Put a stored `finished_product_photo` on the job. Newer handover only, and
+ * only in production; it moves no state until `submitFinishedProducts`.
+ */
+export async function attachFinishedProductPhoto(
+  fileId: string,
+  orderId: string,
+): Promise<{ file: StoredFile; order?: Order }> {
+  return request(`/files/${fileId}/attach`, { method: "POST", body: JSON.stringify({ orderId }) });
+}
+
+/**
+ * Send the finished-product photos on the job for GRIDGO's review
+ * (`docs/SHOP_HANDOVER_API.md`). Every attached photo not already reviewed
+ * goes; the job moves to `supplier_self_qc` until GRIDGO answers.
+ */
+export async function submitFinishedProducts(orderId: string): Promise<Order> {
+  const result = await request<{ order: Order }>(`/orders/${orderId}/production-finished`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  return result.order;
 }
 
 /** Attach packed-work evidence without changing state or payout. */
@@ -1850,6 +2033,29 @@ export async function updateSupplierProfile(
 }
 
 /* --------------------------------------------------------------------------
+   The shop's hours (gridgo-api `docs/SHOP_HOURS_API.md`)
+
+   Weekly hours, closure dates, closing for a while and today's extension.
+   Read only through `normalizeShopHours` in `lib/shopHours.ts`, which also
+   builds every patch. The write carries the same shared version as
+   `/me/supplier-profile`; a stale one is `409 supplier_profile_stale`.
+   -------------------------------------------------------------------------- */
+
+export async function getShopHours(): Promise<unknown> {
+  return request<unknown>("/me/shop-hours");
+}
+
+export async function updateShopHours(
+  version: number,
+  patch: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>("/me/shop-hours", {
+    method: "PATCH",
+    body: JSON.stringify({ ...patch, expectedVersion: version }),
+  });
+}
+
+/* --------------------------------------------------------------------------
  * Reviews: what clients said about each finished job, read back.
  * ------------------------------------------------------------------------ */
 
@@ -2033,6 +2239,122 @@ export async function getSupportChatMe(): Promise<{
   return request("/support-chat/me");
 }
 
+/**
+ * The rider's last position on the way to this shop, and the shop's own
+ * pick-up point. GRIDGO stops sharing it at pick-up. Read through
+ * `lib/riderApproach.ts`.
+ */
+export async function getRiderApproach(orderId: string): Promise<RiderApproach> {
+  return parseRiderApproach(await request<unknown>(`/dispatch/${encodeURIComponent(orderId)}/location`));
+}
+
+/** This job's conversation with its rider (`lib/pickupChat.ts`). Opening it marks it read. */
+export async function getPickupChat(
+  orderId: string,
+): Promise<{ chat: PickupChatSummary | null; messages: PickupChatMessage[] }> {
+  const result = await request<{ chat?: unknown; messages?: PickupChatMessage[] }>(
+    `/orders/${encodeURIComponent(orderId)}/pickup-chat`,
+  );
+  return { chat: pickupChatOf({ pickupChat: result.chat }), messages: Array.isArray(result.messages) ? result.messages : [] };
+}
+
+/** `attachmentFileIds` are `pickup_chat_image` uploads; a photo may be the whole message. */
+export async function sendPickupMessage(
+  orderId: string,
+  body: string,
+  options?: { attachmentFileIds?: string[] },
+): Promise<{ chat: PickupChatSummary | null; message: PickupChatMessage }> {
+  const result = await request<{ chat?: unknown; message: PickupChatMessage }>(
+    `/orders/${encodeURIComponent(orderId)}/pickup-chat/messages`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        body,
+        ...(options?.attachmentFileIds?.length ? { attachmentFileIds: options.attachmentFileIds } : {}),
+      }),
+    },
+  );
+  return { chat: pickupChatOf({ pickupChat: result.chat }), message: result.message };
+}
+
+/* --------------------------------------------------------------------------
+   Internet calls with the rider (`lib/orderCall.ts`, gridgo-api
+   `docs/CALLS_API.md`). Read through `parseCall`, so a projection that drifts
+   reaches no screen.
+   -------------------------------------------------------------------------- */
+
+function callsPath(orderId: string, callId?: string, action?: string): string {
+  return `/orders/${encodeURIComponent(orderId)}/calls${callId ? `/${encodeURIComponent(callId)}` : ""}${action ? `/${action}` : ""}`;
+}
+
+function callOf(raw: { call?: unknown } | null | undefined): OrderCall {
+  const call = parseCall(raw?.call);
+  if (!call) throw new Error("GRIDGO sent a call this app cannot read.");
+  return call;
+}
+
+/** Start ringing the rider. `409 call_already_active` means one is live; list to find it. */
+export async function startCall(orderId: string, pair: string): Promise<OrderCall> {
+  return callOf(await request<{ call?: unknown }>(callsPath(orderId), { method: "POST", body: JSON.stringify({ pair }) }));
+}
+
+/** This shop's calls on the job, active first then newest. */
+export async function listCalls(orderId: string): Promise<OrderCall[]> {
+  const result = await request<{ calls?: unknown }>(callsPath(orderId));
+  return parseCalls(result?.calls);
+}
+
+export async function getCall(orderId: string, callId: string): Promise<OrderCall> {
+  return callOf(await request<{ call?: unknown }>(callsPath(orderId, callId)));
+}
+
+export type CallAction = "accept" | "decline" | "cancel" | "end" | "heartbeat";
+
+export async function callAction(orderId: string, callId: string, action: CallAction): Promise<OrderCall> {
+  return callOf(await request<{ call?: unknown }>(callsPath(orderId, callId, action), { method: "POST", body: "{}" }));
+}
+
+export type CallSignalBody =
+  | { clientId: string; kind: "offer" | "answer"; sdp: string }
+  | { clientId: string; kind: "ice"; candidate: string; sdpMid: string | null; sdpMLineIndex: number | null };
+
+export type CallSignal = CallSignalBody & { id: number };
+
+export async function sendCallSignal(orderId: string, callId: string, signal: CallSignalBody): Promise<void> {
+  await request(callsPath(orderId, callId, "signals"), { method: "POST", body: JSON.stringify(signal) });
+}
+
+/** The rider's signals after `after`, plus the call's state, in one read. */
+export async function getCallSignals(
+  orderId: string,
+  callId: string,
+  after: number,
+): Promise<{ signals: CallSignal[]; cursor: number; call: OrderCall | null }> {
+  const result = await request<{ signals?: unknown; cursor?: unknown; call?: unknown }>(
+    `${callsPath(orderId, callId, "signals")}?after=${after}`,
+  );
+  const signals = Array.isArray(result?.signals)
+    ? (result.signals as CallSignal[]).filter((s) => s && typeof s.id === "number" && typeof s.kind === "string")
+    : [];
+  const cursor = typeof result?.cursor === "number" ? result.cursor : after;
+  return { signals, cursor, call: parseCall(result?.call) };
+}
+
+export type IceServer = { urls: string[] | string; username?: string; credential?: string };
+
+/** Fresh STUN/TURN for one call. Never reused for another call. */
+export async function getCallIceServers(orderId: string, callId: string): Promise<IceServer[]> {
+  const result = await request<{ iceServers?: unknown }>(callsPath(orderId, callId, "ice"));
+  if (!Array.isArray(result?.iceServers)) return [];
+  return (result.iceServers as IceServer[])
+    .filter((server) => server && (typeof server.urls === "string" || Array.isArray(server.urls)))
+    .map(({ urls, username, credential }) => ({
+      urls,
+      ...(typeof username === "string" ? { username } : {}),
+      ...(typeof credential === "string" ? { credential } : {}),
+    }));
+}
+
 export async function getSupportChatThread(
   threadId: string,
   filters?: { q?: string; media?: boolean },
@@ -2100,6 +2422,126 @@ export async function markSupportChatRead(threadId?: string): Promise<{
   return request("/support-chat/me/read", { method: "PATCH", body: JSON.stringify({}) });
 }
 
-export function requestAccountDeletion(): Promise<{ ok: true; message: string }> {
-  return request('/me/account-deletion-request', { method: 'POST', body: JSON.stringify({ confirmed: true }) });
+// ---------------------------------------------------------------------------
+// Legal documents, consent and privacy requests
+//
+// `docs/LEGAL_API.md` in gridgo-api is the contract. The library is public:
+// apply reads it before an account exists. Every acceptance carries the exact
+// version IDs read here, never a hard-coded "version 1".
+// ---------------------------------------------------------------------------
+
+/** The consent protocol this build speaks. Any other value is refused. */
+export const LEGAL_CONSENT_VERSION = 1;
+
+export type LegalAudience = "all" | "client" | "supplier" | "rider" | "staff";
+
+export type LegalVersion = {
+  /** Opaque version ID — what an acceptance names. */
+  id: string;
+  /** The stable slot, e.g. `supplier-agreement`. */
+  documentId: string;
+  version: number;
+  title: string;
+  audience: LegalAudience | string;
+  /** Plain text. Never rendered as HTML. */
+  text: string;
+  pdfFileId?: string | null;
+  pdfUrl?: string | null;
+  effectiveAt: string;
+  publishedAt?: string | null;
+  placeholder: boolean;
+  material: boolean;
+  /** Only ever true on a real Supplier Agreement: it allows late-production deductions. */
+  penalties?: boolean;
+  changeSummary?: string | null;
+  status: "placeholder" | "live" | string;
+};
+
+export type LegalPending = {
+  blocking: boolean;
+  pending: LegalVersion[];
+  notices: LegalVersion[];
+};
+
+/** Who is agreeing from where: caller-reported, never a hardware identity. */
+export type LegalAcceptanceContext = { app: string; device: string };
+
+export type EnrollmentConsentBody = LegalAcceptanceContext & {
+  accepted: true;
+  versionIds: string[];
+  method: "checkbox";
+  junior: boolean;
+  guardian?: boolean;
+  marketing: boolean;
+};
+
+export async function listLegalDocuments(
+  audience: LegalAudience = "supplier",
+): Promise<LegalVersion[]> {
+  const result = await request<{ documents: LegalVersion[] }>(
+    `/legal/documents?audience=${encodeURIComponent(audience)}`,
+  );
+  return result.documents ?? [];
+}
+
+export async function getLegalVersion(versionId: string): Promise<LegalVersion> {
+  const result = await request<{ document: LegalVersion }>(
+    `/legal/versions/${encodeURIComponent(versionId)}`,
+  );
+  return result.document;
+}
+
+export function getLegalVersionPdf(
+  versionId: string,
+): Promise<{ url: string; expiresAt: string; expiresInSeconds: number }> {
+  return request(`/legal/versions/${encodeURIComponent(versionId)}/pdf`);
+}
+
+export function getLegalPending(): Promise<LegalPending> {
+  return request<LegalPending>("/me/legal/pending");
+}
+
+export function acceptLegalVersions(
+  versionIds: string[],
+  context: LegalAcceptanceContext,
+): Promise<LegalPending & { recorded: number }> {
+  return request("/me/legal/accept", {
+    method: "POST",
+    body: JSON.stringify({
+      accepted: true,
+      versionIds,
+      method: "blocking_screen",
+      ...context,
+    }),
+  });
+}
+
+export type PrivacyRequestKind = "access" | "correction" | "deletion";
+
+export type PrivacyRequest = {
+  id: string;
+  kind: PrivacyRequestKind | string;
+  status: "pending" | "in_progress" | "completed" | "rejected" | string;
+  details?: string | null;
+  resolution?: string | null;
+  requestedAt: string;
+  dueAt: string;
+  updatedAt?: string | null;
+};
+
+export async function createPrivacyRequest(
+  kind: PrivacyRequestKind,
+  details?: string,
+): Promise<PrivacyRequest> {
+  const trimmed = details?.trim();
+  const result = await request<{ request: PrivacyRequest }>("/me/privacy-requests", {
+    method: "POST",
+    body: JSON.stringify({ kind, confirmed: true, ...(trimmed ? { details: trimmed } : {}) }),
+  });
+  return result.request;
+}
+
+export async function listPrivacyRequests(): Promise<PrivacyRequest[]> {
+  const result = await request<{ requests: PrivacyRequest[] }>("/me/privacy-requests");
+  return result.requests ?? [];
 }

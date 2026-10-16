@@ -23,11 +23,12 @@ function listing(partial: Partial<Listing> & Pick<Listing, "id" | "name">): List
     minimumHeightMilli: null,
     minimumLengthMilli: null,
     printerMaxWidthFeet: null,
+    printLayouts: [],
     minimumOrderQuantity: null,
     priceTiers: [],
     speedTiers: [],
     turnaroundMode: "override",
-    turnaroundDays: 2,
+    turnaround: { unit: "days" as const, days: 2 },
     fileFormatMode: "override",
     formatCodes: ["pdf"],
     onTheBoard: true,
@@ -47,7 +48,7 @@ const tarp = listing({
   basePriceMinor: 45000,
   pricingUnit: "per_unit",
   packageQty: null,
-  turnaroundDays: 1,
+  turnaround: { unit: "days" as const, days: 1 },
   sortOrder: 1,
 });
 const flyers = listing({

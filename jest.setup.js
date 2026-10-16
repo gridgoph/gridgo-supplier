@@ -41,9 +41,11 @@ jest.mock("react-native-safe-area-context", () => {
 // against a granted phone it never granted.
 jest.mock("expo-notifications", () => ({
   __esModule: true,
-  AndroidImportance: { HIGH: 4 },
+  // Expo's own numbers (`AndroidImportance` in expo-notifications).
+  AndroidImportance: { UNKNOWN: 0, UNSPECIFIED: 1, NONE: 2, MIN: 3, LOW: 4, DEFAULT: 5, HIGH: 6, MAX: 7 },
   setNotificationHandler: jest.fn(),
   setNotificationChannelAsync: jest.fn(async () => undefined),
+  getNotificationChannelAsync: jest.fn(async () => null),
   getPermissionsAsync: jest.fn(async () => ({
     status: "undetermined",
     granted: false,
@@ -74,3 +76,18 @@ jest.mock("react-native-keyboard-controller", () =>
 // has already frozen, and the whole run exits 1 with every test green. Reading
 // it once here installs it while the Expo globals still exist.
 void globalThis.fetch;
+
+// react-native-webview has no native module under Jest and throws at import.
+// Screens that draw a map (the job's rider-on-the-way panel) get an inert view
+// with the imperative handle MapFrame posts into; a test that needs more mocks
+// it itself.
+jest.mock("react-native-webview", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  return {
+    WebView: React.forwardRef(function TestWebView(props, ref) {
+      React.useImperativeHandle(ref, () => ({ injectJavaScript: jest.fn() }));
+      return React.createElement(View, props);
+    }),
+  };
+});

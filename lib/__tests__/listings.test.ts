@@ -28,6 +28,7 @@ import {
   type ServiceLine,
 } from "@/lib/listings";
 import { buildCatalog } from "@/lib/taxonomy";
+import { sameDay, workingDays } from "@/lib/productionDays";
 
 const READY: Listing = {
   id: "item_1",
@@ -43,11 +44,12 @@ const READY: Listing = {
   minimumHeightMilli: null,
   minimumLengthMilli: null,
   printerMaxWidthFeet: 5,
+  printLayouts: [],
   minimumOrderQuantity: null,
   priceTiers: [],
   speedTiers: [],
   turnaroundMode: "override",
-  turnaroundDays: 1,
+  turnaround: { unit: "days" as const, days: 1 },
   fileFormatMode: "override",
   formatCodes: ["pdf", "png"],
   onTheBoard: true,
@@ -58,7 +60,7 @@ const READY: Listing = {
   updatedAt: "2026-08-01T00:00:00.000Z",
 };
 
-const NOTHING_INHERITED = { inheritedTurnaroundDays: null, inheritedFormatCodes: [] };
+const NOTHING_INHERITED = { inheritedTurnaround: null, inheritedFormatCodes: [] };
 
 describe("reading what GRIDGO sends", () => {
   it("reads the platform's own spelling and its snake_case twin", () => {
@@ -92,8 +94,8 @@ describe("reading what GRIDGO sends", () => {
     expect(snake?.printerMaxWidthFeet).toBeNull();
     expect(snake?.pricingUnit).toBe("per_package");
     expect(snake?.packageQty).toBe(100);
-    // An older GRIDGO's 48 hours, at its default 10-hour working day, rounded up.
-    expect(snake?.turnaroundDays).toBe(5);
+    // An older GRIDGO's 48 hours are read exactly — never rounded up into working days.
+    expect(snake?.turnaround).toEqual({ unit: "hours", minutes: 2880 });
     expect(snake?.onTheBoard).toBe(false);
     // Photos arrive in the order the shop set, whatever order they were sent.
     expect(snake?.photos.map((photo) => photo.fileId)).toEqual(["f1", "f2"]);
@@ -189,7 +191,8 @@ describe("reading what GRIDGO sends", () => {
     expect(starters[0].specCount).toBe(2);
     expect(starters[0].addOnCount).toBe(1);
     expect(starters[0].formatCodes).toEqual(["pdf", "png"]);
-    expect(starters[0].turnaroundDays).toBe(3);
+    // Hours only is an older GRIDGO; its 24 hours are read exactly, not rounded up to days.
+    expect(starters[0].turnaround).toEqual(sameDay(1440));
   });
 });
 
@@ -262,11 +265,12 @@ describe("what a listing costs", () => {
     ).toBe(0);
   });
 
-  it("says the wait in working days", () => {
-    expect(readyInLine(1)).toBe("Ready in 1 working day");
-    expect(readyInLine(3)).toBe("Ready in 3 working days");
-    expect(readyInLine(3, 1)).toBe("Ready in 1–3 working days");
-    expect(readyInLine(3, 3)).toBe("Ready in 3 working days");
+  it("says the wait in working days, or in hours for same-day work", () => {
+    expect(readyInLine(workingDays(1))).toBe("Ready in 1 working day");
+    expect(readyInLine(workingDays(3))).toBe("Ready in 3 working days");
+    expect(readyInLine(workingDays(3), workingDays(1))).toBe("Ready in 1–3 working days");
+    expect(readyInLine(workingDays(3), workingDays(3))).toBe("Ready in 3 working days");
+    expect(readyInLine(sameDay(120), sameDay(60))).toBe("Ready in 1–2 hours");
     expect(readyInLine(null)).toBe("Ready-in not set");
   });
 });
@@ -339,10 +343,10 @@ describe("what stops a listing going on the board", () => {
   });
 
   it("asks for a production time when neither the listing nor its category has one", () => {
-    const inheriting: Listing = { ...READY, turnaroundMode: "inherit", turnaroundDays: null };
+    const inheriting: Listing = { ...READY, turnaroundMode: "inherit", turnaround: null };
     expect(boardBlockers(inheriting, NOTHING_INHERITED).join(" ")).toContain("production time");
     expect(
-      boardBlockers(inheriting, { inheritedTurnaroundDays: 2, inheritedFormatCodes: ["pdf"] }),
+      boardBlockers(inheriting, { inheritedTurnaround: { unit: "days" as const, days: 2 }, inheritedFormatCodes: ["pdf"] }),
     ).toEqual([]);
   });
 });
@@ -479,7 +483,7 @@ describe("where a shop may file a listing", () => {
     id: "svc_1",
     categoryCode: "marketing_collateral",
     state: "pending_verification",
-    turnaroundDays: 2,
+    turnaround: { unit: "days" as const, days: 2 },
     formatCodes: [],
     ...over,
   });
@@ -495,7 +499,7 @@ describe("where a shop may file a listing", () => {
   it("inherits the line's turnaround and formats", () => {
     const context = boardContextFor(READY, [line({ formatCodes: ["pdf"] })]);
     expect(context).toEqual({
-      inheritedTurnaroundDays: 2,
+      inheritedTurnaround: { unit: "days" as const, days: 2 },
       inheritedFormatCodes: ["pdf"],
       serviceLive: false,
     });
@@ -550,10 +554,11 @@ describe("how a shop says it sells something", () => {
       speedTiers: [
         { id: "s5", label: "5 days", turnaroundDays: 5, priceMinor: 25_000 },
         { id: "s1", label: "1 day", turnaroundDays: 1, priceMinor: 50_000 },
+        { id: "s0", label: "Same day", turnaroundDays: null, turnaroundMinutes: 180, priceMinor: 80_000 },
       ],
     });
     expect(parsed?.priceTiers.map((tier) => tier.minQuantity)).toEqual([1, 250]);
-    expect(parsed?.speedTiers.map((tier) => tier.turnaroundDays)).toEqual([1, 5]);
+    expect(parsed?.speedTiers.map((tier) => tier.turnaround)).toEqual([sameDay(180), workingDays(1), workingDays(5)]);
   });
 });
 

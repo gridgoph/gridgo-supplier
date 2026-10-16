@@ -1,40 +1,31 @@
 import { useReadVersion } from "@/hooks/useReadVersion";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { ChevronRight } from "lucide-react-native";
+import { ScrollView, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { SecondaryButton } from "@/components/SecondaryButton";
 import { ServiceCapacityCard } from "@/components/ServiceCapacityCard";
+import { DestinationRow } from "@/components/listing/DestinationRow";
 import { SkeletonList } from "@/components/Skeleton";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
-import { blackoutReasonLabel, blackoutSpanLabel } from "@/lib/blackouts";
 import {
   capacityDraftChanged,
+  capacityPatch,
   capacityDraftFor,
   validateCapacity,
   type CapacityDraft,
 } from "@/lib/capacity";
 import { buildCatalog, type ServiceCatalog } from "@/lib/taxonomy";
-import { useShopPlan } from "@/store/shopPlan";
-import { useThemeColors } from "@/hooks/useTheme";
 
 /**
- * What the shop can take on, and when it is shut.
- *
- * Capacity is real GRIDGO data and saves to the platform. Closures are not —
- * the API has no closure endpoint yet, so they are kept on this device and the
- * screen says so rather than implying Operations can see them.
+ * What the shop can take on. When it is open is Shop hours (`app/shop-hours.tsx`).
  */
 export default function CapacityScreen() {
-  const colors = useThemeColors();
-  const blackouts = useShopPlan((s) => s.blackouts);
 
   const [{ services, drafts }, setCapacity] = useState<{
     services: api.SupplierService[];
@@ -105,7 +96,7 @@ export default function CapacityScreen() {
     setSaved(false);
     try {
       const updated = await Promise.all(
-        changed.map((service) => api.updateSupplierService(service.id, drafts[service.id])),
+        changed.map((service) => api.updateSupplierService(service.id, capacityPatch(drafts[service.id]))),
       );
       setCapacity((current) => ({
         services: current.services.map((s) => updated.find((u) => u.id === s.id) ?? s),
@@ -223,55 +214,15 @@ export default function CapacityScreen() {
           </View>
         ) : null}
 
-        <View className="mt-10 gap-3">
-          <Text className="text-h3 text-text-primary">Closures</Text>
-          <Text className="text-body text-text-secondary">
-            Days your shop is shut. Your schedule marks them and warns you before you promise a job
-            on one.
-          </Text>
-          <View className="gg-panel">
-            <Text className="text-caption text-text-secondary">
-              Closures are saved on this device only. GRIDGO cannot route work around them yet, so
-              tell Operations about a long shutdown as well.
-            </Text>
-          </View>
-
-          {blackouts.length ? (
-            <View className="gap-2">
-              {blackouts.map((blackout) => (
-                <Pressable
-                  key={blackout.id}
-                  onPress={() =>
-                    router.push({ pathname: "/shop-closure", params: { id: blackout.id } })
-                  }
-                  accessibilityRole="button"
-                  accessibilityLabel={`Edit closure ${blackoutSpanLabel(blackout)}`}
-                  className="gg-touch flex-row items-center gap-3 rounded-field border border-outline bg-surface px-3 py-3"
-                  style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
-                >
-                  <View className="min-w-0 flex-1 gap-0.5">
-                    <Text className="text-body font-medium text-text-primary">
-                      {blackoutSpanLabel(blackout)}
-                    </Text>
-                    <Text className="text-caption text-text-muted" numberOfLines={1}>
-                      {blackoutReasonLabel(blackout.reason)}
-                      {blackout.note ? ` · ${blackout.note}` : ""}
-                    </Text>
-                  </View>
-                  <ChevronRight size={20} color={colors.textMuted} aria-hidden />
-                </Pressable>
-              ))}
-            </View>
-          ) : (
-            <Text className="text-caption text-text-muted">
-              No closures set. Add one before a holiday so a job is never promised on a day you are
-              shut.
-            </Text>
-          )}
-
-          <SecondaryButton
-            label="Add a closure"
-            onPress={() => router.push("/shop-closure")}
+        <View className="mt-10 gap-2">
+          {/*
+            Closures used to live here, on this phone only. GRIDGO holds them
+            now, with the weekly hours they belong to.
+          */}
+          <DestinationRow
+            title="Shop hours & closures"
+            detail="The days and hours you open, closure dates, and closing for a while"
+            onPress={() => router.push("/shop-hours")}
           />
         </View>
       </ScrollView>

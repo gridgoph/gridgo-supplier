@@ -333,7 +333,7 @@ export function messageFor(
   purpose?: api.StoredFile["purpose"],
 ): string {
   const code = typeof body?.error === "string" ? body.error : "";
-  const known = (["production_photo", "packing_photo"].includes(purpose ?? "") ? PHOTO_ONLY_MESSAGES[code] : undefined) ?? UPLOAD_MESSAGES[code];
+  const known = (["production_photo", "finished_product_photo", "packing_photo"].includes(purpose ?? "") ? PHOTO_ONLY_MESSAGES[code] : undefined) ?? UPLOAD_MESSAGES[code];
   if (known) return known;
   if (status === 401) return "Your session ended. Sign in again to send this file.";
   if (status >= 500) return "GRIDGO could not handle this file. Try again in a moment.";

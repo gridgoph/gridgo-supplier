@@ -40,14 +40,15 @@ export function shouldOfferPushPrompt(input: {
 
 /** One line of the explainer's list: what a notification is for. */
 export type PushPromptReason = {
-  key: "offers" | "payouts" | "pickups" | "reminders";
+  key: "offers" | "payouts" | "pickups" | "messages" | "reminders";
   title: string;
   body: string;
 };
 
 /**
  * What arrives, in the order a shop ranks it: offered work expires first,
- * then money, then someone standing at the counter, then a nudge.
+ * then money, then someone standing at the counter or writing to the shop,
+ * then a nudge.
  */
 export const PUSH_PROMPT_REASONS: readonly PushPromptReason[] = [
   {
@@ -64,6 +65,11 @@ export const PUSH_PROMPT_REASONS: readonly PushPromptReason[] = [
     key: "pickups",
     title: "Pickups",
     body: "When a rider is at your counter.",
+  },
+  {
+    key: "messages",
+    title: "Messages",
+    body: "When your rider or GRIDGO Operations writes to you, with a sound.",
   },
   {
     key: "reminders",

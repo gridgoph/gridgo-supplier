@@ -95,7 +95,6 @@ export const DELETION_NO_SESSION =
   "GRIDGO could not reach your sign-in to confirm it is you. Go back, then open Delete account again.";
 export const DELETION_REQUEST_FAILED =
   "It is you, but the request did not reach GRIDGO. Check this phone's connection and try again.";
-export const DELETION_SENT = "We will delete your account within 30 days";
 
 /** Clerk's own name for what it refused, or null. */
 function clerkCode(error: unknown): string | null {

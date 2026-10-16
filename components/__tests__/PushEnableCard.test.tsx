@@ -32,6 +32,7 @@ beforeEach(() => {
   usePush.setState({
     supported: true,
     permission: "undetermined",
+    channel: "unknown",
     token: null,
     busy: false,
     error: null,
@@ -91,4 +92,18 @@ it("does not raise the dialog until someone taps it", async () => {
 
   fireEvent.press(screen.getByText("Turn on notifications"));
   await waitFor(() => expect(mocked.requestPermissionsAsync).toHaveBeenCalled());
+});
+
+it("tells a granted phone whose channel was set to Silent, and opens that channel's settings", async () => {
+  // gridgo-client#231: Android keeps a shop's Silent setting over any
+  // re-create, so a rider's message would arrive without a sound.
+  signIn();
+  const openChannelSettings = jest.fn(async () => {});
+  usePush.setState({ permission: "granted", channel: "silent", openChannelSettings });
+  await render(<PushEnableCard />);
+
+  expect(screen.getByText("GRIDGO notifications make no sound")).toBeTruthy();
+  fireEvent.press(screen.getByText("Open notification settings"));
+  expect(openChannelSettings).toHaveBeenCalledTimes(1);
+  expect(mocked.requestPermissionsAsync).not.toHaveBeenCalled();
 });

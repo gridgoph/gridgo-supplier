@@ -7,7 +7,7 @@ import {
 } from "@/lib/listingReview";
 import { boardStanding, SPECS_NEEDED, type Listing } from "@/lib/listings";
 
-const CONTEXT = { inheritedTurnaroundDays: 1, inheritedFormatCodes: ["pdf"] };
+const CONTEXT = { inheritedTurnaround: { unit: "days" as const, days: 1 }, inheritedFormatCodes: ["pdf"] };
 
 const LISTING: Listing = {
   id: "item_1",
@@ -23,11 +23,12 @@ const LISTING: Listing = {
   minimumHeightMilli: null,
   minimumLengthMilli: null,
   printerMaxWidthFeet: null,
+  printLayouts: [],
   minimumOrderQuantity: null,
   priceTiers: [],
   speedTiers: [],
   turnaroundMode: "inherit",
-  turnaroundDays: null,
+  turnaround: null,
   fileFormatMode: "inherit",
   formatCodes: [],
   onTheBoard: false,

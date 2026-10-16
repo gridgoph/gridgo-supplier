@@ -6,6 +6,7 @@ import { accountHold } from "@/lib/accountHold";
 import { invalidate, liveGeneration, subscribeLive } from "@/lib/live";
 import { useSession } from "@/store/session";
 import { useAlertsStore } from "@/store/alerts";
+import { useCall } from "@/store/call";
 import { playProductionNudgeSting } from "@/lib/nudgeSound";
 import { shouldToast, useToasts, useViewing } from "@/store/toasts";
 
@@ -45,7 +46,10 @@ export function useAlertStream(enabled = true): void {
         if (!current()) return;
 
         if (resources.has("*") || resources.has("notifications")) {
-          try { await useAlertsStore.getState().refresh(); } catch { /* Next live event/resume or fallback catches up. */ }
+          try {
+            // An unanswered call in the inbox may still be ringing; `store/call.ts` decides.
+            useCall.getState().noticeIncoming(await useAlertsStore.getState().refresh());
+          } catch { /* Next live event/resume or fallback catches up. */ }
         }
       } finally {
         refreshing = false;
@@ -68,7 +72,11 @@ export function useAlertStream(enabled = true): void {
           if (connected) invalidate("*");
         },
         onResumeUnavailable: () => { if (current()) invalidate("*"); },
-        onInvalidate: (event) => { if (current()) invalidate(event.resource); },
+        onInvalidate: (event) => {
+          if (!current()) return;
+          if (event.resource === "calls" && event.id) useCall.getState().callsChanged(event.id);
+          invalidate(event.resource);
+        },
         onNotification: (notification) => {
           if (!current() || (notification.userId && notification.userId !== userId)) return;
           invalidate("*");

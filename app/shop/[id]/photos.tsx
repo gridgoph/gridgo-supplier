@@ -14,7 +14,9 @@ import { LISTING_CAPS, photoViewUrl } from "@/lib/listings";
 import { attachPhoto, BOARD_NOT_OPEN_YET, removePhoto, setPhotoOrder } from "@/lib/listingsApi";
 import { endPhotoPolicySubmission, ensurePhotoPolicy } from "@/store/photoPolicy";
 import { askConfirm } from "@/store/sheets";
+import { WhyWeAsk } from "@/components/legal/WhyWeAsk";
 import { useFileUpload } from "@/hooks/useFileUpload";
+import { WHY_WE_ASK } from "@/lib/legal";
 import { routeId, useListing } from "@/hooks/useBoard";
 import { useThemeColors } from "@/hooks/useTheme";
 
@@ -213,6 +215,7 @@ export default function SamplePhotosScreen() {
           <Text className="text-caption text-text-muted">
             {photos.length} of {LISTING_CAPS.photos} used. The first one is your board photo.
           </Text>
+          <WhyWeAsk>{WHY_WE_ASK.samplePhoto}</WhyWeAsk>
         </View>
 
         {photos.length ? (
