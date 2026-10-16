@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.239 (Fix)
+
+- Update notices now open Google Play or TestFlight, and arrive only once your store has the new version.
+
 ## 1.0.234 (New feature)
 
 - Turn on Express for a listing so clients can pick any deadline from today. Express jobs carry a tag.
