@@ -35,11 +35,9 @@ export function ExpressField({ on, pending, disabled, error, onChange }: Props) 
   const shown = pending ?? on;
 
   return (
-    <View className="gg-panel gap-2">
-      <View className="flex-row items-start gap-2">
-        <View className="pt-3">
-          <Zap size={18} color={colors.info} strokeWidth={2} />
-        </View>
+    <View className="gg-card gap-2">
+      <View className="flex-row items-center gap-2">
+        <Zap size={18} color={colors.info} strokeWidth={2} />
         <View className="min-w-0 flex-1">
           <SwitchRow
             value={shown}

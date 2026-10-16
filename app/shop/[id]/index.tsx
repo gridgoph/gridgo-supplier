@@ -89,6 +89,7 @@ import {
   reorderPrepSteps,
   saveGroup,
   saveListing,
+  setExpress,
   setFileFormats,
   submitForReview,
   type BoardOutcome,
@@ -325,17 +326,17 @@ export default function ListingScreen() {
    * Express saves on its own, at once: only `express` with the listing's
    * version, so it never carries half-typed words and never opens review. The
    * held words stay held, and the reload hands the next save the new version.
-   * A refusal leaves the switch where GRIDGO has it and says why under it.
+   * A refusal reloads too, so the switch shows what GRIDGO has, and says why
+   * under it.
    */
   async function saveExpress(next: boolean) {
     if (!listing || busy) return;
     setBusy(true);
     setExpressPending(next);
     setExpressError(null);
-    const saved = await saveListing(listing, { express: next });
-    if (saved.status === "ok") {
-      await reload();
-    } else {
+    const saved = await setExpress(listing, next);
+    await reload();
+    if (saved.status !== "ok") {
       setExpressError(saved.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : saved.message);
     }
     setExpressPending(null);

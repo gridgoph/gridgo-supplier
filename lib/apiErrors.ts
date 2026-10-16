@@ -60,6 +60,11 @@ export function isSupplierProfileStale(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "supplier_profile_stale";
 }
 
+/** The listing moved on since this phone read it (another device, or GRIDGO). */
+export function isCatalogItemStale(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "catalog_item_stale";
+}
+
 /** The job left production while a photo was on its way; reload it. */
 export function isProductionPhotoUploadNotAllowed(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "production_photo_upload_not_allowed";

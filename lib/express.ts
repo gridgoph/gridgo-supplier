@@ -43,6 +43,13 @@ export function expressStateLine(on: boolean): string {
     : "Express is off. Deadlines follow your production time.";
 }
 
+/**
+ * A stale refusal under the switch. The editor reads the listing again, so
+ * the switch already shows what GRIDGO has; there is nothing to pull down.
+ */
+export const EXPRESS_STALE =
+  "This listing changed on another device, so Express was not changed. The switch shows what GRIDGO has now. Change it again if you still want to.";
+
 /** The job screen: what an Express order promised. */
 export const EXPRESS_JOB_NOTE =
   "GRIDGO promised this order for the client's deadline under Express, even if that is today.";

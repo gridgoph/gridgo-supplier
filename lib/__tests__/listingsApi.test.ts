@@ -9,6 +9,7 @@ import {
   removePhoto,
   reorderPrepSteps,
   saveListing,
+  setExpress,
 } from "@/lib/listingsApi";
 import type { Listing, PrepStep, SpecGroup } from "@/lib/listings";
 
@@ -388,5 +389,40 @@ describe("opening one listing", () => {
       .mockResolvedValue(answered(404, { error: "not_found" }));
 
     expect(await loadListing("sci_1")).toEqual({ status: "not_open_yet" });
+  });
+});
+
+describe("the Express switch", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("sends only express with the listing's version, nothing the shop is still typing", async () => {
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(answered(200, { item: { ...listing, express: true, version: (listing.version ?? 0) + 1 } }));
+
+    const result = await setExpress(listing, true);
+
+    const request = sent(fetch);
+    expect(request.method).toBe("PATCH");
+    expect(request.url).toMatch(/\/me\/catalog-items\/sci_1$/);
+    expect(request.body).toEqual({ express: true, expectedVersion: listing.version });
+    expect(result).toEqual(expect.objectContaining({ status: "ok" }));
+    expect(result.status === "ok" && result.value.express).toBe(true);
+  });
+
+  it("words a stale version for the switch, which reloads, not for pulling down", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue(
+      answered(409, { error: "catalog_item_stale", expectedVersion: 2, currentVersion: 3 }),
+    );
+
+    const result = await setExpress(listing, false);
+
+    expect(result).toEqual({
+      status: "failed",
+      message: expect.stringMatching(/^This listing changed on another device, so Express was not changed\./),
+    });
+    expect(result.status === "failed" && result.message).not.toMatch(/pull down/i);
   });
 });

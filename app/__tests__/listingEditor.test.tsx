@@ -10,6 +10,7 @@ import {
   loadPrepSteps,
   reorderPrepSteps,
   saveListing,
+  setExpress,
   submitForReview,
 } from "@/lib/listingsApi";
 import { useSession } from "@/store/session";
@@ -45,6 +46,7 @@ jest.mock("@/lib/listingsApi", () => ({
   loadListing: jest.fn(),
   loadPrepSteps: jest.fn(async () => ({ status: "ok", value: [] })),
   saveListing: jest.fn(),
+  setExpress: jest.fn(),
   addGroup: jest.fn(),
   addPrepStep: jest.fn(),
   reorderPrepSteps: jest.fn(),
@@ -673,7 +675,7 @@ describe("the listing editor under review and take-down", () => {
   describe("Express", () => {
     it("saves only Express with the listing's version, leaving typed words held", async () => {
       (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ express: false }) });
-      (saveListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ express: true, version: 8 }) });
+      (setExpress as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ express: true, version: 8 }) });
 
       view = await render(<ListingScreen />);
       expect(await screen.findByText("Express is off. Deadlines follow your production time.")).toBeTruthy();
@@ -683,25 +685,28 @@ describe("the listing editor under review and take-down", () => {
       (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ express: true, version: 8 }) });
       await fireEvent.press(screen.getByRole("switch", { name: "Express" }));
 
-      await waitFor(() => expect(saveListing).toHaveBeenCalledTimes(1));
-      expect(saveListing).toHaveBeenCalledWith(expect.objectContaining({ id: "sci_1", version: 7 }), { express: true });
+      await waitFor(() => expect(setExpress).toHaveBeenCalledTimes(1));
+      expect(setExpress).toHaveBeenCalledWith(expect.objectContaining({ id: "sci_1", version: 7 }), true);
+      expect(saveListing).not.toHaveBeenCalled();
       expect(submitForReview).not.toHaveBeenCalled();
       expect(await screen.findByText("Express is on. Clients can choose today as their deadline.")).toBeTruthy();
       // The price is still held, for the ordinary save.
       expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
     });
 
-    it("says why GRIDGO refused and leaves the switch where it was", async () => {
+    it("says why GRIDGO refused and shows the switch as GRIDGO has it", async () => {
       (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ express: false }) });
-      (saveListing as jest.Mock).mockResolvedValue({
+      (setExpress as jest.Mock).mockResolvedValue({
         status: "failed",
-        message: "This listing changed on another device while you were editing it. Pull down to refresh, then make your change again.",
+        message: "This listing changed on another device, so Express was not changed.",
       });
 
       view = await render(<ListingScreen />);
       await fireEvent.press(await screen.findByRole("switch", { name: "Express" }));
 
-      expect(await screen.findByText(/changed on another device/)).toBeTruthy();
+      expect(await screen.findByText(/so Express was not changed/)).toBeTruthy();
+      // Read again, so the next change carries GRIDGO's version.
+      expect((loadListing as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
       const toggle = screen.getByRole("switch", { name: "Express" });
       expect(toggle.props.accessibilityState).toEqual(expect.objectContaining({ checked: false }));
       expect(screen.getByText("Express is off. Deadlines follow your production time.")).toBeTruthy();
