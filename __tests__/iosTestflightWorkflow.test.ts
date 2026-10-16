@@ -1,4 +1,6 @@
-import { readFileSync } from "fs";
+import { spawnSync } from "child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
 
 /**
@@ -8,7 +10,8 @@ import { join } from "path";
  * and EAS minutes), so what matters about them is asserted as text: when the
  * workflow may run, that the build comes before the upload, and that no
  * credential is printed or left behind. Parsed as text for the same reason as
- * releaseWorkflow.test.ts: no YAML parser is a declared dependency.
+ * releaseWorkflow.test.ts: no YAML parser is a declared dependency. The build
+ * step also runs in Bash with fixture EAS output to catch shell quoting bugs.
  */
 
 const root = join(__dirname, "..");
@@ -70,6 +73,44 @@ describe("ios-testflight.yml", () => {
     const pinned = /EAS_CLI: eas-cli@(\S+)/.exec(workflow)?.[1];
     expect(pinned).toBeDefined();
     expect(eas.cli.version).toBe(`>= ${pinned}`);
+  });
+
+  it.each(["array", "object"])("writes the build outputs and summary from EAS %s JSON", (shape) => {
+    const temp = mkdtempSync(join(tmpdir(), "gridgo ios build "));
+    try {
+      const build = { id: "test-build-id", appVersion: "1.0.0", appBuildVersion: "5", status: "FINISHED" };
+      const fixture = join(temp, "eas.json");
+      writeFileSync(fixture, JSON.stringify(shape === "array" ? [build] : build));
+      const run = step("Build the iPhone app on EAS").split("        run: |\n")[1]
+        .split("\n").filter((line) => line.startsWith("          "))
+        .map((line) => line.slice(10)).join("\n");
+      // Stub only the remote build; execute the actual workflow shell and Node.
+      const result = spawnSync("bash", ["-c", 'npx() { cat "$EAS_BUILD_FIXTURE"; }\n' + run], {
+        cwd: temp,
+        encoding: "utf8",
+        timeout: 10_000,
+        env: {
+          ...process.env,
+          EAS_CLI: "eas-cli-test",
+          EAS_BUILD_FIXTURE: fixture,
+          RUNNER_TEMP: temp,
+          GITHUB_OUTPUT: join(temp, "output"),
+          GITHUB_STEP_SUMMARY: join(temp, "summary"),
+          GITHUB_SHA: "test-commit-sha",
+        },
+      });
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      expect(readFileSync(join(temp, "output"), "utf8")).toBe("id=test-build-id\nversion=1.0.5\n");
+      const summary = readFileSync(join(temp, "summary"), "utf8");
+      expect(summary).toContain("| Version | `1.0.0` |");
+      expect(summary).toContain("| Build number | `5` |");
+      expect(summary).toContain("| Status | FINISHED |");
+      expect(summary).toContain("https://expo.dev/accounts/felyciaaa/projects/gridgo-supplier/builds/test-build-id");
+      expect(summary).toContain("| Commit | `test-commit-sha` |");
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
   });
 
   it("names every credential it needs before spending a build", () => {
