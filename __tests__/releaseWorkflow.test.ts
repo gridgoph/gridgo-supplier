@@ -409,3 +409,91 @@ describe("a manual play_bundle run builds a Google Play bundle and publishes not
     expect(cleanup).toMatch(/if:\s*always\(\)/);
   });
 });
+
+describe("submit_to_play hands the verified AAB to EAS Submit for the internal track only", () => {
+  const eas = JSON.parse(readFileSync(join(__dirname, "..", "eas.json"), "utf8"));
+  const appJson = JSON.parse(readFileSync(join(__dirname, "..", "app.json"), "utf8"));
+  const submitStep = () => apkSteps.find((step) => step.includes("eas-cli@"));
+
+  it("is a manual dispatch input that defaults off", () => {
+    expect(workflow).toMatch(/ {6}submit_to_play:\n[\s\S]*?type: boolean\n\s+default: false/);
+  });
+
+  it("runs only on a Play bundle run that asked for it", () => {
+    expect(submitStep()).toMatch(
+      /if: github\.event\.inputs\.play_bundle == 'true' && github\.event\.inputs\.submit_to_play == 'true'\n/,
+    );
+    // Nothing else in the job reads the new input, so the APK path cannot change.
+    const readers = apkSteps.filter((step) => /inputs\.submit_to_play/.test(step));
+    const named = apkSteps.find((step) => step.includes("Name the Play bundle"));
+    expect(readers).toEqual([named, submitStep()]);
+  });
+
+  it("submits the AAB after it is verified and kept as an artifact", () => {
+    const verified = apkSteps.findIndex(
+      (step) => step.includes("scripts/verify-release-apk.sh") && step.includes(".aab"),
+    );
+    const kept = apkSteps.findIndex((step) => step.includes("upload-artifact") && step.includes("*.aab"));
+    const submitted = apkSteps.indexOf(submitStep() as string);
+    expect(submitted).toBeGreaterThan(verified);
+    expect(submitted).toBeGreaterThan(kept);
+  });
+
+  it("pins eas-cli and runs it non-interactive against that AAB", () => {
+    const step = submitStep() as string;
+    expect(step).toMatch(/npx --yes eas-cli@\d+\.\d+\.\d+ submit/);
+    expect(step).toContain("--platform android");
+    expect(step).toContain("--profile production");
+    expect(step).toContain('--path "$RUNNER_TEMP/play/$AAB"');
+    expect(step).toContain("--non-interactive");
+    expect(step).toMatch(/EXPO_TOKEN:\s*\$\{\{\s*secrets\.EXPO_TOKEN\s*\}\}/);
+  });
+
+  it("keeps the service-account key outside the workspace, private, and never echoed", () => {
+    const step = submitStep() as string;
+    expect(step).toMatch(
+      /GOOGLE_PLAY_SERVICE_ACCOUNT_JSON:\s*\$\{\{\s*secrets\.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON\s*\}\}/,
+    );
+    expect(step).toContain('key="$RUNNER_TEMP/play-service-account.json"');
+    expect(step).toContain("umask 077");
+    expect(step).toContain('chmod 600 "$key"');
+    expect(step).toContain(`trap 'rm -f "$key"' EXIT`);
+    // The one expansion of the secret writes it to the key file.
+    const expansions = step.split("\n").filter((line) => line.includes("$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"));
+    expect(expansions.map((line) => line.trim())).toEqual([
+      `printf '%s' "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" > "$key"`,
+    ]);
+    expect(step).not.toMatch(/--verbose|set -x/);
+
+    const cleanup = apkSteps.find((step) => step.includes("rm -f") && step.includes("release.jks"));
+    expect(cleanup).toContain("play-service-account.json");
+  });
+
+  it("sets the version's What's new on that release after the submit", () => {
+    const step = submitStep() as string;
+    const submit = step.indexOf("eas-cli@");
+    const notes = step.indexOf("node scripts/play-release-notes.mjs");
+    expect(notes).toBeGreaterThan(submit);
+    expect(step).toContain('PLAY_SERVICE_ACCOUNT_KEY_PATH="$key"');
+    expect(step).toContain('PLAY_VERSION_CODE="$CODE"');
+    expect(step).toContain('PLAY_VERSION="$VERSION"');
+    expect(step).toContain('PLAY_PACKAGE="$PACKAGE"');
+    expect(jobBody("check")).toContain("node --test scripts/play-release-notes.test.mjs");
+  });
+
+  it("submits to internal testing only and never promotes", () => {
+    expect(eas.submit.production.android).toEqual({
+      serviceAccountKeyPath: "$GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_PATH",
+      track: "internal",
+      releaseStatus: "completed",
+    });
+    expect(Object.keys(eas.submit)).toEqual(["production"]);
+    // Android builds stay in this workflow with the upload key, never on EAS.
+    expect(eas.build?.production?.android).toBeUndefined();
+  });
+
+  it("links this app to its EAS project", () => {
+    expect(appJson.expo.owner).toBe("felyciaaa");
+    expect(appJson.expo.extra.eas.projectId).toBe("ebba1b98-6125-4c84-ac04-3ef268ce9bd2");
+  });
+});

@@ -10,8 +10,12 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "ph.gridgo.supplier"
+      "supportsTablet": false,
+      "bundleIdentifier": "ph.gridgo.supplier",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "GRIDGO does not use Face ID. Your sign-in stays in the phone's secure storage.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "ph.gridgo.supplier",
@@ -52,6 +56,7 @@
       "expo-image",
       "expo-status-bar",
       "expo-web-browser",
+      "expo-apple-authentication",
       "@clerk/expo",
       "expo-secure-store",
       [
@@ -93,6 +98,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ebba1b98-6125-4c84-ac04-3ef268ce9bd2"
+      }
     }
   }
 }

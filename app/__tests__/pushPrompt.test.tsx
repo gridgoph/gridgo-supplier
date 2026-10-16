@@ -110,7 +110,7 @@ it("creates the channels, asks, and registers the phone on a yes", async () => {
 
   fireEvent.press(screen.getByText("Turn on notifications"));
 
-  await waitFor(() => expect(register).toHaveBeenCalledWith("test-fcm-token", "android"));
+  await waitFor(() => expect(register).toHaveBeenCalledWith("test-fcm-token", "android", "fcm"));
   const channel = mocked.setNotificationChannelAsync.mock.invocationCallOrder[0];
   const ask = mocked.requestPermissionsAsync.mock.invocationCallOrder[0];
   expect(mocked.setNotificationChannelAsync).toHaveBeenCalledWith(PUSH_CHANNEL_ID, expect.anything());

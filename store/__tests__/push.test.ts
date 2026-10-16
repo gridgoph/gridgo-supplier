@@ -3,8 +3,23 @@ import { Linking, Platform } from "react-native";
 
 import * as api from "@/lib/api";
 import { PRODUCTION_NUDGE_SOUND, PUSH_CHANNEL_ID, PUSH_PRODUCTION_NUDGE_CHANNEL_ID } from "@/lib/push";
-import { usePush, pushSupported, serializeDeviceMutation } from "@/store/push";
+import type { FirebaseMessaging } from "@/lib/firebaseMessaging";
+import {
+  usePush,
+  pushSupported,
+  serializeDeviceMutation,
+  subscribePushTokenRotation,
+} from "@/store/push";
 import { useSession } from "@/store/session";
+
+/**
+ * An iPhone build with Firebase, when a test sets one. Null everywhere else,
+ * which is Android and an iPhone build made without GoogleService-Info.plist.
+ */
+let mockFirebase: FirebaseMessaging | null = null;
+jest.mock("@/lib/firebaseMessaging", () => ({
+  getFirebaseMessaging: () => mockFirebase,
+}));
 
 /**
  * The registration lifecycle, against a mocked native module (jest.setup.js).
@@ -93,7 +108,7 @@ describe("registerIfGranted", () => {
 
     await usePush.getState().registerIfGranted();
 
-    expect(register).toHaveBeenCalledWith("fcm-token-a7c8d3f1", "android");
+    expect(register).toHaveBeenCalledWith("fcm-token-a7c8d3f1", "android", "fcm");
     expect(usePush.getState().token).toBe("fcm-token-a7c8d3f1");
     expect(usePush.getState().error).toBeNull();
     register.mockRestore();
@@ -118,7 +133,7 @@ describe("registerIfGranted", () => {
 
     await usePush.getState().registerIfGranted();
 
-    expect(unclaimed).toHaveBeenCalledWith("fcm-token-a7c8d3f1", "android");
+    expect(unclaimed).toHaveBeenCalledWith("fcm-token-a7c8d3f1", "android", "fcm");
     expect(claimed).not.toHaveBeenCalled();
     expect(usePush.getState().token).toBe("fcm-token-a7c8d3f1");
     expect(usePush.getState().claimed).toBe(false);
@@ -133,7 +148,7 @@ describe("registerIfGranted", () => {
 
     await usePush.getState().registerIfGranted();
 
-    expect(claimed).toHaveBeenCalledWith("fcm-token-a7c8d3f1", "android");
+    expect(claimed).toHaveBeenCalledWith("fcm-token-a7c8d3f1", "android", "fcm");
     expect(usePush.getState().claimed).toBe(true);
     claimed.mockRestore();
   });
@@ -270,6 +285,100 @@ describe("registerIfGranted", () => {
   });
 });
 
+describe("the iPhone's token provider", () => {
+  afterEach(() => {
+    Object.defineProperty(Platform, "OS", { value: "android", configurable: true });
+    mockFirebase = null;
+  });
+
+  it("files expo-notifications' iOS token as APNs on an iPhone without Firebase", async () => {
+    mocked.getPermissionsAsync.mockResolvedValue(granted as never);
+    mocked.getDevicePushTokenAsync.mockResolvedValue({ type: "ios", data: "a".repeat(64) } as never);
+    const register = jest.spyOn(api, "registerDevice").mockResolvedValue({} as never);
+    Object.defineProperty(Platform, "OS", { value: "ios", configurable: true });
+
+    await usePush.getState().registerIfGranted();
+
+    expect(register).toHaveBeenCalledWith("a".repeat(64), "ios", "apns");
+    register.mockRestore();
+  });
+
+  it("registers Firebase's FCM token on an iPhone build with Firebase", async () => {
+    // The API sends through FCM HTTP v1, which cannot address a raw APNs
+    // token. With Firebase in the build, the iPhone hands over an FCM token
+    // and is filed exactly like an Android phone.
+    mocked.getPermissionsAsync.mockResolvedValue(granted as never);
+    mockFirebase = {
+      getToken: jest.fn(async () => "fcm-ios-token-9b1e"),
+      onTokenRefresh: jest.fn(() => () => undefined),
+    };
+    const register = jest.spyOn(api, "registerDevice").mockResolvedValue({} as never);
+    Object.defineProperty(Platform, "OS", { value: "ios", configurable: true });
+
+    await usePush.getState().registerIfGranted();
+
+    expect(register).toHaveBeenCalledWith("fcm-ios-token-9b1e", "ios", "fcm");
+    expect(mocked.getDevicePushTokenAsync).not.toHaveBeenCalled();
+    expect(usePush.getState().token).toBe("fcm-ios-token-9b1e");
+    register.mockRestore();
+  });
+
+  it("registers Firebase's token unclaimed too, before anyone signs in", async () => {
+    api.setToken(null);
+    mocked.getPermissionsAsync.mockResolvedValue(granted as never);
+    mockFirebase = {
+      getToken: jest.fn(async () => "fcm-ios-token-9b1e"),
+      onTokenRefresh: jest.fn(() => () => undefined),
+    };
+    const unclaimed = jest.spyOn(api, "registerDeviceUnclaimed").mockResolvedValue(undefined);
+    Object.defineProperty(Platform, "OS", { value: "ios", configurable: true });
+
+    await usePush.getState().registerIfGranted();
+
+    expect(unclaimed).toHaveBeenCalledWith("fcm-ios-token-9b1e", "ios", "fcm");
+    unclaimed.mockRestore();
+  });
+});
+
+describe("subscribePushTokenRotation", () => {
+  afterEach(() => {
+    mockFirebase = null;
+  });
+
+  it("follows expo-notifications' token where there is no Firebase", () => {
+    const heard: string[] = [];
+    const unsubscribe = subscribePushTokenRotation((token) => heard.push(token));
+    const listener = mocked.addPushTokenListener.mock.calls[0][0];
+    listener({ type: "android", data: "rotated-fcm" } as never);
+    listener({ type: "android", data: "" } as never);
+    unsubscribe();
+
+    expect(heard).toEqual(["rotated-fcm"]);
+    const subscription = mocked.addPushTokenListener.mock.results[0].value as { remove: jest.Mock };
+    expect(subscription.remove).toHaveBeenCalled();
+  });
+
+  it("follows Firebase, never the APNs token, on an iPhone build with Firebase", () => {
+    let refresh: ((token: string) => void) | undefined;
+    const stop = jest.fn();
+    mockFirebase = {
+      getToken: jest.fn(async () => "unused"),
+      onTokenRefresh: jest.fn((listener) => {
+        refresh = listener;
+        return stop;
+      }),
+    };
+    const heard: string[] = [];
+    const unsubscribe = subscribePushTokenRotation((token) => heard.push(token));
+    refresh?.("rotated-fcm-ios");
+    unsubscribe();
+
+    expect(heard).toEqual(["rotated-fcm-ios"]);
+    expect(stop).toHaveBeenCalled();
+    expect(mocked.addPushTokenListener).not.toHaveBeenCalled();
+  });
+});
+
 describe("enable", () => {
   it("raises the dialog and registers when the shop says yes", async () => {
     mocked.requestPermissionsAsync.mockResolvedValue(granted as never);
@@ -279,7 +388,7 @@ describe("enable", () => {
     await expect(usePush.getState().enable()).resolves.toBe(true);
 
     expect(mocked.requestPermissionsAsync).toHaveBeenCalled();
-    expect(register).toHaveBeenCalledWith("fcm-token-a7c8d3f1", "android");
+    expect(register).toHaveBeenCalledWith("fcm-token-a7c8d3f1", "android", "fcm");
     register.mockRestore();
   });
 
@@ -309,7 +418,7 @@ describe("adoptToken", () => {
 
     await usePush.getState().adoptToken("rotated-token");
 
-    expect(register).toHaveBeenCalledWith("rotated-token", "android");
+    expect(register).toHaveBeenCalledWith("rotated-token", "android", "fcm");
     register.mockRestore();
   });
 
@@ -361,7 +470,7 @@ describe("signing out", () => {
 
     await usePush.getState().release();
 
-    expect(unclaimed).toHaveBeenCalledWith("fcm-token-a7c8d3f1", "android");
+    expect(unclaimed).toHaveBeenCalledWith("fcm-token-a7c8d3f1", "android", "fcm");
     expect(usePush.getState().claimed).toBe(false);
     unclaimed.mockRestore();
   });

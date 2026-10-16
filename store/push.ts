@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { withDeadline } from "@/lib/withDeadline";
 import { getNotificationsNative as notifications, pushSupported } from "@/lib/expoNotifications";
 import * as api from "@/lib/api";
+import { getFirebaseMessaging } from "@/lib/firebaseMessaging";
 import { humanizeApiError } from "@/lib/apiErrors";
 import {
   channelAudibility,
@@ -12,9 +13,12 @@ import {
   PUSH_CHANNEL,
   PUSH_CHANNEL_ID,
   PUSH_PRODUCTION_NUDGE_CHANNEL_ID,
+  pushTokenProvider,
   readPushPermission,
   type ChannelAudibility,
+  type DevicePlatform,
   type PushPermission,
+  type PushTokenProvider,
 } from "@/lib/push";
 
 /**
@@ -22,7 +26,7 @@ import {
  *
  * Every rule this store applies lives in `lib/push.ts` and is unit-tested
  * without a native runtime; what is here is the plumbing that cannot be — the
- * channel, the permission dialog, the FCM token, and keeping the server's idea
+ * channel, the permission dialog, the push token, and keeping the server's idea
  * of this phone in step with the phone's.
  *
  * Ported from `gridgo-client` unchanged apart from the error mapper, which is
@@ -67,7 +71,7 @@ type PushState = {
    * create, because a shop's own channel settings outlive any re-create.
    */
   channel: ChannelAudibility;
-  /** The FCM registration token this installation currently holds. */
+  /** The push token this installation currently holds (FCM, or APNs on an iPhone without Firebase). */
   token: string | null;
   /**
    * Whether the last registration named the signed-in shop.
@@ -159,12 +163,45 @@ async function ensureChannel(): Promise<ChannelAudibility> {
   }
 }
 
-/** The raw FCM token for this installation, or null if it cannot be had. */
-async function fetchToken(): Promise<string | null> {
+/**
+ * This installation's token and who issued it, or null if it cannot be had.
+ *
+ * An iPhone build with Firebase asks Firebase for an FCM token, so the API's
+ * FCM sender reaches it exactly as it reaches Android (`lib/firebaseMessaging.ios.ts`).
+ * Everything else — Android, and an iPhone build without Firebase — keeps the
+ * expo-notifications token: FCM on Android, the native APNs token on iOS.
+ */
+async function fetchToken(
+  platform: DevicePlatform,
+): Promise<{ token: string; provider: PushTokenProvider } | null> {
+  const firebase = getFirebaseMessaging();
+  if (firebase) {
+    const token = await withDeadline(firebase.getToken(), api.API_REQUEST_MS);
+    return token ? { token, provider: "fcm" } : null;
+  }
   const Notifications = notifications();
   if (!Notifications) return null;
   const { data } = await withDeadline(Notifications.getDevicePushTokenAsync(), api.API_REQUEST_MS);
-  return typeof data === "string" && data ? data : null;
+  return typeof data === "string" && data ? { token: data, provider: pushTokenProvider(platform) } : null;
+}
+
+/**
+ * Hear about a token the issuer replaced while the app was running.
+ *
+ * Firebase's own refresh on an iPhone build with Firebase. Otherwise
+ * expo-notifications' listener — and only there, because on such an iPhone
+ * that listener reports the APNs token, which is not what the API was given.
+ */
+export function subscribePushTokenRotation(onToken: (token: string) => void): () => void {
+  const adopt = (token: unknown) => {
+    if (typeof token === "string" && token) onToken(token);
+  };
+  const firebase = getFirebaseMessaging();
+  if (firebase) return firebase.onTokenRefresh(adopt);
+  const Notifications = notifications();
+  if (!Notifications) return () => undefined;
+  const subscription = Notifications.addPushTokenListener((token) => adopt(token.data));
+  return () => subscription.remove();
 }
 
 let registrationQueue: Promise<void> = Promise.resolve();
@@ -251,16 +288,17 @@ export const usePush = create<PushState>((set, get) => ({
     set({ busy: true, error: null });
     try {
       signedIn = Boolean(await withDeadline(api.getAuthToken(), api.API_REQUEST_MS));
-      const token = await fetchToken();
-      if (!token) {
+      const issued = await fetchToken(platform);
+      if (!issued) {
         set({ busy: false, error: "This phone did not return a notification token." });
         return;
       }
+      const { token, provider } = issued;
       // Idempotent by contract, so no comparison against the stored token is
       // worth the risk of skipping a call the server never actually received.
       if (signedIn) set({ token }); // Retain even if sign-out supersedes the claim response.
-      if (signedIn) await api.registerDevice(token, platform);
-      else await api.registerDeviceUnclaimed(token, platform);
+      if (signedIn) await api.registerDevice(token, platform, provider);
+      else await api.registerDeviceUnclaimed(token, platform, provider);
       set({ token, claimed: signedIn, busy: false, error: null });
     } catch (e) {
       if (!signedIn && isUnclaimedRouteAbsent(e)) {

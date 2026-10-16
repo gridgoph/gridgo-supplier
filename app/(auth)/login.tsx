@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
+import { AppleSignInButton } from "@/components/AppleSignInButton";
 import { AuthDivider } from "@/components/AuthDivider";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { FormScrollView } from "@/components/FormScrollView";
@@ -37,6 +38,7 @@ import {
   withSettledClerkSession,
 } from "@/lib/clerkSignIn";
 import { SessionWait } from "@/components/SessionWait";
+import { appleSignInOutcome, isAppleCancel, type AppleFlowResult } from "@/lib/appleSignIn";
 import { completeGoogleSso } from "@/lib/googleSso";
 import { SESSION_ENDED_MESSAGE, useSession } from "@/store/session";
 
@@ -248,6 +250,40 @@ export default function LoginScreen() {
     }
   }
 
+  /**
+   * Sign in with Apple (iPhone only). Apple's sheet is native, so unlike
+   * Google there is no browser return to wait for: the flow either hands back
+   * a session, which is activated and joined to GRIDGO exactly as Google's is,
+   * or the person closed the sheet and nothing is said.
+   */
+  async function continueWithApple(start: () => Promise<AppleFlowResult>) {
+    setBusy(true);
+    setProblem(null);
+    try {
+      if (isSignedIn) {
+        // Same as Google: a live Clerk session is the person who just tapped.
+        useSession.getState().beginSessionWait("in");
+        await adoptAndEnter();
+        return;
+      }
+      const result = await start();
+      const outcome = appleSignInOutcome(result);
+      if (outcome.status === "activated") {
+        await (result.setActive ?? setActive)({ session: outcome.sessionId });
+        useSession.getState().beginSessionWait("in");
+        await adoptAndEnter();
+        return;
+      }
+      if (outcome.status === "incomplete") setProblem(outcome.message);
+    } catch (error) {
+      if (isAppleCancel(error)) return;
+      useSession.getState().clearSessionWait();
+      setProblem(clerkErrorMessage(error, "Apple could not sign you in just now. Try again."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (
     sessionWait &&
     !problem &&
@@ -327,6 +363,7 @@ export default function LoginScreen() {
                 onPress={() => void submitPassword()}
               />
               <AuthDivider />
+              <AppleSignInButton disabled={busy} onPress={(start) => void continueWithApple(start)} />
               <GoogleSignInButton disabled={busy} onPress={() => void continueWithGoogle()} />
             </View>
 

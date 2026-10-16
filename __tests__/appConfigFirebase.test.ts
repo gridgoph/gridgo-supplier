@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-import { googleServicesFile } from "../app.config";
+import { googleServiceInfoFile, googleServicesFile } from "../app.config";
 
 /**
  * How the captain's Firebase config reaches a build.
@@ -56,5 +56,37 @@ describe("googleServicesFile", () => {
     expect(() => googleServicesFile("/nope/google-services.json", ROOT, only(LOCAL))).toThrow(
       /does not exist/,
     );
+  });
+});
+
+const LOCAL_PLIST = resolve(ROOT, "GoogleService-Info.plist");
+
+describe("googleServiceInfoFile", () => {
+  it("uses the file EAS Build staged for the iPhone build", () => {
+    const staged = "/home/expo/workingdir/GoogleService-Info.plist";
+    expect(googleServiceInfoFile(staged, ROOT, true, only(staged))).toBe(staged);
+  });
+
+  it("falls back to one dropped in the repo root", () => {
+    expect(googleServiceInfoFile(undefined, ROOT, false, only(LOCAL_PLIST))).toBe(LOCAL_PLIST);
+  });
+
+  it("omits the key, so the build leaves Firebase out, when there is no file", () => {
+    expect(googleServiceInfoFile(undefined, ROOT, false, () => false)).toBeUndefined();
+    expect(googleServiceInfoFile("  ", ROOT, true, () => false)).toBeUndefined();
+  });
+
+  it("refuses a named missing file on the EAS build machine", () => {
+    expect(() => googleServiceInfoFile("/nope/GoogleService-Info.plist", ROOT, true, () => false)).toThrow(
+      /GOOGLE_SERVICE_INFO_PLIST/,
+    );
+  });
+
+  it("ignores a named file it cannot read where eas-cli starts the build", () => {
+    // A secret file variable is not readable on the machine that starts the
+    // build; only the build machine gets the file.
+    expect(
+      googleServiceInfoFile("/nope/GoogleService-Info.plist", ROOT, false, only(LOCAL_PLIST)),
+    ).toBeUndefined();
   });
 });
