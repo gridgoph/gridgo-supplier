@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.230 (New feature)
+
+- Add as many proof photos as you like to each payout part, pick several at once, and see each photo once.
+
 ## 1.0.221 (New feature)
 
 - Read GRIDGO's terms in Account, agree to them when they change, and ask to see, fix or delete your data.
