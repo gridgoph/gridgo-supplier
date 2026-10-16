@@ -5,6 +5,8 @@ import * as api from "@/lib/api";
 import { liveGeneration } from "@/lib/live";
 import type { Notification } from "@/lib/api";
 import * as alertsApi from "@/lib/alertsApi";
+import { installChannel, type InstallChannel } from "@/lib/buildDistribution";
+import { belongsToInstall } from "@/lib/releasePush";
 import { createPersistStorage } from "@/lib/persistStorage";
 
 /**
@@ -53,9 +55,17 @@ export function isAlertUnread(alert: Notification, dismissed: string[]): boolean
   return !alert.read && !dismissed.includes(alert.id);
 }
 
-/** Alerts the shop still has: what GRIDGO served, minus anything deleted here. */
-export function visibleAlerts(alerts: Notification[], deleted: string[]): Notification[] {
-  return alerts.filter((alert) => !deleted.includes(alert.id));
+/**
+ * Alerts the shop still has: what GRIDGO served, minus anything deleted here
+ * and another install channel's release notices. The list, the badge and
+ * "Mark all read" all count from this, so they cannot disagree.
+ */
+export function visibleAlerts(
+  alerts: Notification[],
+  deleted: string[],
+  channel: InstallChannel | null = installChannel(),
+): Notification[] {
+  return alerts.filter((alert) => !deleted.includes(alert.id) && belongsToInstall(alert, channel));
 }
 
 let readVersion = 0;

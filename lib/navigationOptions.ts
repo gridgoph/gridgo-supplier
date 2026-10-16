@@ -1,5 +1,6 @@
 import type { Stack } from "expo-router";
-import type { ComponentProps } from "react";
+import { HeaderBackButton } from "expo-router/react-navigation";
+import { createElement, type ComponentProps } from "react";
 import { Platform } from "react-native";
 
 import { nativeHeaderInsetOptions } from "@/lib/nativeHeaderInsets";
@@ -7,6 +8,8 @@ import { nativeHeaderInsetOptions } from "@/lib/nativeHeaderInsets";
 import { colors, radius, typography, type ThemeName } from "@/constants/theme";
 
 type ScreenOptions = ComponentProps<typeof Stack>["screenOptions"];
+type StackOptions = Exclude<NonNullable<ScreenOptions>, (...args: never[]) => unknown>;
+type ScreenOptionsArgs = Parameters<Extract<NonNullable<ScreenOptions>, (...args: never[]) => unknown>>[0];
 type ScreenProps = ComponentProps<typeof Stack.Screen>;
 type SingleScreenOptions = NonNullable<ScreenProps["options"]>;
 
@@ -16,7 +19,7 @@ type SingleScreenOptions = NonNullable<ScreenProps["options"]>;
  * The root stack and the nested job stack must look identical, so the options
  * are written once here rather than copied into each `_layout`.
  */
-export function stackScreenOptions(scheme: ThemeName, topInset: number): ScreenOptions {
+export function stackScreenOptions(scheme: ThemeName, topInset: number): StackOptions {
   const token = colors[scheme];
   return {
     ...nativeHeaderInsetOptions(Platform.OS, topInset),
@@ -38,6 +41,36 @@ export function stackScreenOptions(scheme: ThemeName, topInset: number): ScreenO
     // sheet must stay a live native tree so taking the listing off does not
     // unmount photos inside a frozen screen.
     freezeOnBlur: false,
+  };
+}
+
+/**
+ * Header chrome for a stack nested under the root one (the job, a listing,
+ * the service catalogue).
+ *
+ * The first screen of a nested stack has no sibling behind it. Android's
+ * toolbar walks up to the parent stack and draws its arrow anyway; iOS's
+ * navigation bar only draws a back item for a screen below it in the *same*
+ * stack, so a job or listing opened from a tab had no way back on an iPhone.
+ * There, and only there, that first screen borrows the platform's bare
+ * chevron and pops the parent — the same control `(auth)/signup` gives its
+ * first step. A deep link with nothing behind it still gets none.
+ */
+export function nestedStackScreenOptions(scheme: ThemeName, topInset: number) {
+  const options = stackScreenOptions(scheme, topInset);
+  return ({ navigation, route }: ScreenOptionsArgs): StackOptions => {
+    if (Platform.OS !== "ios" || navigation.getState().routes[0]?.key !== route.key) return options;
+    return {
+      ...options,
+      headerLeft: ({ canGoBack, tintColor }) =>
+        canGoBack
+          ? createElement(HeaderBackButton, {
+              tintColor,
+              displayMode: "minimal",
+              onPress: () => navigation.goBack(),
+            })
+          : null,
+    };
   };
 }
 
