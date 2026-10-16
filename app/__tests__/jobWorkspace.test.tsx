@@ -112,20 +112,20 @@ describe("job workspace proof photos", () => {
     }));
     (getFile as jest.Mock).mockRejectedValueOnce(new Error("Offline"));
     await render(<JobWorkspaceScreen />);
-    expect(await screen.findByText("This evidence will not load")).toBeTruthy();
+    expect(await screen.findByText("Will not load")).toBeTruthy();
 
     const [scroll] = screen.container.queryAll((node) => node.props.refreshControl != null);
     await act(async () => { scroll.props.refreshControl.props.onRefresh(); });
 
     if (fileId === "file_pdf") {
       expect(await screen.findByText("PDF")).toBeTruthy();
-      expect(screen.queryByLabelText("Printing evidence")).toBeNull();
+      expect(screen.queryByLabelText("Printing evidence 1 of 1")).toBeNull();
     } else {
-      await waitFor(() => expect(screen.getByLabelText("Printing evidence").props.source).toEqual({
+      await waitFor(() => expect(screen.getByLabelText("Printing evidence 1 of 1").props.source).toEqual({
         uri: `https://example.test/${fileId}.jpg`,
       }));
     }
-    expect(screen.queryByText("This evidence will not load")).toBeNull();
+    expect(screen.queryByText("Will not load")).toBeNull();
     expect(getFile).toHaveBeenCalledTimes(2);
     expect(getOrder).toHaveBeenCalledTimes(3);
   });
@@ -145,7 +145,7 @@ describe("job workspace proof photos", () => {
     await render(<JobWorkspaceScreen />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Printing evidence").props.source).toEqual({
+      expect(screen.getByLabelText("Printing evidence 1 of 1").props.source).toEqual({
         uri: "https://example.test/file_print.jpg",
       });
     });
@@ -295,11 +295,20 @@ describe("job workspace on the escrow plan", () => {
     await render(<JobWorkspaceScreen />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Start of production evidence").props.source).toEqual({
+      expect(screen.getByLabelText("Start of production evidence 1 of 1").props.source).toEqual({
         uri: "https://example.test/file_start.jpg",
       });
     });
-    expect(screen.queryByLabelText("Delivered evidence")).toBeNull();
+    // The rider's delivery evidence is drawn read-only, as the rider's.
+    expect(screen.getByText("1 photo from the rider")).toBeTruthy();
+    await waitFor(() => expect(screen.getByLabelText("Delivery evidence 1 of 1")).toBeTruthy());
+    // A released start still takes more photos; the rider's part never does.
+    expect(screen.getAllByText("Add photos")).toHaveLength(1);
+    await fireEvent.press(screen.getByLabelText("Add photos to the start of production evidence"));
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: "/job/[id]/fulfilment",
+      params: { id: "ord_1", milestone: "production_started" },
+    });
     expect(screen.queryByTestId("job-action-bar")).toBeNull();
     expect(screen.getByText("Window open")).toBeTruthy();
     expect(screen.getByText("₱400.00 released of ₱1,000.00")).toBeTruthy();

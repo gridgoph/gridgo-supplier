@@ -363,7 +363,7 @@ export const WHY_WE_ASK = {
   packedPhoto: "This photo records how the job was packed, for the check with the rider.",
   finishedPhoto:
     "GRIDGO checks these photos before a rider is called. The client sees them on their order, and they are kept for any later question about the job.",
-  proofPhoto: "This file is your evidence for this part of the job's pay. Operations reviews it.",
+  proofPhoto: "These photos are your evidence for this part of the job's pay. The GRIDGO Team reviews them.",
   payoutQr: "We use this QR only to pay your shop.",
   chatPhoto: "Photos you send here are seen by the people in this chat and kept with the job.",
 } as const;

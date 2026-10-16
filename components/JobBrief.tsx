@@ -46,6 +46,8 @@ type Props = {
   proofReloadVersion?: number;
   /** Drawn at the foot of the Pickup row: the rider on the way and the chat with them. */
   handoffExtra?: ReactNode;
+  /** Opens the proof screen for one payout part, from the Earnings row. */
+  onAddProof?: (code: string) => void;
 };
 
 /**
@@ -72,6 +74,7 @@ export function JobBrief({
   defaultOpen = "make",
   proofReloadVersion = 0,
   handoffExtra = null,
+  onAddProof,
 }: Props) {
   const colors = useThemeColors();
   const reduceMotion = useReducedMotion();
@@ -128,6 +131,7 @@ export function JobBrief({
                   order={order}
                   proofReloadVersion={proofReloadVersion}
                   handoffExtra={handoffExtra}
+                  onAddProof={onAddProof}
                 />
               </Animated.View>
             ) : null}
@@ -144,11 +148,13 @@ function SectionBody({
   order,
   proofReloadVersion,
   handoffExtra,
+  onAddProof,
 }: {
   id: JobBriefSectionId;
   order: Order;
   proofReloadVersion: number;
   handoffExtra: ReactNode;
+  onAddProof?: (code: string) => void;
 }) {
   switch (id) {
     case "make": {
@@ -281,7 +287,12 @@ function SectionBody({
               </Text>
             ) : null}
             <View className="gg-divider" />
-            <MilestoneList milestones={milestones} showDetail proofReloadVersion={proofReloadVersion} />
+            <MilestoneList
+              milestones={milestones}
+              showDetail
+              proofReloadVersion={proofReloadVersion}
+              onAddProof={onAddProof}
+            />
             <SettlementPayoutList payouts={settlementPayouts} showDetail />
           </View>
         );

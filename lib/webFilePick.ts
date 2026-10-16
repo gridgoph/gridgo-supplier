@@ -22,7 +22,17 @@ export function canPickOnWeb(): boolean {
 }
 
 /** Opens the browser file dialog. Null when the person closes it. */
-export function pickFileOnWeb(accept: string): Promise<WebPickedAsset | null> {
+export async function pickFileOnWeb(accept: string): Promise<WebPickedAsset | null> {
+  const picked = await pickOnWeb(accept, false);
+  return picked[0] ?? null;
+}
+
+/** The same dialog, taking several files at once. Empty when the person closes it. */
+export function pickFilesOnWeb(accept: string): Promise<WebPickedAsset[]> {
+  return pickOnWeb(accept, true);
+}
+
+function pickOnWeb(accept: string, multiple: boolean): Promise<WebPickedAsset[]> {
   return new Promise((resolve, reject) => {
     if (!canPickOnWeb()) {
       reject(new Error("web_picker_unavailable"));
@@ -32,32 +42,30 @@ export function pickFileOnWeb(accept: string): Promise<WebPickedAsset | null> {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = accept;
-    input.multiple = false;
+    input.multiple = multiple;
     input.setAttribute("data-gridgo-web-file-pick", "true");
 
     let settled = false;
-    const finish = (asset: WebPickedAsset | null) => {
+    const finish = (assets: WebPickedAsset[]) => {
       if (settled) return;
       settled = true;
       input.remove();
-      resolve(asset);
+      resolve(assets);
     };
 
     input.addEventListener("change", () => {
-      const file = input.files?.[0];
-      if (!file) {
-        finish(null);
-        return;
-      }
-      finish({
-        uri: objectUrlFor(file),
-        name: file.name,
-        mimeType: file.type || null,
-        size: Number.isFinite(file.size) ? file.size : null,
-        file,
-      });
+      const files = Array.from(input.files ?? []);
+      finish(
+        files.map((file) => ({
+          uri: objectUrlFor(file),
+          name: file.name,
+          mimeType: file.type || null,
+          size: Number.isFinite(file.size) ? file.size : null,
+          file,
+        })),
+      );
     });
-    input.addEventListener("cancel", () => finish(null));
+    input.addEventListener("cancel", () => finish([]));
 
     document.body?.appendChild(input);
     input.click();
