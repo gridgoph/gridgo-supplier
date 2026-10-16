@@ -51,8 +51,13 @@ export function stackScreenOptions(scheme: ThemeName, topInset: number): ScreenO
  * has. `fitToContents` keeps a short question short: a two-line confirmation
  * must never open full height.
  *
- * The sheet paints its own surface (`components/SheetSurface`), so the screen
- * container behind it stays transparent and the sheet's corners stay round.
+ * The sheet paints its own surface (`components/SheetSurface`). On iOS the
+ * container is painted the same colour: a `fitToContents` detent measures the
+ * content, and UIKit then grows the sheet by the home-indicator inset below it.
+ * react-native-screens hands `contentStyle`'s background to that whole native
+ * sheet on iOS, so a transparent one let the system sheet show through as a
+ * darker band under the surface. Android keeps it transparent so the surface
+ * is what shows through the bottom sheet's rounded corners.
  */
 export function sheetScreenOptions(scheme: ThemeName): SingleScreenOptions {
   const token = colors[scheme];
@@ -63,7 +68,7 @@ export function sheetScreenOptions(scheme: ThemeName): SingleScreenOptions {
     sheetGrabberVisible: true,
     sheetCornerRadius: radius.card,
     sheetElevation: 24,
-    contentStyle: { backgroundColor: "transparent" },
+    contentStyle: { backgroundColor: Platform.OS === "ios" ? token.surface : "transparent" },
     // Android's bottom sheet paints its own container; keep it off the canvas
     // colour so the surface below is what shows through the rounded corners.
     navigationBarColor: token.surface,
