@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.266 (Improvement)
+
+- Alerts opens straight away on what you last saw, and stays quick with a long inbox.
+
 ## 1.0.261 (Fix)
 
 - On iPhone, sheets now reach the bottom of the screen without an empty gap under the buttons.
