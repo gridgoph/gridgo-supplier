@@ -6,6 +6,7 @@ import Animated, { FadeIn, LinearTransition, useReducedMotion } from "react-nati
 import { ArtworkPanel } from "@/components/ArtworkPanel";
 import { CountLedger } from "@/components/CounterCheckPanel";
 import { ColourPricingSpec } from "@/components/ColourPricingSpec";
+import { CoverSpineSpec } from "@/components/CoverSpineSpec";
 import { ExactColoursSpec } from "@/components/ExactColoursSpec";
 import { ItemNote } from "@/components/ItemNote";
 import { PrintLayoutSpec } from "@/components/PrintLayoutSpec";
@@ -188,6 +189,7 @@ function SectionBody({
                 ))}
                 {material ? <SpecRow label="Material" value={material} muted={material === NOT_SPECIFIED} /> : null}
                 <PrintLayoutSpec item={item} />
+                <CoverSpineSpec item={item} />
                 {colour
                   .filter((line) => line.item.id === item.id)
                   .map((line) => (
