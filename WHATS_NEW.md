@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.271 (New feature)
+
+- Hardbound jobs show the cover choice and spine text the client gave, with a preview of the spine.
+
 ## 1.0.266 (Improvement)
 
 - Alerts opens straight away on what you last saw, and stays quick with a long inbox.
