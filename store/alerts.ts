@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 
 import * as api from "@/lib/api";
 import { liveGeneration } from "@/lib/live";
-import type { Notification } from "@/lib/api";
+import type { Notification, Order } from "@/lib/api";
 import * as alertsApi from "@/lib/alertsApi";
 import { installChannel, type InstallChannel } from "@/lib/buildDistribution";
 import { belongsToInstall } from "@/lib/releasePush";
@@ -29,6 +29,15 @@ type AlertsState = {
   /** Alert ids this device has deleted because GRIDGO could not. */
   deleted: string[];
   hydrated: boolean;
+  /**
+   * The inbox as GRIDGO last served it to this owner, or null before the first
+   * read. Memory only: the Alerts screen paints it the moment it opens and
+   * refreshes underneath, instead of a skeleton on every visit.
+   */
+  inbox: Notification[] | null;
+  /** The jobs the Alerts screen last placed its alerts against. Memory only. */
+  inboxJobs: Order[] | null;
+  rememberInboxJobs: (jobs: Order[]) => void;
   /**
    * Legacy cursor slot, no longer persisted or used by useAlertStream.
    * The transport owns its cursor for the lifetime of one connection handle.
@@ -77,7 +86,7 @@ export const useAlertsStore = create<AlertsState>()(
       ownerBound: false,
       bindOwner: (ownerId) => {
         if (get().ownerId !== ownerId) {
-          set({ ownerId, ownerBound: true, unreadCount: 0, unreadIds: [], dismissed: [], deleted: [], streamCursor: null, localOnly: false });
+          set({ ownerId, ownerBound: true, unreadCount: 0, unreadIds: [], dismissed: [], deleted: [], inbox: null, inboxJobs: null, streamCursor: null, localOnly: false });
         } else {
           set({ ownerBound: true });
         }
@@ -88,6 +97,9 @@ export const useAlertsStore = create<AlertsState>()(
       deleted: [],
       localOnly: false,
       hydrated: false,
+      inbox: null,
+      inboxJobs: null,
+      rememberInboxJobs: (inboxJobs) => set({ inboxJobs }),
       streamCursor: null,
       rememberStreamCursor: (id) => set({ streamCursor: id }),
       markRead: async (id) => {
@@ -168,6 +180,7 @@ export const useAlertsStore = create<AlertsState>()(
           .filter((alert) => isAlertUnread(alert, stillDismissed))
           .map((alert) => alert.id))];
         set({
+          inbox: alerts,
           dismissed: stillDismissed,
           deleted: stillDeleted,
           unreadIds,
