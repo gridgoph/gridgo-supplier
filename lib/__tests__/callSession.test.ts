@@ -1,6 +1,6 @@
 import { ApiError } from "@/lib/apiErrors";
 import type { CallRuntime } from "@/lib/callRuntime";
-import { CallSession, RECONNECT_GIVE_UP_MS, type CallApi, type CallSnapshot } from "@/lib/callSession";
+import { CallSession, PEER_END_GRACE_MS, RECONNECT_GIVE_UP_MS, type CallApi, type CallSnapshot } from "@/lib/callSession";
 import { CALL_HEARTBEAT_MS, CALL_LEASE_MS, CALL_POLL_MS, type OrderCall } from "@/lib/orderCall";
 
 /*
@@ -257,7 +257,8 @@ describe("placing a call", () => {
 
   it("ends a call whose audio path fails, and says the network was lost", async () => {
     const { runtime } = makeRuntime();
-    const apiFake = makeApi();
+    // GRIDGO still has the call open: nobody hung up.
+    const apiFake = makeApi({ getCall: jest.fn(async () => call({ state: "accepted" })) });
     const { s } = session(apiFake, runtime);
     await s.startOutgoing();
     apiFake.getCallSignals.mockResolvedValue({ signals: [], cursor: 0, call: call({ state: "accepted" }) });
@@ -345,6 +346,95 @@ describe("placing a call", () => {
     expect(apiFake.callAction).toHaveBeenCalledWith("ord_1", call().id, "cancel");
     expect(apiFake.startCall).toHaveBeenCalledTimes(2);
     expect(s.current.phase).toBe("ringing");
+  });
+});
+
+describe("when the rider hangs up", () => {
+  /** A placed call the rider answered, with audio flowing. */
+  async function connected() {
+    const { runtime } = makeRuntime();
+    const apiFake = makeApi({ getCall: jest.fn(async () => call({ state: "accepted" })) });
+    const { s } = session(apiFake, runtime);
+    await s.startOutgoing();
+    apiFake.getCallSignals.mockResolvedValue({ signals: [], cursor: 0, call: call({ state: "accepted" }) });
+    await advance(CALL_POLL_MS);
+    FakePeer.last!.setIce("connected");
+    await advance(30_000);
+    return { s, apiFake };
+  }
+
+  /** What GRIDGO answers once the rider's end has landed: the call is over. */
+  function riderEnded(apiFake: jest.Mocked<CallApi>) {
+    apiFake.getCallSignals.mockRejectedValue(new ApiError(409, { error: "call_not_active" }));
+    apiFake.getCall.mockResolvedValue(call({ state: "ended", endedAt: new Date(now).toISOString() }));
+  }
+
+  it("says the rider ended it when GRIDGO already has, and says how long it lasted", async () => {
+    const { s, apiFake } = await connected();
+    riderEnded(apiFake);
+    await advance(CALL_POLL_MS);
+    expect(s.current).toMatchObject({ phase: "ended", endReason: "ended", endedByMe: false, durationMs: 32_000 });
+    expect(apiFake.callAction).not.toHaveBeenCalledWith("ord_1", call().id, "end");
+  });
+
+  it("reads GRIDGO the moment the audio drops, rather than waiting to give up", async () => {
+    const { s, apiFake } = await connected();
+    riderEnded(apiFake);
+    FakePeer.last!.setIce("disconnected");
+    await flush();
+    expect(s.current).toMatchObject({ phase: "ended", endReason: "ended", endedByMe: false });
+  });
+
+  it("waits for the rider's end when their phone drops the audio first", async () => {
+    const { s, apiFake } = await connected();
+    // The rider's peer closed; their end is still on its way, so GRIDGO says accepted.
+    FakePeer.last!.setIce("failed");
+    await flush();
+    expect(s.current.phase).toBe("reconnecting");
+    await advance(PEER_END_GRACE_MS - 2_000);
+    expect(s.current.phase).toBe("reconnecting");
+    riderEnded(apiFake);
+    await advance(2_000);
+    expect(s.current).toMatchObject({ phase: "ended", endReason: "ended", endedByMe: false });
+    expect(apiFake.callAction).not.toHaveBeenCalledWith("ord_1", call().id, "end");
+  });
+
+  it("checks GRIDGO before giving up on a drop, even when the polls fell behind", async () => {
+    const { s, apiFake } = await connected();
+    FakePeer.last!.setIce("disconnected");
+    await advance(RECONNECT_GIVE_UP_MS - 1_000);
+    // The rider's end lands just as this phone gives up: only the give-up read sees it.
+    apiFake.getCall.mockResolvedValue(call({ state: "ended" }));
+    await advance(1_000);
+    expect(s.current).toMatchObject({ endReason: "ended", endedByMe: false });
+    expect(apiFake.callAction).not.toHaveBeenCalledWith("ord_1", call().id, "end");
+  });
+
+  it("is a lost connection when GRIDGO still has the call open after the wait", async () => {
+    const { s, apiFake } = await connected();
+    FakePeer.last!.setIce("failed");
+    await advance(PEER_END_GRACE_MS);
+    expect(s.current).toMatchObject({ phase: "ended", endReason: "network_lost", endedByMe: false });
+    expect(apiFake.callAction).toHaveBeenCalledWith("ord_1", call().id, "end");
+    expect(track.stopped).toBe(true);
+  });
+
+  it("is a lost connection when GRIDGO cannot be reached either", async () => {
+    const { s, apiFake } = await connected();
+    apiFake.getCallSignals.mockRejectedValue(new Error("Network request failed"));
+    apiFake.getCall.mockRejectedValue(new Error("Network request failed"));
+    FakePeer.last!.setIce("failed");
+    await advance(PEER_END_GRACE_MS);
+    expect(s.current.endReason).toBe("network_lost");
+  });
+
+  it("still says the shop ended it when the shop hangs up", async () => {
+    const { s, apiFake } = await connected();
+    await s.hangUp();
+    FakePeer.last!.setIce("failed");
+    await advance(PEER_END_GRACE_MS);
+    expect(s.current).toMatchObject({ endReason: "ended", endedByMe: true });
+    expect(apiFake.callAction).toHaveBeenCalledWith("ord_1", call().id, "end");
   });
 });
 

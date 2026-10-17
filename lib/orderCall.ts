@@ -212,11 +212,11 @@ export type EndReason =
   | "no_answer"
   /** The rider rang and stopped, or the ring ran out on this phone. */
   | "missed"
-  /** Either side hung up a connected call. */
+  /** A connected call was hung up: by this shop when `endedByMe`, otherwise by the rider. */
   | "ended"
   /** The shop hung up before the rider answered. */
   | "cancelled"
-  /** Audio stopped reaching either side, or the lease ran out. */
+  /** Audio stopped and GRIDGO still had the call open (nobody hung up), or the lease ran out. */
   | "network_lost"
   /** Calling closed: picked up, reassigned, or GRIDGO refused. */
   | "not_available"
@@ -265,8 +265,11 @@ export function phaseLabel(phase: CallPhase): string {
 
 export type EndCopy = { title: string; body: string; canCallAgain: boolean };
 
-/** A clear end reason, with what the shop can do next. */
-export function endCopy(reason: EndReason, name: string, durationLabel: string | null = null): EndCopy {
+/**
+ * A clear end reason, with what the shop can do next. `byMe` says who hung up
+ * a connected call; GRIDGO's projection does not, so the session tracks it.
+ */
+export function endCopy(reason: EndReason, name: string, byMe = false): EndCopy {
   switch (reason) {
     case "declined":
       return { title: "Call declined", body: `${name} could not take the call. Send a message instead, or try again in a minute.`, canCallAgain: true };
@@ -277,11 +280,11 @@ export function endCopy(reason: EndReason, name: string, durationLabel: string |
     case "cancelled":
       return { title: "Call cancelled", body: `${name} will see that you tried to call.`, canCallAgain: true };
     case "ended":
-      return { title: "Call ended", body: durationLabel ? `You talked for ${durationLabel}.` : "The call has ended.", canCallAgain: true };
+      return { title: "Call ended", body: byMe ? "You ended the call." : "The rider ended the call.", canCallAgain: true };
     case "network_lost":
       return {
-        title: "Call dropped",
-        body: "The connection was lost. Check your mobile data or Wi-Fi, then call again.",
+        title: "Connection lost",
+        body: "The call cut off before either of you hung up. Check your mobile data or Wi-Fi, then call again.",
         canCallAgain: true,
       };
     case "not_available":
