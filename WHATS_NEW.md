@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.261 (Fix)
+
+- On iPhone, sheets now reach the bottom of the screen without an empty gap under the buttons.
+
 ## 1.0.256 (Fix)
 
 - Jobs and listings have a back button again on iPhone, and Alerts shows only the updates for how you installed the app.
