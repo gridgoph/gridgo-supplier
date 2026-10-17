@@ -37,6 +37,13 @@ describe("a job the shop let go", () => {
 
   it("belongs to the replacement shop once the client accepted one", () => {
     expect(shopRelease(released("declined", "accepted"))).toBeNull();
+    expect(shopRelease(released("timed_out", "accepted", "supplier_assigned"))).toBeNull();
+  });
+
+  it("names who resolves the stop", () => {
+    expect(shopRelease(released("timed_out", "awaiting_client"))?.body).toMatch(/GRIDGO/);
+    expect(shopRelease(released("declined", "ops_review"))?.body).toMatch(/Operations/);
+    expect(shopRelease(released("cancelled", "refunded"))?.body).toMatch(/Nothing more is needed/);
   });
 
   it.each([

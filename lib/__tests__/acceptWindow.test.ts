@@ -70,6 +70,8 @@ describe("the hour to answer a new job", () => {
     // States the moment it runs out, never minutes that are really paused.
     expect(acceptWindowLine(window, now)).toMatch(/^Answer by .+ tomorrow$/);
     expect(acceptWindowTickMs(window)).toBe(30_000);
+    expect(window).not.toHaveProperty("remainingMs");
+    expect(window).not.toHaveProperty("elapsed");
   });
 
   it("forgives the server's rounding on an hour inside opening time", () => {
