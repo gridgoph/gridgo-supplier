@@ -224,6 +224,12 @@ export type ProductionItem = {
   colourPricing?: unknown;
   /** The latest colour correction the client agreed to on this line. */
   agreedColourCorrection?: unknown;
+  /**
+   * The hardbound cover and spine the client agreed at checkout (gridgo-api
+   * `docs/HARDBOUND_COVER_API.md`). Null or absent when the product does not
+   * ask and on older orders. Read through `lib/coverSpine.ts`.
+   */
+  coverSpine?: unknown;
 };
 
 /** One design link on an order line, snapshotted at checkout. HTTPS by contract. */
