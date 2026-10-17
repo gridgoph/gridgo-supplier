@@ -1,7 +1,7 @@
 import { useReadVersion } from "@/hooks/useReadVersion";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { router, useFocusEffect, useNavigation } from "expo-router";
 
 import { AlertCard } from "@/components/AlertCard";
@@ -52,6 +52,13 @@ import { useThemeColors } from "@/hooks/useTheme";
  * once they all are. "Clear notifications" is the same delete, for every
  * alert on screen — the client's bulk action lives after the list; this
  * screen also puts it in the header because the title row is free.
+ *
+ * The screen is pushed, so every visit mounts it afresh. It opens on the inbox
+ * the store last read (`inbox`) and refreshes underneath; the skeleton is only
+ * for a shop whose inbox has never been read. The list is a `FlatList` because
+ * each card carries its own swipe handler: drawing a hundred of them in one go
+ * held the screen for seconds on a phone, so only the first screenful is drawn
+ * on arrival.
  */
 export default function NotificationsScreen() {
   const colors = useThemeColors();
@@ -76,10 +83,19 @@ export default function NotificationsScreen() {
    * next focus or pull-to-refresh load. Silent live refreshes preserve existing
    * section membership so they cannot interrupt another swipe.
    */
-  const [{ items, newAtLoad }, setInbox] = useState<{ items: api.Notification[]; newAtLoad: string[] }>({ items: [], newAtLoad: [] });
-  const [jobs, setJobs] = useState<api.Order[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [{ items, newAtLoad }, setInbox] = useState<{ items: api.Notification[]; newAtLoad: string[] }>(() => {
+    const { inbox, dismissed: cleared, deleted: gone } = useAlertsStore.getState();
+    const cached = inbox ?? [];
+    return {
+      items: cached,
+      newAtLoad: visibleAlerts(cached, gone).filter((alert) => isAlertUnread(alert, cleared)).map((alert) => alert.id),
+    };
+  });
+  const [jobs, setJobs] = useState<api.Order[]>(() => useAlertsStore.getState().inboxJobs ?? []);
+  const [loaded, setLoaded] = useState(() => useAlertsStore.getState().inbox !== null);
   const [loading, setLoading] = useState(true);
+  // A cached inbox already set the sections, so the read that follows it keeps them.
+  const seeded = useRef(loaded);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -87,17 +103,18 @@ export default function NotificationsScreen() {
   const reload = useCallback(async (silent = false) => {
     const current = nextRead();
     setLoading(true);
+    // The jobs are what place each alert on a stage. They never hold the list
+    // back, and a failure there costs the track, not the list.
+    void api.listJobs().then((jobList) => {
+      if (!current()) return;
+      setJobs(jobList);
+      useAlertsStore.getState().rememberInboxJobs(jobList);
+    }, () => {});
     try {
-      // The jobs are what place each alert on a stage. A failure there costs
-      // the track, not the list, so the alerts still arrive without it.
-      const [list, jobList] = await Promise.all([
-        refreshAlerts(),
-        api.listJobs().catch(() => [] as api.Order[]),
-      ]);
+      const list = await refreshAlerts();
       if (!current()) return;
       const state = useAlertsStore.getState();
       const live = visibleAlerts(list, state.deleted);
-      setJobs(jobList);
       setInbox((previous) => {
         const existing = new Set(previous.items.map((item) => item.id));
         return {
@@ -124,7 +141,9 @@ export default function NotificationsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void reload();
+      const silent = seeded.current;
+      seeded.current = false;
+      void reload(silent);
     }, [reload]),
   );
 
@@ -280,12 +299,57 @@ export default function NotificationsScreen() {
 
   const caveat = localOnlyCaveat(localOnly || dismissed.length > 0 || deleted.length > 0);
 
+  // One flat list of section headers and cards, so a card keeps its cell (and
+  // its swipe handler) for as long as its key does.
+  const rows: AlertRow[] = [
+    ...(unread.length ? [{ key: "section:new", kind: "new" as const }] : []),
+    ...unread.map((alert) => ({ key: alert.id, kind: "alert" as const, alert })),
+    ...(read.length ? [{ key: "section:earlier", kind: "earlier" as const }] : []),
+    ...read.map((alert) => ({ key: alert.id, kind: "alert" as const, alert })),
+  ];
+
+  const renderRow = ({ item }: { item: AlertRow }) => {
+    if (item.kind === "alert") return <View className="mt-3">{renderAlert(item.alert)}</View>;
+    if (item.kind === "earlier") {
+      return (
+        <View className={unread.length ? "mt-8" : undefined}>
+          <SectionHeader title="EARLIER" count={read.length} />
+        </View>
+      );
+    }
+    return (
+      <SectionHeader
+        title="NEW"
+        count={unread.length}
+        hint="Swipe a card for Read and Delete, or tap it to open the job."
+        right={
+          markableIds.length > 1 ? (
+            <Pressable
+              onPress={() => void markAll()}
+              accessibilityRole="button"
+              accessibilityLabel={`Mark these ${markableIds.length} alerts read`}
+              className="gg-touch justify-center"
+              style={({ pressed }) => (pressed ? { opacity: 0.6 } : undefined)}
+            >
+              <Text className="text-button text-text-primary">Mark all read</Text>
+            </Pressable>
+          ) : null
+        }
+      />
+    );
+  };
+
   return (
     <View className="gg-screen">
-      <ScrollView
+      <FlatList
         className="flex-1"
         contentContainerClassName="gg-page pb-10 pt-4"
         showsVerticalScrollIndicator={false}
+        data={rows}
+        keyExtractor={(row) => row.key}
+        renderItem={renderRow}
+        // About a screenful. The rest follow in batches once the screen is up.
+        initialNumToRender={8}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -293,104 +357,83 @@ export default function NotificationsScreen() {
             tintColor={colors.textMuted}
           />
         }
-      >
-        <Text className="mb-4 text-body text-text-secondary">
-          New work, production news, and what your jobs have paid.
-        </Text>
+        ListHeaderComponent={
+          <>
+            <Text className="mb-4 text-body text-text-secondary">
+              New work, production news, and what your jobs have paid.
+            </Text>
 
-        {/*
-          The one place in this app that may raise the permission dialog, and
-          the obvious one: a shop reading this screen is reading exactly what
-          push would have put on its lock screen. It draws itself only when
-          there is something to offer — see `pushOffer`.
-        */}
-        <PushEnableCard spacing="below" />
+            {/*
+              The one place in this app that may raise the permission dialog, and
+              the obvious one: a shop reading this screen is reading exactly what
+              push would have put on its lock screen. It draws itself only when
+              there is something to offer — see `pushOffer`.
+            */}
+            <PushEnableCard spacing="below" />
 
-        {/*
-          This phone's own news: a newer GRIDGO and what it brings, or the
-          build that just landed. Local, so it never reaches the unread count.
-        */}
-        <AppUpdateNotices />
+            {/*
+              This phone's own news: a newer GRIDGO and what it brings, or the
+              build that just landed. Local, so it never reaches the unread count.
+            */}
+            <AppUpdateNotices />
 
-        {firstLoad ? (
-          <SkeletonList label="Loading your alerts" count={3} sectioned />
-        ) : null}
+            {firstLoad ? (
+              <SkeletonList label="Loading your alerts" count={3} sectioned />
+            ) : null}
 
-        {error && !loaded ? (
-          <EmptyState
-            title="Alerts are not reachable"
-            body={error}
-            actionLabel="Try again"
-            onAction={() => void reload()}
-          />
-        ) : error ? (
-          <View className="mb-6">
-            <ErrorNotice message={error} onRetry={() => void reload()} />
-          </View>
-        ) : null}
+            {error && !loaded ? (
+              <EmptyState
+                title="Alerts are not reachable"
+                body={error}
+                actionLabel="Try again"
+                onAction={() => void reload()}
+              />
+            ) : error ? (
+              <View className="mb-6">
+                <ErrorNotice message={error} onRetry={() => void reload()} />
+              </View>
+            ) : null}
 
-        {actionError ? (
-          <View className="mb-6">
-            <ErrorNotice message={actionError} />
-          </View>
-        ) : null}
+            {actionError ? (
+              <View className="mb-6">
+                <ErrorNotice message={actionError} />
+              </View>
+            ) : null}
 
-        {loaded && !error && !shown.length ? (
-          <EmptyState
-            title="Nothing to catch up on"
-            body="New work, production news and payout notices land here. Your jobs are the place to act on them."
-            actionLabel="Open jobs"
-            onAction={() => router.push("/(tabs)/jobs")}
-          />
-        ) : null}
+            {loaded && !error && !shown.length ? (
+              <EmptyState
+                title="Nothing to catch up on"
+                body="New work, production news and payout notices land here. Your jobs are the place to act on them."
+                actionLabel="Open jobs"
+                onAction={() => router.push("/(tabs)/jobs")}
+              />
+            ) : null}
+          </>
+        }
+        ListFooterComponent={
+          <>
+            {canClear ? (
+              <View className={shown.length ? "mt-6" : undefined}>
+                <SecondaryButton
+                  label="Clear notifications"
+                  onPress={() => void confirmClearAll()}
+                />
+              </View>
+            ) : null}
 
-        {unread.length ? (
-          <View className="gap-3">
-            <SectionHeader
-              title="NEW"
-              count={unread.length}
-              hint="Swipe a card for Read and Delete, or tap it to open the job."
-              right={
-                markableIds.length > 1 ? (
-                  <Pressable
-                    onPress={() => void markAll()}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Mark these ${markableIds.length} alerts read`}
-                    className="gg-touch justify-center"
-                    style={({ pressed }) => (pressed ? { opacity: 0.6 } : undefined)}
-                  >
-                    <Text className="text-button text-text-primary">Mark all read</Text>
-                  </Pressable>
-                ) : null
-              }
-            />
-            {unread.map(renderAlert)}
-          </View>
-        ) : null}
-
-        {read.length ? (
-          <View className={unread.length ? "mt-8 gap-3" : "gap-3"}>
-            <SectionHeader title="EARLIER" count={read.length} />
-            {read.map(renderAlert)}
-          </View>
-        ) : null}
-
-        {canClear ? (
-          <View className={shown.length ? "mt-6" : undefined}>
-            <SecondaryButton
-              label="Clear notifications"
-              onPress={() => void confirmClearAll()}
-            />
-          </View>
-        ) : null}
-
-        {loaded && shown.length > 0 && caveat ? (
-          <Text className="mt-6 text-caption text-text-muted">{caveat}</Text>
-        ) : null}
-      </ScrollView>
+            {loaded && shown.length > 0 && caveat ? (
+              <Text className="mt-6 text-caption text-text-muted">{caveat}</Text>
+            ) : null}
+          </>
+        }
+      />
     </View>
   );
 }
+
+type AlertRow =
+  | { key: string; kind: "new" | "earlier" }
+  | { key: string; kind: "alert"; alert: api.Notification };
 
 /**
  * The inbox action in the stack header.

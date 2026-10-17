@@ -266,6 +266,44 @@ describe("persisted alert ownership", () => {
   });
 });
 
+describe("the inbox the Alerts screen opens on", () => {
+  afterEach(() => { jest.restoreAllMocks(); setLiveOwner(null); });
+
+  it("remembers what GRIDGO last served", async () => {
+    useAlertsStore.setState({ inbox: null, dismissed: [], deleted: [] });
+    jest.spyOn(api, "listNotifications").mockResolvedValue([alert("a"), alert("b", true)]);
+    await useAlertsStore.getState().refresh();
+    expect(useAlertsStore.getState().inbox?.map((item) => item.id)).toEqual(["a", "b"]);
+  });
+
+  it("keeps the newer read when an older one answers last", async () => {
+    useAlertsStore.setState({ inbox: null, dismissed: [], deleted: [] });
+    let receive!: (items: Notification[]) => void;
+    jest.spyOn(api, "listNotifications")
+      .mockReturnValueOnce(new Promise((resolve) => { receive = resolve; }))
+      .mockResolvedValue([alert("new"), alert("old")]);
+    const earlier = useAlertsStore.getState().refresh();
+    await useAlertsStore.getState().refresh();
+    receive([alert("old")]);
+    await earlier;
+    expect(useAlertsStore.getState().inbox?.map((item) => item.id)).toEqual(["new", "old"]);
+  });
+
+  it("never shows one shop's inbox or jobs to the next", () => {
+    useAlertsStore.setState({ ownerId: "shop_a", inbox: [alert("private")], inboxJobs: [{ id: "ord_a" } as api.Order] });
+    useAlertsStore.getState().bindOwner("shop_b");
+    expect(useAlertsStore.getState().inbox).toBeNull();
+    expect(useAlertsStore.getState().inboxJobs).toBeNull();
+  });
+
+  it("is not written to the phone's storage", () => {
+    const partialize = useAlertsStore.persist.getOptions().partialize!;
+    const saved = partialize({ ...useAlertsStore.getState(), inbox: [alert("a")], inboxJobs: [] });
+    expect(saved).not.toHaveProperty("inbox");
+    expect(saved).not.toHaveProperty("inboxJobs");
+  });
+});
+
 describe("shared alert refresh ordering", () => {
   afterEach(() => { jest.restoreAllMocks(); setLiveOwner(null); });
 
