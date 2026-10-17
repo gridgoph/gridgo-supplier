@@ -480,6 +480,55 @@ describe("jobs the shop let go or that wait on a deadline answer", () => {
     const order = job({ id: "o1", state: "supplier_assigned" });
     expect(findAction(order, "decline")?.targetState).toBeNull();
   });
+
+  it("lets a refund speak over a recovery, with or without a readiness list", () => {
+    const readiness = {
+      transitionReadiness: { ready_for_dispatch: { allowed: true, missing: [] } },
+    } as const;
+    for (const extra of [{}, readiness]) {
+      const paused = job({
+        id: "o1",
+        state: "production",
+        refundHold: true,
+        shopRecovery: { id: "e1", status: "awaiting_client" },
+        shopAcceptance: { ...window, status: "cancelled" },
+        ...extra,
+      });
+      expect(actionsForJob(paused)).toEqual([]);
+      expect(presentJobStatus(paused).label).toBe("Paused for refund");
+    }
+  });
+
+  it("lets a held deadline speak over a failed counter check", () => {
+    const order = job({
+      id: "o1",
+      state: "rider_assigned",
+      pickupChecklist: {
+        status: "failed_escalated",
+        checks: [],
+        evidenceFileIds: [],
+        failureNote: null,
+        completedAt: null,
+        completedBy: null,
+        escalationId: "esc",
+      },
+      rescheduleRequest: {
+        id: "resched_1",
+        orderId: "o1",
+        reason: "Laminator",
+        status: "declined",
+        requestedAt: "2026-10-05T06:00:00.000Z",
+        expiresAt: "2026-10-06T06:00:00.000Z",
+        answeredAt: "2026-10-05T08:00:00.000Z",
+        resolution: null,
+        workHeld: true,
+        originalReadyBy: "2026-10-07T09:00:00.000Z",
+        proposedReadyBy: "2026-10-09T09:00:00.000Z",
+      },
+    });
+    expect(actionsForJob(order)).toEqual([]);
+    expect(presentJobStatus(order).label).toBe("Paused");
+  });
 });
 
 describe("the newer handover (rider packs, docs/SHOP_HANDOVER_API.md)", () => {
