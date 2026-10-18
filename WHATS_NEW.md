@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.288 (New feature)
+
+- New Performance page: late-finish notices, warnings, on-time rate and Top Pick. Warnings only, no money taken.
+
 ## 1.0.283 (New feature)
 
 - Message the client about a job through GRIDGO, and see exactly what the client approved.
