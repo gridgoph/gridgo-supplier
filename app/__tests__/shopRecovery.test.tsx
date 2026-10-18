@@ -169,7 +169,7 @@ describe("cancelling an accepted job", () => {
     await render(<CancelJobScreen />);
     await fireEvent.press(await screen.findByText("A machine broke down"));
     await fireEvent.press(screen.getByText("Cancel job"));
-    await waitFor(() => expect(cancelJob).toHaveBeenCalledWith("ord_1", "A machine broke down"));
+    await waitFor(() => expect(cancelJob).toHaveBeenCalledWith("ord_1", "A machine broke down", "machine_down"));
     expect(askConfirm).toHaveBeenCalledWith(expect.objectContaining({ question: "Cancel Barangay tarpaulin?" }));
     expect(await screen.findByText("Cancelled")).toBeTruthy();
     expect(screen.getByText("It is on your shop's record")).toBeTruthy();
@@ -214,7 +214,11 @@ describe("declining a new job", () => {
     await fireEvent.press(await screen.findByText("Capacity is full for this date"));
     await fireEvent.press(screen.getByText("Decline job"));
     await waitFor(() =>
-      expect(declineJob).toHaveBeenCalledWith("ord_1", "Declined — shop capacity is full for the requested date"),
+      expect(declineJob).toHaveBeenCalledWith(
+        "ord_1",
+        "Declined — shop capacity is full for the requested date",
+        "capacity_full",
+      ),
     );
     expect(await screen.findByText(/on your shop's record as passed on/)).toBeTruthy();
   });

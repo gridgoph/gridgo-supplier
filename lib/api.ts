@@ -1343,23 +1343,26 @@ export async function listIssues(orderId?: string): Promise<Issue[]> {
 
 /**
  * Pass on a newly assigned job. The reason is required and goes on the shop's
- * record (gridgo-api `docs/SHOP_RECOVERY_API.md`).
+ * record (gridgo-api `docs/SHOP_RECOVERY_API.md`); `reasonCode` is the option
+ * the shop picked, kept on its Performance record
+ * (`docs/SUPPLIER_PERFORMANCE_API.md`).
  */
-export async function declineJob(orderId: string, reason: string): Promise<void> {
+export async function declineJob(orderId: string, reason: string, reasonCode?: string): Promise<void> {
   await request(`/orders/${orderId}/decline`, {
     method: "POST",
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify(reasonCode ? { reason, reasonCode } : { reason }),
   });
 }
 
 /**
  * Give back a job the shop already accepted, at any stage before the rider
- * collects it. The reason is required and goes on the shop's record.
+ * collects it. The reason is required and goes on the shop's record, with the
+ * picked option as `reasonCode`.
  */
-export async function cancelJob(orderId: string, reason: string): Promise<void> {
+export async function cancelJob(orderId: string, reason: string, reasonCode?: string): Promise<void> {
   await request(`/orders/${orderId}/shop-cancel`, {
     method: "POST",
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify(reasonCode ? { reason, reasonCode } : { reason }),
   });
 }
 
@@ -1702,6 +1705,16 @@ export async function listCatalogItems(query: CatalogListQuery = {}): Promise<un
  */
 export async function getMyProductionLapses(): Promise<unknown> {
   return request<unknown>("/me/production-lapses");
+}
+
+/**
+ * The shop's warnings, late-finish notices, on-time rate and Top Pick
+ * standing over the last 30 days (gridgo-api
+ * `docs/SUPPLIER_PERFORMANCE_API.md`). Read only through
+ * `normalizePerformance` in `lib/performance.ts`.
+ */
+export async function getMyPerformance(): Promise<unknown> {
+  return request<unknown>("/me/performance");
 }
 
 /**
