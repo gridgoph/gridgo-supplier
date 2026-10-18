@@ -110,6 +110,7 @@ export type CancelReasonId =
   | "shop_closing"
   | "other";
 
+/** `id` is sent as the cancellation's `reasonCode` and kept on the shop's record, so it never changes. */
 export type CancelReason = { id: CancelReasonId; label: string };
 
 export const CANCEL_REASONS: readonly CancelReason[] = [

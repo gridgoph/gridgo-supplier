@@ -15,6 +15,7 @@ export type DeclineReasonId =
   | "special_instructions";
 
 export type DeclineReason = {
+  /** Sent as the decline's `reasonCode` and kept on the shop's record, so it never changes. */
   id: DeclineReasonId;
   /** What the shop taps. */
   label: string;

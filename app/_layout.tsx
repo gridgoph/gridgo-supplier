@@ -530,6 +530,13 @@ function RootStack({ introDone }: { introDone: boolean }) {
           }}
         />
         <Stack.Screen
+          name="performance"
+          options={{
+            title: "Performance",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        <Stack.Screen
           name="capacity"
           options={{
             title: "Capacity",
