@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import {
+  Clock,
   Lock,
   Mic,
   MicOff,
@@ -125,12 +126,9 @@ export default function CallScreen() {
   // Say each change of state to a screen reader, as a sighted shop sees it.
   useEffect(() => {
     if (!snapshot) return;
-    const words =
-      snapshot.phase === "ended" && snapshot.endReason
-        ? endCopy(snapshot.endReason, snapshot.otherName).title
-        : phaseLabel(snapshot.phase);
-    AccessibilityInfo.announceForAccessibility(words);
-  }, [snapshot?.phase, snapshot?.endReason, snapshot?.otherName, snapshot]);
+    const ended = snapshot.phase === "ended" && snapshot.endReason ? endCopy(snapshot.endReason, snapshot.otherName, snapshot.endedByMe) : null;
+    AccessibilityInfo.announceForAccessibility(ended ? `${ended.title}. ${ended.body}` : phaseLabel(snapshot.phase));
+  }, [snapshot?.phase, snapshot?.endReason, snapshot?.otherName, snapshot?.endedByMe, snapshot]);
 
   // The shop's own hang-up or decline closes the screen; anything else stays to be read.
   useEffect(() => {
@@ -167,7 +165,16 @@ export default function CallScreen() {
           </Text>
           <Text className="mt-1 text-center text-body text-text-secondary">Rider collecting this job</Text>
           <View className="mt-4 min-h-8 items-center" accessibilityLiveRegion="polite">
-            {snapshot ? <CallStatus phase={snapshot.phase} connectedAt={snapshot.connectedAt} endReason={snapshot.endReason} name={displayName} durationMs={snapshot.durationMs} /> : null}
+            {snapshot ? (
+              <CallStatus
+                phase={snapshot.phase}
+                connectedAt={snapshot.connectedAt}
+                endReason={snapshot.endReason}
+                endedByMe={snapshot.endedByMe}
+                name={displayName}
+                durationMs={snapshot.durationMs}
+              />
+            ) : null}
           </View>
         </View>
 
@@ -266,12 +273,14 @@ function CallStatus({
   phase,
   connectedAt,
   endReason,
+  endedByMe,
   name,
   durationMs,
 }: {
   phase: CallPhase;
   connectedAt: number | null;
   endReason: EndReason | null;
+  endedByMe: boolean;
   name: string;
   durationMs: number | null;
 }) {
@@ -279,22 +288,7 @@ function CallStatus({
   const elapsed = useElapsed(phase === "connected" || phase === "reconnecting" ? connectedAt : null);
 
   if (phase === "permission" || phase === "unsupported") return null;
-  if (phase === "ended") {
-    const copy = endCopy(endReason ?? "ended", name, durationMs ? formatCallDuration(durationMs) : null);
-    const Icon = END_ICON[endReason ?? "ended"];
-    const tone = endReason === "network_lost" || endReason === "failed" ? colors.warning : colors.textPrimary;
-    return (
-      <View className="items-center gap-2 px-4">
-        <View className="flex-row items-center gap-2">
-          <Icon size={18} color={tone} strokeWidth={2} aria-hidden />
-          <Text className="text-h3 text-text-primary" testID="call-end-title">
-            {copy.title}
-          </Text>
-        </View>
-        <Text className="max-w-80 text-center text-body text-text-secondary">{copy.body}</Text>
-      </View>
-    );
-  }
+  if (phase === "ended") return <EndedStatus reason={endReason ?? "ended"} endedByMe={endedByMe} name={name} durationMs={durationMs} />;
   const Icon = PHASE_ICON[phase];
   const tone = phase === "connected" ? colors.success : phase === "reconnecting" ? colors.warning : colors.textSecondary;
   const showTimer = phase === "connected" && elapsed !== null;
@@ -314,6 +308,43 @@ function CallStatus({
           {phaseLabel(phase)}
         </Text>
       )}
+    </View>
+  );
+}
+
+/**
+ * How the call ended, who ended it, and how long it lasted. A lost connection
+ * wears the warning colour, so it never reads like a call someone hung up.
+ */
+function EndedStatus({ reason, endedByMe, name, durationMs }: { reason: EndReason; endedByMe: boolean; name: string; durationMs: number | null }) {
+  const colors = useThemeColors();
+  const copy = endCopy(reason, name, endedByMe);
+  const Icon = END_ICON[reason];
+  const trouble = reason === "network_lost" || reason === "failed";
+  return (
+    <View className="items-center gap-2 px-4" testID="call-ended">
+      <View className="flex-row items-center gap-2">
+        <Icon size={18} color={trouble ? colors.warning : colors.textPrimary} strokeWidth={2} aria-hidden />
+        <Text className="text-h3 text-text-primary" testID="call-end-title">
+          {copy.title}
+        </Text>
+      </View>
+      <Text className="max-w-80 text-center text-body text-text-secondary" testID="call-end-body">
+        {copy.body}
+      </Text>
+      {durationMs ? (
+        <View
+          className="mt-1 flex-row items-center gap-1.5 rounded-pill bg-surface-variant px-3 py-1"
+          accessible
+          accessibilityLabel={`Call lasted ${spokenDuration(durationMs)}`}
+          testID="call-end-duration"
+        >
+          <Clock size={14} color={colors.textMuted} strokeWidth={2} aria-hidden />
+          <Text className="text-caption text-text-secondary" style={{ fontVariant: ["tabular-nums"] }}>
+            {`Lasted ${formatCallDuration(durationMs)}`}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }

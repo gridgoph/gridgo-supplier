@@ -125,12 +125,47 @@ describe("call screen", () => {
     ["declined", "Call declined"],
     ["no_answer", "Not answered"],
     ["missed", "Missed call from Jun"],
-    ["network_lost", "Call dropped"],
+    ["network_lost", "Connection lost"],
     ["not_available", "Calling has closed"],
   ] as const)("gives a clear reason when the call ends: %s", async (endReason, title) => {
     await renderWith({ phase: "ended", endReason });
     expect(screen.getByTestId("call-end-title").props.children).toBe(title);
     expect(screen.getByText("Message Jun")).toBeTruthy();
+  });
+
+  it("says the rider ended the call, how long it lasted, and offers to call again", async () => {
+    await renderWith({ phase: "ended", endReason: "ended", endedByMe: false, durationMs: 151_000 });
+    expect(screen.getByTestId("call-end-title").props.children).toBe("Call ended");
+    expect(screen.getByText("The rider ended the call.")).toBeTruthy();
+    expect(screen.getByText("Lasted 2:31")).toBeTruthy();
+    expect(screen.getByLabelText("Call lasted 2 minutes 31 seconds")).toBeTruthy();
+    expect(screen.getByText("Call again")).toBeTruthy();
+    expect(screen.getByText("Close")).toBeTruthy();
+    expect(screen.queryByText(/connection/i)).toBeNull();
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it("keeps a lost connection apart from a call someone ended", async () => {
+    await renderWith({ phase: "ended", endReason: "network_lost", durationMs: 40_000 });
+    expect(screen.getByTestId("call-end-title").props.children).toBe("Connection lost");
+    expect(screen.getByText(/before either of you hung up/)).toBeTruthy();
+    expect(screen.getByText("Lasted 0:40")).toBeTruthy();
+    expect(screen.queryByText("The rider ended the call.")).toBeNull();
+  });
+
+  it("says the shop ended it, then closes", async () => {
+    jest.useFakeTimers();
+    try {
+      await renderWith({ phase: "ended", endReason: "ended", endedByMe: true, durationMs: 20_000 });
+      expect(screen.getByText("You ended the call.")).toBeTruthy();
+      expect(screen.queryByText("Call again")).toBeNull();
+      await act(async () => {
+        jest.advanceTimersByTime(1500);
+      });
+      expect(mockBack).toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("offers to call back after a missed call", async () => {

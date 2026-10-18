@@ -144,8 +144,10 @@ describe("what the call screen says", () => {
     expect(endCopy("declined", "Jun").title).toBe("Call declined");
     expect(endCopy("no_answer", "Jun").title).toBe("Not answered");
     expect(endCopy("missed", "Jun").title).toBe("Missed call from Jun");
-    expect(endCopy("ended", "Jun", "2:31").body).toBe("You talked for 2:31.");
-    expect(endCopy("network_lost", "Jun").title).toBe("Call dropped");
+    expect(endCopy("ended", "Jun")).toMatchObject({ title: "Call ended", body: "The rider ended the call.", canCallAgain: true });
+    expect(endCopy("ended", "Jun", true)).toMatchObject({ title: "Call ended", body: "You ended the call." });
+    expect(endCopy("network_lost", "Jun")).toMatchObject({ title: "Connection lost", canCallAgain: true });
+    expect(endCopy("network_lost", "Jun").body).not.toMatch(/ended the call/);
     expect(endCopy("not_available", "Jun").canCallAgain).toBe(false);
   });
 
