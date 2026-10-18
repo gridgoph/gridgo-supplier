@@ -1,6 +1,6 @@
 import type { User } from "@/lib/api";
 import type { LegalGateStatus } from "@/lib/legal";
-import { isSignedIn, type IdentityState } from "@/store/session";
+import { isSignedIn, signedOutWithNotice, type IdentityState } from "@/store/session";
 
 export type LaunchHref =
   | "/access"
@@ -30,7 +30,7 @@ export function launchHref(
   legal: LegalGateStatus = "clear",
 ): LaunchHref {
   if (identity.kind === "mismatch" || identity.kind === "error") return "/access";
-  if (identity.kind === "signed_out" && identity.reason === "session_ended") return "/(auth)/login";
+  if (signedOutWithNotice(identity)) return "/(auth)/login";
   if (!isSignedIn(user)) return "/(auth)/welcome";
   if (legal === "blocked") return "/legal/review";
   return "/(tabs)/home";

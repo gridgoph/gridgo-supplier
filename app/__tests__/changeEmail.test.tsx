@@ -58,7 +58,7 @@ async function typeAddress(value: string) {
 }
 
 async function answerCode(digits: string) {
-  await fireEvent.changeText(await screen.findByLabelText("6-digit job number"), digits);
+  await fireEvent.changeText(await screen.findByLabelText("6-digit code"), digits);
   await fireEvent.press(screen.getByRole("button", { name: "Use this address" }));
 }
 

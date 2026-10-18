@@ -136,7 +136,7 @@ describe("signup verify then enroll", () => {
     });
   });
 
-  it("verifies the emailed job number, enrolls, and opens Home", async () => {
+  it("verifies the emailed code, enrolls, and opens Home", async () => {
     await render(<ReviewStep />);
     await agree();
 
@@ -149,7 +149,7 @@ describe("signup verify then enroll", () => {
       expect(screen.queryByLabelText("Verification code")).toBeNull();
     });
 
-    await fireEvent.changeText(screen.getByLabelText("6-digit job number"), "148203");
+    await fireEvent.changeText(screen.getByLabelText("6-digit code"), "148203");
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Verify email" })).toBeEnabled();
     });
