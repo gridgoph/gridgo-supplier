@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 
 import * as api from "@/lib/api";
+import { ApiError } from "@/lib/apiErrors";
 
 export const SUPPORT_CHAT_IMAGE_PURPOSE = "support_chat_image" as const;
 export const SUPPORT_CHAT_IMAGE_MAX_BYTES = 15 * 1024 * 1024;
@@ -50,17 +51,16 @@ export async function pickChatImages(): Promise<Array<{
   }));
 }
 
-export async function uploadChatImage(
-  asset: {
-    uri: string;
-    name: string;
-    mimeType: string;
-  },
-  // Operations chat by default; the pick-up chat with a rider names its own.
-  purpose: string = SUPPORT_CHAT_IMAGE_PURPOSE,
-): Promise<string> {
+type ChatUpload = { uri: string; name: string; mimeType: string };
+
+/** Sends one file to `POST /files`. Rejects only when it never reached GRIDGO. */
+async function postChatFile(
+  asset: ChatUpload,
+  purpose: string,
+  noun: string,
+): Promise<{ status: number; data: { file?: { fileId?: unknown }; error?: unknown } | null }> {
   const token = await api.getAuthToken();
-  if (!token) throw new Error("Sign in again to send this photo.");
+  if (!token) throw new Error(`Sign in again to send this ${noun}.`);
   const form = new FormData();
   form.append("purpose", purpose);
   if (Platform.OS === "web") {
@@ -81,19 +81,40 @@ export async function uploadChatImage(
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.setRequestHeader("X-GRIDGO-Role", "supplier");
     xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText });
-    xhr.onerror = () => reject(new Error("That photo did not reach GRIDGO. Try again."));
-    xhr.ontimeout = () => reject(new Error("That photo took too long to send. Try again."));
-    xhr.onabort = () => reject(new Error("The photo upload was cancelled. Try again."));
+    xhr.onerror = () => reject(new Error(`That ${noun} did not reach GRIDGO. Try again.`));
+    xhr.ontimeout = () => reject(new Error(`That ${noun} took too long to send. Try again.`));
+    xhr.onabort = () => reject(new Error(`The ${noun} upload was cancelled. Try again.`));
     xhr.send(form);
   });
-  let data: { file?: { fileId?: unknown } } | null = null;
+  let data: { file?: { fileId?: unknown }; error?: unknown } | null = null;
   try {
-    data = JSON.parse(response.text) as { file?: { fileId?: unknown } } | null;
+    data = JSON.parse(response.text) as typeof data;
   } catch {
     // A malformed response cannot confirm storage.
   }
-  if (response.status !== 201 || typeof data?.file?.fileId !== "string" || !data.file.fileId) {
+  return { status: response.status, data };
+}
+
+export async function uploadChatImage(
+  asset: ChatUpload,
+  // Operations chat by default; the pick-up chat with a rider names its own.
+  purpose: string = SUPPORT_CHAT_IMAGE_PURPOSE,
+): Promise<string> {
+  const { status, data } = await postChatFile(asset, purpose, "photo");
+  if (status !== 201 || typeof data?.file?.fileId !== "string" || !data.file.fileId) {
     throw new Error("That photo did not reach GRIDGO. Try again.");
   }
   return data.file.fileId;
+}
+
+/**
+ * A photo or a PDF for the conversation with the client. A refusal keeps
+ * GRIDGO's code (`ApiError`), because "too large", "not a PDF" and "could not
+ * clean this photo" each need their own sentence (`clientChatSendError`).
+ */
+export async function uploadChatFile(asset: ChatUpload, purpose: string): Promise<string> {
+  const { status, data } = await postChatFile(asset, purpose, "file");
+  if (status === 201 && typeof data?.file?.fileId === "string" && data.file.fileId) return data.file.fileId;
+  if (status >= 400 && status < 500) throw new ApiError(status, data);
+  throw new Error("That file did not reach GRIDGO. Try again.");
 }

@@ -8,6 +8,14 @@ import type { PublishedFileFormat } from "@/data/fileFormats";
 import { readPublishedFormats } from "@/lib/fileFormatResolve";
 import { parseCall, parseCalls, type OrderCall } from "@/lib/orderCall";
 import { pickupChatOf, type PickupChatMessage, type PickupChatSummary } from "@/lib/pickupChat";
+import { parseApprovalProofs, type ApprovalProofRecord } from "@/lib/approvalProof";
+import {
+  parseClientChatMessage,
+  parseClientChatThread,
+  type ClientChatMessage,
+  type ClientChatThread,
+  type ReportReason,
+} from "@/lib/clientChat";
 import { parseRiderApproach, type RiderApproach } from "@/lib/riderApproach";
 import { pushTokenProvider, type DevicePlatform, type PushTokenProvider } from "@/lib/push";
 import { installChannel } from "@/lib/buildDistribution";
@@ -454,6 +462,16 @@ export type Order = {
    * keeps one. Read only through `pickupChatOf` in `lib/pickupChat.ts`.
    */
   pickupChat?: unknown;
+  /**
+   * The conversation with the client through GRIDGO, once the shop accepts.
+   * Read only through `clientChatOf` in `lib/clientChat.ts`.
+   */
+  clientShopChat?: unknown;
+  /**
+   * What the client approved: the requirement and a summary of each record.
+   * Read only through `lib/approvalProof.ts`.
+   */
+  approvalProof?: unknown;
   timeline: {
     at: string;
     state: string;
@@ -2328,6 +2346,56 @@ export async function sendPickupMessage(
     },
   );
   return { chat: pickupChatOf({ pickupChat: result.chat }), message: result.message };
+}
+
+/**
+ * One page of this job's conversation with the client (`lib/clientChat.ts`),
+ * oldest first. `after` is the last message already held; reading marks the
+ * returned page read on GRIDGO's side.
+ */
+export async function getClientChat(
+  orderId: string,
+  after?: string | null,
+): Promise<{ chat: ClientChatThread | null; messages: ClientChatMessage[]; nextAfter: string | null }> {
+  const query = new URLSearchParams({ limit: "100" });
+  if (after) query.set("after", after);
+  const result = await request<{ chat?: unknown; messages?: unknown; nextAfter?: unknown }>(
+    `/orders/${encodeURIComponent(orderId)}/client-shop-chat?${query.toString()}`,
+  );
+  return {
+    chat: parseClientChatThread(result.chat),
+    messages: Array.isArray(result.messages)
+      ? result.messages.map(parseClientChatMessage).filter((row): row is ClientChatMessage => row !== null)
+      : [],
+    nextAfter: typeof result.nextAfter === "string" && result.nextAfter ? result.nextAfter : null,
+  };
+}
+
+/** `attachmentFileIds` are `client_shop_chat_attachment` uploads; one may be the whole message. */
+export async function sendClientChatMessage(
+  orderId: string,
+  body: string,
+  attachmentFileIds: string[] = [],
+): Promise<{ chat: ClientChatThread | null; message: ClientChatMessage | null }> {
+  const result = await request<{ chat?: unknown; message?: unknown }>(
+    `/orders/${encodeURIComponent(orderId)}/client-shop-chat/messages`,
+    { method: "POST", body: JSON.stringify({ body, attachmentFileIds }) },
+  );
+  return { chat: parseClientChatThread(result.chat), message: parseClientChatMessage(result.message) };
+}
+
+/** One report per message per shop; sending it again keeps the first reason. */
+export async function reportClientChatMessage(orderId: string, messageId: string, reason: ReportReason): Promise<void> {
+  await request<{ ok?: boolean }>(
+    `/orders/${encodeURIComponent(orderId)}/client-shop-chat/messages/${encodeURIComponent(messageId)}/reports`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
+}
+
+/** The client's approval records for this job (`lib/approvalProof.ts`). */
+export async function getApprovalProof(orderId: string): Promise<ApprovalProofRecord[]> {
+  const result = await request<{ approvalProofs?: unknown }>(`/orders/${encodeURIComponent(orderId)}/approval-proof`);
+  return parseApprovalProofs(result.approvalProofs);
 }
 
 /* --------------------------------------------------------------------------

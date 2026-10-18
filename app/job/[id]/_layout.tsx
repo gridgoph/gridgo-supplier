@@ -51,6 +51,7 @@ export default function JobLayout() {
       <Stack.Screen name="self-qc" options={{ title: "Packaging" }} />
       <Stack.Screen name="handoff" options={{ title: "Packaging ready" }} />
       <Stack.Screen name="messages" options={{ title: "Rider messages" }} />
+      <Stack.Screen name="client-messages" options={{ title: "Client messages" }} />
     </Stack>
   );
 }

@@ -79,6 +79,9 @@
   --color-tour-scrim: rgb(0 0 0 / 0.55);
   --color-tour-ring: #ffffff;
 
+  /* Paper: a signature drawn as it was signed, the same in both themes */
+  --color-paper: #ffffff;
+
   /* -- Type ---------------------------------------------------------------
      Satoshi carries all UI type. It ships as one file per cut, and React
      Native resolves a font by family name alone — `font-weight: 700` will
@@ -184,6 +187,7 @@
     --color-scrim: rgb(0 0 0 / 0.6);
     --color-tour-scrim: rgb(0 0 0 / 0.72);
     --color-tour-ring: #f0f0f0;
+    --color-paper: #ffffff;
   }
 }
 

@@ -2,25 +2,33 @@ name: iOS TestFlight
 
 # Builds the iPhone app and uploads it to TestFlight. Manual only.
 #
-# An iPhone build needs Xcode on macOS and these runners are Linux, so the
-# build itself runs on EAS Build (Expo's macOS machines) with the `production`
-# profile in eas.json: an App Store build whose buildNumber EAS raises by one
-# every time. EAS Submit then uploads that build to App Store Connect, where it
-# reaches TestFlight's internal testers once Apple has processed it. Nothing
-# here touches the App Store listing or submits for review.
+# The build runs on this GitHub-hosted Mac, not on EAS Build: the repository
+# is public, so macOS minutes cost nothing and have no monthly cap, while the
+# Expo plan's iOS builds run out. `eas build --local` still drives it with the
+# `production` profile in eas.json, so EAS keeps what it owns: the signing
+# certificate and provisioning profile (downloaded for the build) and the
+# build number (`appVersionSource: remote` + `autoIncrement`, raised by one on
+# EAS before every build). Nothing here starts a build on Expo's servers.
+# `xcrun altool` then uploads the IPA to App Store Connect, where it reaches
+# TestFlight's internal testers once Apple has processed it. Nothing here
+# touches the App Store listing or submits for review.
 #
-# The build machine reads its configuration from the EAS project's
-# `production` environment, never from this runner:
+# Configuration:
 # - EXPO_PUBLIC_API_URL, EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and
-#   EXPO_PUBLIC_CARTO_API_KEY are copied there from the repository secrets the
-#   Android release already uses, so both platforms ship the same values.
-# - GOOGLE_SERVICE_INFO_PLIST is an EAS *file* variable holding the Firebase
-#   file for iPhone push. It is never in this repository or in GitHub.
-# app.config.ts refuses the build on the EAS machine if any of them is missing.
+#   EXPO_PUBLIC_CARTO_API_KEY are copied to the EAS project's `production`
+#   environment from the repository secrets the Android release already uses,
+#   so both platforms ship the same values. A local build reads them back from
+#   there, because they are Sensitive rather than Secret.
+# - GOOGLE_SERVICE_INFO_PLIST is the Firebase file for iPhone push. The EAS
+#   copy is a Secret file variable, which only Expo's own builders can read, so
+#   this runner decodes it from GOOGLE_SERVICE_INFO_PLIST_BASE64 into a mode-600
+#   file under $RUNNER_TEMP and names that path. It is never in this repository.
+# app.config.ts refuses the build if any of them is missing.
 #
-# The App Store Connect API key lets EAS make the signing certificate and
-# provisioning profile and upload the build. It is written to a mode-600 file
-# under $RUNNER_TEMP, never printed, and removed when the job ends.
+# The App Store Connect API key lets EAS check the signing credentials and
+# lets altool upload. It is written to a mode-600 file under $RUNNER_TEMP,
+# never printed, and removed with the Firebase file and the IPA when the job
+# ends.
 
 on:
   workflow_dispatch:
@@ -31,7 +39,7 @@ on:
         default: true
 
 # One iPhone build at a time; a second run waits rather than cancelling one
-# that is already on EAS.
+# that already holds a build number.
 concurrency:
   group: ios-testflight-${{ github.ref }}
   cancel-in-progress: false
@@ -42,13 +50,17 @@ permissions:
 jobs:
   testflight:
     name: iPhone build and TestFlight upload
-    runs-on: ubuntu-latest
-    # The free EAS queue can hold a build for a long time before it starts.
-    timeout-minutes: 300
+    # Expo SDK 57 needs Xcode 26.4 or later; macos-26 carries 26.4.1 to 26.6.
+    runs-on: macos-26
+    # A clean build is about half an hour; this is room for a slow pod install.
+    timeout-minutes: 90
     env:
       # Pinned with the Android Play upload, so a new eas-cli cannot change
-      # what this job builds or uploads.
+      # what this job builds.
       EAS_CLI: eas-cli@24.12.1
+      # Chosen explicitly so an image update cannot change the compiler under
+      # a release. Any installed 26.4+ satisfies SDK 57.
+      XCODE_APP: /Applications/Xcode_26.6.app
       EXPO_APPLE_TEAM_ID: G8SXSQ49F8
       EXPO_APPLE_TEAM_TYPE: INDIVIDUAL
     steps:
@@ -61,6 +73,12 @@ jobs:
 
       - run: npm ci
 
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+
       - name: Check the secrets
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -72,11 +90,13 @@ jobs:
           EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
           EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY }}
           EXPO_PUBLIC_CARTO_API_KEY: ${{ secrets.EXPO_PUBLIC_CARTO_API_KEY }}
+          GOOGLE_SERVICE_INFO_PLIST_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
         run: |
           set -euo pipefail
           missing=""
           for name in EXPO_TOKEN ASC_API_KEY_P8 ASC_KEY_ID ASC_ISSUER_ID \
-            EXPO_PUBLIC_API_URL EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY EXPO_PUBLIC_CARTO_API_KEY; do
+            EXPO_PUBLIC_API_URL EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY EXPO_PUBLIC_CARTO_API_KEY \
+            GOOGLE_SERVICE_INFO_PLIST_BASE64; do
             [ -n "${!name:-}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
@@ -96,19 +116,45 @@ jobs:
       - name: Check the app configuration
         run: npx expo config --type public > /dev/null
 
+      # altool finds a key only as AuthKey_<key id>.p8 in API_PRIVATE_KEYS_DIR.
       - name: Stage the App Store Connect key
         env:
           ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
         run: |
           set -euo pipefail
           umask 077
-          key="$RUNNER_TEMP/asc_api_key.p8"
+          dir="$RUNNER_TEMP/private_keys"
+          mkdir -p "$dir"
+          key="$dir/AuthKey_$ASC_KEY_ID.p8"
           printf '%s\n' "$ASC_API_KEY_P8" > "$key"
           echo "EXPO_ASC_API_KEY_PATH=$key" >> "$GITHUB_ENV"
+          echo "API_PRIVATE_KEYS_DIR=$dir" >> "$GITHUB_ENV"
 
-      # The build runs on EAS, which never sees this runner's environment. The
-      # values are public (they are inlined into the app), so they are set as
-      # sensitive variables, which keeps them out of EAS logs.
+      # A local build cannot read the EAS Secret file variable, so the file
+      # comes from GitHub. Its identifiers are masked before anything else can
+      # print them, and a file for another app is refused.
+      - name: Stage the Firebase file
+        env:
+          GOOGLE_SERVICE_INFO_PLIST_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          plist="$RUNNER_TEMP/GoogleService-Info.plist"
+          printf '%s' "$GOOGLE_SERVICE_INFO_PLIST_BASE64" | base64 --decode > "$plist"
+          for field in API_KEY GCM_SENDER_ID GOOGLE_APP_ID PROJECT_ID; do
+            value="$(plutil -extract "$field" raw -o - "$plist" 2>/dev/null || true)"
+            [ -z "$value" ] || echo "::add-mask::$value"
+          done
+          if [ "$(plutil -extract BUNDLE_ID raw -o - "$plist" 2>/dev/null || true)" != "ph.gridgo.supplier" ]; then
+            echo "::error::GOOGLE_SERVICE_INFO_PLIST_BASE64 is not a Firebase file for ph.gridgo.supplier"
+            exit 1
+          fi
+          echo "GOOGLE_SERVICE_INFO_PLIST=$plist" >> "$GITHUB_ENV"
+
+      # The values are public (they are inlined into the app), so they are set
+      # as sensitive variables: kept out of EAS logs, yet readable by the local
+      # build below.
       - name: Copy the public configuration to EAS
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -123,64 +169,81 @@ jobs:
             echo "Set $name on EAS (production)"
           done
 
-      - name: Build the iPhone app on EAS
-        id: build
+      - name: Build the iPhone app on this Mac
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          EAS_LOCAL_BUILD_WORKINGDIR: ${{ runner.temp }}/eas-build
         run: |
           set -euo pipefail
+          ipa="$RUNNER_TEMP/gridgo-supplier.ipa"
           npx --yes "$EAS_CLI" build --platform ios --profile production \
-            --non-interactive --wait --json > "$RUNNER_TEMP/build.json"
-          BUILD_JSON="$RUNNER_TEMP/build.json" node <<'NODE'
+            --local --non-interactive --output "$ipa"
+          echo "IPA=$ipa" >> "$GITHUB_ENV"
+
+      # Read from the IPA itself, so the summary and the release notice name
+      # exactly what is uploaded.
+      - name: Read the build
+        id: build
+        run: |
+          set -euo pipefail
+          info="$RUNNER_TEMP/Info.plist"
+          unzip -p "$IPA" 'Payload/*.app/Info.plist' > "$info"
+          APP_VERSION="$(plutil -extract CFBundleShortVersionString raw -o - "$info")"
+          BUILD_NUMBER="$(plutil -extract CFBundleVersion raw -o - "$info")"
+          BUNDLE_ID="$(plutil -extract CFBundleIdentifier raw -o - "$info")"
+          IPA_BYTES="$(wc -c < "$IPA" | tr -d ' ')"
+          export APP_VERSION BUILD_NUMBER BUNDLE_ID IPA_BYTES
+          node <<'NODE'
             const fs = require("fs");
-            const builds = JSON.parse(fs.readFileSync(process.env.BUILD_JSON, "utf8"));
-            const build = Array.isArray(builds) ? builds[0] : builds;
-            // app.json's iPhone version is MAJOR.MINOR.0 and EAS raises
-            // only the build number, so the release notice names
-            // MAJOR.MINOR.<build number>: the Android rule, and a new version
-            // for every upload (GRIDGO sends each version once).
-            const line = /^(\d+)\.(\d+)\./.exec(build.appVersion ?? "");
-            const number = String(build.appBuildVersion ?? "");
-            const version = line && /^[1-9]\d*$/.test(number) ? `${line[1]}.${line[2]}.${number}` : "";
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `id=${build.id}\nversion=${version}\n`);
+            const { APP_VERSION: version, BUILD_NUMBER: number, BUNDLE_ID: bundleId, IPA_BYTES: bytes } = process.env;
+            // Every iPhone build is app.json's version and only the build
+            // number rises, so the release notice is MAJOR.MINOR.<build number>,
+            // the way the Android builds count. Announcing app.json's version
+            // would be sent once and then refused as a repeat.
+            const line = /^(\d+)\.(\d+)\./.exec(version ?? "");
+            const announce = line && /^[1-9]\d{0,8}$/.test(number ?? "") ? `${line[1]}.${line[2]}.${number}` : "";
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, [
+              `version=${version}`,
+              `build_number=${number}`,
+              `bundle_id=${bundleId}`,
+              `announce_version=${announce}`,
+              "",
+            ].join("\n"));
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
               "### GRIDGO Supplier iPhone build",
               "",
               "| | |",
               "|---|---|",
-              `| Version | \`${build.appVersion ?? "?"}\` |`,
-              `| Build number | \`${build.appBuildVersion ?? "?"}\` |`,
-              `| Status | ${build.status ?? "?"} |`,
-              `| EAS build | https://expo.dev/accounts/felyciaaa/projects/gridgo-supplier/builds/${build.id} |`,
+              `| Version | \`${version || "?"}\` |`,
+              `| Build number | \`${number || "?"}\` |`,
+              `| Bundle | \`${bundleId || "?"}\` |`,
+              `| IPA | ${(Number(bytes) / 1024 / 1024).toFixed(1)} MB |`,
+              `| Built on | GitHub-hosted Mac (\`eas build --local\`) |`,
               `| Commit | \`${process.env.GITHUB_SHA}\` |`,
               "",
             ].join("\n"));
           NODE
 
-      # The app's Apple ID is not secret but is only known once the app exists
-      # in App Store Connect, so it comes from a repository variable and is
-      # written into this runner's copy of eas.json for the upload alone.
+      # Apple's own uploader on this Mac: nothing in the upload depends on
+      # the Expo plan or waits in an Expo queue.
       - name: Upload to TestFlight
         id: testflight
         if: inputs.submit_to_testflight
         env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_APP_ID: ${{ vars.ASC_APP_ID }}
-          BUILD_ID: ${{ steps.build.outputs.id }}
+          APP_VERSION: ${{ steps.build.outputs.version }}
+          BUILD_NUMBER: ${{ steps.build.outputs.build_number }}
+          BUNDLE_ID: ${{ steps.build.outputs.bundle_id }}
         run: |
           set -euo pipefail
-          node -e '
-            const fs = require("fs");
-            const eas = JSON.parse(fs.readFileSync("eas.json", "utf8"));
-            eas.submit.production.ios.ascAppId = process.env.ASC_APP_ID;
-            fs.writeFileSync("eas.json", JSON.stringify(eas, null, 2) + "\n");
-          '
-          npx --yes "$EAS_CLI" submit --platform ios --profile production \
-            --id "$BUILD_ID" --non-interactive --wait
+          xcrun altool --upload-package "$IPA" --type ios \
+            --apple-id "$ASC_APP_ID" --bundle-id "$BUNDLE_ID" \
+            --bundle-short-version-string "$APP_VERSION" --bundle-version "$BUILD_NUMBER" \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
           {
             echo
             echo "Uploaded to App Store Connect. It appears in TestFlight once Apple has processed it (usually 5 to 30 minutes)."
@@ -191,15 +254,17 @@ jobs:
       # docs/RELEASE_ANNOUNCEMENTS_API.md). Advisory: the upload has already
       # succeeded, so a failed announcement never fails the run.
       - name: Announce the TestFlight release
-        if: steps.testflight.outcome == 'success'
+        if: steps.testflight.outcome == 'success' && steps.build.outputs.announce_version != ''
         continue-on-error: true
         env:
           RELEASE_ANNOUNCE_TOKEN: ${{ secrets.RELEASE_ANNOUNCE_TOKEN }}
           RELEASE_APP: supplier
           RELEASE_CHANNEL: ios
-          RELEASE_VERSION: ${{ steps.build.outputs.version }}
+          RELEASE_VERSION: ${{ steps.build.outputs.announce_version }}
         run: node scripts/announce-release.mjs
 
-      - name: Remove the App Store Connect key
+      - name: Remove the credentials and the IPA
         if: always()
-        run: rm -f "$RUNNER_TEMP/asc_api_key.p8"
+        run: |
+          rm -rf "$RUNNER_TEMP/private_keys" "$RUNNER_TEMP/GoogleService-Info.plist" \
+            "$RUNNER_TEMP/gridgo-supplier.ipa" "$RUNNER_TEMP/Info.plist" "$RUNNER_TEMP/eas-build"

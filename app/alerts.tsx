@@ -20,6 +20,7 @@ import { CHAT_LIST_ROUTE, chatThreadRoute, isChatThreadId } from "@/lib/chatThre
 import { listingAlertHref } from "@/lib/listingReview";
 import { PICKUP_ISSUE_ALERT, presentAlertTitle, stageForAlert } from "@/lib/alertStages";
 import { PICKUP_CHAT_NOTICE, pickupChatHref } from "@/lib/pickupChat";
+import { CLIENT_CHAT_NOTICE, clientChatHref } from "@/lib/clientChat";
 import { jobScreenHref } from "@/lib/productionNudge";
 import { isLapseAlert } from "@/lib/productionLapse";
 import { SUPPORT_MESSAGE_PUSH_TYPE } from "@/lib/push";
@@ -279,6 +280,8 @@ export default function NotificationsScreen() {
             ? () => router.push(listingHref)
             : alert.orderId && alert.type === PICKUP_CHAT_NOTICE
               ? () => router.push(pickupChatHref(alert.orderId as string))
+              : alert.orderId && alert.type === CLIENT_CHAT_NOTICE
+              ? () => router.push(clientChatHref(alert.orderId as string))
               : alert.type === SHOP_HOURS_NOTICE
               ? () => router.push(SHOP_HOURS_ROUTE)
               : alert.type === SUPPORT_MESSAGE_PUSH_TYPE

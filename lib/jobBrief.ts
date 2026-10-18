@@ -3,6 +3,7 @@ import { formatPhp } from "@/lib/api";
 import { formatDeadlineFull } from "@/lib/dates";
 import { custodyForOrder } from "@/lib/handoff";
 import { primaryAction } from "@/lib/jobState";
+import { approvalRowSummary, approvalSummaryOf } from "@/lib/approvalProof";
 import { linkOnlySummary, orderDesignLinks } from "@/lib/designLink";
 import { earningsSplit, milestoneViews, nextShopProof, payoutPlanCopy } from "@/lib/milestones";
 import { orderArtwork } from "@/lib/orderArtwork";
@@ -34,6 +35,7 @@ export type JobBriefSectionId =
   | "make"
   | "artwork"
   | "mockup"
+  | "approval"
   | "delivery"
   | "earnings"
   | "progress"
@@ -61,6 +63,7 @@ export const DEFAULT_BRIEF_SECTIONS: JobBriefSectionId[] = [
 type BriefOrder = Pick<
   Order,
   | "state"
+  | "approvalProof"
   | "pickupChat"
   | "riderId"
   | "payoutMilestones"
@@ -176,6 +179,12 @@ export function mockupSummary(order: BriefOrder): { summary: string; empty: bool
   return { summary: plural(count, "reference picture", "reference pictures"), empty: false };
 }
 
+/** When and how the client signed off; a row a job without any record never draws. */
+export function approvalSummary(order: BriefOrder): { summary: string; empty: boolean } {
+  const summary = approvalSummaryOf(order);
+  return summary ? approvalRowSummary(summary) : { summary: "Not recorded", empty: true };
+}
+
 /** The date the shop is held to first; the client's need-by only when GRIDGO has not set one. Then the zone. */
 export function deliverySummary(order: BriefOrder): string {
   const details = jobDetailsOf(order);
@@ -254,6 +263,7 @@ export function jobBriefSections(
     make: { id: "make", title: "What to make", summary: makeSummary(order) },
     artwork: { id: "artwork", title: "Artwork", ...artworkSummary(order) },
     mockup: { id: "mockup", title: "How it should look", ...mockupSummary(order) },
+    approval: { id: "approval", title: "What the client approved", ...approvalSummary(order) },
     delivery: { id: "delivery", title: "Where and when", summary: deliverySummary(order) },
     earnings: { id: "earnings", title: "Your earnings", summary: earningsSummary(order) },
     progress: { id: "progress", title: "Production photos", ...progressPhotoSummary(order) },
@@ -273,6 +283,8 @@ export function workspaceBriefSections(order: BriefOrder): JobBriefSectionId[] {
     "make",
     "artwork",
     "mockup",
+    // What counts as a correct print, once GRIDGO holds a record of it.
+    ...(approvalSummaryOf(order) ? (["approval"] as const) : []),
     "delivery",
     "earnings",
     // What the client sees of the work; only once GRIDGO keeps a count of it.
