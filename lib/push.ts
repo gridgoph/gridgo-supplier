@@ -246,6 +246,8 @@ export function pushTargetRoute(data: PushData, threadId: string | null = null):
   // A message from the rider collecting the job opens the conversation itself;
   // its back control leads to the job (`app/job/[id]/messages.tsx`).
   if (data.type === "pickup_chat_message") return `/job/${data.orderId}/messages`;
+  // The client's (or GRIDGO's) message in the job's conversation, the same way.
+  if (data.type === "client_shop_chat_message") return `/job/${data.orderId}/client-messages`;
   // A rider's call opens the call screen, which rings only if the call still is;
   // a missed one opens the job, where "Missed call from …" offers to call back.
   if (data.type === "order_call_incoming") return `/call?orderId=${encodeURIComponent(data.orderId)}&mode=incoming`;

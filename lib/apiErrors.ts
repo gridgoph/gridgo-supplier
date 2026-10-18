@@ -544,3 +544,49 @@ export function callRefusal(error: unknown): CallRefusal | null {
   if (code === "call_not_found" || code === "call_history_closed") return "gone";
   return null;
 }
+
+/** Why the conversation with the client cannot be shown (`lib/clientChat.ts`), or null when a retry may fix it. */
+export function clientChatUnavailable(error: unknown): PickupChatUnavailable | null {
+  const code = apiErrorCode(error);
+  if (code === "forbidden" || code === "order_not_found" || (error instanceof ApiError && error.status === 404)) {
+    return {
+      title: "This conversation is not available",
+      body: "Only the shop working on this job, the client and GRIDGO can read its messages.",
+    };
+  }
+  return null;
+}
+
+/** Copy for a message to the client that did not go through. */
+export function clientChatSendError(error: unknown): string {
+  const code = apiErrorCode(error);
+  const status = error instanceof ApiError ? error.status : 0;
+  if (code === "client_shop_chat_read_only") return "This conversation has closed, so no new messages can be sent.";
+  if (code === "client_shop_chat_not_available") return "You can message the client once you accept this job.";
+  if (code === "too_many_requests") return "You are sending messages too fast. Wait a moment and try again.";
+  if (code === "invalid_request") return "Write a message of up to 1,000 characters, or add a file.";
+  if (code === "chat_image_sanitization_failed" || status === 422) {
+    return "GRIDGO could not prepare that photo. Try another photo, or send it as a PDF.";
+  }
+  if (status === 413) return "Files can be up to 10 MB.";
+  if (code === "invalid_chat_attachment" || status === 415) return "Send a photo (JPEG, PNG or WebP) or a PDF of up to 10 MB.";
+  if (code === "file_already_attached") return "That file was already sent. Choose it again to send it once more.";
+  if (error instanceof Error && !(error instanceof ApiError) && error.message.startsWith("That file")) {
+    return error.message;
+  }
+  return "That did not reach the client. Check your connection and send it again.";
+}
+
+/** Copy for a report that did not go through. */
+export function clientChatReportError(error: unknown): string {
+  if (apiErrorCode(error) === "too_many_requests") return "Too many reports and messages at once. Wait a moment and try again.";
+  return "The report did not reach GRIDGO. Check your connection and try again.";
+}
+
+/** Copy for an approval record that could not be read. */
+export function approvalProofError(error: unknown): string {
+  if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
+    return "The client's approval is not available for this job.";
+  }
+  return "Could not load the client's approval. Check your connection and try again.";
+}

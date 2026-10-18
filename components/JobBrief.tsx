@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import Animated, { FadeIn, LinearTransition, useReducedMotion } from "react-native-reanimated";
 
+import { ApprovalProofPanel } from "@/components/ApprovalProofPanel";
 import { ArtworkPanel } from "@/components/ArtworkPanel";
 import { CountLedger } from "@/components/CounterCheckPanel";
 import { ColourPricingSpec } from "@/components/ColourPricingSpec";
@@ -328,6 +329,8 @@ function SectionBody({
         </View>
       );
     }
+    case "approval":
+      return <ApprovalProofPanel orderId={order.id} reloadVersion={proofReloadVersion} />;
     case "progress":
       return (
         <View className="gap-2">

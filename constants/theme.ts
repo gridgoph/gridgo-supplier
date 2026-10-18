@@ -73,6 +73,8 @@ export const colors = {
     tourScrim: "rgba(0, 0, 0, 0.55)",
     /** The edge of the tour's cut-out. */
     tourRing: "#FFFFFF",
+    /** A signature drawn as it was signed: dark ink needs white paper in both themes. */
+    paper: "#FFFFFF",
   },
   dark: {
     canvas: "#000000",
@@ -109,6 +111,7 @@ export const colors = {
     scrim: "rgba(0, 0, 0, 0.6)",
     tourScrim: "rgba(0, 0, 0, 0.72)",
     tourRing: "#F0F0F0",
+    paper: "#FFFFFF",
   },
 } as const;
 
