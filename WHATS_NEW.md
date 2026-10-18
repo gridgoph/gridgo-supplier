@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.283 (New feature)
+
+- Message the client about a job through GRIDGO, and see exactly what the client approved.
+
 ## 1.0.277 (Fix)
 
 - When the rider hangs up, your call now says the rider ended it and how long it lasted, not a lost connection.
