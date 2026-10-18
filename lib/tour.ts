@@ -52,7 +52,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     id: "jobs.list",
     screen: "jobs",
     title: "Accept before time runs out",
-    body: "Open a job to check its specs and files. Tap Accept and name your price, or Decline if you can't take it.",
+    body: "Open a job to check its specs and files. Accept if your shop can run it by the date, or Decline.",
   },
   {
     id: "jobs.scheduleTab",

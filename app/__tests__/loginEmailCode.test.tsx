@@ -107,9 +107,11 @@ describe("Sign in email code", () => {
       expect(screen.getByText("Check your email")).toBeTruthy();
       expect(screen.getByText("Send another code")).toBeTruthy();
     });
+    expect(screen.getByText("We sent a 6-digit code to shop@example.com")).toBeTruthy();
+    expect(screen.queryByText(/job number/)).toBeNull();
     expect(mockFinalize).not.toHaveBeenCalled();
 
-    await fireEvent.changeText(screen.getByLabelText("6-digit job number"), "148203");
+    await fireEvent.changeText(screen.getByLabelText("6-digit code"), "148203");
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Verify email" })).toBeEnabled();
     });

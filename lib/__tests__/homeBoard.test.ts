@@ -103,7 +103,14 @@ describe("the headline figure", () => {
     const headline = homeHeadline([]);
     expect(headline.tone).toBe("none");
     expect(headline.amountMinor).toBe(0);
-    expect(headline.detail).toMatch(/accept a job/i);
+    expect(headline.detail).toMatch(/orders from your board and you accept the job/i);
+  });
+
+  // A shop never prices a job: the client orders a listing at the shop's
+  // price and pays first, and Accept only confirms the shop can run it.
+  it("never asks a new shop to name a price on a job", () => {
+    const { detail } = homeHeadline([]);
+    expect(detail).not.toMatch(/price|₱|\d/i);
   });
 
   it("never names an internal state or code", () => {

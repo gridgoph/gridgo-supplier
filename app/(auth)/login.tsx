@@ -59,6 +59,9 @@ export default function LoginScreen() {
   const [healthState, setHealthState] = useState<HealthState>("checking");
   const sessionWait = useSession((state) => state.sessionWait);
   const identity = useSession((state) => state.identity);
+  const shown =
+    problem ??
+    (identity.kind === "signed_out" && identity.reason === "refused" ? emailUnavailableMessage : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,12 +77,21 @@ export default function LoginScreen() {
     };
   }, []);
 
+  // The refusal is recorded in the session before Clerk signs out. Clerk's
+  // session can close the door guard on its way out, which remounts the stack
+  // on launch; launch reads the refusal and opens Sign in again with the
+  // sentence, instead of Welcome with nothing said.
   async function refuseNonSupplier() {
     setVerifying(false);
     setProblem(emailUnavailableMessage);
-    useSession.getState().clearSessionWait();
+    useSession.getState().refuseSignIn();
     await releaseClerkSession(() => signOut());
-    useSession.getState().clearClerkIdentity();
+  }
+
+  function startAttempt() {
+    setBusy(true);
+    setProblem(null);
+    useSession.getState().clearSignInRefusal();
   }
 
   async function adoptAndEnter() {
@@ -143,8 +155,7 @@ export default function LoginScreen() {
 
   async function submitPassword() {
     if (!email.trim() || !password) return;
-    setBusy(true);
-    setProblem(null);
+    startAttempt();
     try {
       const settled = await withSettledClerkSession({
         isSignedIn: Boolean(isSignedIn),
@@ -224,8 +235,7 @@ export default function LoginScreen() {
   }
 
   async function continueWithGoogle() {
-    setBusy(true);
-    setProblem(null);
+    startAttempt();
     try {
       const outcome = await completeGoogleSso({
         alreadySignedIn: Boolean(isSignedIn),
@@ -257,8 +267,7 @@ export default function LoginScreen() {
    * or the person closed the sheet and nothing is said.
    */
   async function continueWithApple(start: () => Promise<AppleFlowResult>) {
-    setBusy(true);
-    setProblem(null);
+    startAttempt();
     try {
       if (isSignedIn) {
         // Same as Google: a live Clerk session is the person who just tapped.
@@ -350,9 +359,9 @@ export default function LoginScreen() {
               </Pressable>
             </View>
 
-            {problem ? (
+            {shown ? (
               <View className="mt-4">
-                <ErrorNotice message={problem} />
+                <ErrorNotice message={shown} />
               </View>
             ) : null}
 
