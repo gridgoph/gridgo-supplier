@@ -15,6 +15,11 @@
   set. One offer/answer per call: a peer that fails ends the call, and the shop
   calls again.
 
+  A dropped audio path is not yet a lost connection. The rider hanging up drops
+  it too, and their phone can close its peer before its `end` reaches GRIDGO
+  (or this phone's own poll can be late), so the loss is checked against
+  GRIDGO's call state first: ended there means the rider ended it.
+
   Fail closed, always. The API cannot cut a direct media path, so the moment
   the call is terminal, a request is refused, or the lease runs out without a
   renewal, this stops the microphone, closes the peer and releases the audio
@@ -83,6 +88,8 @@ type PeerConnection = {
 export const RING_VIBRATION = Array.from({ length: 31 }, (_, i) => (i === 0 ? 0 : 1000));
 /** ICE `disconnected` for this long without recovering is a dropped call. */
 export const RECONNECT_GIVE_UP_MS = 15_000;
+/** After ICE `failed`, how long the rider's own hang-up has to reach GRIDGO before the call counts as lost. */
+export const PEER_END_GRACE_MS = 5_000;
 /** Polls failing for this long while still ringing out: the network is gone. */
 export const RING_OFFLINE_GIVE_UP_MS = 15_000;
 
@@ -326,14 +333,30 @@ export class CallSession {
       this.reconnectTimer = null;
       withInCall(this.runtime, (inCall) => inCall.stopRingback());
       this.set({ phase: "connected", connectedAt: this.snapshot.connectedAt ?? this.deps.now() });
-    } else if (state === "disconnected") {
+    } else if (state === "disconnected" || state === "failed") {
       if (this.snapshot.connectedAt) this.set({ phase: "reconnecting" });
-      if (!this.reconnectTimer) {
-        this.reconnectTimer = setTimeout(() => void this.hangUpWith("network_lost"), RECONNECT_GIVE_UP_MS);
+      // The rider may simply have hung up: ask GRIDGO now rather than at the next poll.
+      void this.poll();
+      // `failed` never recovers, so it only waits for the rider's end to land.
+      if (state === "failed" && this.reconnectTimer) clearTimeout(this.reconnectTimer);
+      if (state === "failed" || !this.reconnectTimer) {
+        const wait = state === "failed" ? PEER_END_GRACE_MS : RECONNECT_GIVE_UP_MS;
+        this.reconnectTimer = setTimeout(() => void this.confirmLoss(), wait);
       }
-    } else if (state === "failed") {
-      void this.hangUpWith("network_lost");
     }
+  }
+
+  /** The audio path is gone. Ended on GRIDGO means the rider hung up; only a call still open there is a lost connection. */
+  private async confirmLoss(): Promise<void> {
+    const call = this.snapshot.call;
+    if (!call || this.finished) return;
+    try {
+      this.onState(await this.deps.api.getCall(call.orderId, call.id));
+    } catch (error) {
+      if (callRefusal(error)) return this.settleAfterRefusal(error);
+      // GRIDGO is unreachable too: this phone has lost its connection.
+    }
+    if (!this.finished) await this.hangUpWith("network_lost");
   }
 
   private send(signal: api.CallSignalBody): void {
