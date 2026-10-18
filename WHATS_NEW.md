@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.293 (Fix)
+
+- Signing in with an account that is not a shop now says so on Sign in, and the emailed code is called a code.
+
 ## 1.0.288 (New feature)
 
 - New Performance page: late-finish notices, warnings, on-time rate and Top Pick. Warnings only, no money taken.
