@@ -149,12 +149,14 @@ unchanged.
 
 ## iPhone build and TestFlight
 
-The iPhone app builds on [EAS Build](https://docs.expo.dev/build/introduction/), because
-an iOS build needs Xcode on macOS. **Actions → iOS TestFlight → Run workflow** builds the
-`production` profile in `eas.json` (an App Store build; EAS raises the build number by one
-each time) and then uploads it to App Store Connect with EAS Submit. Untick
-**submit_to_testflight** to build only. The run summary links the EAS build. Nothing
-reaches the App Store listing or review from here.
+The iPhone app builds on a GitHub-hosted Mac (`macos-26`, Xcode 26.6; Expo SDK 57 needs
+Xcode 26.4+), because the repository is public and those minutes are free and uncapped while
+the Expo plan's iOS builds run out. **Actions → iOS TestFlight → Run workflow** runs
+`eas build --local` with the `production` profile in `eas.json` (an App Store build; EAS
+still holds the signing certificate and profile and raises the build number by one each
+time) and then uploads the IPA to App Store Connect with `xcrun altool`. Untick
+**submit_to_testflight** to build only. The run summary names the version and build number.
+Nothing reaches the App Store listing or review from here.
 
 What the iPhone build has that Android does not:
 
@@ -180,14 +182,16 @@ The workflow needs, once:
 | GitHub secret | `ASC_KEY_ID` | That key's Key ID. |
 | GitHub secret | `ASC_ISSUER_ID` | The Issuer ID shown above the key list. |
 | GitHub variable | `ASC_APP_ID` | The app's Apple ID (App Store Connect → the app → App Information). Not secret. |
-| EAS, `production` environment | `GOOGLE_SERVICE_INFO_PLIST` | **File** variable, visibility Secret: the Firebase `GoogleService-Info.plist` for `ph.gridgo.supplier`. Never commit it. |
+| GitHub secret | `GOOGLE_SERVICE_INFO_PLIST_BASE64` | The Firebase `GoogleService-Info.plist` for `ph.gridgo.supplier`, base64-encoded. Never commit it. |
 
 `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` and `EXPO_PUBLIC_CARTO_API_KEY`
 come from the repository secrets the Android release already uses; the workflow copies them
-to the EAS `production` environment before each build, because the EAS machine never sees
-GitHub's environment. On the EAS machine, `app.config.ts` refuses a store build that is
-missing any of them or the Firebase file (`iosStoreBuildProblems`). The App Store Connect
-key lets EAS create the distribution certificate and provisioning profile on the first run.
+to the EAS `production` environment as Sensitive variables before each build, and the local
+build reads them back from there. The Firebase file is decoded into a private temp file on
+the runner instead, because a local build cannot read an EAS Secret file variable.
+`app.config.ts` refuses a store build that is missing any of them or the Firebase file
+(`iosStoreBuildProblems`). The App Store Connect key lets EAS check the signing credentials
+and lets altool upload.
 
 To try the iPhone build locally, drop `GoogleService-Info.plist` in the repo root (it is
 gitignored) or point `GOOGLE_SERVICE_INFO_PLIST` at it, then `npx expo prebuild -p ios` on
