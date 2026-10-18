@@ -4,7 +4,6 @@ import { router, useLocalSearchParams } from "expo-router";
 
 import { DangerButton } from "@/components/DangerButton";
 import { FlowScreen } from "@/components/FlowScreen";
-import { LATE_PRODUCTION_HREF } from "@/components/LatenessPanel";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { FieldShell } from "@/components/controls/FieldShell";
@@ -17,6 +16,7 @@ import {
   type DeclineReasonId,
 } from "@/lib/decline";
 import * as api from "@/lib/api";
+import { performanceHref } from "@/lib/performance";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { useJob } from "@/hooks/useJob";
 import { askConfirm } from "@/store/sheets";
@@ -58,7 +58,7 @@ export default function DeclineJobScreen() {
     setActionError(null);
     try {
       // The reason is required; GRIDGO keeps it on the shop's record.
-      await api.declineJob(job.id, declineTimelineNote(reason, detail));
+      await api.declineJob(job.id, declineTimelineNote(reason, detail), reason);
       // The job is GRIDGO's again while the client chooses, so the workspace
       // behind this screen has nothing left for the shop. The outcome is
       // stated here instead, and the way on is back to the job list.
@@ -85,7 +85,7 @@ export default function DeclineJobScreen() {
               label="Back to jobs"
               onPress={() => router.navigate("/(tabs)/jobs")}
             />
-            <SecondaryButton label="See your shop's record" onPress={() => router.push(LATE_PRODUCTION_HREF)} />
+            <SecondaryButton label="See your performance" onPress={() => router.push(performanceHref())} />
           </>
         }
       >
@@ -161,6 +161,7 @@ export default function DeclineJobScreen() {
         <Text className="text-body text-text-secondary">
           GRIDGO offers the client another vetted shop or a full refund. Your decline goes on your
           shop&apos;s record with your reason, beside your late jobs. No money is taken for it.
+          Three declines within 30 days bring a warning on your Performance page.
         </Text>
       </View>
     </FlowScreen>

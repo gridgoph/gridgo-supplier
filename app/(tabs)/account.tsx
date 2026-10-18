@@ -12,6 +12,7 @@ import { ShopPortrait } from "@/components/ShopPortrait";
 import { StatusChip } from "@/components/StatusChip";
 import * as api from "@/lib/api";
 import { clerkDisplayName } from "@/lib/clerk";
+import { performanceHref } from "@/lib/performance";
 import { standingLine } from "@/lib/reviews";
 import { shopHoursSummary } from "@/lib/shopHours";
 import { WHATS_NEW_HISTORY_COPY } from "@/lib/whatsNewHistory";
@@ -229,6 +230,13 @@ export default function AccountScreen() {
               title="Reviews & ranking"
               detail={standing ?? "What clients said about each job, and where you rank"}
               onPress={() => router.push("/reviews" as Href)}
+            />
+          ) : null}
+          {approved ? (
+            <DestinationRow
+              title="Performance"
+              detail="Warnings, late-finish notices, on-time rate and Top Pick"
+              onPress={() => router.push(performanceHref())}
             />
           ) : null}
           {approved ? (

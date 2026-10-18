@@ -125,6 +125,13 @@ describe("pushTargetRoute", () => {
     ).toBe("/job/ord_demo_1");
   });
 
+  it("opens Performance at the job's notice for a performance notice", () => {
+    expect(
+      pushTargetRoute(parsePushData({ type: "supplier_performance_notice", orderId: "ord_demo_1" })),
+    ).toBe("/performance?orderId=ord_demo_1");
+    expect(pushTargetRoute(parsePushData({ type: "supplier_performance_notice" }))).toBe("/performance");
+  });
+
   it("opens the pick-up chat for a message from the rider", () => {
     expect(
       pushTargetRoute(parsePushData({ type: "pickup_chat_message", orderId: "ord_demo_1" })),
