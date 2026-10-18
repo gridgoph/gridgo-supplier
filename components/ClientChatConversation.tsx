@@ -366,6 +366,10 @@ export function ClientChatConversation({ orderId, onOpenJob }: { orderId: string
               onScroll={trackEnd}
               scrollEventThrottle={32}
               onLayout={keepEndInView}
+              // A photo arrives after the text it sits in; stay at the newest message while the shop is there.
+              onContentSizeChange={() => {
+                if (followingEnd.current) listRef.current?.scrollToEnd({ animated: false });
+              }}
             >
               {loading && !chat ? (
                 <View className="gap-3">
@@ -559,7 +563,7 @@ function MessageBubble({
       </View>
       {mine && hidesContact(message) ? (
         <View className="mt-1 flex-row items-start gap-1" testID="contact-hidden-note">
-          <Info size={12} color={colors.textMuted} strokeWidth={2} style={{ marginTop: 2 }} aria-hidden />
+          <Info size={14} color={colors.textMuted} strokeWidth={2} style={{ marginTop: 1 }} aria-hidden />
           <Text className="shrink text-caption text-text-muted">{CONTACT_HIDDEN_NOTE}</Text>
         </View>
       ) : null}
