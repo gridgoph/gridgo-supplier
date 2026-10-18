@@ -57,6 +57,7 @@ jest.mock("@/lib/api", () => {
 
 import LoginScreen from "@/app/(auth)/login";
 import * as api from "@/lib/api";
+import { authDoorOpen, launchHref } from "@/lib/launch";
 import { useSession } from "@/store/session";
 
 const mockRouter = jest.requireMock("expo-router").router as {
@@ -166,5 +167,60 @@ describe("Sign in of a GRIDGO client identity", () => {
     expect(mockRouter.replace).not.toHaveBeenCalledWith("/access");
     expect(mockRouter.replace).not.toHaveBeenCalledWith("/(tabs)/home");
     expect(mockSignOut).toHaveBeenCalled();
+  });
+
+  // On a phone the Clerk session flips the door guard while it is refused,
+  // so the stack remounts on launch. The refusal has to outlive Sign in's
+  // own state and bring the person back to it, not to Welcome.
+  it("keeps the refusal on Sign in when the stack remounts it", async () => {
+    mockPassword.mockImplementation(async () => {
+      mockSignInStatus = "complete";
+      return { error: null };
+    });
+    mockSignOut.mockImplementation(async () => {
+      // What the Clerk bridge does when Clerk reports signed out.
+      useSession.getState().clearClerkIdentity();
+    });
+
+    await submitClientPassword();
+    await waitFor(() => {
+      expect(screen.getByText(emailUnavailableMessage)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+    });
+    expect(mockSignOut).toHaveBeenCalled();
+
+    const { identity, user } = useSession.getState();
+    expect(identity).toEqual({ kind: "signed_out", reason: "refused" });
+    expect(launchHref(identity, user)).toBe("/(auth)/login");
+    expect(authDoorOpen(identity, user)).toBe(true);
+
+    // A new key is a new mount: Sign in's own state is gone, as on a phone.
+    await screen.rerender(<LoginScreen key="remounted" />);
+    expect(screen.queryByDisplayValue("mark@example.com")).toBeNull();
+    expect(screen.getByText(emailUnavailableMessage)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
+  });
+
+  it("drops the old refusal when the next sign-in starts", async () => {
+    useSession.setState({ identity: { kind: "signed_out", reason: "refused" } });
+    (api.me as jest.Mock).mockResolvedValue({ ...clientUser, role: "supplier" });
+    mockPassword.mockImplementation(async () => {
+      mockSignInStatus = "complete";
+      return { error: null };
+    });
+
+    await render(<LoginScreen />);
+    expect(screen.getByText(emailUnavailableMessage)).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("Email"), "shop@example.com");
+    await fireEvent.changeText(screen.getByLabelText("Password"), "shop-password");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+    });
+    await fireEvent.press(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(mockRouter.replace).toHaveBeenCalledWith("/(tabs)/home");
+    });
+    expect(useSession.getState().identity.kind).toBe("supplier");
   });
 });
