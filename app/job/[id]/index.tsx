@@ -4,6 +4,7 @@ import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "exp
 
 import { AcceptWindowPanel } from "@/components/AcceptWindowPanel";
 import { ChangeRequestPanel } from "@/components/ChangeRequestPanel";
+import { ClientChatRow } from "@/components/ClientChatRow";
 import { CounterCheckPanel } from "@/components/CounterCheckPanel";
 import { DangerButton } from "@/components/DangerButton";
 import { DeadlineRequestPanel } from "@/components/DeadlineRequestPanel";
@@ -64,6 +65,7 @@ import {
   shopFinish,
 } from "@/lib/shopHandover";
 import { pickupChatHref, pickupChatOf } from "@/lib/pickupChat";
+import { clientChatHref, clientChatOf, showsClientChat } from "@/lib/clientChat";
 import { callsSupported } from "@/lib/callRuntime";
 import { callHref, latestMissedCall, pickupCallAvailability } from "@/lib/orderCall";
 import { deadlineUrgency } from "@/lib/urgency";
@@ -232,6 +234,9 @@ export default function JobWorkspaceScreen() {
         {callRow ? <View className="border-t border-outline-subtle pt-1">{callRow}</View> : null}
       </>
     ) : null;
+
+  // The conversation with the client, from acceptance until the issue window closes, then kept to read.
+  const clientChat = clientChatOf(job);
 
   // What GRIDGO still needs before packaging, shown before the button is pressed.
   const packaging = packagingCheck(job);
@@ -460,6 +465,21 @@ export default function JobWorkspaceScreen() {
             }
           />
         </View>
+
+        {/*
+          Questions about the work go to the client here, through GRIDGO, with
+          names and contact details kept out. Under the docket, because what is
+          asked is about what the docket says.
+        */}
+        {showsClientChat(clientChat) ? (
+          <View className="gg-card mt-6 py-2">
+            <ClientChatRow
+              orderId={job.id}
+              chat={clientChat}
+              onPress={() => router.push(clientChatHref(job.id))}
+            />
+          </View>
+        ) : null}
 
         {/*
           The moment the ask earns itself: a job with nothing for the shop to
