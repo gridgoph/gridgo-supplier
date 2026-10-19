@@ -10,6 +10,7 @@ import { DangerButton } from "@/components/DangerButton";
 import { DeadlineRequestPanel } from "@/components/DeadlineRequestPanel";
 import { EmptyState } from "@/components/EmptyState";
 import { ExpressChip } from "@/components/ExpressChip";
+import { SchedulingNotice } from "@/components/SchedulingNotice";
 import { ForcedStepNotice } from "@/components/ForcedStepNotice";
 import { JobActionBar } from "@/components/JobActionBar";
 import { JobBrief } from "@/components/JobBrief";
@@ -308,6 +309,7 @@ export default function JobWorkspaceScreen() {
               <Text className="text-body text-text-secondary">{EXPRESS_JOB_NOTE}</Text>
             </View>
           ) : null}
+          <SchedulingNotice order={job} />
           {clientDate ? (
             <Text className="text-body-lg text-text-secondary">
               {job.promisedDate ? "Promised" : "Client needs it by"}{" "}

@@ -4,6 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import { ExpressChip } from "@/components/ExpressChip";
 import { OrderReference } from "@/components/OrderReference";
 import { orderReferenceSpoken } from "@/lib/orderReference";
+import { SchedulingNotice } from "@/components/SchedulingNotice";
 import { StatusChip } from "@/components/StatusChip";
 import { formatDeadlineFull } from "@/lib/dates";
 import { formatPhp, type Order } from "@/lib/api";
@@ -11,6 +12,7 @@ import { isFulfilmentFinished, presentJobStatus } from "@/lib/jobState";
 import { deadlineUrgency } from "@/lib/urgency";
 import { acceptWindow, acceptWindowLine } from "@/lib/acceptWindow";
 import { isExpressOrder } from "@/lib/express";
+import { isTightBeforeAccepting, sameDayReadyLine, TIGHT_DEADLINE_LABEL } from "@/lib/scheduling";
 import { orderSpecSummary } from "@/lib/productionSpecs";
 import { shopRelease } from "@/lib/shopRecovery";
 import { useNow } from "@/hooks/useNow";
@@ -48,6 +50,8 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
   const urgency = deadlineUrgency(shopRelease(job) || isFulfilmentFinished(job) ? null : dueAt, now);
   const spec = orderSpecSummary(job);
   const express = isExpressOrder(job);
+  const tight = isTightBeforeAccepting(job);
+  const sameDay = sameDayReadyLine(job);
   const price = job.supplierPriceMinor != null
     ? formatPhp(job.supplierPriceMinor)
     : "Price not recorded yet";
@@ -97,6 +101,11 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
             <ExpressChip />
           </View>
         ) : null}
+        {tight || sameDay ? (
+          <View className="py-1">
+            <SchedulingNotice order={job} compact />
+          </View>
+        ) : null}
         {showSpec ? (
           <Text className="text-caption text-text-muted" numberOfLines={2}>
             {spec} · {price}
@@ -116,7 +125,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`${job.title}, ${orderReferenceSpoken(job.id) ?? `order ${job.id}`}, ${status.label}${
         urgency.level === "overdue" ? ", late" : ""
-      }${express ? ", Express" : ""}`}
+      }${express ? ", Express" : ""}${tight ? `, ${TIGHT_DEADLINE_LABEL}` : ""}`}
       className="gg-touch"
     >
       {({ pressed }) => (

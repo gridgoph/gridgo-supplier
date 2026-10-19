@@ -1,27 +1,32 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
+import { validateChatImageAsset } from "@/lib/chatImages";
 import { orderReference } from "@/lib/orderReference";
 
 /**
  * A problem report, as Operations reads it in the shop's chat.
  *
- * The support chat carries text and nothing else — no message kind, no
- * attachment — so a report is marked the only way a desk reading plain text
- * can see: its first line says "Problem report", which is also what the chat
- * history shows as the thread's preview. Everything a shop would otherwise be
- * asked for next (which job, which app build, which phone) is written in
- * underneath, so the first reply can be about the problem.
+ * The support chat has no message kind, so a report is marked the only way a
+ * desk reading plain text can see: its first line says "Problem report", which
+ * is also what the chat history shows as the thread's preview. Everything a
+ * shop would otherwise be asked for next (which job, which app build, which
+ * phone) is written in underneath, so the first reply can be about the problem.
  *
- * No photo, on purpose: until the chat has a file purpose of its own and the
- * Operations desk can open one, a stored photo would be a reference nobody can
- * follow.
+ * Screenshots travel the way a photo does in the chat: each is uploaded as a
+ * `support_chat_image` and the report carries their ids as
+ * `attachmentFileIds`, so Operations sees them under the report's text.
  */
 
 /** Operations' chat caps a message at 4000; this leaves room for the context lines. */
 export const PROBLEM_REPORT_MAX = 1500;
 
 export const PROBLEM_REPORT_HEADING = "Problem report";
+
+/** Screenshots one report may carry. Fewer than a chat message's four. */
+export const PROBLEM_REPORT_SCREENSHOTS_MAX = 3;
+
+export type ProblemReportScreenshot = { uri: string; name: string; mimeType: string };
 
 export type ProblemReportJob = {
   orderId: string;
@@ -48,6 +53,27 @@ export function problemReportIssue(what: string): string | null {
     return `Keep it under ${PROBLEM_REPORT_MAX} characters. Operations can ask for more in the chat.`;
   }
   return null;
+}
+
+/**
+ * Adds picked images to the report's screenshots, or says why it cannot. A
+ * pick that would go past the limit adds none of them, so the shop chooses
+ * which three rather than the picker's order choosing for it.
+ */
+export function addProblemReportScreenshots(
+  current: ProblemReportScreenshot[],
+  picked: { uri: string; name?: string | null; mimeType?: string | null; size?: number | null }[],
+): { ok: true; screenshots: ProblemReportScreenshot[] } | { ok: false; error: string } {
+  const next = [...current];
+  for (const asset of picked) {
+    const problem = validateChatImageAsset(asset);
+    if (problem) return { ok: false, error: problem };
+    if (next.length >= PROBLEM_REPORT_SCREENSHOTS_MAX) {
+      return { ok: false, error: `A report can include up to ${PROBLEM_REPORT_SCREENSHOTS_MAX} screenshots.` };
+    }
+    next.push({ uri: asset.uri, name: asset.name || "screenshot.jpg", mimeType: asset.mimeType || "image/jpeg" });
+  }
+  return { ok: true, screenshots: next };
 }
 
 /** "Order 3FF0-128E-105A (ord_3ff0128e105a)": the reference a shop reads, and the id Operations opens. */

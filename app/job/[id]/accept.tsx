@@ -6,6 +6,7 @@ import { FlowScreen } from "@/components/FlowScreen";
 import { JobBrief } from "@/components/JobBrief";
 import { LATE_PRODUCTION_HREF } from "@/components/LatenessPanel";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { SchedulingNotice } from "@/components/SchedulingNotice";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SpecialInstructionsPanel } from "@/components/SpecialInstructionsPanel";
 import { CheckboxRow } from "@/components/controls/CheckboxRow";
@@ -14,6 +15,7 @@ import { acceptWindow, acceptWindowLine, acceptWindowTickMs } from "@/lib/accept
 import { formatDeadlineFull } from "@/lib/dates";
 import { findAction } from "@/lib/jobState";
 import { payoutPlanCopy } from "@/lib/milestones";
+import { isTightBeforeAccepting } from "@/lib/scheduling";
 import { closureOnDay, manilaClock } from "@/lib/shopHours";
 import { canRequestChange, hasSpecialInstructions, itemInstructions } from "@/lib/orderChanges";
 import { NO_SUBCONTRACTING_ACCEPT_LINE } from "@/lib/supplierTerms";
@@ -137,6 +139,25 @@ export default function AcceptJobScreen() {
             <Text className="text-body font-medium text-warning" testID="accept-window-line">
               {answerLine}
             </Text>
+          ) : null}
+          {/*
+            A Tight date is said before the shop commits, with the way out
+            beside it: during the pilot a reasoned decline costs nothing.
+          */}
+          <SchedulingNotice order={job} />
+          {isTightBeforeAccepting(job) ? (
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: "/job/[id]/decline",
+                  params: { id: job.id, reason: "deadline_unachievable" },
+                })
+              }
+              accessibilityRole="link"
+              className="gg-touch justify-center self-start"
+            >
+              <Text className="text-button text-brand">Too tight? Decline with a reason</Text>
+            </Pressable>
           ) : null}
           {/*
             The client's own words come before the docket and the money: they

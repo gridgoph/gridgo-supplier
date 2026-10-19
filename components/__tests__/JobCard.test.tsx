@@ -154,3 +154,11 @@ describe("Express", () => {
     expect(screen.queryByText("Express")).toBeNull();
   });
 });
+
+it("badges a Tight job still waiting for the shop's answer", async () => {
+  const tight = { status: "tight", sameDay: false, tightDeadline: true, label: "Tight deadline" } as const;
+  const view = await render(<JobCard job={{ ...job, state: "supplier_assigned", scheduling: tight }} />);
+  expect(screen.getByText("Tight deadline")).toBeTruthy();
+  await view.rerender(<JobCard job={{ ...job, state: "production", scheduling: tight }} />);
+  expect(screen.queryByText("Tight deadline")).toBeNull();
+});
