@@ -50,7 +50,7 @@ export default function AdvanceJobScreen() {
   const templateId =
     chosen && templates.some((t) => t.id === chosen) ? chosen : (templates[0]?.id ?? null);
   const template = PRODUCTION_UPDATE_TEMPLATES.find((t) => t.id === templateId);
-  const status = job ? presentOrderState(job.state) : null;
+  const status = job ? presentOrderState(job.state, job) : null;
 
   async function advance() {
     // A step with no target state is not a transition at all (a proof is sent
