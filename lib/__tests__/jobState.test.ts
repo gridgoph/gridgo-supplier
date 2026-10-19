@@ -17,7 +17,7 @@ import {
   presentTimelineState,
   journeyLabel,
 } from "@/lib/jobState";
-import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
+import type { Installment, MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
 
 const SHARES: Record<MilestoneCode, number> = {
   printing: 50,
@@ -133,6 +133,55 @@ describe("presentOrderState", () => {
     for (const state of states) {
       expect(presentOrderState(state).label).not.toMatch(/_/);
     }
+  });
+});
+
+describe("payment on an accepted job", () => {
+  const installment = (status: Installment["status"], amountMinor: number): Installment => ({
+    amountMinor,
+    method: status === "not_required" ? null : "qr_manual",
+    status,
+    submittedAt: null,
+    confirmedAt: null,
+    confirmationSource: null,
+  });
+
+  it("says the client paid in full when the order was paid 100% up front", () => {
+    const fullUpfront = job({
+      id: "o1",
+      state: "payment_authorized",
+      downpaymentPercent: 100,
+      downpaymentMinor: 112500,
+      balanceMinor: 0,
+      payments: { initial: installment("confirmed", 112500), final_online: installment("not_required", 0) },
+    });
+    expect(presentJobStatus(fullUpfront)).toMatchObject({ label: "Client paid in full", tone: "success" });
+    expect(presentOrderState("payment_authorized", fullUpfront).label).toBe("Client paid in full");
+  });
+
+  it("reads any one paid-in-full signal, as the client app does", () => {
+    const partial = { id: "o1", state: "payment_authorized" } as const;
+    expect(presentJobStatus(job({ ...partial, downpaymentPercent: 100 })).label).toBe("Client paid in full");
+    expect(presentJobStatus(job({ ...partial, balanceMinor: 0 })).label).toBe("Client paid in full");
+    expect(
+      presentJobStatus(job({ ...partial, payments: { balance: installment("not_required", 0) } })).label,
+    ).toBe("Client paid in full");
+  });
+
+  it("keeps \"Downpayment in\" for a real 75% downpayment", () => {
+    const split = job({
+      id: "o1",
+      state: "payment_authorized",
+      downpaymentPercent: 75,
+      payments: { initial: installment("confirmed", 84375), final_online: installment("not_submitted", 28125) },
+    });
+    expect(presentJobStatus(split).label).toBe("Downpayment in");
+    expect(presentOrderState("payment_authorized").label).toBe("Downpayment in");
+  });
+
+  it("never puts an amount in the label", () => {
+    const fullUpfront = job({ id: "o1", state: "payment_authorized", downpaymentPercent: 100 });
+    expect(presentJobStatus(fullUpfront).label).not.toMatch(/\d|₱|PHP/);
   });
 });
 

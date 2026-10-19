@@ -26,6 +26,7 @@ import {
   type ProductionLapse,
 } from "@/lib/productionLapse";
 import { orderReference } from "@/lib/orderReference";
+import { performanceHref } from "@/lib/performance";
 import { rescheduleNotice } from "@/lib/reschedule";
 import {
   FAILURE_LABELS,
@@ -97,6 +98,21 @@ export default function LateProductionScreen() {
             tells you first, with the reason spelled out, before anything comes off your payout.
           </Text>
         </View>
+
+        <Pressable
+          onPress={() => router.push(performanceHref())}
+          accessibilityRole="link"
+          className="gg-touch gg-panel mt-4 flex-row items-center gap-3"
+          style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+        >
+          <View className="min-w-0 flex-1 gap-0.5">
+            <Text className="text-body font-medium text-text-primary">Performance</Text>
+            <Text className="text-body text-text-secondary">
+              Your late-finish notices, warnings, on-time rate and Top Pick standing.
+            </Text>
+          </View>
+          <ChevronRight size={20} color={colors.textMuted} aria-hidden />
+        </Pressable>
 
         <View className="mt-8 gap-3">
           <Text className="text-overline text-text-muted">HOW IT IS MEASURED</Text>

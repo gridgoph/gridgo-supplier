@@ -70,8 +70,12 @@ export type User = {
   verifiedAt?: string | null;
 };
 
-/** `downpayment` is 75% of the client total; `balance` is the remaining 25%. */
-export type InstallmentCode = "downpayment" | "balance";
+/**
+ * The client's installments. Canonical keys are `initial` and `final_online`;
+ * older reads use the aliases `downpayment` and `balance`. Read through
+ * `lib/payment.ts`.
+ */
+export type InstallmentCode = "initial" | "final_online" | "downpayment" | "balance";
 
 /**
  * One half of the digital payment split.
@@ -83,7 +87,8 @@ export type InstallmentCode = "downpayment" | "balance";
 export type Installment = {
   amountMinor: number;
   method: string | null;
-  status: "not_submitted" | "pending_confirmation" | "confirmed" | "legacy_confirmed";
+  /** `not_required` is the zero balance of an order paid in full up front. */
+  status: "not_submitted" | "pending_confirmation" | "confirmed" | "legacy_confirmed" | "not_required";
   submittedAt: string | null;
   confirmedAt: string | null;
   confirmationSource: string | null;
@@ -353,7 +358,9 @@ export type Order = {
   balanceMinor?: number;
   paymentMethod: string | null;
   paymentStatus: string;
-  payments?: Record<InstallmentCode, Installment>;
+  payments?: Partial<Record<InstallmentCode, Installment>>;
+  /** Share of the client total paid up front: 100 (paid in full) or 75. */
+  downpaymentPercent?: number;
   /** The plan this order's stages were committed under; null before commitment. */
   payoutPlanVersion?: PayoutPlanVersion | null;
   /** Stages in release order. Render them in this order, never a fixed list. */
@@ -1343,23 +1350,26 @@ export async function listIssues(orderId?: string): Promise<Issue[]> {
 
 /**
  * Pass on a newly assigned job. The reason is required and goes on the shop's
- * record (gridgo-api `docs/SHOP_RECOVERY_API.md`).
+ * record (gridgo-api `docs/SHOP_RECOVERY_API.md`); `reasonCode` is the option
+ * the shop picked, kept on its Performance record
+ * (`docs/SUPPLIER_PERFORMANCE_API.md`).
  */
-export async function declineJob(orderId: string, reason: string): Promise<void> {
+export async function declineJob(orderId: string, reason: string, reasonCode?: string): Promise<void> {
   await request(`/orders/${orderId}/decline`, {
     method: "POST",
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify(reasonCode ? { reason, reasonCode } : { reason }),
   });
 }
 
 /**
  * Give back a job the shop already accepted, at any stage before the rider
- * collects it. The reason is required and goes on the shop's record.
+ * collects it. The reason is required and goes on the shop's record, with the
+ * picked option as `reasonCode`.
  */
-export async function cancelJob(orderId: string, reason: string): Promise<void> {
+export async function cancelJob(orderId: string, reason: string, reasonCode?: string): Promise<void> {
   await request(`/orders/${orderId}/shop-cancel`, {
     method: "POST",
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify(reasonCode ? { reason, reasonCode } : { reason }),
   });
 }
 
@@ -1702,6 +1712,16 @@ export async function listCatalogItems(query: CatalogListQuery = {}): Promise<un
  */
 export async function getMyProductionLapses(): Promise<unknown> {
   return request<unknown>("/me/production-lapses");
+}
+
+/**
+ * The shop's warnings, late-finish notices, on-time rate and Top Pick
+ * standing over the last 30 days (gridgo-api
+ * `docs/SUPPLIER_PERFORMANCE_API.md`). Read only through
+ * `normalizePerformance` in `lib/performance.ts`.
+ */
+export async function getMyPerformance(): Promise<unknown> {
+  return request<unknown>("/me/performance");
 }
 
 /**

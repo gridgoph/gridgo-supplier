@@ -60,7 +60,7 @@ export function homeHeadline(jobs: Order[]): HomeHeadline {
       amountMinor: 0,
       label: "Earned so far",
       detail:
-        "Accept a job and name your price, and what GRIDGO owes you shows up here as you work through it.",
+        "When a client orders from your board and you accept the job, what GRIDGO owes you shows up here as you work through it.",
       tone: "none",
     };
   }

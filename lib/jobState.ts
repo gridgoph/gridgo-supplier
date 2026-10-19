@@ -5,6 +5,7 @@ import { CURRENT_PAYOUT_PLAN, milestoneDefinition, nextShopProof } from "@/lib/m
 import { counterCheck, presentCheckCodes } from "@/lib/pickupCheck";
 import { needsPackingPhoto } from "@/lib/packingPhoto";
 import { packagingCheck, packagingHeld } from "@/lib/packagingReadiness";
+import { paysInFull } from "@/lib/payment";
 import { needsProductionPhoto } from "@/lib/productionPhoto";
 import { presentRefundTimelineNote, refundStanding, refundStatus } from "@/lib/refund";
 import { rescheduleNotice } from "@/lib/reschedule";
@@ -24,9 +25,9 @@ import {
  *
  * Two things a shop used to do here are gone with operational model v2: it no
  * longer sends the client a proof to approve, and it no longer asks for
- * payment. The client pays 75% up front and 25% on the balance, both handled
- * outside this app, and the shop's evidence now buys its own money back one
- * milestone at a time rather than unlocking the press.
+ * payment. The client pays in full up front (older orders: 75% and a 25%
+ * balance), all handled outside this app, and the shop's evidence now buys
+ * its own money back one milestone at a time rather than unlocking the press.
  */
 
 export type SupplierActionKind =
@@ -67,8 +68,15 @@ export type StatePresentation = {
   icon: StatusIconName;
 };
 
-/** Map every API state the supplier may see to plain language + chip chrome. */
-export function presentOrderState(state: string): StatePresentation {
+/**
+ * Map every API state the supplier may see to plain language + chip chrome.
+ * Pass the order where there is one: a job the client paid in full up front
+ * must not read as a downpayment.
+ */
+export function presentOrderState(
+  state: string,
+  payment?: Partial<Pick<Order, "payments" | "downpaymentPercent" | "balanceMinor">>,
+): StatePresentation {
   switch (state) {
     case "supplier_assigned":
       return { label: "Needs decision", tone: "warning", icon: "triangle-alert" };
@@ -79,6 +87,10 @@ export function presentOrderState(state: string): StatePresentation {
     case "payment_authorized":
       // A status says where the job stands; the button says what to do about
       // it. Naming the next action here made both read the same words twice.
+      // "Client" because "Paid in full" alone is the shop's own payout below.
+      if (payment && paysInFull(payment)) {
+        return { label: "Client paid in full", tone: "success", icon: "circle-check" };
+      }
       return { label: "Downpayment in", tone: "success", icon: "circle-check" };
     case "production":
       return { label: "In production", tone: "info", icon: "square-pen" };
@@ -135,7 +147,7 @@ export function presentJobStatus(
     | "handoverFlow"
     | "shopHandover"
   > &
-    Partial<Pick<Order, "supplierId" | "riderId">>,
+    Partial<Pick<Order, "supplierId" | "riderId" | "payments" | "downpaymentPercent" | "balanceMinor">>,
 ): StatePresentation {
   const refund = refundStatus(order);
   if (refund) return refund;
@@ -152,7 +164,9 @@ export function presentJobStatus(
       return { label: check.status, tone: check.tone, icon: check.icon };
     }
   }
-  return ridersPack(order) ? presentRiderPacksStatus(order) ?? presentOrderState(order.state) : presentOrderState(order.state);
+  return ridersPack(order)
+    ? presentRiderPacksStatus(order) ?? presentOrderState(order.state, order)
+    : presentOrderState(order.state, order);
 }
 
 /**

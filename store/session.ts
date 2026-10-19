@@ -25,7 +25,7 @@ export const ACCESS_WITHDRAWN_MESSAGE = "Supplier access was withdrawn from this
 
 export type IdentityState =
   | { kind: "loading" }
-  | { kind: "signed_out"; reason?: "session_ended" }
+  | { kind: "signed_out"; reason?: "session_ended" | "refused" }
   | { kind: "supplier" }
   | { kind: "unassigned"; email?: string | null }
   | { kind: "mismatch"; destination: string; email?: string | null }
@@ -46,6 +46,19 @@ export function setClerkSignOutHandler(
  * Single source for `Stack.Protected` and launch redirects.
  * Any path that clears `user` (logout, role reject, 401) relies on this.
  */
+/**
+ * Signed out by GRIDGO with something Sign in has to say: the session ended,
+ * or an account that is not a shop was refused. Either reason sends launch to
+ * Sign in, and the Clerk bridge leaves it alone while Clerk is still letting go
+ * of the session — remounting the stack must not lose the sentence.
+ */
+export function signedOutWithNotice(identity: IdentityState): boolean {
+  return (
+    identity.kind === "signed_out" &&
+    (identity.reason === "session_ended" || identity.reason === "refused")
+  );
+}
+
 export function isSignedIn(user: User | null | undefined): boolean {
   return user != null;
 }
@@ -95,6 +108,10 @@ type SessionState = {
   adoptClerkUser: (user: User) => boolean;
   clearClerkIdentity: () => void;
   endClerkSession: () => void;
+  /** Sign in refused an account that is not a shop. Call before Clerk signs out. */
+  refuseSignIn: () => void;
+  /** A new sign-in attempt starts; the last refusal no longer applies. */
+  clearSignInRefusal: () => void;
   login: (email: string, password: string) => Promise<void>;
   /** Public apply via Clerk enroll. Lands pending; Operations still has to approve matching. */
   enrollSupplier: (input: api.SupplierEnrollment, idempotencyKey: string) => Promise<boolean>;
@@ -133,6 +150,24 @@ export const useSession = create<SessionState>((set, get) => ({
     // its existing leftover-session recovery can settle Clerk on the next tap.
     // An explicit logout already owns the Clerk sign-out in its finally block.
     if (clerkSignOutHandler && sessionWait !== "out") void releaseClerkSession(clerkSignOutHandler);
+  },
+  refuseSignIn: () => {
+    api.setTokenProvider(null);
+    api.setToken(null);
+    set({
+      user: null,
+      loading: false,
+      error: null,
+      authSource: "none",
+      identity: { kind: "signed_out", reason: "refused" },
+      sessionWait: null,
+    });
+  },
+  clearSignInRefusal: () => {
+    const { identity } = get();
+    if (identity.kind === "signed_out" && identity.reason === "refused") {
+      set({ identity: { kind: "signed_out" } });
+    }
   },
   setClerkIdentity: (identity) =>
     set((state) => ({
@@ -319,7 +354,7 @@ export const useSession = create<SessionState>((set, get) => ({
  */
 api.setUnauthorizedHandler(() => {
   const { authSource, identity } = useSession.getState();
-  if (identity.kind === "signed_out" && identity.reason === "session_ended") return;
+  if (signedOutWithNotice(identity)) return;
   if (authSource === "clerk") {
     useSession.getState().endClerkSession();
     return;

@@ -331,7 +331,7 @@ export default function PayoutScreen() {
               body={
                 allRows.length
                   ? "Switch to All to see every job you have been paid for."
-                  : "Accept a job and name your price, and the parts you are paid in appear here as you work through it."
+                  : "When a client orders from your board and you accept the job, the parts you are paid in appear here as you work through it."
               }
               actionLabel={allRows.length ? "Show all" : "Open jobs"}
               onAction={() =>

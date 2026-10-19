@@ -54,7 +54,7 @@ export function leftoverActionForTypedEmail(input: {
  * Whether a live Clerk JWT is a shop, some other GRIDGO app, or unmapped.
  *
  * Sign in uses this *before* mailing a second-factor code. A client password
- * is valid at Clerk; mailing that person a job number is how the wrong app
+ * is valid at Clerk; mailing that person a code is how the wrong app
  * looks open.
  */
 export async function supplierDoorForClerkSession(

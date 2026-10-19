@@ -63,6 +63,12 @@ describe("the steps", () => {
     expect(text("listing.options")).toMatch(/option/);
   });
 
+  it("say Accept confirms the shop can run a job, never that it names a price", () => {
+    const step = TOUR_STEPS.find((entry) => entry.id === "jobs.list")!;
+    expect(step.body).toMatch(/Accept if your shop can run it by the date/);
+    expect(`${step.title} ${step.body}`).not.toMatch(/price/i);
+  });
+
   it("keep every instruction short", () => {
     for (const step of TOUR_STEPS) {
       expect(step.title.length).toBeLessThanOrEqual(32);

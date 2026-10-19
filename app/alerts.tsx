@@ -23,6 +23,7 @@ import { PICKUP_CHAT_NOTICE, pickupChatHref } from "@/lib/pickupChat";
 import { CLIENT_CHAT_NOTICE, clientChatHref } from "@/lib/clientChat";
 import { jobScreenHref } from "@/lib/productionNudge";
 import { isLapseAlert } from "@/lib/productionLapse";
+import { isPerformanceAlert, performanceHref } from "@/lib/performance";
 import { SUPPORT_MESSAGE_PUSH_TYPE } from "@/lib/push";
 import { installChannel } from "@/lib/buildDistribution";
 import { openRelease, releaseNoticeOpen } from "@/lib/releasePush";
@@ -284,6 +285,8 @@ export default function NotificationsScreen() {
               ? () => router.push(clientChatHref(alert.orderId as string))
               : alert.type === SHOP_HOURS_NOTICE
               ? () => router.push(SHOP_HOURS_ROUTE)
+              : isPerformanceAlert(alert.type)
+              ? () => router.push(performanceHref(alert.orderId))
               : alert.type === SUPPORT_MESSAGE_PUSH_TYPE
               ? () => router.push(isChatThreadId(supportThread) ? chatThreadRoute(supportThread) : CHAT_LIST_ROUTE)
               : // A notice asking the shop to act opens its job even before the list has it.

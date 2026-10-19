@@ -4,13 +4,13 @@ import { router, useLocalSearchParams } from "expo-router";
 
 import { DangerButton } from "@/components/DangerButton";
 import { FlowScreen } from "@/components/FlowScreen";
-import { LATE_PRODUCTION_HREF } from "@/components/LatenessPanel";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { NoteField } from "@/components/controls/NoteField";
 import { OptionList } from "@/components/controls/OptionList";
 import * as api from "@/lib/api";
+import { performanceHref } from "@/lib/performance";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { hasReleasedShare } from "@/lib/milestones";
 import {
@@ -65,7 +65,7 @@ export default function CancelJobScreen() {
     setBusy(true);
     setActionError(null);
     try {
-      await api.cancelJob(job.id, cancelReasonText(reason, detail));
+      await api.cancelJob(job.id, cancelReasonText(reason, detail), reason);
       setCancelled(true);
     } catch (e) {
       setActionError(humanizeApiError(e, offlineMessage("cancel this job")));
@@ -86,7 +86,7 @@ export default function CancelJobScreen() {
         footer={
           <>
             <PrimaryButton label="Back to jobs" onPress={() => router.navigate("/(tabs)/jobs")} />
-            <SecondaryButton label="See your shop's record" onPress={() => router.push(LATE_PRODUCTION_HREF)} />
+            <SecondaryButton label="See your performance" onPress={() => router.push(performanceHref())} />
           </>
         }
       >
@@ -148,7 +148,7 @@ export default function CancelJobScreen() {
             <Text className="text-body text-text-secondary">
               The client is already counting on this job. GRIDGO records the cancellation with the
               stage it reached — {failureStageLabel(job.state).toLowerCase()} — and Operations sees
-              it beside your late jobs.
+              it beside your late jobs. It is also a warning on your Performance page straight away.
             </Text>
             <Text className="text-body text-text-secondary">
               Parts of your earnings on this job that have not been released will not be paid. Stop

@@ -51,12 +51,12 @@ export function JobTicketCode({
         <View className="gap-1">
           <Text className="text-h1 text-text-primary">{title}</Text>
           <Text className="text-body-lg text-text-secondary">
-            We sent a 6-digit job number to {email}
+            We sent a 6-digit code to {email}
           </Text>
         </View>
       ) : (
         <Text className="text-body-lg text-text-secondary">
-          We sent a 6-digit job number to {email}
+          We sent a 6-digit code to {email}
         </Text>
       )}
 
@@ -99,7 +99,7 @@ export function JobTicketCode({
           maxLength={LENGTH}
           caretHidden
           importantForAutofill="yes"
-          accessibilityLabel="6-digit job number"
+          accessibilityLabel="6-digit code"
           editable={!busy}
           style={[
             styles.hiddenInput,

@@ -7,6 +7,7 @@ import { awaitClerkSessionToken, clerkAccessFor, clerkSessionToken } from "@/lib
 import {
   ACCESS_WITHDRAWN_MESSAGE,
   setClerkSignOutHandler,
+  signedOutWithNotice,
   useSession,
 } from "@/store/session";
 
@@ -22,9 +23,7 @@ export function ClerkSessionBridge({ children }: Props) {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const { user } = useUser();
   const { signOut } = useClerk();
-  const sessionEnded = useSession((state) =>
-    state.identity.kind === "signed_out" && state.identity.reason === "session_ended",
-  );
+  const sessionEnded = useSession((state) => signedOutWithNotice(state.identity));
   const getTokenRef = useRef(getToken);
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -113,7 +112,7 @@ export function ClerkSessionBridge({ children }: Props) {
       } catch (error) {
         if (cancelled) return;
         const current = useSession.getState();
-        if (current.identity.kind === "signed_out" && current.identity.reason === "session_ended") return;
+        if (signedOutWithNotice(current.identity)) return;
         if (current.identity.kind === "supplier" && current.user) return;
         if (isUnmappedIdentity(error)) {
           current.setClerkIdentity({ kind: "unassigned", email });
