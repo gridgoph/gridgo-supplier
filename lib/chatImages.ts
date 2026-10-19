@@ -51,6 +51,36 @@ export async function pickChatImages(): Promise<Array<{
   }));
 }
 
+/** One photo from the camera, or none when the shop backs out. */
+export async function takeChatPhoto(): Promise<Array<{
+  uri: string;
+  name: string;
+  mimeType: string;
+  size: number | null;
+}>> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ImagePicker = require("expo-image-picker") as {
+    requestCameraPermissionsAsync: () => Promise<{ granted: boolean }>;
+    launchCameraAsync: (options: Record<string, unknown>) => Promise<{
+      canceled: boolean;
+      assets?: Array<{ uri: string; fileName?: string | null; mimeType?: string | null; fileSize?: number | null }>;
+    }>;
+  };
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  if (!permission.granted) {
+    throw new Error("GRIDGO needs camera access to take a photo. Turn it on for this app in your phone's settings, or choose a screenshot instead.");
+  }
+  const taken = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.9 });
+  const asset = taken.canceled ? null : taken.assets?.[0];
+  if (!asset) return [];
+  return [{
+    uri: asset.uri,
+    name: asset.fileName || "photo.jpg",
+    mimeType: asset.mimeType || "image/jpeg",
+    size: asset.fileSize ?? null,
+  }];
+}
+
 type ChatUpload = { uri: string; name: string; mimeType: string };
 
 /** Sends one file to `POST /files`. Rejects only when it never reached GRIDGO. */
