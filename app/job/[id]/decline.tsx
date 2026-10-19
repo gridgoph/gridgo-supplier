@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { DangerButton } from "@/components/DangerButton";
 import { FlowScreen } from "@/components/FlowScreen";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { SchedulingNotice } from "@/components/SchedulingNotice";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { NoteField } from "@/components/controls/NoteField";
@@ -17,6 +18,7 @@ import {
 } from "@/lib/decline";
 import * as api from "@/lib/api";
 import { performanceHref } from "@/lib/performance";
+import { isTightBeforeAccepting, TIGHT_DECLINE_NO_PENALTY } from "@/lib/scheduling";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { useJob } from "@/hooks/useJob";
 import { askConfirm } from "@/store/sheets";
@@ -38,6 +40,9 @@ export default function DeclineJobScreen() {
   const [detail, setDetail] = useState("");
   const [showErrors, setShowErrors] = useState(false);
   const [declined, setDeclined] = useState(false);
+  // A Tight job is no longer waiting once declined, so the outcome keeps what was sent.
+  const [declinedTight, setDeclinedTight] = useState(false);
+  const tight = declined ? declinedTight : isTightBeforeAccepting(job);
 
   async function decline() {
     if (!job || !reason) {
@@ -46,8 +51,9 @@ export default function DeclineJobScreen() {
     }
     const confirmed = await askConfirm({
       question: `Decline ${job.title}?`,
-      consequence:
-        "It goes back to GRIDGO now and on your shop's record, and your shop will not be offered it again.",
+      consequence: tight
+        ? "It goes back to GRIDGO now and your shop will not be offered it again. With a tight deadline and your reason, it does not count against your shop."
+        : "It goes back to GRIDGO now and on your shop's record, and your shop will not be offered it again.",
       confirmLabel: "Decline job",
       cancelLabel: "Keep this job",
       destructive: true,
@@ -59,6 +65,7 @@ export default function DeclineJobScreen() {
     try {
       // The reason is required; GRIDGO keeps it on the shop's record.
       await api.declineJob(job.id, declineTimelineNote(reason, detail), reason);
+      setDeclinedTight(tight);
       // The job is GRIDGO's again while the client chooses, so the workspace
       // behind this screen has nothing left for the shop. The outcome is
       // stated here instead, and the way on is back to the job list.
@@ -94,8 +101,9 @@ export default function DeclineJobScreen() {
             Your reason went with it
           </Text>
           <Text className="text-body text-text-secondary">
-            It is on your shop&apos;s record as passed on, with your reason. No money is taken for
-            declining.
+            {tight
+              ? "It was a tight deadline, so it does not count against your shop during the pilot. No money is taken for declining."
+              : "It is on your shop's record as passed on, with your reason. No money is taken for declining."}
           </Text>
         </View>
       </FlowScreen>
@@ -126,6 +134,8 @@ export default function DeclineJobScreen() {
         </>
       }
     >
+      {job ? <SchedulingNotice order={job} compact /> : null}
+
       <FieldShell
         label="Why are you declining?"
         hint="Operations reads this on your shop's record."
@@ -159,9 +169,9 @@ export default function DeclineJobScreen() {
           What happens after you decline
         </Text>
         <Text className="text-body text-text-secondary">
-          GRIDGO offers the client another vetted shop or a full refund. Your decline goes on your
-          shop&apos;s record with your reason, beside your late jobs. No money is taken for it.
-          Three declines within 30 days bring a warning on your Performance page.
+          {tight
+            ? `GRIDGO offers the client another vetted shop or a full refund. ${TIGHT_DECLINE_NO_PENALTY} No money is taken for it.`
+            : "GRIDGO offers the client another vetted shop or a full refund. Your decline goes on your shop's record with your reason, beside your late jobs. No money is taken for it. Three declines within 30 days bring a warning on your Performance page."}
         </Text>
       </View>
     </FlowScreen>
