@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.304 (New feature)
+
+- New jobs with a tight deadline say so before you accept, and you can decline them with a reason at no penalty.
+- You can add up to three screenshots when you report a problem, so Operations sees what you saw.
+
 ## 1.0.298 (Fix)
 
 - A job the client paid in full now says "Client paid in full" instead of "Downpayment in".
