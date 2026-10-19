@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.298 (Fix)
+
+- A job the client paid in full now says "Client paid in full" instead of "Downpayment in".
+
 ## 1.0.293 (Fix)
 
 - Signing in with an account that is not a shop now says so on Sign in, and the emailed code is called a code.
