@@ -443,6 +443,12 @@ export type Order = {
    */
   shopAcceptance?: ShopAcceptance | null;
   /**
+   * Whether the client's date is Tight or same-day (gridgo-api
+   * `docs/SCHEDULING_API.md`). Read only through `lib/scheduling.ts`.
+   * Absent on an older API.
+   */
+  scheduling?: OrderScheduling | null;
+  /**
    * Set once this shop let the job go — the hour ran out, it declined, or it
    * cancelled. The shop sees only where the client's choice stands. Read
    * through `lib/shopRecovery.ts`.
@@ -500,6 +506,14 @@ export type ShopAcceptance = {
   workingMinutes: number;
   status: "pending" | "accepted" | ShopFailureKind;
   acceptedAt?: string | null;
+};
+
+/** The supplier's slice of an order's scheduling; `label` is "Tight deadline" or null. */
+export type OrderScheduling = {
+  status?: "tight" | "secured" | "rush" | "not_possible" | null;
+  sameDay?: boolean;
+  tightDeadline?: boolean;
+  label?: string | null;
 };
 
 export type ShopFailureKind = "timed_out" | "declined" | "cancelled";
