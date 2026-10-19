@@ -1,4 +1,5 @@
 import {
+  addProblemReportScreenshots,
   composeProblemReport,
   PROBLEM_REPORT_HEADING,
   PROBLEM_REPORT_MAX,
@@ -65,5 +66,37 @@ describe("problemReportIssue", () => {
     expect(problemReportIssue("   ")).toBe("Say what went wrong before you send it.");
     expect(problemReportIssue("It crashed")).toBeNull();
     expect(problemReportIssue("x".repeat(PROBLEM_REPORT_MAX + 1))).toMatch(/under 1500/);
+  });
+});
+
+describe("addProblemReportScreenshots", () => {
+  const shot = (name: string, extra: { mimeType?: string; size?: number } = {}) => ({
+    uri: `file:///cache/${name}`,
+    name,
+    mimeType: "image/png",
+    ...extra,
+  });
+
+  it("adds picked images after the ones already chosen", () => {
+    expect(addProblemReportScreenshots([shot("a.png")], [shot("b.png")])).toEqual({
+      ok: true,
+      screenshots: [shot("a.png"), shot("b.png")],
+    });
+  });
+
+  it("adds none of a pick that would go past three", () => {
+    const two = [shot("a.png"), shot("b.png")];
+    expect(addProblemReportScreenshots(two, [shot("c.png"), shot("d.png")])).toEqual({
+      ok: false,
+      error: "A report can include up to 3 screenshots.",
+    });
+    expect(addProblemReportScreenshots(two, [shot("c.png")]).ok).toBe(true);
+  });
+
+  it("refuses a file that is not a photo", () => {
+    expect(addProblemReportScreenshots([], [shot("notes.pdf", { mimeType: "application/pdf" })])).toEqual({
+      ok: false,
+      error: "Choose a JPEG, PNG, or WebP photo.",
+    });
   });
 });
