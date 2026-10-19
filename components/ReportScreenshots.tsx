@@ -50,7 +50,7 @@ export function ReportScreenshots({ screenshots, max, disabled, onAdd, onTakePho
                 hitSlop={4}
                 className="absolute right-0 top-0 h-11 w-11 items-end justify-start p-1"
               >
-                <View className="h-7 w-7 items-center justify-center rounded-pill bg-accent">
+                <View className="h-7 w-7 items-center justify-center rounded-pill border-2 border-surface bg-accent">
                   <X size={16} color={colors.accentOn} strokeWidth={2.5} />
                 </View>
               </Pressable>
