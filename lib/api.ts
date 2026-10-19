@@ -70,8 +70,12 @@ export type User = {
   verifiedAt?: string | null;
 };
 
-/** `downpayment` is 75% of the client total; `balance` is the remaining 25%. */
-export type InstallmentCode = "downpayment" | "balance";
+/**
+ * The client's installments. Canonical keys are `initial` and `final_online`;
+ * older reads use the aliases `downpayment` and `balance`. Read through
+ * `lib/payment.ts`.
+ */
+export type InstallmentCode = "initial" | "final_online" | "downpayment" | "balance";
 
 /**
  * One half of the digital payment split.
@@ -83,7 +87,8 @@ export type InstallmentCode = "downpayment" | "balance";
 export type Installment = {
   amountMinor: number;
   method: string | null;
-  status: "not_submitted" | "pending_confirmation" | "confirmed" | "legacy_confirmed";
+  /** `not_required` is the zero balance of an order paid in full up front. */
+  status: "not_submitted" | "pending_confirmation" | "confirmed" | "legacy_confirmed" | "not_required";
   submittedAt: string | null;
   confirmedAt: string | null;
   confirmationSource: string | null;
@@ -353,7 +358,9 @@ export type Order = {
   balanceMinor?: number;
   paymentMethod: string | null;
   paymentStatus: string;
-  payments?: Record<InstallmentCode, Installment>;
+  payments?: Partial<Record<InstallmentCode, Installment>>;
+  /** Share of the client total paid up front: 100 (paid in full) or 75. */
+  downpaymentPercent?: number;
   /** The plan this order's stages were committed under; null before commitment. */
   payoutPlanVersion?: PayoutPlanVersion | null;
   /** Stages in release order. Render them in this order, never a fixed list. */
