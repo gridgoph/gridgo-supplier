@@ -1,7 +1,13 @@
 import * as api from "@/lib/api";
 import type { ColourPricingPayload } from "@/lib/colourPricing";
-import { apiErrorBlockers, humanizeApiError, isCatalogItemStale, offlineMessage } from "@/lib/apiErrors";
-import { EXPRESS_STALE } from "@/lib/express";
+import {
+  apiErrorBlockers,
+  humanizeApiError,
+  isCatalogItemsStale,
+  isProductionTimeRefused,
+  offlineMessage,
+  previewRefusal,
+} from "@/lib/apiErrors";
 import { fileFormatName } from "@/data/fileFormats";
 import { invalidate } from "@/lib/live";
 import {
@@ -20,7 +26,8 @@ import {
   type SpecGroup,
   type SpeedTier,
 } from "@/lib/listings";
-import type { timeFields } from "@/lib/productionDays";
+import { productionTimeBody, type ProductionChoice, type ProductionTimeBody, type timeFields } from "@/lib/productionDays";
+import { normalizePreview, previewQuery, type ProductionTimePreview } from "@/lib/productionTimePreview";
 import type { PrintLayoutCode } from "@/lib/printLayout";
 import {
   normalizeProductTypeRequest,
@@ -56,6 +63,15 @@ export type BoardOutcome<T> =
   | { status: "ok"; value: T }
   | { status: "not_open_yet" }
   | { status: "failed"; message: string };
+
+/**
+ * A listing already on screen that GRIDGO did not answer for again: what is
+ * drawn is the last answer, and the shop is told so rather than shown it as
+ * current. `reason` is the failure's own sentence.
+ */
+export function listingRefreshFailed(reason: string): string {
+  return `This listing could not be refreshed, so what you see may be out of date. ${reason}`;
+}
 
 /** What a shop is told while GRIDGO has no board routes. Promises nothing. */
 export const BOARD_NOT_OPEN_YET =
@@ -228,15 +244,11 @@ export type ListingPatch = {
   priceTiers?: Listing["priceTiers"];
   /** Each speed's time written through `timeFields` in `lib/productionDays.ts`. */
   speedTiers?: (Omit<SpeedTier, "turnaround"> & ReturnType<typeof timeFields<"turnaround">>)[];
-  turnaroundMode?: Listing["turnaroundMode"];
   /**
-   * Working days or same-day minutes, only the chosen unit's field per end,
-   * written through `listingTimeFields` in `lib/productionDays.ts`.
+   * The shop's answer to "How long does this take?". GRIDGO refuses it beside
+   * the older duration fields or `express`, so a save sends only this.
    */
-  turnaroundDays?: number | null;
-  turnaroundMinutes?: number | null;
-  minimumTurnaroundDays?: number | null;
-  minimumTurnaroundMinutes?: number | null;
+  productionTime?: ProductionTimeBody;
   subcategoryCode?: string;
   /** The platform's `active`; "on the board" everywhere a shop can see. */
   active?: boolean;
@@ -265,32 +277,114 @@ export async function saveListing(
       );
     }
     const saved = normalizeListing(
-      await api.updateCatalogItem(listing.id, listing.version, body),
+      await api.updateCatalogItem(listing.id, listing.version, body).catch((error: unknown) => {
+        // One sentence for a refused production time, whichever code GRIDGO used.
+        if (patch.productionTime && isProductionTimeRefused(error)) {
+          throw new api.ApiError(400, { error: "invalid_production_time" });
+        }
+        throw error;
+      }),
     );
     if (!saved) throw new api.ApiError(502, { error: "unreadable" });
     return saved;
   });
 }
 
-/**
- * Express, on its own: only `express` with the listing's version, never the
- * held words, and it never opens review (gridgo-api `docs/EXPRESS_API.md`).
- * A stale version is worded for the switch, which reloads rather than asking
- * the shop to pull down.
- */
-export async function setExpress(listing: Listing, on: boolean): Promise<BoardOutcome<Listing>> {
+/** The dates clients would see for this answer, before it is saved. */
+export async function loadProductionTimePreview(
+  listing: Listing,
+  choice: ProductionChoice,
+): Promise<BoardOutcome<ProductionTimePreview>> {
+  let body: unknown;
   try {
-    const saved = normalizeListing(
-      await api.updateCatalogItem(listing.id, listing.version, { express: on }),
-    );
-    if (!saved) return { status: "failed", message: UNREADABLE_LISTING };
-    invalidate("catalog");
-    return { status: "ok", value: saved };
+    body = await api.getProductionTimePreview(listing.id, previewQuery(choice));
   } catch (error) {
+    // GRIDGO's own refusals come first: a 404 naming the listing is a listing
+    // that is gone, not a route this GRIDGO lacks.
+    const refused = previewRefusal(error);
+    if (refused) return { status: "failed", message: refused };
     if (isRouteAbsent(error)) return { status: "not_open_yet" };
-    if (isCatalogItemStale(error)) return { status: "failed", message: EXPRESS_STALE };
-    return { status: "failed", message: humanizeApiError(error, offlineMessage("change Express")) };
+    return { status: "failed", message: humanizeApiError(error, offlineMessage("show the dates clients will see")) };
   }
+  const preview = normalizePreview(body);
+  return preview
+    ? { status: "ok", value: preview }
+    : { status: "failed", message: "GRIDGO sent dates this version of the app cannot read." };
+}
+
+/** GRIDGO pages at fifty; a hundred pages is far past any shop's board. */
+const MAX_BOARD_PAGES = 100;
+
+/** The board could not be read whole, so nothing is sent: GRIDGO would change nothing anyway. */
+class IncompleteBoardError extends Error {}
+
+export const INCOMPLETE_BOARD =
+  "Some of your listings could not be read, so nothing was changed. Try again.";
+
+/**
+ * Every listing the shop owns, hidden ones and drafts too, page by page. A
+ * listing without a version, or a board past the last page read, is refused
+ * rather than sent short.
+ */
+async function ownListingVersions(): Promise<Record<string, number>> {
+  const versions: Record<string, number> = {};
+  let cursor: string | null = null;
+  for (let page = 0; page < MAX_BOARD_PAGES; page += 1) {
+    const board = normalizeBoardPage(await api.listCatalogItems({ limit: 50, cursor }));
+    for (const listing of board.listings) {
+      if (listing.version == null) throw new IncompleteBoardError();
+      versions[listing.id] = listing.version;
+    }
+    if (!board.nextCursor) return versions;
+    cursor = board.nextCursor;
+  }
+  throw new IncompleteBoardError();
+}
+
+/**
+ * How many listings the shop owns, for "All 12 of your listings". Null when
+ * GRIDGO does not say, or cannot be reached: the question then says "Every
+ * listing you have".
+ */
+export async function loadListingCount(): Promise<number | null> {
+  try {
+    const page = normalizeBoardPage(await api.listCatalogItems({ limit: 1, cursor: null }));
+    return page.nextCursor && page.total <= page.listings.length ? null : page.total;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * "Use for all my listings": one production time on every listing at once.
+ *
+ * GRIDGO applies it only when every listing and its version is named, so the
+ * whole board is read first. A listing that moved in between makes GRIDGO
+ * change nothing (`catalog_items_stale`); the board is read again and sent
+ * once more before the shop is told. Answers how many listings changed.
+ */
+export async function applyProductionTimeToAll(choice: ProductionChoice): Promise<BoardOutcome<number>> {
+  let incomplete = false;
+  const send = async () => {
+    const expectedVersions = await ownListingVersions().catch((error: unknown) => {
+      incomplete = error instanceof IncompleteBoardError;
+      throw error;
+    });
+    const body = (await api.applyCatalogProductionTime({
+      productionTime: productionTimeBody(choice),
+      expectedVersions,
+    })) as { total?: unknown; items?: unknown };
+    return typeof body?.total === "number" ? body.total : Array.isArray(body?.items) ? body.items.length : 0;
+  };
+  const result = await attemptWrite("set the production time on your listings", async () => {
+    try {
+      return await send();
+    } catch (error) {
+      if (!isCatalogItemsStale(error)) throw error;
+      return send();
+    }
+  });
+  return incomplete && result.status === "failed" ? { status: "failed", message: INCOMPLETE_BOARD } : result;
 }
 
 /**

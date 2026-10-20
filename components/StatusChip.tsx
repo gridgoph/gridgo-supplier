@@ -1,4 +1,5 @@
 import {
+  Ban,
   Banknote,
   CircleCheck,
   CircleHelp,
@@ -10,6 +11,7 @@ import {
   TrendingUp,
   TriangleAlert,
   Wrench,
+  Zap,
   type LucideIcon,
 } from "lucide-react-native";
 import { Text, View } from "react-native";
@@ -27,6 +29,7 @@ export type StatusTone = "success" | "warning" | "error" | "info" | "neutral";
  * vocabulary small enough to stay consistent across screens.
  */
 const ICONS = {
+  ban: Ban,
   banknote: Banknote,
   "circle-check": CircleCheck,
   "circle-help": CircleHelp,
@@ -38,6 +41,7 @@ const ICONS = {
   sparkles: Sparkles,
   "trending-up": TrendingUp,
   wrench: Wrench,
+  zap: Zap,
 } satisfies Record<string, LucideIcon>;
 
 export type StatusIconName = keyof typeof ICONS;

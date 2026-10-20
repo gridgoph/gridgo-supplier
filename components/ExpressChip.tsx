@@ -5,7 +5,7 @@ import { useThemeColors } from "@/hooks/useTheme";
 import { EXPRESS_LABEL } from "@/lib/express";
 
 /**
- * The one Express tag, on jobs and listings alike.
+ * The one Express tag, on jobs placed under Express.
  *
  * A tag, not a status: it says how the deadline was promised, so it keeps the
  * neutral outline instead of a status colour and carries its meaning in the

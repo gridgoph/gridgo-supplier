@@ -1,4 +1,17 @@
-import { applyDraft, colourHold, draftFrom, listingSavePatch, measureUnitFor, packageQtyFor } from "@/lib/listingDraft";
+import {
+  applyDraft,
+  colourHold,
+  draftEdits,
+  draftFrom,
+  heldMixedRange,
+  listingSavePatch,
+  measureUnitFor,
+  packageQtyFor,
+  rebaseEdits,
+  sameDraft,
+  shownProductionTime,
+  withEdits,
+} from "@/lib/listingDraft";
 import type { Listing } from "@/lib/listings";
 import { sameDay, workingDays } from "@/lib/productionDays";
 
@@ -56,55 +69,110 @@ describe("listingSavePatch measured units", () => {
     );
   });
 
-  it("sends the soonest and latest working days when the listing overrides ready-in", () => {
-    const working = {
-      ...draftFrom(listing),
-      turnaroundMode: "override" as const,
-      minimumTurnaround: workingDays(1),
-      turnaround: workingDays(3),
-    };
-    expect(listingSavePatch(working, 0)).toEqual(
-      expect.objectContaining({
-        turnaroundMode: "override",
-        minimumTurnaroundDays: 1,
-        turnaroundDays: 3,
-      }),
+  it("sends the shop's answer as productionTime, and never the duration fields beside it", () => {
+    const days = listingSavePatch(
+      { ...draftFrom(listing), productionTime: { mode: "days", minDays: 1, maxDays: 3 } },
+      0,
     );
+    expect(days.productionTime).toEqual({ mode: "days", minDays: 1, maxDays: 3 });
+    const same = listingSavePatch(
+      { ...draftFrom(listing), productionTime: { mode: "same_day", minutes: 90 } },
+      0,
+    );
+    expect(same.productionTime).toEqual({ mode: "same_day", hours: 1.5 });
+    for (const patch of [days, same]) {
+      expect(JSON.stringify(patch)).not.toMatch(/"(minimumT|t)urnaround(Mode|Days|Minutes|Hours)"|"express"/);
+    }
   });
 
-  it("sends a same-day window as minutes, and only the chosen unit's field", () => {
-    const working = {
-      ...draftFrom(listing),
-      turnaroundMode: "override" as const,
-      minimumTurnaround: sameDay(60),
-      turnaround: sameDay(150),
-    };
-    const patch = listingSavePatch(working, 0);
-    expect(patch).toEqual(
-      expect.objectContaining({ minimumTurnaroundMinutes: 60, turnaroundMinutes: 150 }),
-    );
-    expect(patch).not.toHaveProperty("turnaroundDays");
-    expect(patch).not.toHaveProperty("minimumTurnaroundDays");
+  it("leaves the production time alone on a save that did not touch it", () => {
+    const patch = listingSavePatch(draftFrom({ ...listing, name: "Renamed" }), 0);
+    expect(patch).not.toHaveProperty("productionTime");
+    expect(patch).not.toHaveProperty("turnaroundMode");
   });
 
-  it("clears the window when the listing follows its category, and sends each speed in its own unit", () => {
+  it("counts a touched production time as a change, so the foot offers Save", () => {
+    const base = draftFrom(listing);
+    expect(sameDraft({ ...base, productionTime: { mode: "same_day", minutes: 60 } }, base)).toBe(false);
+    expect(sameDraft(base, draftFrom(listing))).toBe(true);
+  });
+
+  it("reads the answer as the window the rest of the editor checks", () => {
+    const merged = applyDraft(listing, { ...draftFrom(listing), productionTime: { mode: "same_day", minutes: 120 } });
+    expect(merged.turnaroundMode).toBe("override");
+    expect(merged.turnaround).toEqual(sameDay(120));
+    expect(merged.minimumTurnaround).toEqual(sameDay(120));
+  });
+
+  it("shows the shop's answer, else GRIDGO's, else one read off an older window", () => {
+    const base = draftFrom(listing);
+    expect(shownProductionTime(listing, base, null)).toBeNull();
+    expect(shownProductionTime(listing, base, workingDays(2))).toEqual({ mode: "days", minDays: 2, maxDays: 2 });
+    expect(
+      shownProductionTime({ ...listing, productionTime: { mode: "same_day", minutes: 120 } }, base, workingDays(2)),
+    ).toEqual({ mode: "same_day", minutes: 120 });
+    expect(
+      shownProductionTime(
+        { ...listing, turnaroundMode: "override", minimumTurnaround: workingDays(2), turnaround: workingDays(4) },
+        base,
+        null,
+      ),
+    ).toEqual({ mode: "days", minDays: 2, maxDays: 4 });
+    expect(
+      shownProductionTime(listing, { productionTime: { mode: "days", minDays: 3, maxDays: 5 } }, workingDays(2)),
+    ).toEqual({ mode: "days", minDays: 3, maxDays: 5 });
+  });
+
+  it("never turns an older range that mixes hours and days into a different answer", () => {
+    const mixed = {
+      ...listing,
+      productionTime: null,
+      turnaroundMode: "override" as const,
+      minimumTurnaround: sameDay(120),
+      turnaround: workingDays(2),
+    };
+    // GRIDGO sent null beside the range: no answer is made up for it.
+    expect(shownProductionTime(mixed, draftFrom(mixed), null)).toBeNull();
+    expect(heldMixedRange(mixed)).toEqual({ min: sameDay(120), max: workingDays(2) });
+    // A GRIDGO that predates the question sends no productionTime at all.
+    const { productionTime: _absent, ...older } = mixed;
+    expect(shownProductionTime(older, draftFrom(older), null)).toEqual({ mode: "days", minDays: 1, maxDays: 2 });
+    expect(heldMixedRange(older)).toBeNull();
+    // Null with no older range is simply no time yet.
+    expect(heldMixedRange({ ...listing, productionTime: null })).toBeNull();
+    // The shop's own pick replaces it.
+    expect(
+      shownProductionTime(mixed, { productionTime: { mode: "same_day", minutes: 180 } }, null),
+    ).toEqual({ mode: "same_day", minutes: 180 });
+  });
+
+  it("holds only the fields the shop changed, on top of whatever GRIDGO holds now", () => {
+    const v7 = { ...listing, version: 7, name: "Flyers", basePriceMinor: 10_000 };
+    const edits = draftEdits({ ...draftFrom(v7), name: "Flyers A5" }, draftFrom(v7));
+    expect(edits).toEqual({ name: "Flyers A5" });
+    expect(draftEdits(draftFrom(v7), draftFrom(v7))).toBeNull();
+
+    // Another device moved the price; the shop's name stays and the new price is taken.
+    const v8 = { ...v7, version: 8, basePriceMinor: 20_000 };
+    expect(withEdits(v8, edits)).toEqual({ ...draftFrom(v8), name: "Flyers A5" });
+    expect(withEdits(v8, edits).price).toBe("200.00");
+    expect(rebaseEdits(edits, v8)).toEqual({ name: "Flyers A5" });
+    // An edit GRIDGO now holds too is no longer the shop's.
+    expect(rebaseEdits(edits, { ...v8, name: "Flyers A5" })).toBeNull();
+  });
+
+  it("sends each faster price tier in its own unit, as before", () => {
     const working = {
       ...draftFrom(listing),
-      turnaroundMode: "inherit" as const,
-      minimumTurnaround: workingDays(1),
-      turnaround: workingDays(3),
       speedTiers: [
         { id: "s0", label: "Same day", turnaround: sameDay(120), priceMinor: 80_000, surchargeMinor: null },
-        { id: "s1", label: "Express", turnaround: workingDays(1), priceMinor: 50_000, surchargeMinor: null },
+        { id: "s1", label: "Rush", turnaround: workingDays(1), priceMinor: 50_000, surchargeMinor: null },
       ],
     };
     const patch = listingSavePatch(working, 0);
-    expect(patch).toEqual(
-      expect.objectContaining({ minimumTurnaroundDays: null, turnaroundDays: null }),
-    );
     expect(patch.speedTiers).toEqual([
       { id: "s0", label: "Same day", turnaroundMinutes: 120, priceMinor: 80_000, surchargeMinor: null },
-      { id: "s1", label: "Express", turnaroundDays: 1, priceMinor: 50_000, surchargeMinor: null },
+      { id: "s1", label: "Rush", turnaroundDays: 1, priceMinor: 50_000, surchargeMinor: null },
     ]);
     expect(JSON.stringify(patch)).not.toMatch(/Hours/);
   });

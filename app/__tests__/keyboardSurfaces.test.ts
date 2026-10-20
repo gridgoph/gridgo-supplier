@@ -56,6 +56,7 @@ const HANDLED_BY_ITS_CALLERS = [
   "components/JobDocketRail.tsx",
   "components/FormatPlusField.tsx",
   "components/listing/TierEditor.tsx",
+  "components/listing/ProductionTimeQuestion.tsx",
   "components/listing/ColourPricingField.tsx",
   "components/listing/PagePricingField.tsx",
   "components/listing/wizard/AboutStep.tsx",
@@ -91,10 +92,13 @@ const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
   { component: "JobDocketRail", users: /<JobDocketRail\b/, least: 1 },
   // Another artwork type on a listing — typed from a plus on the chip row.
   { component: "FormatPlusField", users: /<FormatPlusField\b/, least: 1 },
-  // Bulk breaks and speeds are both edited inside the listing screen, which
-  // owns the keyboard-aware surface they are typed into.
+  // Bulk breaks are edited inside the listing screen, which owns the
+  // keyboard-aware surface they are typed into. Faster price tiers sit under
+  // More options in the production-time section, which the listing screen and
+  // the wizard's Speed step both draw.
   { component: "PriceTierEditor", users: /<PriceTierEditor\b/, least: 1 },
   { component: "SpeedTierEditor", users: /<SpeedTierEditor\b/, least: 1 },
+  { component: "ProductionTimeSection", users: /<ProductionTimeSection\b/, least: 2 },
   { component: "AboutStep", users: /<AboutStep\b/, least: 1 },
   { component: "PriceStep", users: /<PriceStep\b/, least: 1 },
   // The colour tier table sits in the page-pricing block, which sits in the

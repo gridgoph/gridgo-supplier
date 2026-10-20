@@ -9,12 +9,16 @@ import {
 import {
   readDayMinutes,
   readListingTime,
+  readProductionChoice,
+  readProductionTimeReview,
   readServiceLineTime,
   readSpeedTierTime,
   readStarterTime,
   timeLabel,
   timeMinutes,
+  type ProductionChoice,
   type ProductionTime,
+  type ProductionTimeReview,
 } from "@/lib/productionDays";
 import { listingOwnSteps, type ListingReadiness } from "@/lib/readiness";
 import { readPrintLayouts, type PrintLayoutCode } from "@/lib/printLayout";
@@ -288,11 +292,6 @@ export type Listing = {
    */
   printLayouts: PrintLayoutCode[];
   /**
-   * Express, the shop's own same-day switch (`lib/express.ts`). Applies at
-   * once and never enters review. Null from a GRIDGO that predates it.
-   */
-  express?: boolean | null;
-  /**
    * Priced per sheet by each page's strong colour, from the shop's own tier
    * table (`colourPricing`). Read through `lib/colourPricing.ts`. Fixed-price
    * listings keep it false.
@@ -315,6 +314,15 @@ export type Listing = {
   minimumTurnaround?: ProductionTime | null;
   /** The shop's working day in minutes, which a same-day time must stay under. Null when GRIDGO did not say. */
   productionDayMinutes?: number | null;
+  /**
+   * The answer to "How long does this take?", as GRIDGO resolves it (its own
+   * time, or its category line's). Null when it has none, or an older window
+   * neither answer can hold; `turnaround*` above still describe that one.
+   * Absent (undefined) from a GRIDGO that predates the question.
+   */
+  productionTime?: ProductionChoice | null;
+  /** GRIDGO asking the shop to "Check your production time". */
+  productionTimeReview?: ProductionTimeReview;
   fileFormatMode: FileFormatMode;
   /** The listing's own set when it overrides; otherwise what GRIDGO echoed back. */
   formatCodes: string[];
@@ -612,7 +620,6 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     minimumLengthMilli: num(pick(raw, "minimumLengthMilli", "minimum_length_milli")),
     printerMaxWidthFeet: readPrinterCap(pick(raw, "printerMaxWidthFeet", "printer_max_width_feet")),
     printLayouts: readPrintLayouts(pick(raw, "printLayouts", "print_layouts")),
-    express: typeof raw.express === "boolean" ? raw.express : null,
     pricedByColour: pick(raw, "pricedByColour", "priced_by_colour") === true,
     oneColour: pick(raw, "oneColour", "one_colour") === true,
     colourPricing: readColourPricing(pick(raw, "colourPricing", "colour_pricing")),
@@ -624,6 +631,9 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     turnaround: time.max,
     minimumTurnaround: time.min,
     productionDayMinutes: readDayMinutes(raw),
+    productionTime:
+      "productionTime" in raw || "production_time" in raw ? readProductionChoice(raw) : undefined,
+    productionTimeReview: readProductionTimeReview(raw),
     fileFormatMode,
     formatCodes: readFormatCodes(
       pick(raw, "formatCodes", "format_codes", "fileFormats", "acceptedFormats"),

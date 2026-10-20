@@ -8,8 +8,10 @@ import {
   removeListing,
   removePhoto,
   reorderPrepSteps,
+  applyProductionTimeToAll,
+  loadListingCount,
+  loadProductionTimePreview,
   saveListing,
-  setExpress,
 } from "@/lib/listingsApi";
 import type { Listing, PrepStep, SpecGroup } from "@/lib/listings";
 
@@ -392,37 +394,148 @@ describe("opening one listing", () => {
   });
 });
 
-describe("the Express switch", () => {
+describe("the production-time question on the wire", () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  it("sends only express with the listing's version, nothing the shop is still typing", async () => {
-    const fetch = jest
-      .spyOn(global, "fetch")
-      .mockResolvedValue(answered(200, { item: { ...listing, express: true, version: (listing.version ?? 0) + 1 } }));
-
-    const result = await setExpress(listing, true);
-
-    const request = sent(fetch);
-    expect(request.method).toBe("PATCH");
-    expect(request.url).toMatch(/\/me\/catalog-items\/sci_1$/);
-    expect(request.body).toEqual({ express: true, expectedVersion: listing.version });
-    expect(result).toEqual(expect.objectContaining({ status: "ok" }));
-    expect(result.status === "ok" && result.value.express).toBe(true);
-  });
-
-  it("words a stale version for the switch, which reloads, not for pulling down", async () => {
-    jest.spyOn(global, "fetch").mockResolvedValue(
-      answered(409, { error: "catalog_item_stale", expectedVersion: 2, currentVersion: 3 }),
+  it("asks GRIDGO's preview for the proposed answer and two weeks of days", async () => {
+    const fetch = jest.spyOn(global, "fetch").mockResolvedValue(
+      answered(200, {
+        productionTime: { mode: "days", minDays: 1, maxDays: 3 },
+        scheduling: { earliestReadyBy: "2026-10-24T05:00:00.000Z", securedReadyBy: "2026-10-27T05:00:00.000Z" },
+        calendar: {
+          days: [{ day: "2026-10-24", state: "tight", status: "tight", reason: null, readyBy: "2026-10-24T05:00:00.000Z" }],
+          earliest: "2026-10-24T05:00:00.000Z",
+        },
+      }),
     );
 
-    const result = await setExpress(listing, false);
+    const result = await loadProductionTimePreview(listing, { mode: "days", minDays: 1, maxDays: 3 });
+
+    const request = sent(fetch);
+    expect(request.method).toBe("GET");
+    expect(request.url).toMatch(
+      /\/me\/catalog-items\/sci_1\/production-time-preview\?mode=days&minDays=1&maxDays=3&days=14$/,
+    );
+    expect(result.status === "ok" && result.value.days).toEqual([
+      { day: "2026-10-24", status: "tight", reason: null, readyBy: new Date("2026-10-24T05:00:00.000Z"), rushTier: null },
+    ]);
+  });
+
+  it("says one sentence when GRIDGO refuses the production time, whichever code it used", async () => {
+    const message =
+      "GRIDGO could not save this production time. Choose Same day with a number of hours, or Days with whole working days.";
+    const choice = { productionTime: { mode: "same_day" as const, hours: 10 } };
+    jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(400, { error: "invalid_production_time", field: "productionTime" }));
+    expect(await saveListing(listing, choice)).toEqual({ status: "failed", message });
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(answered(400, { error: "invalid_catalog_item", field: "turnaroundMinutes" }));
+    expect(await saveListing(listing, choice)).toEqual({ status: "failed", message });
+    // An older GRIDGO that names no field at all, as the dashboard reads it.
+    jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(400, { error: "invalid_catalog_item" }));
+    expect(await saveListing(listing, choice)).toEqual({ status: "failed", message });
+    // A different field is a different problem.
+    jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(400, { error: "invalid_catalog_item", field: "name" }));
+    expect(await saveListing(listing, choice)).not.toEqual({ status: "failed", message });
+  });
+
+  it("says what each documented preview refusal means, before reading a 404 as a closed board", async () => {
+    const choice = { mode: "days" as const, minDays: 1, maxDays: 3 };
+    const cases: [number, string, string][] = [
+      [404, "catalog_item_not_found", "This listing is no longer on your board, so there are no dates to show."],
+      [
+        409,
+        "production_day_length_unavailable",
+        "The dates cannot be worked out until every open day has the same hours. Pick one opening and closing time for all your open days.",
+      ],
+      [
+        409,
+        "shop_never_open",
+        "GRIDGO could not fit this work into your open hours in the coming weeks. Check your open days and hours.",
+      ],
+      [400, "invalid_schedule", "GRIDGO could not read your shop hours. Set your open days and hours again, then try again."],
+      [400, "invalid_production_time", "GRIDGO could not show dates for this time. Change it, then try again."],
+    ];
+    for (const [status, error, message] of cases) {
+      jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(status, { error }));
+      expect(await loadProductionTimePreview(listing, choice)).toEqual({ status: "failed", message });
+    }
+    // A bare 404 is a GRIDGO without the route.
+    jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(404, {}));
+    expect(await loadProductionTimePreview(listing, choice)).toEqual({ status: "not_open_yet" });
+  });
+
+  it("refuses to send a board it could not read whole", async () => {
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(answered(200, { items: [{ id: "sci_1", version: 7 }, { id: "sci_2" }], total: 2 }));
+
+    const result = await applyProductionTimeToAll({ mode: "days", minDays: 1, maxDays: 3 });
 
     expect(result).toEqual({
       status: "failed",
-      message: expect.stringMatching(/^This listing changed on another device, so Express was not changed\./),
+      message: "Some of your listings could not be read, so nothing was changed. Try again.",
     });
-    expect(result.status === "failed" && result.message).not.toMatch(/pull down/i);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts the shop's listings for the question, or says nothing it cannot know", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(200, { items: [{ id: "sci_1", version: 7 }], total: 12, nextCursor: "c2" }));
+    expect(await loadListingCount()).toBe(12);
+    jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(200, { items: [{ id: "sci_1", version: 7 }], nextCursor: "c2" }));
+    expect(await loadListingCount()).toBeNull();
+    jest.spyOn(global, "fetch").mockRejectedValueOnce(new TypeError("Network request failed"));
+    expect(await loadListingCount()).toBeNull();
+  });
+
+  it("sends Same day as hours", async () => {
+    const fetch = jest.spyOn(global, "fetch").mockResolvedValue(answered(200, { calendar: { days: [] } }));
+    await loadProductionTimePreview(listing, { mode: "same_day", minutes: 90 });
+    expect(sent(fetch).url).toMatch(/\?mode=same_day&hours=1\.5&days=14$/);
+  });
+
+  it("names every listing and its version, hidden ones too, across pages", async () => {
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(
+        answered(200, { items: [{ id: "sci_1", version: 7, active: true }], total: 2, nextCursor: "c2" }),
+      )
+      .mockResolvedValueOnce(answered(200, { items: [{ id: "sci_2", version: 3, active: false }], total: 2 }))
+      .mockResolvedValueOnce(answered(200, { items: [], total: 2 }));
+
+    const result = await applyProductionTimeToAll({ mode: "same_day", minutes: 120 });
+
+    expect(sent(fetch, 0).url).toMatch(/\/me\/catalog-items\?limit=50$/);
+    expect(sent(fetch, 1).url).toMatch(/\/me\/catalog-items\?limit=50&cursor=c2$/);
+    const apply = sent(fetch, 2);
+    expect(apply.method).toBe("POST");
+    expect(apply.url).toMatch(/\/me\/catalog-items\/production-time$/);
+    expect(apply.body).toEqual({
+      productionTime: { mode: "same_day", hours: 2 },
+      expectedVersions: { sci_1: 7, sci_2: 3 },
+    });
+    expect(result).toEqual({ status: "ok", value: 2 });
+  });
+
+  it("reads the board again once when a listing moved in between, then says so plainly", async () => {
+    const stale = answered(409, { error: "catalog_items_stale" });
+    const page = answered(200, { items: [{ id: "sci_1", version: 7 }], total: 1 });
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(page)
+      .mockResolvedValueOnce(stale)
+      .mockResolvedValueOnce(answered(200, { items: [{ id: "sci_1", version: 8 }], total: 1 }))
+      .mockResolvedValueOnce(stale);
+
+    const result = await applyProductionTimeToAll({ mode: "days", minDays: 1, maxDays: 2 });
+
+    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(sent(fetch, 3).body).toEqual(expect.objectContaining({ expectedVersions: { sci_1: 8 } }));
+    expect(result).toEqual({
+      status: "failed",
+      message: "One of your listings changed while this was being applied, so nothing was changed. Try again.",
+    });
   });
 });

@@ -65,6 +65,46 @@ export function isCatalogItemStale(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "catalog_item_stale";
 }
 
+/**
+ * GRIDGO refused a listing's production time, on a save that sent one. Older
+ * builds answer with `invalid_catalog_item`, naming a turnaround field or no
+ * field at all; both read as `invalid_production_time`, as on the web
+ * dashboard. One that names another field (the name, the price) stays that
+ * field's own refusal.
+ */
+export function isProductionTimeRefused(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 400) return false;
+  const code = apiErrorCode(error);
+  if (code === "invalid_production_time") return true;
+  const body = error.body as { field?: unknown } | null;
+  const field = typeof body === "object" && body && typeof body.field === "string" ? body.field : "";
+  return code === "invalid_catalog_item" && (!field || /^(productionTime|turnaround|minimumTurnaround)/.test(field));
+}
+
+/**
+ * The date preview's documented refusals (gridgo-api `docs/SCHEDULING_API.md`,
+ * "Preview before saving"), each with what the shop can do about it. Null for
+ * any other failure, which keeps its ordinary sentence and a "Try again".
+ */
+const PREVIEW_REFUSED: Record<string, string> = {
+  catalog_item_not_found: "This listing is no longer on your board, so there are no dates to show.",
+  production_day_length_unavailable:
+    "The dates cannot be worked out until every open day has the same hours. Pick one opening and closing time for all your open days.",
+  shop_never_open:
+    "GRIDGO could not fit this work into your open hours in the coming weeks. Check your open days and hours.",
+  invalid_schedule: "GRIDGO could not read your shop hours. Set your open days and hours again, then try again.",
+  invalid_production_time: "GRIDGO could not show dates for this time. Change it, then try again.",
+};
+
+export function previewRefusal(error: unknown): string | null {
+  return error instanceof ApiError ? (PREVIEW_REFUSED[apiErrorCode(error)] ?? null) : null;
+}
+
+/** A listing was added, removed or changed since the shop's listings were read. */
+export function isCatalogItemsStale(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "catalog_items_stale";
+}
+
 /** The job left production while a photo was on its way; reload it. */
 export function isProductionPhotoUploadNotAllowed(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "production_photo_upload_not_allowed";
@@ -258,6 +298,10 @@ const MESSAGES: Record<string, string> = {
     "That listing is no longer on your board. Pull down to refresh and open it again.",
   catalog_item_stale:
     "This listing changed on another device while you were editing it. Pull down to refresh, then make your change again.",
+  catalog_items_stale:
+    "One of your listings changed while this was being applied, so nothing was changed. Try again.",
+  invalid_production_time:
+    "GRIDGO could not save this production time. Choose Same day with a number of hours, or Days with whole working days.",
   invalid_catalog_item:
     "Some details on this listing are missing or not valid. Check the name, price and pack size, then try again.",
   invalid_catalog_options:
