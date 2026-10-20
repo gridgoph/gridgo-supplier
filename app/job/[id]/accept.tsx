@@ -15,6 +15,7 @@ import { acceptWindow, acceptWindowLine, acceptWindowTickMs } from "@/lib/accept
 import { formatDeadlineFull } from "@/lib/dates";
 import { findAction } from "@/lib/jobState";
 import { payoutPlanCopy } from "@/lib/milestones";
+import { NO_MONEY_TAKEN } from "@/lib/performance";
 import { isTightBeforeAccepting } from "@/lib/scheduling";
 import { closureOnDay, manilaClock } from "@/lib/shopHours";
 import { canRequestChange, hasSpecialInstructions, itemInstructions } from "@/lib/orderChanges";
@@ -250,12 +251,15 @@ export default function AcceptJobScreen() {
           {/*
             The one sentence a shop should hear before it commits: the date
             below is the one it is measured against. Calm, and one tap from
-            the whole policy rather than the whole policy here.
+            the whole policy rather than the whole policy here. A Tight job
+            is exempt from late deductions during the pilot, so it hears the
+            Performance page's promise instead.
           */}
           <View className="gap-1">
             <Text className="text-body text-text-secondary">
-              Missing the ready-by time leads to a deduction from what GRIDGO still owes you on
-              this job.
+              {isTightBeforeAccepting(job)
+                ? NO_MONEY_TAKEN
+                : "Missing the ready-by time leads to a deduction from what GRIDGO still owes you on this job."}
             </Text>
             <Pressable
               onPress={() => router.push(LATE_PRODUCTION_HREF)}

@@ -82,6 +82,9 @@ export const PERFORMANCE_ALERT = "supplier_performance_notice";
 
 export const PERFORMANCE_ROUTE = "/performance";
 
+/** The pilot's promise in one line, said wherever a shop could expect a deduction. */
+export const NO_MONEY_TAKEN = "Warnings only — no money is taken";
+
 /** The Performance page, opened at one order's notice when there is one. */
 export function performanceHref(orderId?: string | null): Href {
   return (orderId ? `${PERFORMANCE_ROUTE}?orderId=${encodeURIComponent(orderId)}` : PERFORMANCE_ROUTE) as Href;

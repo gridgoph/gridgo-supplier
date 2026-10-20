@@ -44,9 +44,10 @@ jest.mock("@/hooks/useBoard", () => ({
 
 import HomeScreen from "@/app/(tabs)/home";
 import { router } from "expo-router";
-import type { User } from "@/lib/api";
+import { listJobs, type Order, type User } from "@/lib/api";
 import type { Listing } from "@/lib/listings";
 import { loadBoard } from "@/lib/listingsApi";
+import { TIGHT_DEADLINE_LABEL } from "@/lib/scheduling";
 import { useSession } from "@/store/session";
 import { usePush } from "@/store/push";
 
@@ -268,6 +269,66 @@ describe("phone notifications on Home", () => {
     await screen.findByLabelText("Alerts");
     expect(screen.queryByText("Get these on your phone")).toBeNull();
     expect(screen.queryByText("Turn on notifications")).toBeNull();
+    await view.unmount();
+  });
+});
+
+/**
+ * A Tight offer is time-boxed, and Tight is why the shop may decline it, so
+ * "Needs you next" carries the same badge as the job screen. Any other offer
+ * reads as it always did.
+ */
+describe("a Tight offer on Home", () => {
+  const offer: Order = {
+    id: "ord_1", title: "Tarpaulin 3x5", state: "supplier_assigned", timeline: [],
+    clientId: "client_1", supplierId: "shop", riderId: null, productId: "product_1",
+    quantity: 1, size: "3x5", material: "Vinyl", deadline: null,
+    address: "Davao City", zone: "Davao", totalMinor: 100000, deliveryFeeMinor: 0,
+    paymentMethod: null, paymentStatus: "paid", promisedDate: null, artworkName: null,
+    createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-01T00:00:00Z",
+    supplierPriceMinor: 100000, payoutMilestones: [], readyBy: "2026-10-23T07:00:00.000Z",
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (loadBoard as jest.Mock).mockResolvedValue({ status: "not_open_yet" });
+    signIn(approvedShop);
+  });
+
+  afterEach(() => {
+    useSession.setState({
+      user: null,
+      loading: false,
+      error: null,
+      authSource: "none",
+      identity: { kind: "signed_out" },
+    });
+  });
+
+  it("shows the Tight deadline badge on Needs you next", async () => {
+    (listJobs as jest.Mock).mockResolvedValue([
+      { ...offer, scheduling: { status: "tight", sameDay: false, tightDeadline: true, label: "Tight deadline" } },
+    ]);
+
+    const view = await render(<HomeScreen />);
+
+    expect(await screen.findByText("NEEDS YOU NEXT")).toBeTruthy();
+    expect(screen.getByText(TIGHT_DEADLINE_LABEL)).toBeTruthy();
+    expect(screen.getByText("Accept job")).toBeTruthy();
+    await view.unmount();
+  });
+
+  it("draws no badge for an offer that is not Tight", async () => {
+    (listJobs as jest.Mock).mockResolvedValue([
+      { ...offer, scheduling: { status: "secured", sameDay: false, tightDeadline: false, label: null } },
+    ]);
+
+    const view = await render(<HomeScreen />);
+
+    expect(await screen.findByText("NEEDS YOU NEXT")).toBeTruthy();
+    expect(screen.getByText("Accept job")).toBeTruthy();
+    expect(screen.queryByText(TIGHT_DEADLINE_LABEL)).toBeNull();
+    expect(screen.queryByTestId("scheduling-notice")).toBeNull();
     await view.unmount();
   });
 });

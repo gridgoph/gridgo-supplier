@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 import AcceptJobScreen from "@/app/job/[id]/accept";
 import DeclineJobScreen from "@/app/job/[id]/decline";
 import * as api from "@/lib/api";
+import { NO_MONEY_TAKEN } from "@/lib/performance";
 import { TIGHT_DECLINE_NO_PENALTY, TIGHT_DEADLINE_LINE } from "@/lib/scheduling";
 import { askConfirm } from "@/store/sheets";
 
@@ -35,6 +36,25 @@ it("says Tight deadline before the shop accepts, with the way to decline", async
   expect(await screen.findByText("Tight deadline")).toBeTruthy();
   expect(screen.getByText(TIGHT_DEADLINE_LINE)).toBeTruthy();
   expect(screen.getByText("Too tight? Decline with a reason")).toBeTruthy();
+  await view.unmount();
+});
+
+const DEDUCTION_LINE = /leads to a deduction from what GRIDGO still owes you/;
+
+it("promises a Tight job no money is taken, in the Performance page's words", async () => {
+  (api.getOrder as jest.Mock).mockResolvedValue(tight);
+  const view = await render(<AcceptJobScreen />);
+  expect(await screen.findByText(NO_MONEY_TAKEN)).toBeTruthy();
+  expect(screen.queryByText(DEDUCTION_LINE)).toBeNull();
+  expect(screen.getByText("How late production is handled")).toBeTruthy();
+  await view.unmount();
+});
+
+it("keeps the deduction sentence on a job that is not Tight", async () => {
+  (api.getOrder as jest.Mock).mockResolvedValue(job);
+  const view = await render(<AcceptJobScreen />);
+  expect(await screen.findByText(DEDUCTION_LINE)).toBeTruthy();
+  expect(screen.queryByText(NO_MONEY_TAKEN)).toBeNull();
   await view.unmount();
 });
 
