@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import type { VerificationDocumentType } from "@/lib/api";
 import { createPersistStorage } from "@/lib/persistStorage";
 import type { ShopPin } from "@/lib/shopLocation";
 
@@ -30,8 +31,8 @@ export type PickedDocument = {
   file?: File;
 };
 
-/** What Operations asks a shop for. Codes are this app's, not the platform's. */
-export type DocumentKind = "business_permit" | "valid_id" | "sample_work";
+/** What Operations asks a shop for, in gridgo-api's own `documentType` codes. */
+export type DocumentKind = VerificationDocumentType;
 
 export type SignupDraft = {
   shopName: string;

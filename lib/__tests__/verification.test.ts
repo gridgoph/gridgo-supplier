@@ -20,7 +20,65 @@ const PICKED = {
 };
 
 afterEach(() => {
+  api.setToken(null);
   jest.restoreAllMocks();
+});
+
+function answer(status: number, body: unknown): Response {
+  return { ok: status < 400, status, text: async () => JSON.stringify(body) } as Response;
+}
+
+/**
+ * gridgo-api `src/attachments.js`: a `verification_document` attach accepts
+ * `documentType` and `replaceFileId` only, and anything else is
+ * `400 unexpected_target_field` — which is how every paper failed while the
+ * app sent `documentKind`.
+ */
+describe("attaching a paper", () => {
+  it("sends documentType and nothing else", async () => {
+    api.setToken("supplier-token");
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(answer(200, { file: { fileId: "file_1", purpose: "verification_document" } }));
+
+    await api.attachVerificationDocument("file_1", "valid_id");
+
+    const [url, init] = fetch.mock.calls[0];
+    expect(String(url)).toMatch(/\/files\/file_1\/attach$/);
+    expect((init as RequestInit).method).toBe("POST");
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ documentType: "valid_id" });
+  });
+
+  it("names each paper with a code GRIDGO accepts", () => {
+    // gridgo-api `VERIFICATION_DOCUMENT_TYPES`.
+    expect(VERIFICATION_DOCUMENTS.map((d) => d.kind).sort()).toEqual(
+      ["business_permit", "sample_work", "valid_id"],
+    );
+  });
+
+  it("is sent only once GRIDGO has bound it", async () => {
+    jest.spyOn(files, "uploadFile").mockResolvedValue({ ok: true, fileId: "file_1" });
+    const attach = jest
+      .spyOn(api, "attachVerificationDocument")
+      .mockResolvedValue({ fileId: "file_1" } as api.StoredFile);
+
+    expect(await sendDocument("business_permit", PICKED)).toEqual({ status: "saved" });
+    expect(attach).toHaveBeenCalledWith("file_1", "business_permit");
+  });
+
+  it("stays a failure the shop can send again when GRIDGO refuses the attach", async () => {
+    jest.spyOn(files, "uploadFile").mockResolvedValue({ ok: true, fileId: "file_1" });
+    jest
+      .spyOn(api, "attachVerificationDocument")
+      .mockRejectedValue(new ApiError(400, { error: "unexpected_target_field" }));
+
+    const outcome = await sendDocument("business_permit", PICKED);
+    expect(outcome.status).toBe("failed");
+    if (outcome.status === "failed") {
+      expect(outcome.message).toMatch(/Try again/);
+      expect(outcome.message).not.toMatch(/_|400/);
+    }
+  });
 });
 
 /**

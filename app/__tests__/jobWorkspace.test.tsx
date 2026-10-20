@@ -6,6 +6,7 @@ import JobWorkspaceScreen from "@/app/job/[id]/index";
 import type { MilestoneCode, Order, PayoutMilestone } from "@/lib/api";
 import { getFile, getMyProductionLapses, getOrder, getRiderApproach, listCalls } from "@/lib/api";
 import { router } from "expo-router";
+import { NO_MONEY_TAKEN } from "@/lib/performance";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), navigate: jest.fn() },
@@ -513,7 +514,7 @@ describe("job workspace late production", () => {
     await render(<JobWorkspaceScreen />);
     const panel = await screen.findByTestId("lateness-notice");
     expect(within(panel).getByText("Moderate lateness")).toBeTruthy();
-    expect(within(panel).getByText(/^This is a warning only/)).toBeTruthy();
+    expect(within(panel).getByText(`${NO_MONEY_TAKEN}.`)).toBeTruthy();
     expect(within(panel).queryByText(/T02:00/)).toBeNull();
     expect(screen.queryByText("Severe lateness")).toBeNull();
   });

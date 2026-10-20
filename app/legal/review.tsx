@@ -99,7 +99,8 @@ export default function LegalReviewScreen() {
                 <Text className="text-body font-medium text-text-primary">
                   What this means for your pay
                 </Text>
-                <Text className="text-body text-text-secondary">{money}</Text>
+                <Text className="text-body text-text-primary">{money.promise}</Text>
+                <Text className="text-body text-text-secondary">{money.clause}</Text>
               </View>
             </View>
           ) : null}

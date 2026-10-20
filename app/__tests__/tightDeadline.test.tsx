@@ -41,7 +41,7 @@ it("says Tight deadline before the shop accepts, with the way to decline", async
   await view.unmount();
 });
 
-const DEDUCTION_LINE = /leads to a deduction from what GRIDGO still owes you/;
+const DEDUCTION_LINE = /deduction/i;
 
 it("promises a Tight job no money is taken, in the Performance page's words", async () => {
   (api.getOrder as jest.Mock).mockResolvedValue(tight);
@@ -53,11 +53,11 @@ it("promises a Tight job no money is taken, in the Performance page's words", as
   await view.unmount();
 });
 
-it("keeps the deduction sentence on a job that is not Tight", async () => {
+it("promises a job that is not Tight no money is taken too, linking late production", async () => {
   (api.getOrder as jest.Mock).mockResolvedValue(job);
   const view = await render(<AcceptJobScreen />);
-  expect(await screen.findByText(DEDUCTION_LINE)).toBeTruthy();
-  expect(screen.queryByText(NO_MONEY_TAKEN)).toBeNull();
+  expect(await screen.findByText(NO_MONEY_TAKEN)).toBeTruthy();
+  expect(screen.queryByText(DEDUCTION_LINE)).toBeNull();
   await fireEvent.press(screen.getByText("How late production is handled"));
   expect(router.push).toHaveBeenCalledWith(LATE_PRODUCTION_HREF);
   await view.unmount();
