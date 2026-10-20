@@ -2,7 +2,9 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 import AcceptJobScreen from "@/app/job/[id]/accept";
 import DeclineJobScreen from "@/app/job/[id]/decline";
 import * as api from "@/lib/api";
-import { NO_MONEY_TAKEN } from "@/lib/performance";
+import { router } from "expo-router";
+import { LATE_PRODUCTION_HREF } from "@/components/LatenessPanel";
+import { NO_MONEY_TAKEN, performanceHref } from "@/lib/performance";
 import { TIGHT_DECLINE_NO_PENALTY, TIGHT_DEADLINE_LINE } from "@/lib/scheduling";
 import { askConfirm } from "@/store/sheets";
 
@@ -46,7 +48,8 @@ it("promises a Tight job no money is taken, in the Performance page's words", as
   const view = await render(<AcceptJobScreen />);
   expect(await screen.findByText(NO_MONEY_TAKEN)).toBeTruthy();
   expect(screen.queryByText(DEDUCTION_LINE)).toBeNull();
-  expect(screen.getByText("How late production is handled")).toBeTruthy();
+  await fireEvent.press(screen.getByText("How late production is handled"));
+  expect(router.push).toHaveBeenCalledWith(performanceHref());
   await view.unmount();
 });
 
@@ -55,6 +58,8 @@ it("keeps the deduction sentence on a job that is not Tight", async () => {
   const view = await render(<AcceptJobScreen />);
   expect(await screen.findByText(DEDUCTION_LINE)).toBeTruthy();
   expect(screen.queryByText(NO_MONEY_TAKEN)).toBeNull();
+  await fireEvent.press(screen.getByText("How late production is handled"));
+  expect(router.push).toHaveBeenCalledWith(LATE_PRODUCTION_HREF);
   await view.unmount();
 });
 

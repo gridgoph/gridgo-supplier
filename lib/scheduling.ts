@@ -25,6 +25,10 @@ export const TIGHT_DEADLINE_LINE =
 export const TIGHT_DECLINE_NO_PENALTY =
   "This job has a tight deadline. A decline with a reason does not count against your shop during the pilot.";
 
+/** What a late Tight or same-day job leads to during the pilot (`docs/SCHEDULING_API.md`). */
+export const TIGHT_LATE_LINE =
+  "A Tight or same-day job ready late gets its warning and nothing more: it does not lower your place, hide your shop from Top Pick, or send your shop to Operations for review.";
+
 type SchedulingOrder = Pick<Order, "state" | "shopRecovery" | "scheduling" | "readyBy">;
 
 /** Still waiting for the shop's answer: the only time the Tight badge is shown. */

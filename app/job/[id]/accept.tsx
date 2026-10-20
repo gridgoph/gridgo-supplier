@@ -15,7 +15,7 @@ import { acceptWindow, acceptWindowLine, acceptWindowTickMs } from "@/lib/accept
 import { formatDeadlineFull } from "@/lib/dates";
 import { findAction } from "@/lib/jobState";
 import { payoutPlanCopy } from "@/lib/milestones";
-import { NO_MONEY_TAKEN } from "@/lib/performance";
+import { NO_MONEY_TAKEN, performanceHref } from "@/lib/performance";
 import { isTightBeforeAccepting } from "@/lib/scheduling";
 import { closureOnDay, manilaClock } from "@/lib/shopHours";
 import { canRequestChange, hasSpecialInstructions, itemInstructions } from "@/lib/orderChanges";
@@ -253,7 +253,7 @@ export default function AcceptJobScreen() {
             below is the one it is measured against. Calm, and one tap from
             the whole policy rather than the whole policy here. A Tight job
             is exempt from late deductions during the pilot, so it hears the
-            Performance page's promise instead.
+            Performance page's promise instead, and its link opens that page.
           */}
           <View className="gap-1">
             <Text className="text-body text-text-secondary">
@@ -262,7 +262,9 @@ export default function AcceptJobScreen() {
                 : "Missing the ready-by time leads to a deduction from what GRIDGO still owes you on this job."}
             </Text>
             <Pressable
-              onPress={() => router.push(LATE_PRODUCTION_HREF)}
+              onPress={() =>
+                router.push(isTightBeforeAccepting(job) ? performanceHref() : LATE_PRODUCTION_HREF)
+              }
               accessibilityRole="link"
               className="gg-touch justify-center self-start"
             >
