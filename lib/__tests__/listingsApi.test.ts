@@ -9,6 +9,7 @@ import {
   removePhoto,
   reorderPrepSteps,
   applyProductionTimeToAll,
+  loadListingCount,
   loadProductionTimePreview,
   saveListing,
 } from "@/lib/listingsApi";
@@ -423,7 +424,8 @@ describe("the production-time question on the wire", () => {
   });
 
   it("says one sentence when GRIDGO refuses the production time, whichever code it used", async () => {
-    const message = "Choose Same day with a number of hours, or Days with whole working days, then save again.";
+    const message =
+      "GRIDGO could not save this production time. Choose a number of hours, or whole working days, then save again.";
     const choice = { productionTime: { mode: "same_day" as const, hours: 10 } };
     jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(400, { error: "invalid_production_time", field: "productionTime" }));
     expect(await saveListing(listing, choice)).toEqual({ status: "failed", message });
@@ -431,9 +433,61 @@ describe("the production-time question on the wire", () => {
       .spyOn(global, "fetch")
       .mockResolvedValueOnce(answered(400, { error: "invalid_catalog_item", field: "turnaroundMinutes" }));
     expect(await saveListing(listing, choice)).toEqual({ status: "failed", message });
+    // An older GRIDGO that names no field at all, as the dashboard reads it.
+    jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(400, { error: "invalid_catalog_item" }));
+    expect(await saveListing(listing, choice)).toEqual({ status: "failed", message });
     // A different field is a different problem.
     jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(400, { error: "invalid_catalog_item", field: "name" }));
     expect(await saveListing(listing, choice)).not.toEqual({ status: "failed", message });
+  });
+
+  it("says what each documented preview refusal means, before reading a 404 as a closed board", async () => {
+    const choice = { mode: "days" as const, minDays: 1, maxDays: 3 };
+    const cases: [number, string, string][] = [
+      [404, "catalog_item_not_found", "This listing is no longer on your board, so there are no dates to show."],
+      [
+        409,
+        "production_day_length_unavailable",
+        "The dates cannot be worked out until every open day has the same hours. Pick one opening and closing time for all your open days.",
+      ],
+      [
+        409,
+        "shop_never_open",
+        "GRIDGO could not fit this work into your open hours in the coming weeks. Check your open days and hours.",
+      ],
+      [400, "invalid_schedule", "GRIDGO could not read your shop hours. Set your open days and hours again, then try again."],
+      [400, "invalid_production_time", "GRIDGO could not show dates for this time. Change it, then try again."],
+    ];
+    for (const [status, error, message] of cases) {
+      jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(status, { error }));
+      expect(await loadProductionTimePreview(listing, choice)).toEqual({ status: "failed", message });
+    }
+    // A bare 404 is a GRIDGO without the route.
+    jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(404, {}));
+    expect(await loadProductionTimePreview(listing, choice)).toEqual({ status: "not_open_yet" });
+  });
+
+  it("refuses to send a board it could not read whole", async () => {
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(answered(200, { items: [{ id: "sci_1", version: 7 }, { id: "sci_2" }], total: 2 }));
+
+    const result = await applyProductionTimeToAll({ mode: "days", minDays: 1, maxDays: 3 });
+
+    expect(result).toEqual({
+      status: "failed",
+      message: "Some of your listings could not be read, so nothing was changed. Try again.",
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts the shop's listings for the question, or says nothing it cannot know", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(200, { items: [{ id: "sci_1", version: 7 }], total: 12, nextCursor: "c2" }));
+    expect(await loadListingCount()).toBe(12);
+    jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(200, { items: [{ id: "sci_1", version: 7 }], nextCursor: "c2" }));
+    expect(await loadListingCount()).toBeNull();
+    jest.spyOn(global, "fetch").mockRejectedValueOnce(new TypeError("Network request failed"));
+    expect(await loadListingCount()).toBeNull();
   });
 
   it("sends Same day as hours", async () => {

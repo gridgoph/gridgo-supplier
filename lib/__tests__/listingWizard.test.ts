@@ -101,6 +101,23 @@ describe("wizard gates", () => {
     ).toBe(false);
   });
 
+  it("keeps an older range that mixes hours and days, and takes exact long hours", () => {
+    const noLine = { inheritedTurnaround: null, inheritedFormatCodes: [] };
+    const mixed = {
+      ...listing,
+      productionTime: null,
+      turnaroundMode: "override" as const,
+      minimumTurnaround: sameDay(120),
+      turnaround: workingDays(2),
+    };
+    // Nothing is made up over it, and the step can still be passed.
+    expect(wizardProductionTime(mixed, draftFrom(mixed), noLine)).toBeNull();
+    expect(speedReady(mixed, draftFrom(mixed), noLine)).toBe(true);
+    // 12 hours on a 10-hour working day is a time GRIDGO takes as it is.
+    const long = { ...listing, productionDayMinutes: 600, productionTime: { mode: "same_day" as const, minutes: 720 } };
+    expect(speedReady(long, draftFrom(long), noLine)).toBe(true);
+  });
+
   it("accepts a typed price GRIDGO will take", () => {
     expect(priceReady("")).toBe(false);
     expect(priceReady("0")).toBe(false);

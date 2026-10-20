@@ -1,6 +1,13 @@
 import * as api from "@/lib/api";
 import type { ColourPricingPayload } from "@/lib/colourPricing";
-import { apiErrorBlockers, humanizeApiError, isCatalogItemsStale, isProductionTimeRefused, offlineMessage } from "@/lib/apiErrors";
+import {
+  apiErrorBlockers,
+  humanizeApiError,
+  isCatalogItemsStale,
+  isProductionTimeRefused,
+  offlineMessage,
+  previewRefusal,
+} from "@/lib/apiErrors";
 import { fileFormatName } from "@/data/fileFormats";
 import { invalidate } from "@/lib/live";
 import {
@@ -288,29 +295,64 @@ export async function loadProductionTimePreview(
   listing: Listing,
   choice: ProductionChoice,
 ): Promise<BoardOutcome<ProductionTimePreview>> {
-  const result = await attempt("show the dates clients will see", async () =>
-    normalizePreview(await api.getProductionTimePreview(listing.id, previewQuery(choice))),
-  );
-  if (result.status !== "ok") return result;
-  return result.value
-    ? { status: "ok", value: result.value }
+  let body: unknown;
+  try {
+    body = await api.getProductionTimePreview(listing.id, previewQuery(choice));
+  } catch (error) {
+    // GRIDGO's own refusals come first: a 404 naming the listing is a listing
+    // that is gone, not a route this GRIDGO lacks.
+    const refused = previewRefusal(error);
+    if (refused) return { status: "failed", message: refused };
+    if (isRouteAbsent(error)) return { status: "not_open_yet" };
+    return { status: "failed", message: humanizeApiError(error, offlineMessage("show the dates clients will see")) };
+  }
+  const preview = normalizePreview(body);
+  return preview
+    ? { status: "ok", value: preview }
     : { status: "failed", message: "GRIDGO sent dates this version of the app cannot read." };
 }
 
-/** Every listing the shop owns, hidden ones and drafts too, page by page. */
+/** GRIDGO pages at fifty; a hundred pages is far past any shop's board. */
+const MAX_BOARD_PAGES = 100;
+
+/** The board could not be read whole, so nothing is sent: GRIDGO would change nothing anyway. */
+class IncompleteBoardError extends Error {}
+
+export const INCOMPLETE_BOARD =
+  "Some of your listings could not be read, so nothing was changed. Try again.";
+
+/**
+ * Every listing the shop owns, hidden ones and drafts too, page by page. A
+ * listing without a version, or a board past the last page read, is refused
+ * rather than sent short.
+ */
 async function ownListingVersions(): Promise<Record<string, number>> {
   const versions: Record<string, number> = {};
   let cursor: string | null = null;
-  // GRIDGO pages at fifty; a hundred pages is far past any shop's board.
-  for (let page = 0; page < 100; page += 1) {
+  for (let page = 0; page < MAX_BOARD_PAGES; page += 1) {
     const board = normalizeBoardPage(await api.listCatalogItems({ limit: 50, cursor }));
     for (const listing of board.listings) {
-      if (listing.version != null) versions[listing.id] = listing.version;
+      if (listing.version == null) throw new IncompleteBoardError();
+      versions[listing.id] = listing.version;
     }
-    if (!board.nextCursor) break;
+    if (!board.nextCursor) return versions;
     cursor = board.nextCursor;
   }
-  return versions;
+  throw new IncompleteBoardError();
+}
+
+/**
+ * How many listings the shop owns, for "All 12 of your listings". Null when
+ * GRIDGO does not say, or cannot be reached: the question then says "Every
+ * listing you have".
+ */
+export async function loadListingCount(): Promise<number | null> {
+  try {
+    const page = normalizeBoardPage(await api.listCatalogItems({ limit: 1, cursor: null }));
+    return page.nextCursor && page.total <= page.listings.length ? null : page.total;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -322,14 +364,19 @@ async function ownListingVersions(): Promise<Record<string, number>> {
  * once more before the shop is told. Answers how many listings changed.
  */
 export async function applyProductionTimeToAll(choice: ProductionChoice): Promise<BoardOutcome<number>> {
+  let incomplete = false;
   const send = async () => {
+    const expectedVersions = await ownListingVersions().catch((error: unknown) => {
+      incomplete = error instanceof IncompleteBoardError;
+      throw error;
+    });
     const body = (await api.applyCatalogProductionTime({
       productionTime: productionTimeBody(choice),
-      expectedVersions: await ownListingVersions(),
+      expectedVersions,
     })) as { total?: unknown; items?: unknown };
     return typeof body?.total === "number" ? body.total : Array.isArray(body?.items) ? body.items.length : 0;
   };
-  return attemptWrite("set the production time on your listings", async () => {
+  const result = await attemptWrite("set the production time on your listings", async () => {
     try {
       return await send();
     } catch (error) {
@@ -337,6 +384,7 @@ export async function applyProductionTimeToAll(choice: ProductionChoice): Promis
       return send();
     }
   });
+  return incomplete && result.status === "failed" ? { status: "failed", message: INCOMPLETE_BOARD } : result;
 }
 
 /**

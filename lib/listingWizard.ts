@@ -10,7 +10,7 @@ import {
   type BoardContext,
   type Listing,
 } from "@/lib/listings";
-import { applyDraft, colourHold, colourOn, shownProductionTime, type ListingDraft } from "@/lib/listingDraft";
+import { applyDraft, colourHold, colourOn, heldMixedRange, shownProductionTime, type ListingDraft } from "@/lib/listingDraft";
 import { COLOUR_PRICES_NEEDED, readColourDraft } from "@/lib/colourPricing";
 import { DEFAULT_DAYS_CHOICE, choiceProblem, type ProductionChoice } from "@/lib/productionDays";
 
@@ -94,18 +94,23 @@ export function priceBlocker(draft: ListingDraft): string | null {
 
 /**
  * The answer the production-time step shows and saves: the shop's own, else
- * GRIDGO's (its category line's usual time included), else two working days.
+ * GRIDGO's (its category line's usual time included), else 1 to 3 working
+ * days. Null only for an older range that mixes hours and working days: that
+ * is kept as it is until the shop picks an answer.
  */
 export function wizardProductionTime(
   listing: Listing,
   draft: ListingDraft,
   context: BoardContext,
-): ProductionChoice {
-  return shownProductionTime(listing, draft, context.inheritedTurnaround) ?? DEFAULT_DAYS_CHOICE;
+): ProductionChoice | null {
+  const shown = shownProductionTime(listing, draft, context.inheritedTurnaround);
+  if (shown) return shown;
+  return heldMixedRange(listing) ? null : DEFAULT_DAYS_CHOICE;
 }
 
 export function speedReady(listing: Listing, draft: ListingDraft, context: BoardContext): boolean {
-  return choiceProblem(wizardProductionTime(listing, draft, context), listing.productionDayMinutes ?? undefined) == null;
+  const choice = wizardProductionTime(listing, draft, context);
+  return choice ? choiceProblem(choice, listing.productionDayMinutes ?? undefined) == null : true;
 }
 
 export function speedGuidance(listing: Listing, draft: ListingDraft, context: BoardContext): string | null {

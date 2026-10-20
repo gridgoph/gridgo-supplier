@@ -13,7 +13,8 @@ import {
   readStarterTime,
   readyInLine,
   reviewLines,
-  sameDayTooLong,
+  MAX_PRODUCTION_MINUTES,
+  sameDayPastOneDay,
   sameChoice,
   sameDay,
   sameDayLadder,
@@ -204,15 +205,24 @@ describe("How long does this take?", () => {
   it("refuses what GRIDGO would refuse, in the dashboard's sentences", () => {
     expect(choiceProblem(null)).toBe("Choose how long this takes.");
     expect(choiceProblem({ mode: "same_day", minutes: 0 })).toBe("Choose how many hours this takes.");
-    expect(choiceProblem({ mode: "same_day", minutes: 600 })).toBe(
-      "Hours are for work done inside one working day (under 10 hours). Use working days for anything longer.",
+    expect(choiceProblem({ mode: "same_day", minutes: 90.5 })).toBe("Choose how many hours this takes.");
+    expect(choiceProblem({ mode: "same_day", minutes: MAX_PRODUCTION_MINUTES + 1 })).toBe(
+      "Choose how many hours this takes.",
     );
-    expect(sameDayTooLong({ mode: "same_day", minutes: 600 })).toBe(true);
-    expect(sameDayTooLong({ mode: "same_day", minutes: 570 })).toBe(false);
     expect(choiceProblem({ mode: "days", minDays: 0, maxDays: 2 })).toBe("Production time is at least 1 working day.");
+    expect(choiceProblem({ mode: "days", minDays: 1, maxDays: 1.5 })).toBe("Production time is at least 1 working day.");
     expect(choiceProblem({ mode: "days", minDays: 1, maxDays: 31 })).toBe("Production time is at most 30 working days.");
     expect(choiceProblem({ mode: "days", minDays: 3, maxDays: 2 })).toBe("The soonest can't be later than the latest.");
     expect(choiceProblem({ mode: "days", minDays: 1, maxDays: 3 })).toBeNull();
+  });
+
+  it("takes exact hours of a working day or more as they are (gridgo-api#299)", () => {
+    // 12 hours on a 10-hour working day: an older or converted Express time.
+    expect(choiceProblem({ mode: "same_day", minutes: 720 }, 600)).toBeNull();
+    expect(choiceProblem({ mode: "same_day", minutes: 600 }, 600)).toBeNull();
+    expect(sameDayPastOneDay({ mode: "same_day", minutes: 720 }, 600)).toBe(true);
+    expect(sameDayPastOneDay({ mode: "same_day", minutes: 570 }, 600)).toBe(false);
+    expect(sameDayPastOneDay({ mode: "days", minDays: 1, maxDays: 2 }, 600)).toBe(false);
   });
 
   it("steps Same day in half hours inside the working day, keeping an off-step time GRIDGO holds", () => {
@@ -234,15 +244,13 @@ describe("Check your production time", () => {
     expect(readProductionTimeReview({})).toEqual({ required: false, reasons: [] });
   });
 
-  it("says why for each reason, and something useful for one it does not know", () => {
+  it("says why for each reason it knows, and nothing for one it does not, as on the dashboard", () => {
     expect(reviewLines({ required: true, reasons: ["legacy_one_working_day"] })).toEqual([
       "This listing has an older 1-working-day setting. Confirm it, or set the time it really takes.",
     ]);
     expect(reviewLines({ required: true, reasons: ["express_missing_hours"] })).toEqual([
       "This was an Express listing with no production time. Express is now Same day: say how many hours it takes.",
     ]);
-    expect(reviewLines({ required: true, reasons: ["something_new"] })).toEqual([
-      "Confirm how long this listing takes, then save.",
-    ]);
+    expect(reviewLines({ required: true, reasons: ["something_new"] })).toEqual([]);
   });
 });

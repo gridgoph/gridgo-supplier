@@ -257,8 +257,8 @@ describe("Add a listing — later steps", () => {
     expect(screen.getByText(/Cheaper in bulk/)).toBeTruthy();
     expect(screen.getByLabelText("Smallest order you will take")).toBeTruthy();
     expect(screen.getByText("How long does this take?")).toBeTruthy();
-    expect(screen.getByLabelText("From how many working days")).toBeTruthy();
-    expect(screen.getByLabelText("To how many working days")).toBeTruthy();
+    expect(screen.getByLabelText("Shortest working days")).toBeTruthy();
+    expect(screen.getByLabelText("Longest working days")).toBeTruthy();
     // Faster price tiers wait under More options.
     expect(screen.queryByText(/Faster, for more/)).toBeNull();
     expect(screen.getByRole("button", { name: /More options/ })).toBeTruthy();
@@ -302,7 +302,7 @@ describe("Add a listing — later steps", () => {
     await render(<NewListingScreen />);
 
     expect(await screen.findByText("How long does this take?")).toBeTruthy();
-    await fireEvent.press(screen.getByLabelText("Increase To how many working days"));
+    await fireEvent.press(screen.getByLabelText("Increase Longest working days"));
     await fireEvent.press(screen.getByRole("button", { name: "Proceed" }));
 
     await waitFor(() => {
@@ -314,6 +314,30 @@ describe("Add a listing — later steps", () => {
     const patch = (saveListing as jest.Mock).mock.calls.at(-1)?.[1];
     expect(patch).not.toHaveProperty("turnaroundMode");
     expect(patch).not.toHaveProperty("turnaroundDays");
+  });
+
+  it("leaves an older range that mixes hours and working days as it is until the shop picks", async () => {
+    openAt(
+      "speed",
+      listingWith({
+        photos: [{ fileId: "file_1", sortOrder: 0, altText: null }],
+        name: "Event flyers",
+        basePriceMinor: 45000,
+        productionTime: null,
+        turnaroundMode: "override",
+        minimumTurnaround: { unit: "hours", minutes: 120 },
+        turnaround: { unit: "days", days: 2 },
+      }),
+    );
+    await render(<NewListingScreen />);
+
+    expect(await screen.findByText("Now: Ready in 2 hours to 2 working days")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Proceed" }));
+
+    await waitFor(() => expect(useListingWizard.getState().step).not.toBe("speed"));
+    for (const [, patch] of (saveListing as jest.Mock).mock.calls) {
+      expect(patch).not.toHaveProperty("productionTime");
+    }
   });
 
   it("saves a step as soon as it is added", async () => {

@@ -318,6 +318,7 @@ export type Listing = {
    * The answer to "How long does this take?", as GRIDGO resolves it (its own
    * time, or its category line's). Null when it has none, or an older window
    * neither answer can hold; `turnaround*` above still describe that one.
+   * Absent (undefined) from a GRIDGO that predates the question.
    */
   productionTime?: ProductionChoice | null;
   /** GRIDGO asking the shop to "Check your production time". */
@@ -630,7 +631,8 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     turnaround: time.max,
     minimumTurnaround: time.min,
     productionDayMinutes: readDayMinutes(raw),
-    productionTime: readProductionChoice(raw),
+    productionTime:
+      "productionTime" in raw || "production_time" in raw ? readProductionChoice(raw) : undefined,
     productionTimeReview: readProductionTimeReview(raw),
     fileFormatMode,
     formatCodes: readFormatCodes(

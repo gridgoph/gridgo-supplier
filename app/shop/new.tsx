@@ -16,12 +16,16 @@ import { StepsStep } from "@/components/listing/wizard/StepsStep";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import {
   applyDraft,
+  draftEdits,
   draftFrom,
   colourHold,
   formatsMoved,
   listingSavePatch,
+  rebaseEdits,
   sameDraft,
+  type DraftEdits,
   type ListingDraft,
+  withEdits,
 } from "@/lib/listingDraft";
 import {
   aboutBlocker,
@@ -114,7 +118,7 @@ export default function NewListingScreen() {
   const [listingId, setListingId] = useState<string | null>(session.listingId);
   const [step, setStep] = useState<WizardStepId>(session.listingId ? session.step : "pick");
   const [created, setCreated] = useState<Listing | null>(null);
-  const [draft, storeDraft] = useState<ListingDraft | null>(null);
+  const [edits, storeEdits] = useState<DraftEdits | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notOpenOnSave, setNotOpenOnSave] = useState<string | null>(null);
@@ -145,16 +149,17 @@ export default function NewListingScreen() {
   const target = targets.find((entry) => entry.category.code === categoryCode) ?? null;
 
   const baseline = listing;
-  const working = draft ?? (listing ? draftFrom(listing) : null);
+  // Only the fields the shop changed are held (see the listing editor).
+  const working = listing ? withEdits(listing, edits) : null;
   const dirty = Boolean(baseline && working && !sameDraft(working, draftFrom(baseline)));
   useLayoutEffect(() => {
     dirtyRef.current = dirty;
   });
 
   function setDraft(value: ListingDraft | null) {
-    const changed = Boolean(value && baseline && !sameDraft(value, draftFrom(baseline)));
-    dirtyRef.current = changed;
-    storeDraft(changed ? value : null);
+    const next = value && baseline ? draftEdits(value, draftFrom(baseline)) : null;
+    dirtyRef.current = next != null;
+    storeEdits(next);
   }
 
   const merged = useMemo(
@@ -233,7 +238,7 @@ export default function NewListingScreen() {
     useListingWizard.getState().forget(listingId);
     setListingId(null);
     setCreated(null);
-    storeDraft(null);
+    storeEdits(null);
     setStep("pick");
   }, [listing, listingError, listingId, listingLoading, listingNotOpen, notOpenYet]);
 
@@ -328,10 +333,12 @@ export default function NewListingScreen() {
       }
       // Leaving the speed step saves the time it showed, even untouched, so a
       // new listing never goes on without one.
-      const toSave =
+      // An older range that mixes hours and working days is kept as it is.
+      const untouched =
         step === "speed" && context && !working.productionTime
-          ? { ...working, productionTime: wizardProductionTime(baseline, working, context) }
-          : working;
+          ? wizardProductionTime(baseline, working, context)
+          : null;
+      const toSave = untouched ? { ...working, productionTime: untouched } : working;
       if (toSave !== working) setDraft(toSave);
 
       savingRef.current = true;
@@ -349,7 +356,7 @@ export default function NewListingScreen() {
           return false;
         }
         dirtyRef.current = false;
-        storeDraft(null);
+        storeEdits(null);
         setCreated(saved.value);
 
         if (formatsMoved(toSave, baseline)) {
@@ -423,7 +430,7 @@ export default function NewListingScreen() {
           return null;
         }
         dirtyRef.current = false;
-        storeDraft(null);
+        storeEdits(null);
         setCreated(saved.value);
         await reload();
         return saved.value;
@@ -864,7 +871,10 @@ export default function NewListingScreen() {
           onChange={setDraft}
           busy={busy}
           beforeApply={() => persist()}
-          afterApply={reload}
+          afterApply={async () => {
+            const fresh = await reload();
+            if (fresh) storeEdits((current) => rebaseEdits(current, fresh));
+          }}
         />
       ) : null}
 

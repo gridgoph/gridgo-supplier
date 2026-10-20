@@ -1,12 +1,16 @@
 import {
   applyDraft,
   colourHold,
+  draftEdits,
   draftFrom,
+  heldMixedRange,
   listingSavePatch,
   measureUnitFor,
   packageQtyFor,
+  rebaseEdits,
   sameDraft,
   shownProductionTime,
+  withEdits,
 } from "@/lib/listingDraft";
 import type { Listing } from "@/lib/listings";
 import { sameDay, workingDays } from "@/lib/productionDays";
@@ -114,18 +118,47 @@ describe("listingSavePatch measured units", () => {
         null,
       ),
     ).toEqual({ mode: "days", minDays: 2, maxDays: 4 });
-    // GRIDGO sends no productionTime for an hours minimum under a days maximum;
-    // the range it holds is still shown, from the first working day.
-    expect(
-      shownProductionTime(
-        { ...listing, productionTime: null, turnaroundMode: "override", minimumTurnaround: sameDay(120), turnaround: workingDays(2) },
-        base,
-        null,
-      ),
-    ).toEqual({ mode: "days", minDays: 1, maxDays: 2 });
     expect(
       shownProductionTime(listing, { productionTime: { mode: "days", minDays: 3, maxDays: 5 } }, workingDays(2)),
     ).toEqual({ mode: "days", minDays: 3, maxDays: 5 });
+  });
+
+  it("never turns an older range that mixes hours and days into a different answer", () => {
+    const mixed = {
+      ...listing,
+      productionTime: null,
+      turnaroundMode: "override" as const,
+      minimumTurnaround: sameDay(120),
+      turnaround: workingDays(2),
+    };
+    // GRIDGO sent null beside the range: no answer is made up for it.
+    expect(shownProductionTime(mixed, draftFrom(mixed), null)).toBeNull();
+    expect(heldMixedRange(mixed)).toEqual({ min: sameDay(120), max: workingDays(2) });
+    // A GRIDGO that predates the question sends no productionTime at all.
+    const { productionTime: _absent, ...older } = mixed;
+    expect(shownProductionTime(older, draftFrom(older), null)).toEqual({ mode: "days", minDays: 1, maxDays: 2 });
+    expect(heldMixedRange(older)).toBeNull();
+    // Null with no older range is simply no time yet.
+    expect(heldMixedRange({ ...listing, productionTime: null })).toBeNull();
+    // The shop's own pick replaces it.
+    expect(
+      shownProductionTime(mixed, { productionTime: { mode: "same_day", minutes: 180 } }, null),
+    ).toEqual({ mode: "same_day", minutes: 180 });
+  });
+
+  it("holds only the fields the shop changed, on top of whatever GRIDGO holds now", () => {
+    const v7 = { ...listing, version: 7, name: "Flyers", basePriceMinor: 10_000 };
+    const edits = draftEdits({ ...draftFrom(v7), name: "Flyers A5" }, draftFrom(v7));
+    expect(edits).toEqual({ name: "Flyers A5" });
+    expect(draftEdits(draftFrom(v7), draftFrom(v7))).toBeNull();
+
+    // Another device moved the price; the shop's name stays and the new price is taken.
+    const v8 = { ...v7, version: 8, basePriceMinor: 20_000 };
+    expect(withEdits(v8, edits)).toEqual({ ...draftFrom(v8), name: "Flyers A5" });
+    expect(withEdits(v8, edits).price).toBe("200.00");
+    expect(rebaseEdits(edits, v8)).toEqual({ name: "Flyers A5" });
+    // An edit GRIDGO now holds too is no longer the shop's.
+    expect(rebaseEdits(edits, { ...v8, name: "Flyers A5" })).toBeNull();
   });
 
   it("sends each faster price tier in its own unit, as before", () => {

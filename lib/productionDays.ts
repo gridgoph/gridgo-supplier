@@ -350,14 +350,24 @@ export function choiceLine(choice: ProductionChoice): string {
   return `${choice.minDays} to ${choice.maxDays} working days`;
 }
 
-/** A Same day time held from before that is a working day or longer. */
-export function sameDayTooLong(choice: ProductionChoice | null, dayMinutes: number = DEFAULT_DAY_MINUTES): boolean {
+/**
+ * Exact hours of one working day or more: an older or converted Express time.
+ * GRIDGO takes these exactly as they are (create, edit, preview and "Use for
+ * all"), so they are kept and explained, never rounded into days.
+ */
+export function sameDayPastOneDay(choice: ProductionChoice | null, dayMinutes: number = DEFAULT_DAY_MINUTES): boolean {
   return choice?.mode === "same_day" && choice.minutes >= dayMinutes;
 }
 
+/** GRIDGO's ceiling on one production duration, in minutes. */
+export const MAX_PRODUCTION_MINUTES = 2_147_483_647;
+
 /**
  * Why an answer cannot be saved, in the shop's words. Null when it can. The
- * web dashboard says the same sentence for the same bad input.
+ * web dashboard says the same sentence for the same bad input. Exact hours
+ * are any positive whole number of minutes up to GRIDGO's ceiling — a day or
+ * more included (gridgo-api `docs/SCHEDULING_API.md`) — however short the
+ * picker's own steps are.
  */
 export function choiceProblem(
   choice: ProductionChoice | null,
@@ -365,15 +375,13 @@ export function choiceProblem(
 ): string | null {
   if (!choice) return "Choose how long this takes.";
   if (choice.mode === "same_day") {
-    if (!Number.isInteger(choice.minutes) || choice.minutes <= 0) return "Choose how many hours this takes.";
-    return choice.minutes >= dayMinutes
-      ? `Hours are for work done inside one working day (under ${timeLabel(sameDay(dayMinutes))}). Use working days for anything longer.`
-      : null;
+    const whole = Number.isInteger(choice.minutes) && choice.minutes > 0 && choice.minutes <= MAX_PRODUCTION_MINUTES;
+    return whole ? null : "Choose how many hours this takes.";
   }
-  if (!Number.isInteger(choice.minDays) || choice.minDays < PRODUCTION_DAYS.min) return "Production time is at least 1 working day.";
-  if (!Number.isInteger(choice.maxDays) || choice.maxDays > PRODUCTION_DAYS.max) {
-    return `Production time is at most ${PRODUCTION_DAYS.max} working days.`;
+  if (!Number.isInteger(choice.minDays) || !Number.isInteger(choice.maxDays) || choice.minDays < PRODUCTION_DAYS.min) {
+    return "Production time is at least 1 working day.";
   }
+  if (choice.maxDays > PRODUCTION_DAYS.max) return `Production time is at most ${PRODUCTION_DAYS.max} working days.`;
   if (choice.minDays > choice.maxDays) return "The soonest can't be later than the latest.";
   return null;
 }
@@ -426,6 +434,5 @@ export function reviewLines(review: ProductionTimeReview): string[] {
         return null;
     }
   });
-  const known = lines.filter((line): line is string => line != null);
-  return known.length ? known : ["Confirm how long this listing takes, then save."];
+  return lines.filter((line): line is string => line != null);
 }

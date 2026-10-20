@@ -27,7 +27,7 @@ import { ListingSection as Section } from "@/components/listing/ListingSection";
 import { PrinterCapField } from "@/components/listing/PrinterCapField";
 import { PrintLayoutField } from "@/components/listing/PrintLayoutField";
 import { PagePricingField, pagePricingApplies } from "@/components/listing/PagePricingField";
-import { ProductionTimeSection } from "@/components/listing/ProductionTimeQuestion";
+import { ProductionTimeCheckJump, ProductionTimeSection } from "@/components/listing/ProductionTimeQuestion";
 import { SampleStrip } from "@/components/listing/SampleStrip";
 import { PriceTierEditor } from "@/components/listing/TierEditor";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
@@ -43,6 +43,7 @@ import {
   applyDraft,
   colourHold,
   colourOn,
+  draftEdits,
   draftFrom,
   formatsMoved,
   listingSavePatch,
@@ -50,10 +51,13 @@ import {
   needsMeasure,
   packageQtyFor,
   PACK_STEP,
+  rebaseEdits,
   sameDraft,
   shownProductionTime,
+  type DraftEdits,
   type ListingDraft as Draft,
   unitHint,
+  withEdits,
 } from "@/lib/listingDraft";
 import {
   addOns,
@@ -135,7 +139,7 @@ export default function ListingScreen() {
   const approved = isMatchable(useSession((s) => s.user));
   const formats = useAcceptedFileFormats();
 
-  const [draft, storeDraft] = useState<Draft | null>(null);
+  const [edits, storeEdits] = useState<DraftEdits | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -162,7 +166,9 @@ export default function ListingScreen() {
   // for an effect is what stops the screen rendering its "not reachable" state
   // for the frame between the listing arriving and the draft being seeded.
   const baseline = listing;
-  const working = draft ?? (listing ? draftFrom(listing) : null);
+  // Only the fields the shop changed are held; every other field is what
+  // GRIDGO holds now, so a newer version never carries an old price back.
+  const working = listing ? withEdits(listing, edits) : null;
 
   const dirty = Boolean(baseline && working && !sameDraft(working, draftFrom(baseline)));
   useLayoutEffect(() => { dirtyRef.current = dirty; });
@@ -178,6 +184,7 @@ export default function ListingScreen() {
   const reduceMotion = useReducedMotion();
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const sectionY = useRef<Partial<Record<TourStepId, number>>>({});
+  const productionY = useRef(0);
   const showSection = useCallback(
     (step: TourStepId | null) => {
       if (step !== "listing.price" && step !== "listing.options") return;
@@ -197,9 +204,9 @@ export default function ListingScreen() {
   );
 
   function setDraft(value: Draft | null) {
-    const changed = Boolean(value && baseline && !sameDraft(value, draftFrom(baseline)));
-    dirtyRef.current = changed;
-    storeDraft(changed ? value : null);
+    const next = value && baseline ? draftEdits(value, draftFrom(baseline)) : null;
+    dirtyRef.current = next != null;
+    storeEdits(next);
   }
 
   const merged = useMemo(
@@ -285,7 +292,7 @@ export default function ListingScreen() {
           return false;
         }
         dirtyRef.current = false;
-        storeDraft(null);
+        storeEdits(null);
 
         if (formatsMoved(working, baseline)) {
           const formatsSaved = await setFileFormats(
@@ -533,6 +540,15 @@ export default function ListingScreen() {
             </View>
           ) : null}
           {error ? <ErrorNotice message={listingRefreshFailed(error)} onRetry={() => void reload()} /> : null}
+          <ProductionTimeCheckJump
+            listing={listing}
+            onCheck={() =>
+              scrollRef.current?.scrollTo({
+                y: Math.max(0, productionY.current - spacing.xl),
+                animated: !reduceMotion,
+              })
+            }
+          />
         </View>
 
         {/* 1. Samples */}
@@ -791,34 +807,41 @@ export default function ListingScreen() {
         </TourTarget>
 
         {/* 4. Production time */}
-        <Section
-          title="PRODUCTION TIME"
-          hint="Counted on your shop's open hours. Changing it moves only the dates of new orders."
-        >
-          <ProductionTimeSection
-            listing={listing}
-            held={shownProductionTime(listing, { productionTime: null }, context.inheritedTurnaround)}
-            choice={productionTime}
-            touched={working.productionTime != null}
-            onChange={(choice) => setDraft({ ...working, productionTime: choice })}
-            // "Keep 1 working day" saves the time GRIDGO holds, which clears
-            // the reminder; only while nothing else is waiting to save.
-            onKeep={
-              dirty || !baseline
-                ? undefined
-                : async (held) => {
-                    await run(() => saveListing(baseline, { productionTime: productionTimeBody(held) }));
-                  }
-            }
-            speedTiers={working.speedTiers}
-            onSpeedTiersChange={(next) => setDraft({ ...working, speedTiers: next })}
-            disabled={busy}
-            // "Use for all my listings" saves this screen's own changes first,
-            // so the listing's version is current when every listing is sent.
-            beforeApply={async () => (dirtyRef.current && !savingRef.current ? persist() : true)}
-            afterApply={reload}
-          />
-        </Section>
+        <View onLayout={(event) => (productionY.current = event.nativeEvent.layout.y)}>
+          <Section
+            title="PRODUCTION TIME"
+            hint="Counted on your shop's open hours. Changing it moves only the dates of new orders."
+          >
+            <ProductionTimeSection
+              listing={listing}
+              held={shownProductionTime(listing, { productionTime: null }, context.inheritedTurnaround)}
+              choice={productionTime}
+              touched={working.productionTime != null}
+              onChange={(choice) => setDraft({ ...working, productionTime: choice })}
+              // "Keep 1 working day" saves the time GRIDGO holds, which clears
+              // the reminder; only while nothing else is waiting to save.
+              onKeep={
+                dirty || !baseline
+                  ? undefined
+                  : async (held) => {
+                      await run(() => saveListing(baseline, { productionTime: productionTimeBody(held) }));
+                    }
+              }
+              speedTiers={working.speedTiers}
+              onSpeedTiersChange={(next) => setDraft({ ...working, speedTiers: next })}
+              disabled={busy}
+              // "Use for all my listings" saves this screen's own changes first,
+              // so the listing's version is current when every listing is sent.
+              beforeApply={async () => (dirtyRef.current && !savingRef.current ? persist() : true)}
+              // Edits made while every listing was being changed stay; whatever
+              // GRIDGO changed under them (a newer price) is taken as it is.
+              afterApply={async () => {
+                const fresh = await reload();
+                if (fresh) storeEdits((current) => rebaseEdits(current, fresh));
+              }}
+            />
+          </Section>
+        </View>
 
         {/* 5. Steps */}
         <TourTarget step="listing.options" onLayout={(y) => placeSection("listing.options", y)} className="mt-8">

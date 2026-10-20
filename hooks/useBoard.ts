@@ -216,7 +216,8 @@ export type ListingData = {
   loading: boolean;
   notOpenYet: boolean;
   error: string | null;
-  reload: (preserveDraft?: boolean) => Promise<void>;
+  /** Answers the listing as read, or null when this read was not taken. */
+  reload: (preserveDraft?: boolean) => Promise<Listing | null>;
 };
 
 /**
@@ -247,9 +248,9 @@ export function useListing(
   useLayoutEffect(() => { hold.current = holdRefresh; }, [holdRefresh]);
 
   const nextRead = useReadVersion();
-  const reload = useCallback(async (preserveDraft = false) => {
+  const reload = useCallback(async (preserveDraft = false): Promise<Listing | null> => {
     const current = nextRead();
-    if (!itemId) return;
+    if (!itemId) return null;
     setLoading(true);
     try {
       const [result, taxonomy, lines, steps] = await Promise.all([
@@ -259,7 +260,7 @@ export function useListing(
         loadPrepSteps(itemId),
       ]);
 
-      if (!current() || (preserveDraft && hold.current?.())) return;
+      if (!current() || (preserveDraft && hold.current?.())) return null;
       if (taxonomy) setCatalog(buildCatalog(taxonomy));
       setServices(lines);
       setPrepSteps(steps.status === "ok" ? steps.value : []);
@@ -269,13 +270,16 @@ export function useListing(
         setListing(result.value);
         setNotOpenYet(false);
         setError(null);
-      } else if (result.status === "not_open_yet") {
+        return result.value;
+      }
+      if (result.status === "not_open_yet") {
         setNotOpenYet(true);
         setError(null);
       } else {
         setNotOpenYet(false);
         setError(result.message);
       }
+      return null;
     } finally {
       if (current()) setLoading(false);
     }

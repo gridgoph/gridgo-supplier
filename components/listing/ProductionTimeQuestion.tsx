@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, TriangleAlert } from "lucide-react-native";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
@@ -9,7 +9,8 @@ import { SpeedTierEditor } from "@/components/listing/TierEditor";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { useThemeColors } from "@/hooks/useTheme";
 import type { Listing, SpeedTier } from "@/lib/listings";
-import { applyProductionTimeToAll, BOARD_NOT_OPEN_YET } from "@/lib/listingsApi";
+import { heldMixedRange, sameSpeedTiers } from "@/lib/listingDraft";
+import { applyProductionTimeToAll, BOARD_NOT_OPEN_YET, loadListingCount } from "@/lib/listingsApi";
 import {
   DEFAULT_DAY_MINUTES,
   DEFAULT_DAYS_CHOICE,
@@ -18,10 +19,11 @@ import {
   PRODUCTION_TIME_REVIEW_TITLE,
   choiceLine,
   choiceProblem,
+  readyInLine,
   reviewLines,
   sameDay,
   sameDayLadder,
-  sameDayTooLong,
+  sameDayPastOneDay,
   timeParts,
   type ProductionChoice,
   type ProductionChoiceMode,
@@ -44,17 +46,22 @@ function daysUnit(days: number): string {
  * same words as the shop web dashboard.
  *
  * Switching the mode and back restores what the shop had there, so a look at
- * the other one costs nothing. Unanswered (a listing with no production time
- * at all) neither mode is selected until the shop picks one. A bad answer
- * reads the dashboard's sentence for it under the steppers.
+ * the other one costs nothing. Unanswered, neither mode is selected until the
+ * shop picks one: a listing with no production time at all, or one holding an
+ * older range that mixes hours and working days (`heldLine`), which keeps
+ * setting the dates until then. A bad answer reads the dashboard's sentence
+ * for it under the steppers.
  */
 export function ProductionTimeQuestion({
   choice,
+  heldLine,
   onChange,
   dayMinutes = DEFAULT_DAY_MINUTES,
   disabled,
 }: {
   choice: ProductionChoice | null;
+  /** "Ready in 2 hours to 2 working days": an older range neither answer holds. */
+  heldLine?: string | null;
   onChange: (choice: ProductionChoice) => void;
   dayMinutes?: number;
   disabled?: boolean;
@@ -89,7 +96,7 @@ export function ProductionTimeQuestion({
                 min={0}
                 max={ladder.length - 1}
                 display={timeParts(sameDay(choice.minutes))}
-                accessibilityLabel="Ready in how many hours"
+                accessibilityLabel="Hours until ready"
                 disabled={disabled}
               />
             );
@@ -108,7 +115,7 @@ export function ProductionTimeQuestion({
             min={PRODUCTION_DAYS.min}
             max={PRODUCTION_DAYS.max}
             display={{ value: String(choice.minDays), unit: daysUnit(choice.minDays) }}
-            accessibilityLabel="From how many working days"
+            accessibilityLabel="Shortest working days"
             disabled={disabled}
           />
           <Text className="text-caption text-text-secondary">To</Text>
@@ -118,22 +125,33 @@ export function ProductionTimeQuestion({
             min={PRODUCTION_DAYS.min}
             max={PRODUCTION_DAYS.max}
             display={{ value: String(choice.maxDays), unit: daysUnit(choice.maxDays) }}
-            accessibilityLabel="To how many working days"
+            accessibilityLabel="Longest working days"
             disabled={disabled}
           />
+        </View>
+      ) : heldLine ? (
+        <View className="gap-1">
+          <Text className="text-body text-text-primary">
+            Now: {heldLine}
+          </Text>
+          <Text className="text-caption text-text-secondary">
+            This older setting mixes hours and working days, so it fits neither answer. It still sets the dates
+            clients are offered. Choosing an answer changes them from now on; orders already placed keep their dates.
+          </Text>
         </View>
       ) : (
         <Text className="text-caption text-text-secondary">
           No production time yet, so clients cannot be offered a date. Pick one.
         </Text>
       )}
-      {choice && sameDayTooLong(choice, dayMinutes) ? (
-        <Text className="text-caption text-text-secondary">
-          This listing still holds a time longer than one working day. Choose Days to set it in working days.
-        </Text>
-      ) : choice && choiceProblem(choice, dayMinutes) ? (
+      {choice && choiceProblem(choice, dayMinutes) ? (
         <Text className="text-caption text-error" accessibilityRole="alert">
           {choiceProblem(choice, dayMinutes)}
+        </Text>
+      ) : sameDayPastOneDay(choice, dayMinutes) ? (
+        <Text className="text-caption text-text-secondary">
+          This is more than one working day of open hours. GRIDGO keeps it exactly, so the work is ready on a later
+          working day; the dates below show when.
         </Text>
       ) : null}
     </View>
@@ -201,11 +219,31 @@ export function ProductionTimeReminder({
 }
 
 /**
+ * The same reminder near the top of a long listing screen, with the way to
+ * it: "Check production time" brings the question into view. Drawn only while
+ * GRIDGO asks.
+ */
+export function ProductionTimeCheckJump({ listing, onCheck }: { listing: Listing; onCheck: () => void }) {
+  const colors = useThemeColors();
+  if (!listing.productionTimeReview?.required) return null;
+  return (
+    <View className="gg-panel gap-2 border border-warning p-3">
+      <View className="flex-row items-center gap-2">
+        <TriangleAlert size={18} color={colors.warning} strokeWidth={2} />
+        <Text className="flex-1 text-body font-medium text-text-primary">{PRODUCTION_TIME_REVIEW_TITLE}</Text>
+      </View>
+      <SecondaryButton label="Check production time" onPress={onCheck} />
+    </View>
+  );
+}
+
+/**
  * Under "More options": "Use for all my listings" and the faster price
  * options (the tier editor, kept exactly as it was, only moved).
  *
- * "Use for all my listings" asks first, saves this screen's own changes
- * (`beforeApply`), then sets the answer on every listing the shop owns.
+ * "Use for all my listings" asks first — naming how many listings when GRIDGO
+ * says — saves this screen's own changes (`beforeApply`), then sets the answer
+ * on every listing the shop owns.
  */
 export function ProductionTimeMoreOptions({
   choice,
@@ -228,16 +266,27 @@ export function ProductionTimeMoreOptions({
   const [open, setOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [listingCount, setListingCount] = useState<number | null>(null);
   const Chevron = open ? ChevronUp : ChevronDown;
   const problem = choice ? choiceProblem(choice, dayMinutes) : null;
+
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    void loadListingCount().then((count) => {
+      if (live) setListingCount(count);
+    });
+    return () => {
+      live = false;
+    };
+  }, [open]);
 
   async function applyToAll() {
     if (!choice) return;
     const confirmed = await askConfirm(
       {
         question: `Use ${choiceLine(choice)} for all your listings?`,
-        consequence:
-          "Every listing you have, hidden ones and drafts included, will take this production time. New orders get dates from it straight away. Orders already placed keep their dates, and your prices and faster options do not change.",
+        consequence: `${listingCount != null ? `All ${listingCount} of your listings` : "Every listing you have"}, hidden ones and drafts included, will take this production time. New orders get dates from it straight away. Orders already placed keep their dates, and your prices and faster options do not change.`,
         confirmLabel: "Use for all",
         cancelLabel: "Cancel",
       },
@@ -341,6 +390,7 @@ export function ProductionTimeSection({
   afterApply: () => Promise<void>;
 }) {
   const dayMinutes = listing.productionDayMinutes ?? undefined;
+  const mixed = heldMixedRange(listing);
   return (
     <View className="gap-4">
       <ProductionTimeReminder
@@ -350,9 +400,20 @@ export function ProductionTimeSection({
         onKeep={onKeep}
         dayMinutes={dayMinutes}
       />
-      <ProductionTimeQuestion choice={choice} onChange={onChange} dayMinutes={dayMinutes} disabled={disabled} />
+      <ProductionTimeQuestion
+        choice={choice}
+        heldLine={mixed ? readyInLine(mixed.max, mixed.min) : null}
+        onChange={onChange}
+        dayMinutes={dayMinutes}
+        disabled={disabled}
+      />
       {choice ? (
-        <ProductionTimePreviewPanel listing={listing} choice={choice} problem={choiceProblem(choice, dayMinutes)} />
+        <ProductionTimePreviewPanel
+          listing={listing}
+          choice={choice}
+          problem={choiceProblem(choice, dayMinutes)}
+          tiersUnsaved={!sameSpeedTiers(speedTiers, listing.speedTiers)}
+        />
       ) : null}
       <ProductionTimeMoreOptions
         choice={choice}

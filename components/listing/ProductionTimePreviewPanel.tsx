@@ -1,6 +1,7 @@
 import { CalendarDays } from "lucide-react-native";
 import { Text, View } from "react-native";
 
+import { ErrorNotice } from "@/components/ErrorNotice";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { StatusChip, type StatusIconName, type StatusTone } from "@/components/StatusChip";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -42,19 +43,23 @@ function DayRow({ day }: { day: PreviewDay }) {
  * before it is saved, in the web dashboard's words. Each day is a status chip
  * (icon + label + colour) with its ready-by time or why it is not offered.
  * `problem` is the answer's own validation sentence; while there is one,
- * nothing is asked.
+ * nothing is asked. While newer dates load, the last ones stay up dimmed.
+ * GRIDGO counts the faster price options it holds, so `tiersUnsaved` says
+ * that edited ones are not in the dates yet.
  */
 export function ProductionTimePreviewPanel({
   listing,
   choice,
   problem,
+  tiersUnsaved = false,
 }: {
   listing: Listing;
   choice: ProductionChoice;
   problem: string | null;
+  tiersUnsaved?: boolean;
 }) {
   const colors = useThemeColors();
-  const { outcome, updating } = useProductionTimePreview(listing, problem ? null : choice);
+  const { outcome, updating, retry } = useProductionTimePreview(listing, problem ? null : choice);
   const preview = outcome?.status === "ok" ? outcome.value : null;
 
   return (
@@ -62,32 +67,38 @@ export function ProductionTimePreviewPanel({
       <View className="flex-row items-start gap-3">
         <CalendarDays size={18} color={colors.textSecondary} strokeWidth={2} />
         <View className="min-w-0 flex-1 gap-1">
-          <View className="flex-row items-center justify-between gap-2">
-            <Text className="text-body font-medium text-text-primary">Dates clients will see</Text>
-            {updating && preview && !problem ? <Text className="text-caption text-text-muted">Updating…</Text> : null}
-          </View>
+          <Text className="text-body font-medium text-text-primary">Dates clients will see</Text>
           {problem ? (
             <Text className="text-caption text-text-muted">Fix the time above to see the dates.</Text>
           ) : outcome?.status === "not_open_yet" ? (
             <Text className="text-caption text-text-secondary">{BOARD_NOT_OPEN_YET}</Text>
-          ) : outcome?.status === "failed" ? (
-            <Text className="text-caption text-text-secondary">
-              The dates could not be loaded. They will show when you change the time again.
-            </Text>
           ) : preview ? (
-            <Text className="text-caption text-text-secondary">{previewSummary(choice, preview)}</Text>
+            <Text className={`text-caption text-text-secondary ${updating ? "opacity-60" : ""}`}>
+              {previewSummary(choice, preview)}
+            </Text>
+          ) : null}
+          {!problem && tiersUnsaved ? (
+            <Text className="text-caption text-text-muted">
+              These dates use your saved faster price options. Save to see your changes in them.
+            </Text>
           ) : null}
         </View>
       </View>
 
-      {problem ? null : outcome == null ? (
+      {problem ? null : outcome?.status === "failed" ? (
+        <ErrorNotice message={outcome.message} onRetry={updating ? undefined : retry} />
+      ) : outcome == null ? (
         <View className="gap-2" accessibilityLabel="Loading the dates clients will see">
           <SkeletonBlock className="h-14 w-full rounded-field" />
           <SkeletonBlock className="h-14 w-full rounded-field" />
           <SkeletonBlock className="h-14 w-full rounded-field" />
         </View>
       ) : preview ? (
-        <View className="gap-2" accessibilityLabel="The next two weeks">
+        <View
+          className={`gap-2 ${updating ? "opacity-60" : ""}`}
+          accessibilityLabel="The next two weeks"
+          accessibilityState={{ busy: updating }}
+        >
           {preview.days.map((day) => (
             <DayRow key={day.day} day={day} />
           ))}
@@ -95,8 +106,8 @@ export function ProductionTimePreviewPanel({
       ) : null}
 
       <Text className="text-caption text-text-muted">
-        Counted from an order placed now, with GRIDGO&rsquo;s file check, your open days and the jobs already ahead
-        of it. Tight dates fall between your shortest and longest time. It is a preview: nothing is reserved.
+        Counted from an order placed now, with GRIDGO&apos;s file check, your open days and the jobs already ahead of it.
+        Tight dates fall between your shortest and longest time. It is a preview: nothing is reserved.
       </Text>
     </View>
   );
