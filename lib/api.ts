@@ -1167,19 +1167,26 @@ export async function updateShopLocation(shop: ShopLocation): Promise<SupplierPr
   return updateSupplierProfile(profile.version, { shop });
 }
 
+/** gridgo-api's `VERIFICATION_DOCUMENT_TYPES`: the only slots a paper can fill. */
+export type VerificationDocumentType = "business_permit" | "valid_id" | "sample_work";
+
 /**
- * Provisional. Bind an uploaded file to the caller's own pending accreditation.
+ * Bind an uploaded file to the caller's own accreditation (gridgo-api
+ * `docs/STORAGE_API.md`, verification-document attachment rules).
  *
  * Uploading uses the ordinary `POST /files` route with a
- * `verification_document` purpose; this is the second half of that pair.
+ * `verification_document` purpose; this is the second half of that pair. The
+ * body is `documentType` and nothing else — any other field is
+ * `400 unexpected_target_field`. A permit or ID replaces the one already in
+ * its slot on its own, so `replaceFileId` is not sent.
  */
 export async function attachVerificationDocument(
   fileId: string,
-  documentKind: string,
+  documentType: VerificationDocumentType,
 ): Promise<StoredFile> {
   const result = await request<{ file: StoredFile }>(`/files/${fileId}/attach`, {
     method: "POST",
-    body: JSON.stringify({ documentKind }),
+    body: JSON.stringify({ documentType }),
   });
   return result.file;
 }
