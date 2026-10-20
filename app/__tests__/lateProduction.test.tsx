@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react-native";
 
 import LateProductionScreen from "@/app/late-production";
+import { NO_MONEY_TAKEN } from "@/lib/performance";
+import { TIGHT_LATE_LINE } from "@/lib/scheduling";
 import { getMyProductionLapses, getMyRescheduleRequests, getMyShopFailures, getSettings, listJobs } from "@/lib/api";
 
 jest.mock("expo-router", () => ({
@@ -25,15 +27,21 @@ const POLICY = { deductionsEnabled: false, minorBps: 500, moderateBps: 1500, sev
 describe("late production screen", () => {
   afterEach(() => jest.clearAllMocks());
 
-  it("states every tier with GRIDGO's rates, and that deductions are off", async () => {
-    (getSettings as jest.Mock).mockResolvedValue({ issueWindowHours: 24, deliveryFeeBands: [], productionPenalty: POLICY });
+  /** Warnings only (gridgo-api SUPPLIER_PERFORMANCE_API.md): true even when the legacy flag is on. */
+  it("states every tier as a warning and that no money is taken, whatever the legacy flag", async () => {
+    (getSettings as jest.Mock).mockResolvedValue({ issueWindowHours: 24, deliveryFeeBands: [], productionPenalty: { ...POLICY, deductionsEnabled: true } });
     (getMyProductionLapses as jest.Mock).mockResolvedValue({ lapses: [] });
     await render(<LateProductionScreen />);
-    expect(await screen.findByText("Minor: 5%")).toBeTruthy();
-    expect(screen.getByText("Moderate: 15%")).toBeTruthy();
-    expect(screen.getByText("Severe: 30%")).toBeTruthy();
-    expect(screen.getByTestId("deductions-off")).toBeTruthy();
     expect(await screen.findByText("No late jobs")).toBeTruthy();
+    expect(screen.getByTestId("no-money-taken")).toBeTruthy();
+    expect(screen.getByText(NO_MONEY_TAKEN)).toBeTruthy();
+    expect(screen.getByText(TIGHT_LATE_LINE)).toBeTruthy();
+    expect(screen.getAllByText("Moderate").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^Minor: /)).toBeNull();
+    expect(screen.queryByText("WHAT A DEDUCTION TAKES")).toBeNull();
+    expect(screen.queryByText(/share/)).toBeNull();
+    expect(screen.queryByText(/another shop/)).toBeNull();
+    expect(screen.queryByText(/comes off your payout\./)).toBeNull();
   });
 
   it("lists the shop's late jobs with each deduction against what was owed", async () => {
@@ -50,10 +58,11 @@ describe("late production screen", () => {
     expect(await screen.findByText("₱90.00 off ₱600.00 still owed")).toBeTruthy();
     expect(await screen.findByText("Barangay tarpaulin")).toBeTruthy();
     expect(screen.getByText("Formal warning on your record")).toBeTruthy();
-    expect(screen.queryByTestId("deductions-off")).toBeNull();
+    // A deduction applied before warnings only stays on the record as history.
+    expect(screen.getByTestId("no-money-taken")).toBeTruthy();
   });
 
-  it("keeps the rule without numbers on an API older than the settings", async () => {
+  it("keeps the rule on an API without late-production records", async () => {
     (getSettings as jest.Mock).mockResolvedValue({ issueWindowHours: 24, deliveryFeeBands: [] });
     (getMyProductionLapses as jest.Mock).mockRejectedValue(
       new (jest.requireActual("@/lib/api").ApiError)(404, { error: "not_found" }),
@@ -61,7 +70,7 @@ describe("late production screen", () => {
     await render(<LateProductionScreen />);
     expect(await screen.findByText(/not showing late-production records/)).toBeTruthy();
     expect(screen.getAllByText("Minor").length).toBeGreaterThan(0);
-    expect(screen.queryByText(/^Minor: /)).toBeNull();
+    expect(screen.getByTestId("no-money-taken")).toBeTruthy();
   });
 });
 
