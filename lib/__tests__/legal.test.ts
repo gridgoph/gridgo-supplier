@@ -22,6 +22,7 @@ import {
   unseenNotices,
   versionLine,
 } from "@/lib/legal";
+import { NO_MONEY_TAKEN } from "@/lib/performance";
 
 function doc(documentId: string, patch: Partial<LegalVersion> = {}): LegalVersion {
   const titles: Record<string, string> = {
@@ -118,7 +119,17 @@ describe("the library", () => {
 
   it("speaks about money only for a version that allows deductions", () => {
     expect(penaltyNote(doc("supplier-agreement"))).toBeNull();
-    expect(penaltyNote(doc("supplier-agreement", { penalties: true }))).toMatch(/only once you agree/);
+    expect(penaltyNote(doc("supplier-agreement", { penalties: true }))).not.toBeNull();
+  });
+
+  /** Warnings only (gridgo-api SUPPLIER_PERFORMANCE_API.md): accepting does not enable deductions. */
+  it("keeps the clause in the agreement but promises no money is taken during the pilot", () => {
+    const note = penaltyNote(doc("supplier-agreement", { penalties: true }))!;
+    expect(note.promise).toBe(NO_MONEY_TAKEN);
+    expect(note.clause).toMatch(/^This version includes a clause that lets GRIDGO deduct/);
+    expect(note.clause).toMatch(/does not use it during the current pilot/);
+    expect(note.clause).toMatch(/agreeing does not change that/);
+    expect(note.clause).not.toMatch(/once you agree/);
   });
 });
 
