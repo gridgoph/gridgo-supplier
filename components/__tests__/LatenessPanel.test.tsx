@@ -3,6 +3,7 @@ import { router } from "expo-router";
 
 import { LatenessPanel } from "@/components/LatenessPanel";
 import { lapseNotice, type ProductionLapse } from "@/lib/productionLapse";
+import { NO_MONEY_TAKEN } from "@/lib/performance";
 
 jest.mock("expo-router", () => ({ router: { push: jest.fn() } }));
 
@@ -34,7 +35,7 @@ describe("LatenessPanel", () => {
     await render(<LatenessPanel notice={lapseNotice(lapse(), { readyBy: DEADLINE, readyAt: null }, now)} />);
     expect(screen.getByText("Minor lateness")).toBeTruthy();
     expect(screen.getByText("This job is past its ready-by time")).toBeTruthy();
-    expect(screen.getByText(/^This is a warning only/)).toBeTruthy();
+    expect(screen.getByText(`${NO_MONEY_TAKEN}.`)).toBeTruthy();
     expect(screen.getByTestId("lateness-scale").props.accessibilityLabel).toMatch(/^This job: Minor lateness\./);
     expect(screen.queryByTestId("deduction-ledger")).toBeNull();
   });
