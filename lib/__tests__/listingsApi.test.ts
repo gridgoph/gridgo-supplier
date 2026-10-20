@@ -425,7 +425,7 @@ describe("the production-time question on the wire", () => {
 
   it("says one sentence when GRIDGO refuses the production time, whichever code it used", async () => {
     const message =
-      "GRIDGO could not save this production time. Choose a number of hours, or whole working days, then save again.";
+      "GRIDGO could not save this production time. Choose Same day with a number of hours, or Days with whole working days.";
     const choice = { productionTime: { mode: "same_day" as const, hours: 10 } };
     jest.spyOn(global, "fetch").mockResolvedValueOnce(answered(400, { error: "invalid_production_time", field: "productionTime" }));
     expect(await saveListing(listing, choice)).toEqual({ status: "failed", message });

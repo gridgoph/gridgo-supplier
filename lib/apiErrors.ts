@@ -301,7 +301,7 @@ const MESSAGES: Record<string, string> = {
   catalog_items_stale:
     "One of your listings changed while this was being applied, so nothing was changed. Try again.",
   invalid_production_time:
-    "GRIDGO could not save this production time. Choose a number of hours, or whole working days, then save again.",
+    "GRIDGO could not save this production time. Choose Same day with a number of hours, or Days with whole working days.",
   invalid_catalog_item:
     "Some details on this listing are missing or not valid. Check the name, price and pack size, then try again.",
   invalid_catalog_options:
