@@ -150,7 +150,7 @@ export function ProductionTimeQuestion({
         </Text>
       ) : sameDayPastOneDay(choice, dayMinutes) ? (
         <Text className="text-caption text-text-secondary">
-          This is more than one working day of open hours. GRIDGO keeps it exactly, so the work is ready on a later
+          This is one working day of open hours or more. GRIDGO keeps it exactly, so the work is ready on a later
           working day; the dates below show when.
         </Text>
       ) : null}

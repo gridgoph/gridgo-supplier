@@ -832,7 +832,7 @@ describe("the listing editor under review and take-down", () => {
       expect(screen.getByLabelText("Hours until ready").props.accessibilityValue).toEqual({ text: "12 hours" });
       expect(
         screen.getByText(
-          "This is more than one working day of open hours. GRIDGO keeps it exactly, so the work is ready on a later working day; the dates below show when.",
+          "This is one working day of open hours or more. GRIDGO keeps it exactly, so the work is ready on a later working day; the dates below show when.",
         ),
       ).toBeTruthy();
       expect(screen.queryByText("Fix the time above to see the dates.")).toBeNull();
