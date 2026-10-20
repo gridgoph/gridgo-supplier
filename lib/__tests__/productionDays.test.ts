@@ -216,6 +216,15 @@ describe("How long does this take?", () => {
     expect(choiceProblem({ mode: "days", minDays: 1, maxDays: 3 })).toBeNull();
   });
 
+  it("round-trips any whole number of minutes GRIDGO returns as fractional hours", () => {
+    // 31 minutes arrives as 31 / 60 hours; GRIDGO takes that same number back.
+    const choice = readProductionChoice({ productionTime: { mode: "same_day", hours: 31 / 60 } });
+    expect(choice).toEqual({ mode: "same_day", minutes: 31 });
+    expect(choiceProblem(choice, 600)).toBeNull();
+    expect(productionTimeBody(choice!)).toEqual({ mode: "same_day", hours: 31 / 60 });
+    expect(sameDayLadder(600, 31)).toContain(31);
+  });
+
   it("takes exact hours of a working day or more as they are (gridgo-api#299)", () => {
     // 12 hours on a 10-hour working day: an older or converted Express time.
     expect(choiceProblem({ mode: "same_day", minutes: 720 }, 600)).toBeNull();

@@ -248,9 +248,14 @@ export function useListing(
   useLayoutEffect(() => { hold.current = holdRefresh; }, [holdRefresh]);
 
   const nextRead = useReadVersion();
-  const reload = useCallback(async (preserveDraft = false): Promise<Listing | null> => {
+  // An explicit read (after the screen's own write) that has not landed yet.
+  // A later refresh overtakes it; if that refresh is then held, the write's
+  // result would never land, so the held refresh reads again instead.
+  const owed = useRef(false);
+  const reload = useCallback(async function read(preserveDraft = false): Promise<Listing | null> {
     const current = nextRead();
     if (!itemId) return null;
+    if (!preserveDraft) owed.current = true;
     setLoading(true);
     try {
       const [result, taxonomy, lines, steps] = await Promise.all([
@@ -260,7 +265,9 @@ export function useListing(
         loadPrepSteps(itemId),
       ]);
 
-      if (!current() || (preserveDraft && hold.current?.())) return null;
+      if (!current()) return null;
+      if (preserveDraft && hold.current?.()) return owed.current ? await read() : null;
+      owed.current = false;
       if (taxonomy) setCatalog(buildCatalog(taxonomy));
       setServices(lines);
       setPrepSteps(steps.status === "ok" ? steps.value : []);

@@ -1056,6 +1056,51 @@ describe("the listing editor under review and take-down", () => {
       expect(patch).toEqual(expect.objectContaining({ name: "Tarpaulin, 15oz", basePriceMinor: 50_000 }));
     });
 
+    it("reads again when a refresh that overtook the read after Use for all is held", async () => {
+      const days = { mode: "days" as const, minDays: 2, maxDays: 3 };
+      (loadListing as jest.Mock).mockResolvedValue({
+        status: "ok",
+        value: listingWith({ version: 7, basePriceMinor: 10_000, productionTime: days }),
+      });
+      let finish: (value: unknown) => void = () => undefined;
+      (applyProductionTimeToAll as jest.Mock).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+
+      view = await render(<ListingScreen />);
+
+      await fireEvent.press(await screen.findByRole("button", { name: /More options/ }));
+      await fireEvent.press(screen.getByRole("button", { name: "Use for all my listings" }));
+      await waitFor(() => expect(useSheets.getState().confirm).not.toBeNull());
+      await act(async () => settleConfirm(true));
+      await waitFor(() => expect(applyProductionTimeToAll).toHaveBeenCalled());
+
+      // The read after Use for all, then a live refresh, both held open.
+      const fresh = { status: "ok", value: listingWith({ version: 8, basePriceMinor: 20_000, productionTime: days }) };
+      let afterApply: (value: unknown) => void = () => undefined;
+      let live: (value: unknown) => void = () => undefined;
+      (loadListing as jest.Mock)
+        .mockReturnValueOnce(new Promise((resolve) => (afterApply = resolve)))
+        .mockReturnValueOnce(new Promise((resolve) => (live = resolve)))
+        .mockResolvedValue(fresh);
+      const before = (loadListing as jest.Mock).mock.calls.length;
+      await act(async () => finish({ status: "ok", value: 8 }));
+      await waitFor(() => expect(loadListing).toHaveBeenCalledTimes(before + 1));
+      await act(async () => invalidate("catalog"));
+      await waitFor(() => expect(loadListing).toHaveBeenCalledTimes(before + 2));
+
+      // The shop starts typing before either lands: the refresh is held, so it reads again.
+      await fireEvent.changeText(screen.getByLabelText("Listing name"), "Tarpaulin, 15oz");
+      await act(async () => afterApply(fresh));
+      await act(async () => live(fresh));
+      await waitFor(() => expect(loadListing).toHaveBeenCalledTimes(before + 3));
+      await waitFor(() => expect(screen.getByLabelText("Your price").props.value).toBe("200.00"));
+
+      await fireEvent.press(screen.getByLabelText("See what clients see"));
+      await waitFor(() => expect(saveListing).toHaveBeenCalled());
+      const [base, patch] = (saveListing as jest.Mock).mock.calls.at(-1) ?? [];
+      expect(base).toEqual(expect.objectContaining({ version: 8 }));
+      expect(patch).toEqual(expect.objectContaining({ name: "Tarpaulin, 15oz", basePriceMinor: 20_000 }));
+    });
+
     it("names how many listings it will change when GRIDGO says", async () => {
       (loadListing as jest.Mock).mockResolvedValue({
         status: "ok",
