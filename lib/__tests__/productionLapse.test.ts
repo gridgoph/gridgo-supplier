@@ -11,6 +11,7 @@ import {
   type ProductionLapse,
 } from "@/lib/productionLapse";
 import { presentAlertBody, presentAlertTitle } from "@/lib/alertStages";
+import { NO_MONEY_TAKEN } from "@/lib/performance";
 
 const DEADLINE = "2026-10-01T02:00:00.000Z";
 const HOUR = 3_600_000;
@@ -103,28 +104,25 @@ describe("rates and durations", () => {
 describe("lapseNotice: the warning states", () => {
   const unfinished = { readyBy: DEADLINE, readyAt: null };
 
-  it("minor, deductions off: a warning only, with the tier's share and how it can rise", () => {
+  it("minor, deductions off: warnings only, and how the tier can rise", () => {
     const notice = lapseNotice(lapse(), unfinished, at(3));
     expect(notice.chipLabel).toBe("Minor lateness");
     expect(notice.tone).toBe("warning");
     expect(notice.title).toBe("This job is past its ready-by time");
     expect(notice.measured).toMatch(/^Now 3 hours past the ready-by time on this job, /);
-    expect(notice.penalty).toMatch(/^This is a warning only — nothing comes off your payout/);
-    expect(notice.penalty).toContain("5% of what GRIDGO still owes you on this job");
+    expect(notice.penalty).toBe(`${NO_MONEY_TAKEN}.`);
     expect(notice.deduction).toBeNull();
     expect(notice.consequences).not.toContain("A formal warning is on your shop's record.");
-    expect(notice.consequences).toContain("Past 6 hours late it becomes moderate, with a larger share.");
+    expect(notice.consequences).toContain("Past 6 hours late it becomes moderate.");
     expect(notice.next).toMatch(/^Finish the job and mark it ready/);
   });
 
-  it("moderate, deductions on: the share comes off once worked out, with a formal warning", () => {
+  it("moderate, deductions on: still warnings only during the pilot, with a formal warning", () => {
     const notice = lapseNotice(lapse({ tier: "moderate", rateBps: 1500, status: "warned" }), unfinished, at(10));
     expect(notice.chipLabel).toBe("Moderate lateness");
-    expect(notice.penalty).toBe(
-      "15% of what GRIDGO still owes you on this job comes off once GRIDGO works it out, after the job is ready. Never more than what is still owed, and nothing carries over to another job.",
-    );
+    expect(notice.penalty).toBe(`${NO_MONEY_TAKEN}.`);
     expect(notice.consequences[0]).toBe("A formal warning is on your shop's record.");
-    expect(notice.consequences).toContain("Past 24 hours late it becomes severe, with a larger share.");
+    expect(notice.consequences).toContain("Past 24 hours late it becomes severe.");
   });
 
   it("severe: error tone, reassignment named, nothing about rising further", () => {
@@ -134,7 +132,7 @@ describe("lapseNotice: the warning states", () => {
       at(30),
     );
     expect(notice.tone).toBe("error");
-    expect(notice.penalty).toMatch(/^30% of what GRIDGO .* comes off once GRIDGO works it out\. /);
+    expect(notice.penalty).toBe(`${NO_MONEY_TAKEN}.`);
     expect(notice.consequences).toContain("Operations may now hand this job to another shop.");
     expect(notice.consequences.join(" ")).not.toMatch(/becomes/);
     expect(notice.measured).toMatch(/^Now 1 day 6 hours past/);
@@ -207,7 +205,7 @@ describe("the deduction, against what is still owed", () => {
 
   it("names each record's standing in one line", () => {
     expect(lapseStandingLine(lapse())).toBe("Warning only, no deduction");
-    expect(lapseStandingLine(lapse({ status: "warned", rateBps: 1500 }))).toBe("15% to come off, once worked out");
+    expect(lapseStandingLine(lapse({ status: "warned", rateBps: 1500 }))).toBe(NO_MONEY_TAKEN);
     expect(lapseStandingLine(lapse({ status: "closed" }))).toBe("Closed, no deduction");
   });
 });

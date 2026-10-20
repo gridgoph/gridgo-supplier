@@ -249,18 +249,14 @@ export default function AcceptJobScreen() {
           </View>
 
           {/*
-            The one sentence a shop should hear before it commits: the date
-            below is the one it is measured against. Calm, and one tap from
-            the whole policy rather than the whole policy here. A Tight job
-            is exempt from late deductions during the pilot, so it hears the
-            Performance page's promise instead, and its link opens that page.
+            The one sentence a shop should hear before it commits, one tap from
+            the whole policy rather than the whole policy here. GRIDGO assesses
+            no new late deduction during the pilot (gridgo-api
+            `docs/SUPPLIER_PERFORMANCE_API.md`), so every offer hears the
+            Performance page's promise. A Tight job's link opens that page.
           */}
           <View className="gap-1">
-            <Text className="text-body text-text-secondary">
-              {isTightBeforeAccepting(job)
-                ? NO_MONEY_TAKEN
-                : "Missing the ready-by time leads to a deduction from what GRIDGO still owes you on this job."}
-            </Text>
+            <Text className="text-body text-text-secondary">{NO_MONEY_TAKEN}</Text>
             <Pressable
               onPress={() =>
                 router.push(isTightBeforeAccepting(job) ? performanceHref() : LATE_PRODUCTION_HREF)

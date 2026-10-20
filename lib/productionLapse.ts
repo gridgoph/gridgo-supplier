@@ -1,6 +1,7 @@
 import type { Notification, Order, Settings } from "@/lib/api";
 import { formatDeadlineFull } from "@/lib/dates";
 import { formatPhp } from "@/lib/money";
+import { NO_MONEY_TAKEN } from "@/lib/performance";
 import { rejectedReviewMs, shopFinish } from "@/lib/shopHandover";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 
@@ -24,14 +25,18 @@ import type { StatusIconName, StatusTone } from "@/components/StatusChip";
  *   states the fact, how it was measured, what applies and what to do next.
  *   Deductions are a Super Admin switch that starts off, so "warning only" is
  *   a real, common state and is said plainly.
+ * - **No new deduction during the pilot** (gridgo-api
+ *   `docs/SUPPLIER_PERFORMANCE_API.md`), whatever the switch says and even on
+ *   a record still waiting to be worked out. Only an `applied` record names
+ *   money; every other state says the Performance page's promise.
  */
 
 export type LapseTier = "minor" | "moderate" | "severe";
 
 /**
  * `warning_only`: deductions were off when GRIDGO first warned, and stay off
- * for this job. `warned`: a deduction may follow once assessed. `applied`: it
- * was taken. `closed`: a refund or a cancellation closed it without one.
+ * for this job. `warned`: deductions were on when GRIDGO first warned; during
+ * the pilot none is assessed. `applied`: one was taken before the pilot. `closed`: a refund or a cancellation closed it without one.
  */
 export type LapseStatus = "warning_only" | "warned" | "applied" | "closed";
 
@@ -301,8 +306,7 @@ export function lapseNotice(
       : `Measured against ${against}.`;
 
   const rate = formatRate(lapse.rateBps);
-  const share = `${rate} of what GRIDGO still owes you on this job`;
-  // Unfinished and below severe, the tier — and its rate — can still rise.
+  // Unfinished and below severe, the tier can still rise.
   const canRise =
     !finished && !paused && lapse.tier !== "severe" && lapse.status !== "closed" && lapse.status !== "applied";
 
@@ -310,13 +314,8 @@ export function lapseNotice(
   let deduction: DeductionView | null = null;
   switch (lapse.status) {
     case "warning_only":
-      penalty = `This is a warning only — nothing comes off your payout for this job. When deductions apply, ${definition.label.toLowerCase()} lateness takes ${share}.`;
-      break;
     case "warned":
-      // Severe is worked out straight away; any other tier once the job is ready.
-      penalty = `${share[0].toUpperCase()}${share.slice(1)} comes off once GRIDGO works it out${
-        finished || lapse.tier === "severe" ? "" : ", after the job is ready"
-      }. Never more than what is still owed, and nothing carries over to another job.`;
+      penalty = `${NO_MONEY_TAKEN}.`;
       break;
     case "applied": {
       const taken = cappedDeductionMinor(lapse);
@@ -347,8 +346,8 @@ export function lapseNotice(
   if (canRise) {
     consequences.push(
       lapse.tier === "minor"
-        ? "Past 6 hours late it becomes moderate, with a larger share."
-        : "Past 24 hours late it becomes severe, with a larger share.",
+        ? "Past 6 hours late it becomes moderate."
+        : "Past 24 hours late it becomes severe.",
     );
   }
 
@@ -381,7 +380,7 @@ export function lapseStandingLine(lapse: ProductionLapse): string {
     case "warning_only":
       return "Warning only, no deduction";
     case "warned":
-      return `${formatRate(lapse.rateBps)} to come off, once worked out`;
+      return NO_MONEY_TAKEN;
     case "applied":
       return `${formatPhp(cappedDeductionMinor(lapse))} off ${formatPhp(lapse.remainingBalanceMinor)} still owed`;
     case "closed":
