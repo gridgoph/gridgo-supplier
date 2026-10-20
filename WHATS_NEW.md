@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.318 (New feature)
+
+- Set how long a listing takes in one question, Same day or Days, and see the dates clients will be offered.
+- A tight-deadline offer is marked on Home, and its accept screen no longer warns of a deduction during the pilot.
+
 ## 1.0.304 (New feature)
 
 - New jobs with a tight deadline say so before you accept, and you can decline them with a reason at no penalty.
