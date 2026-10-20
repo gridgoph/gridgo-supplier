@@ -14,7 +14,16 @@ import {
 } from "@/lib/colourPricing";
 import { parseMoney } from "@/lib/money";
 import { samePrintLayouts, type PrintLayoutCode } from "@/lib/printLayout";
-import { listingTimeFields, sameTime, timeFields, timeKey, type ProductionTime } from "@/lib/productionDays";
+import {
+  choiceFromWindow,
+  choiceWindow,
+  productionTimeBody,
+  sameChoice,
+  timeFields,
+  timeKey,
+  type ProductionChoice,
+  type ProductionTime,
+} from "@/lib/productionDays";
 
 /**
  * The words, price and times a shop holds until the foot is pressed.
@@ -44,10 +53,12 @@ export type ListingDraft = {
   minimumOrderQuantity: number | null;
   priceTiers: Listing["priceTiers"];
   speedTiers: Listing["speedTiers"];
-  turnaroundMode: Listing["turnaroundMode"];
-  /** Hours or working days. Null while the listing follows its category line. */
-  turnaround: ProductionTime | null;
-  minimumTurnaround: ProductionTime | null;
+  /**
+   * The shop's answer to "How long does this take?" once it has touched it.
+   * Null leaves the listing's production time as GRIDGO holds it, so an
+   * unrelated save never re-sends it (and never clears GRIDGO's reminder).
+   */
+  productionTime: ProductionChoice | null;
   subcategoryCode: string;
   fileFormatMode: Listing["fileFormatMode"];
   formatCodes: string[];
@@ -74,9 +85,7 @@ export function draftFrom(listing: Listing): ListingDraft {
     minimumOrderQuantity: listing.minimumOrderQuantity,
     priceTiers: listing.priceTiers,
     speedTiers: listing.speedTiers,
-    turnaroundMode: listing.turnaroundMode,
-    turnaround: listing.turnaround,
-    minimumTurnaround: listing.minimumTurnaround ?? null,
+    productionTime: null,
     subcategoryCode: listing.subcategoryCode,
     fileFormatMode: listing.fileFormatMode,
     formatCodes: listing.formatCodes,
@@ -86,33 +95,75 @@ export function draftFrom(listing: Listing): ListingDraft {
   };
 }
 
+const same = (left: unknown, right: unknown) => left === right;
+
+/** How each field is compared: by value, never by the array or object it arrived in. */
+const SAME_FIELD: { [K in keyof ListingDraft]: (left: ListingDraft[K], right: ListingDraft[K]) => boolean } = {
+  name: same,
+  description: same,
+  price: same,
+  pricingUnit: same,
+  packageQty: same,
+  measureUnit: same,
+  minimumWidth: same,
+  minimumHeight: same,
+  minimumLength: same,
+  printerMaxWidthFeet: same,
+  printLayouts: samePrintLayouts,
+  minimumOrderQuantity: same,
+  priceTiers: (left, right) => tierKey(left) === tierKey(right),
+  speedTiers: (left, right) => speedKey(left) === speedKey(right),
+  productionTime: sameChoice,
+  subcategoryCode: same,
+  fileFormatMode: same,
+  formatCodes: (left, right) => left.join(",") === right.join(","),
+  pricedByColour: same,
+  oneColour: same,
+  colour: sameColourDraft,
+};
+
+const DRAFT_FIELDS = Object.keys(SAME_FIELD) as (keyof ListingDraft)[];
+
+function sameField<K extends keyof ListingDraft>(key: K, left: ListingDraft, right: ListingDraft): boolean {
+  return SAME_FIELD[key](left[key], right[key]);
+}
+
 /** Whether anything a shop typed differs from what GRIDGO holds. */
 export function sameDraft(left: ListingDraft, right: ListingDraft): boolean {
-  return (
-    left.name === right.name &&
-    left.description === right.description &&
-    left.price === right.price &&
-    left.pricingUnit === right.pricingUnit &&
-    left.packageQty === right.packageQty &&
-    left.measureUnit === right.measureUnit &&
-    left.minimumWidth === right.minimumWidth &&
-    left.minimumHeight === right.minimumHeight &&
-    left.minimumLength === right.minimumLength &&
-    left.printerMaxWidthFeet === right.printerMaxWidthFeet &&
-    samePrintLayouts(left.printLayouts, right.printLayouts) &&
-    left.minimumOrderQuantity === right.minimumOrderQuantity &&
-    tierKey(left.priceTiers) === tierKey(right.priceTiers) &&
-    speedKey(left.speedTiers) === speedKey(right.speedTiers) &&
-    left.turnaroundMode === right.turnaroundMode &&
-    sameTime(left.turnaround, right.turnaround) &&
-    sameTime(left.minimumTurnaround, right.minimumTurnaround) &&
-    left.subcategoryCode === right.subcategoryCode &&
-    left.fileFormatMode === right.fileFormatMode &&
-    left.formatCodes.join(",") === right.formatCodes.join(",") &&
-    left.pricedByColour === right.pricedByColour &&
-    left.oneColour === right.oneColour &&
-    sameColourDraft(left.colour, right.colour)
-  );
+  return DRAFT_FIELDS.every((key) => sameField(key, left, right));
+}
+
+/**
+ * Only the fields a shop has changed: what a screen holds instead of a whole
+ * draft. Null when nothing differs from `base`.
+ *
+ * A whole draft copies every field GRIDGO held when the shop started typing,
+ * so once the listing is read again at a newer version — after "Use for all
+ * my listings", say — saving it would send an old price back under the new
+ * version and GRIDGO would take it. Edits ride on whatever GRIDGO holds now
+ * instead (`withEdits`), so a field the shop never touched is never sent stale.
+ */
+export type DraftEdits = Partial<ListingDraft>;
+
+export function draftEdits(draft: ListingDraft, base: ListingDraft): DraftEdits | null {
+  const edits: DraftEdits = {};
+  for (const key of DRAFT_FIELDS) {
+    if (!sameField(key, draft, base)) Object.assign(edits, { [key]: draft[key] });
+  }
+  return Object.keys(edits).length ? edits : null;
+}
+
+/** The draft on screen: the listing as GRIDGO holds it now, with the shop's edits on top. */
+export function withEdits(listing: Listing, edits: DraftEdits | null): ListingDraft {
+  return { ...draftFrom(listing), ...edits };
+}
+
+/**
+ * The shop's edits after the listing is read again: an edit GRIDGO now holds
+ * as well is no longer the shop's, so a later change to it is taken.
+ */
+export function rebaseEdits(edits: DraftEdits | null, fresh: Listing): DraftEdits | null {
+  return edits ? draftEdits(withEdits(fresh, edits), draftFrom(fresh)) : null;
 }
 
 /**
@@ -146,9 +197,15 @@ export function applyDraft(listing: Listing, draft: ListingDraft): Listing {
     minimumOrderQuantity: asksQuantity(draft.pricingUnit) ? draft.minimumOrderQuantity : null,
     priceTiers: asksQuantity(draft.pricingUnit) ? draft.priceTiers : [],
     speedTiers: draft.speedTiers,
-    turnaroundMode: draft.turnaroundMode,
-    turnaround: draft.turnaroundMode === "override" ? draft.turnaround : null,
-    minimumTurnaround: draft.turnaroundMode === "override" ? draft.minimumTurnaround : null,
+    ...(draft.productionTime
+      ? {
+          // GRIDGO saves an answer as the listing's own time.
+          turnaroundMode: "override" as const,
+          turnaround: choiceWindow(draft.productionTime).max,
+          minimumTurnaround: choiceWindow(draft.productionTime).min,
+          productionTime: draft.productionTime,
+        }
+      : {}),
     subcategoryCode: draft.subcategoryCode,
     fileFormatMode: draft.fileFormatMode,
     formatCodes: draft.formatCodes,
@@ -195,14 +252,44 @@ export function listingSavePatch(
       ...tier,
       ...timeFields("turnaround", turnaround),
     })),
-    turnaroundMode: working.turnaroundMode,
-    ...(working.turnaroundMode === "override"
-      ? listingTimeFields(working.minimumTurnaround, working.turnaround)
-      : listingTimeFields(null, null)),
+    ...(working.productionTime ? { productionTime: productionTimeBody(working.productionTime) } : {}),
     subcategoryCode: working.subcategoryCode,
     ...colourPatch(working),
     ...(onTheBoard == null ? {} : { active: onTheBoard }),
   };
+}
+
+/**
+ * The answer the production-time question shows: the shop's own if it has
+ * touched it, else GRIDGO's. A GRIDGO that predates the question sends no
+ * `productionTime` at all, and one is read off its older window (the
+ * listing's own, or its category line's). Null when nothing says how long it
+ * takes — or when GRIDGO sent null beside an older range, which is never
+ * turned into a different answer (`heldMixedRange` says what it is).
+ */
+export function shownProductionTime(
+  listing: Listing,
+  draft: Pick<ListingDraft, "productionTime">,
+  inherited: ProductionTime | null,
+): ProductionChoice | null {
+  if (draft.productionTime) return draft.productionTime;
+  if (listing.productionTime !== undefined) return listing.productionTime;
+  return listing.turnaroundMode === "override"
+    ? choiceFromWindow(listing.minimumTurnaround ?? null, listing.turnaround)
+    : choiceFromWindow(null, inherited);
+}
+
+/**
+ * An older range that mixes hours and working days (2 hours to 2 working
+ * days), which fits neither answer: GRIDGO sends `productionTime: null` and
+ * the range still sets the dates clients are offered. Null for any other
+ * listing.
+ */
+export function heldMixedRange(listing: Listing): { min: ProductionTime; max: ProductionTime } | null {
+  if (listing.productionTime !== null || listing.turnaroundMode !== "override") return null;
+  const min = listing.minimumTurnaround ?? null;
+  const max = listing.turnaround;
+  return min && max && min.unit !== max.unit ? { min, max } : null;
 }
 
 /** Priced by colour only per page: any other unit sends it off. */
@@ -308,4 +395,9 @@ function speedKey(tiers: Listing["speedTiers"]): string {
   return tiers
     .map((tier) => `${timeKey(tier.turnaround)}:${tier.label}:${tier.priceMinor ?? "-"}:${tier.surchargeMinor ?? "-"}`)
     .join(",");
+}
+
+/** Whether two sets of faster price options are the same options. */
+export function sameSpeedTiers(left: Listing["speedTiers"], right: Listing["speedTiers"]): boolean {
+  return speedKey(left) === speedKey(right);
 }

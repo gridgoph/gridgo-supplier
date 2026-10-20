@@ -175,26 +175,29 @@ describe("review and take-down on the wall", () => {
   });
 });
 
-describe("the Express tag", () => {
-  it("marks a listing with Express on, on the wall and on the list", async () => {
+describe("Check your production time", () => {
+  const flagged = { required: true, reasons: ["legacy_one_working_day"] };
+
+  it("marks a listing GRIDGO asked the shop to check, on the wall and on the list", async () => {
     const tile = await render(
-      <ListingCard listing={{ ...listing, express: true }} catalog={null} services={[]} shopApproved onPress={() => undefined} />,
+      <ListingCard listing={{ ...listing, productionTimeReview: flagged }} catalog={null} services={[]} shopApproved onPress={() => undefined} />,
     );
-    expect(screen.getByText("Express")).toBeTruthy();
+    expect(screen.getByText("Check your production time")).toBeTruthy();
     await tile.unmount();
 
     const row = await render(
-      <ListingRow listing={{ ...listing, express: true }} catalog={null} services={[]} shopApproved onPress={() => undefined} />,
+      <ListingRow listing={{ ...listing, productionTimeReview: flagged }} catalog={null} services={[]} shopApproved onPress={() => undefined} />,
     );
-    expect(screen.getByText("Express")).toBeTruthy();
+    expect(screen.getByText("Check your production time")).toBeTruthy();
     await row.unmount();
   });
 
-  it("draws nothing for a listing with Express off or from an older GRIDGO", async () => {
-    for (const express of [false, null, undefined]) {
+  it("draws nothing once it is clear, or from an older GRIDGO", async () => {
+    for (const productionTimeReview of [{ required: false, reasons: [] }, undefined]) {
       const tile = await render(
-        <ListingCard listing={{ ...listing, express }} catalog={null} services={[]} shopApproved onPress={() => undefined} />,
+        <ListingCard listing={{ ...listing, productionTimeReview }} catalog={null} services={[]} shopApproved onPress={() => undefined} />,
       );
+      expect(screen.queryByText("Check your production time")).toBeNull();
       expect(screen.queryByText("Express")).toBeNull();
       await tile.unmount();
     }

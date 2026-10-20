@@ -12,7 +12,9 @@
  * time, always shorter than one of those days.
  *
  * This is the only place a production time is read off GRIDGO or written back,
- * so the field names live here and nowhere else. GRIDGO sends days for
+ * so the field names live here and nowhere else. A listing is answered with
+ * one question and saved as `productionTime` (the end of this file); speeds
+ * and category lines still write the duration fields below. GRIDGO sends days for
  * day-based work and exact minutes for everything (`*Minutes`), with hours
  * (`*Hours`) kept for older apps. Days win, because they keep their calendar
  * meaning; minutes are next; a payload with hours only is an older GRIDGO and
@@ -32,14 +34,9 @@ export const DEFAULT_DAY_MINUTES = 600;
 /** The same-day picker moves in half hours; an odd time GRIDGO holds is still shown exactly. */
 export const SAME_DAY_STEP_MINUTES = 30;
 
-/** Monday to Saturday, as `Date#getUTCDay` numbers them on the shop's wall clock. */
-const DEFAULT_WORKDAYS = [1, 2, 3, 4, 5, 6];
-const OPENS_MINUTE = 8 * 60;
-const CLOSES_MINUTE = 18 * 60;
 /** The Philippines keeps one offset all year, and GRIDGO stores it the same way. */
 const MANILA_OFFSET_MINUTES = 8 * 60;
 const MINUTE_MS = 60_000;
-const DAY_MS = 24 * 60 * MINUTE_MS;
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -125,11 +122,6 @@ export function timeFields<P extends string>(
       ? { [`${prefix}Days`]: time.days }
       : { [`${prefix}Minutes`]: time.minutes };
   return fields as Partial<Record<`${P}Days` | `${P}Minutes`, number | null>>;
-}
-
-/** What a listing save sends for its window. Nulls clear it back to the category line. */
-export function listingTimeFields(min: ProductionTime | null, max: ProductionTime | null) {
-  return { ...timeFields("minimumTurnaround", min), ...timeFields("turnaround", max) };
 }
 
 /* --------------------------------------------------------------------------
@@ -226,15 +218,6 @@ export function timeLadder(dayMinutes: number = DEFAULT_DAY_MINUTES, current?: P
 export const DEFAULT_SAME_DAY = sameDay(60);
 export const DEFAULT_WORKING_DAYS = workingDays(2);
 
-/** The soonest and latest, kept in order: a soonest past the latest comes back to it. */
-export function clampWindow(
-  min: ProductionTime,
-  max: ProductionTime,
-  dayMinutes: number = DEFAULT_DAY_MINUTES,
-): { min: ProductionTime; max: ProductionTime } {
-  return timeMinutes(min, dayMinutes) > timeMinutes(max, dayMinutes) ? { min: max, max } : { min, max };
-}
-
 function timeProblem(time: ProductionTime, dayMinutes: number): string | null {
   if (time.unit === "days") {
     if (!Number.isInteger(time.days) || time.days < PRODUCTION_DAYS.min) return "Production time is at least 1 working day.";
@@ -248,62 +231,14 @@ function timeProblem(time: ProductionTime, dayMinutes: number): string | null {
   return null;
 }
 
-/** Why a window cannot be saved, in the shop's words. Null when it can. */
-export function windowProblem(
-  min: ProductionTime | null,
-  max: ProductionTime | null,
-  dayMinutes: number = DEFAULT_DAY_MINUTES,
-): string | null {
-  if (!max) return "Set how long this takes.";
-  const problem = timeProblem(max, dayMinutes) ?? (min ? timeProblem(min, dayMinutes) : null);
-  if (problem) return problem;
-  if (min && timeMinutes(min, dayMinutes) > timeMinutes(max, dayMinutes)) {
-    return "The soonest can't be later than the latest.";
-  }
-  return null;
-}
-
 /** Why one time (a speed, a category line's usual time) cannot be saved. Null when it can. */
 export function singleTimeProblem(time: ProductionTime, dayMinutes: number = DEFAULT_DAY_MINUTES): string | null {
   return timeProblem(time, dayMinutes);
 }
 
 /* --------------------------------------------------------------------------
-   The ready-date example
+   Dates on the shop's calendar
    -------------------------------------------------------------------------- */
-
-/**
- * When a job that starts at `from` is ready, counted on GRIDGO's default open
- * hours: a working day is a full day of the shop's open time, so a job started
- * Tuesday at 11 AM with two days is ready Thursday at 11 AM, an hour's job
- * started at 5:30 PM is ready at 8:30 the next morning, and Sunday does not
- * count. An example for the shop, not a promise — GRIDGO's own date also weighs
- * the shop's real hours, closures and the jobs already ahead.
- */
-export function readyAfter(time: ProductionTime, from: Date): Date {
-  let remaining = timeMinutes(time, DEFAULT_DAY_MINUTES);
-  const offsetMs = MANILA_OFFSET_MINUTES * MINUTE_MS;
-  const wall = from.getTime() + offsetMs;
-  let dayStart = Math.floor(wall / DAY_MS) * DAY_MS;
-  let cursor = Math.floor((wall - dayStart) / MINUTE_MS);
-
-  for (let step = 0; step < 366; step += 1) {
-    const weekday = new Date(dayStart).getUTCDay();
-    if (DEFAULT_WORKDAYS.includes(weekday)) {
-      const opens = Math.max(OPENS_MINUTE, cursor);
-      if (opens < CLOSES_MINUTE) {
-        const available = CLOSES_MINUTE - opens;
-        if (remaining <= available) {
-          return new Date(dayStart + (opens + remaining) * MINUTE_MS - offsetMs);
-        }
-        remaining -= available;
-      }
-    }
-    dayStart += DAY_MS;
-    cursor = 0;
-  }
-  return new Date(dayStart - offsetMs);
-}
 
 /** "Thu 9 Oct", on the shop's own calendar. */
 export function shopDateLabel(at: Date): string {
@@ -312,7 +247,7 @@ export function shopDateLabel(at: Date): string {
 }
 
 /** "3:30 PM" on the shop's wall clock. */
-function shopClockLabel(at: Date): string {
+export function shopClockLabel(at: Date): string {
   const wall = new Date(at.getTime() + MANILA_OFFSET_MINUTES * MINUTE_MS);
   const hours = wall.getUTCHours();
   const minutes = String(wall.getUTCMinutes()).padStart(2, "0");
@@ -324,20 +259,180 @@ export function shopDateTimeLabel(at: Date): string {
   return `${shopDateLabel(at)}, ${shopClockLabel(at)}`;
 }
 
-/** "A job that starts now is ready by Thu 9 Oct", or between two times. */
-export function readyExampleLine(min: ProductionTime, max: ProductionTime, now: Date): string {
-  const soonest = readyAfter(min, now);
-  const latest = readyAfter(max, now);
-  if (min.unit === "days" && max.unit === "days") {
-    const [from, to] = [shopDateLabel(soonest), shopDateLabel(latest)];
-    return from === to
-      ? `A job that starts now is ready by ${to}.`
-      : `A job that starts now is ready between ${from} and ${to}.`;
+/* --------------------------------------------------------------------------
+   The one question: "How long does this take?"
+   (gridgo-api `docs/SCHEDULING_API.md`, "Release 2: one production-time question")
+   -------------------------------------------------------------------------- */
+
+/**
+ * What a shop answers for a listing: Same day, ready in exact hours, or Days,
+ * from one to another number of working days. GRIDGO takes it as
+ * `productionTime` and maps it onto the duration fields above itself, so a
+ * listing save sends this and never those fields beside it.
+ *
+ * Same day is held in minutes so half hours stay whole numbers; GRIDGO is
+ * sent hours (1.5), which is what it asks for.
+ */
+export type ProductionChoice =
+  | { mode: "same_day"; minutes: number }
+  | { mode: "days"; minDays: number; maxDays: number };
+
+export type ProductionChoiceMode = ProductionChoice["mode"];
+
+/** The body GRIDGO takes on create, edit and "Use for all my listings". */
+export type ProductionTimeBody =
+  | { mode: "same_day"; hours: number }
+  | { mode: "days"; minDays: number; maxDays: number };
+
+/** Where a mode lands the first time a shop picks it: 2 hours, or 1 to 3 working days (as on the web dashboard). */
+export const DEFAULT_SAME_DAY_CHOICE: ProductionChoice = { mode: "same_day", minutes: 120 };
+export const DEFAULT_DAYS_CHOICE: ProductionChoice = { mode: "days", minDays: 1, maxDays: 3 };
+
+function wholeDays(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
+}
+
+/** A listing's `productionTime`. Null when GRIDGO sent none, or one this app cannot read. */
+export function readProductionChoice(raw: Raw): ProductionChoice | null {
+  const value = raw.productionTime ?? raw.production_time;
+  if (!value || typeof value !== "object") return null;
+  const choice = value as Raw;
+  if (choice.mode === "same_day") {
+    const hours = positive(choice.hours);
+    return hours == null ? null : { mode: "same_day", minutes: Math.round(hours * 60) };
   }
-  if (soonest.getTime() === latest.getTime()) return `A job that starts now is ready by ${shopDateTimeLabel(latest)}.`;
-  // One day for both ends: say it once.
-  if (shopDateLabel(soonest) === shopDateLabel(latest)) {
-    return `A job that starts now is ready between ${shopClockLabel(soonest)} and ${shopClockLabel(latest)} on ${shopDateLabel(latest)}.`;
+  if (choice.mode === "days") {
+    const minDays = wholeDays(choice.minDays);
+    const maxDays = wholeDays(choice.maxDays);
+    return minDays == null || maxDays == null || minDays > maxDays ? null : { mode: "days", minDays, maxDays };
   }
-  return `A job that starts now is ready between ${shopDateTimeLabel(soonest)} and ${shopDateTimeLabel(latest)}.`;
+  return null;
+}
+
+/**
+ * An older window as one answer, for a GRIDGO that sent no `productionTime`:
+ * hours read as Same day at the longest, days as Days. No soonest means the
+ * same as the latest, as GRIDGO reads it; a soonest in hours under a latest
+ * in days has no answer of its own and starts from one day.
+ */
+export function choiceFromWindow(min: ProductionTime | null, max: ProductionTime | null): ProductionChoice | null {
+  if (!max) return null;
+  if (max.unit === "hours") return { mode: "same_day", minutes: max.minutes };
+  const minDays = !min ? max.days : min.unit === "days" ? Math.min(min.days, max.days) : 1;
+  return { mode: "days", minDays, maxDays: max.days };
+}
+
+/** The same answer as the soonest–latest window the rest of the app reads. */
+export function choiceWindow(choice: ProductionChoice): { min: ProductionTime; max: ProductionTime } {
+  return choice.mode === "same_day"
+    ? { min: sameDay(choice.minutes), max: sameDay(choice.minutes) }
+    : { min: workingDays(choice.minDays), max: workingDays(choice.maxDays) };
+}
+
+export function productionTimeBody(choice: ProductionChoice): ProductionTimeBody {
+  return choice.mode === "same_day"
+    ? { mode: "same_day", hours: choice.minutes / 60 }
+    : { mode: "days", minDays: choice.minDays, maxDays: choice.maxDays };
+}
+
+export function sameChoice(left: ProductionChoice | null, right: ProductionChoice | null): boolean {
+  if (!left || !right) return left === right;
+  if (left.mode === "same_day" || right.mode === "same_day") {
+    return left.mode === right.mode && (left as { minutes: number }).minutes === (right as { minutes: number }).minutes;
+  }
+  return left.minDays === right.minDays && left.maxDays === right.maxDays;
+}
+
+/** "Same day, ready in 2 hours", "1 to 3 working days", "2 working days". */
+export function choiceLine(choice: ProductionChoice): string {
+  if (choice.mode === "same_day") return `Same day, ready in ${timeLabel(sameDay(choice.minutes))}`;
+  if (choice.minDays === choice.maxDays) return timeLabel(workingDays(choice.maxDays));
+  return `${choice.minDays} to ${choice.maxDays} working days`;
+}
+
+/**
+ * Exact hours of one working day or more: an older or converted Express time.
+ * GRIDGO takes these exactly as they are (create, edit, preview and "Use for
+ * all"), so they are kept and explained, never rounded into days.
+ */
+export function sameDayPastOneDay(choice: ProductionChoice | null, dayMinutes: number = DEFAULT_DAY_MINUTES): boolean {
+  return choice?.mode === "same_day" && choice.minutes >= dayMinutes;
+}
+
+/** GRIDGO's ceiling on one production duration, in minutes. */
+export const MAX_PRODUCTION_MINUTES = 2_147_483_647;
+
+/**
+ * Why an answer cannot be saved, in the shop's words. Null when it can. The
+ * web dashboard says the same sentence for the same bad input. Exact hours
+ * are any positive whole number of minutes up to GRIDGO's ceiling — a day or
+ * more included (gridgo-api `docs/SCHEDULING_API.md`) — however short the
+ * picker's own steps are.
+ */
+export function choiceProblem(
+  choice: ProductionChoice | null,
+  dayMinutes: number = DEFAULT_DAY_MINUTES,
+): string | null {
+  if (!choice) return "Choose how long this takes.";
+  if (choice.mode === "same_day") {
+    const whole = Number.isInteger(choice.minutes) && choice.minutes > 0 && choice.minutes <= MAX_PRODUCTION_MINUTES;
+    return whole ? null : "Choose how many hours this takes.";
+  }
+  if (!Number.isInteger(choice.minDays) || !Number.isInteger(choice.maxDays) || choice.minDays < PRODUCTION_DAYS.min) {
+    return "Production time is at least 1 working day.";
+  }
+  if (choice.maxDays > PRODUCTION_DAYS.max) return `Production time is at most ${PRODUCTION_DAYS.max} working days.`;
+  if (choice.minDays > choice.maxDays) return "The soonest can't be later than the latest.";
+  return null;
+}
+
+/** The Same day steps: half hours inside one working day, plus the time GRIDGO holds if it is off them. */
+export function sameDayLadder(dayMinutes: number = DEFAULT_DAY_MINUTES, current?: number): number[] {
+  const ladder: number[] = [];
+  for (let minutes = SAME_DAY_STEP_MINUTES; minutes <= sameDayMaxMinutes(dayMinutes); minutes += SAME_DAY_STEP_MINUTES) {
+    ladder.push(minutes);
+  }
+  if (current != null && current > 0 && !ladder.includes(current)) {
+    ladder.push(current);
+    ladder.sort((left, right) => left - right);
+  }
+  return ladder;
+}
+
+/* --------------------------------------------------------------------------
+   "Check your production time"
+   -------------------------------------------------------------------------- */
+
+export type ProductionTimeReview = {
+  required: boolean;
+  /** GRIDGO's reason codes: `legacy_one_working_day`, `express_missing_hours`. */
+  reasons: string[];
+};
+
+export const PRODUCTION_TIME_REVIEW_TITLE = "Check your production time";
+
+/** A listing's `productionTimeReview`. An older GRIDGO sends none, which is clear. */
+export function readProductionTimeReview(raw: Raw): ProductionTimeReview {
+  const value = raw.productionTimeReview ?? raw.production_time_review;
+  if (!value || typeof value !== "object") return { required: false, reasons: [] };
+  const review = value as Raw;
+  const reasons = Array.isArray(review.reasons)
+    ? review.reasons.filter((reason): reason is string => typeof reason === "string")
+    : [];
+  return { required: review.required === true, reasons };
+}
+
+/** What the reminder asks, one sentence per reason GRIDGO gave. */
+export function reviewLines(review: ProductionTimeReview): string[] {
+  const lines = review.reasons.map((reason): string | null => {
+    switch (reason) {
+      case "legacy_one_working_day":
+        return "This listing has an older 1-working-day setting. Confirm it, or set the time it really takes.";
+      case "express_missing_hours":
+        return "This was an Express listing with no production time. Express is now Same day: say how many hours it takes.";
+      default:
+        return null;
+    }
+  });
+  return lines.filter((line): line is string => line != null);
 }

@@ -10,15 +10,9 @@ import {
   type BoardContext,
   type Listing,
 } from "@/lib/listings";
-import { applyDraft, colourHold, colourOn, type ListingDraft } from "@/lib/listingDraft";
+import { applyDraft, colourHold, colourOn, heldMixedRange, shownProductionTime, type ListingDraft } from "@/lib/listingDraft";
 import { COLOUR_PRICES_NEEDED, readColourDraft } from "@/lib/colourPricing";
-import {
-  DEFAULT_DAY_MINUTES,
-  DEFAULT_WORKING_DAYS,
-  clampWindow,
-  windowProblem,
-  type ProductionTime,
-} from "@/lib/productionDays";
+import { DEFAULT_DAYS_CHOICE, choiceProblem, type ProductionChoice } from "@/lib/productionDays";
 
 /**
  * The add-a-listing interview, in the order a shop walks it.
@@ -99,22 +93,24 @@ export function priceBlocker(draft: ListingDraft): string | null {
 }
 
 /**
- * The window the production-time step shows: the listing's own, else its
- * category line's usual time, else two working days.
+ * The answer the production-time step shows and saves: the shop's own, else
+ * GRIDGO's (its category line's usual time included), else 1 to 3 working
+ * days. Null only for an older range that mixes hours and working days: that
+ * is kept as it is until the shop picks an answer.
  */
-export function productionWindow(
+export function wizardProductionTime(
+  listing: Listing,
   draft: ListingDraft,
-  inherited: ProductionTime | null,
-  dayMinutes: number = DEFAULT_DAY_MINUTES,
-): { min: ProductionTime; max: ProductionTime } {
-  const max = draft.turnaround ?? inherited ?? DEFAULT_WORKING_DAYS;
-  return clampWindow(draft.minimumTurnaround ?? max, max, dayMinutes);
+  context: BoardContext,
+): ProductionChoice | null {
+  const shown = shownProductionTime(listing, draft, context.inheritedTurnaround);
+  if (shown) return shown;
+  return heldMixedRange(listing) ? null : DEFAULT_DAYS_CHOICE;
 }
 
 export function speedReady(listing: Listing, draft: ListingDraft, context: BoardContext): boolean {
-  const dayMinutes = listing.productionDayMinutes ?? DEFAULT_DAY_MINUTES;
-  const { min, max } = productionWindow(draft, context.inheritedTurnaround, dayMinutes);
-  return windowProblem(min, max, dayMinutes) == null;
+  const choice = wizardProductionTime(listing, draft, context);
+  return choice ? choiceProblem(choice, listing.productionDayMinutes ?? undefined) == null : true;
 }
 
 export function speedGuidance(listing: Listing, draft: ListingDraft, context: BoardContext): string | null {

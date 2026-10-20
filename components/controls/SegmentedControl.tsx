@@ -7,7 +7,8 @@ export type SegmentOption<T extends string> = {
 
 type Props<T extends string> = {
   options: readonly SegmentOption<T>[];
-  value: T;
+  /** Null while nothing is chosen yet: no segment is selected. */
+  value: T | null;
   onChange: (value: T) => void;
   /** Names the group for assistive technology. */
   accessibilityLabel: string;

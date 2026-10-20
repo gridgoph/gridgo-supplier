@@ -1785,6 +1785,36 @@ export async function updateCatalogItem(
 }
 
 /**
+ * The dates clients would see for a production time not saved yet
+ * (gridgo-api `docs/SCHEDULING_API.md`). Read only through
+ * `normalizePreview` in `lib/productionTimePreview.ts`.
+ */
+export async function getProductionTimePreview(
+  itemId: string,
+  query: Record<string, string>,
+): Promise<unknown> {
+  const search = new URLSearchParams(query).toString();
+  return request<unknown>(
+    `/me/catalog-items/${encodeURIComponent(itemId)}/production-time-preview?${search}`,
+  );
+}
+
+/**
+ * One production time for every listing the shop owns, hidden ones and
+ * drafts included. `expectedVersions` names every one of them, or GRIDGO
+ * answers `409 catalog_items_stale` and changes nothing.
+ */
+export async function applyCatalogProductionTime(body: {
+  productionTime: Record<string, unknown>;
+  expectedVersions: Record<string, number>;
+}): Promise<unknown> {
+  return request<unknown>("/me/catalog-items/production-time", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/**
  * Take a listing off the shop.
  *
  * A listing a client has already ordered from is archived rather than deleted,

@@ -13,6 +13,7 @@ import { ChatButton } from "@/components/ChatButton";
 import { EmptyState } from "@/components/EmptyState";
 import { ObligationRow } from "@/components/ObligationRow";
 import { SamplePhoto } from "@/components/SamplePhoto";
+import { SchedulingNotice } from "@/components/SchedulingNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { LegalNoticeCard } from "@/components/legal/LegalNoticeCard";
 import { PushEnableCard } from "@/components/PushEnableCard";
@@ -27,6 +28,7 @@ import { clerkDisplayName } from "@/lib/clerk";
 import { buildObligations, greeting, homeHeadline, type Obligation } from "@/lib/homeBoard";
 import { boardCountLine, boardPrompt, photoViewUrl, type Listing, type ServiceLine } from "@/lib/listings";
 import { loadBoard } from "@/lib/listingsApi";
+import { isTightBeforeAccepting } from "@/lib/scheduling";
 import { useAlertsStore } from "@/store/alerts";
 import { isMatchable, useSession } from "@/store/session";
 import { loadServiceLines } from "@/hooks/useBoard";
@@ -336,7 +338,11 @@ export default function HomeScreen() {
             {first ? (
               <View className="mt-6 gap-2">
                 <Text className="text-overline text-text-muted">TODAY</Text>
-                <NextCard obligation={first} onPress={() => open(first)} />
+                <NextCard
+                  obligation={first}
+                  job={jobs.find((job) => job.id === first.orderId)}
+                  onPress={() => open(first)}
+                />
                 {rest.map((obligation) => (
                   <ObligationRow
                     key={obligation.id}
@@ -426,7 +432,15 @@ export default function HomeScreen() {
  * button commits the shop to — the same sentence the flow screen will repeat,
  * so nothing is a surprise on the other side of the tap.
  */
-function NextCard({ obligation, onPress }: { obligation: Obligation; onPress: () => void }) {
+function NextCard({
+  obligation,
+  job,
+  onPress,
+}: {
+  obligation: Obligation;
+  job?: api.Order;
+  onPress: () => void;
+}) {
   return (
     <View className="gg-card gap-5">
       <View className="gap-3">
@@ -447,6 +461,8 @@ function NextCard({ obligation, onPress }: { obligation: Obligation; onPress: ()
           />
         </View>
         <Text className="text-h2 text-text-primary">{obligation.title}</Text>
+        {/* The same Tight badge the job screen shows: it is why the shop may decline. */}
+        {job && isTightBeforeAccepting(job) ? <SchedulingNotice order={job} compact /> : null}
         {obligation.kind === "proof" && obligation.amountMinor != null ? (
           <Text className="text-body-lg font-medium text-text-primary">
             {api.formatPhp(obligation.amountMinor)} waits on this photo

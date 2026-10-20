@@ -1,16 +1,25 @@
 import {
-  clampWindow,
-  listingTimeFields,
+  choiceFromWindow,
+  choiceLine,
+  choiceProblem,
+  choiceWindow,
+  productionTimeBody,
   readDayMinutes,
+  readProductionChoice,
+  readProductionTimeReview,
   readListingTime,
   readServiceLineTime,
   readSpeedTierTime,
   readStarterTime,
-  readyAfter,
-  readyExampleLine,
   readyInLine,
+  reviewLines,
+  MAX_PRODUCTION_MINUTES,
+  sameDayPastOneDay,
+  sameChoice,
   sameDay,
+  sameDayLadder,
   sameDayMaxMinutes,
+  shopClockLabel,
   shopDateLabel,
   shopDateTimeLabel,
   singleTimeProblem,
@@ -19,7 +28,6 @@ import {
   timeLadder,
   timeMinutes,
   timeParts,
-  windowProblem,
   workingDays,
 } from "@/lib/productionDays";
 
@@ -74,17 +82,7 @@ describe("writing a production time back", () => {
   it("sends only the chosen unit's field", () => {
     expect(timeFields("turnaround", workingDays(3))).toEqual({ turnaroundDays: 3 });
     expect(timeFields("turnaround", sameDay(60))).toEqual({ turnaroundMinutes: 60 });
-    expect(listingTimeFields(sameDay(60), workingDays(2))).toEqual({
-      minimumTurnaroundMinutes: 60,
-      turnaroundDays: 2,
-    });
-  });
-
-  it("clears both ends when the listing follows its category", () => {
-    expect(listingTimeFields(null, null)).toEqual({
-      minimumTurnaroundDays: null,
-      turnaroundDays: null,
-    });
+    expect(timeFields("turnaround", null)).toEqual({ turnaroundDays: null });
   });
 });
 
@@ -135,75 +133,133 @@ describe("the picker", () => {
     expect(timeMinutes(sameDay(90))).toBe(90);
   });
 
-  it("keeps the soonest no later than the latest", () => {
-    expect(clampWindow(workingDays(4), workingDays(2))).toEqual({ min: workingDays(2), max: workingDays(2) });
-    expect(clampWindow(workingDays(1), sameDay(60))).toEqual({ min: sameDay(60), max: sameDay(60) });
-    expect(clampWindow(sameDay(60), workingDays(2))).toEqual({ min: sameDay(60), max: workingDays(2) });
-  });
-
-  it("refuses a window GRIDGO would refuse, naming the fix", () => {
-    expect(windowProblem(workingDays(1), workingDays(3))).toBeNull();
-    expect(windowProblem(null, workingDays(2))).toBeNull();
-    expect(windowProblem(sameDay(60), sameDay(120))).toBeNull();
-    expect(windowProblem(null, null)).toContain("how long");
-    expect(windowProblem(null, workingDays(0))).toContain("at least 1 working day");
-    expect(windowProblem(null, workingDays(1.5))).toContain("at least 1 working day");
-    expect(windowProblem(null, workingDays(31))).toContain("at most 30");
-    expect(windowProblem(workingDays(3), workingDays(2))).toContain("soonest");
-    // A same-day time is shorter than the shop's working day.
-    expect(windowProblem(null, sameDay(600), 600)).toContain("working days");
-    expect(windowProblem(null, sameDay(450), 480)).toBeNull();
+  it("names what a speed or a category line's time would be refused for", () => {
+    expect(singleTimeProblem(workingDays(2))).toBeNull();
     expect(singleTimeProblem(sameDay(0))).toContain("hours");
+    expect(singleTimeProblem(sameDay(600), 600)).toContain("working days");
   });
 });
 
-describe("the ready-date example", () => {
-  it("lands at the same time a working day later, inside open hours", () => {
-    // Tuesday 11 AM, two days: Thursday 11 AM.
-    expect(readyAfter(workingDays(2), manila("2026-10-06T11:00:00")).toISOString()).toBe(
-      manila("2026-10-08T11:00:00").toISOString(),
-    );
-  });
-
-  it("skips Sunday", () => {
-    // Saturday 2 PM, one day: four hours Saturday, six Monday — Monday 2 PM.
-    expect(readyAfter(workingDays(1), manila("2026-10-10T14:00:00")).toISOString()).toBe(
-      manila("2026-10-12T14:00:00").toISOString(),
-    );
-  });
-
-  it("starts counting at opening when the job arrives after hours", () => {
-    // Tuesday 8 PM, one day: all of Wednesday, ready at 6 PM.
-    expect(readyAfter(workingDays(1), manila("2026-10-06T20:00:00")).toISOString()).toBe(
-      manila("2026-10-07T18:00:00").toISOString(),
-    );
-  });
-
-  it("finishes a same-day job the same day, or the next morning across closing", () => {
-    expect(readyAfter(sameDay(60), manila("2026-10-06T11:00:00")).toISOString()).toBe(
-      manila("2026-10-06T12:00:00").toISOString(),
-    );
-    // Tuesday 5:30 PM, one hour: half an hour Tuesday, half Wednesday from 8.
-    expect(readyAfter(sameDay(60), manila("2026-10-06T17:30:00")).toISOString()).toBe(
-      manila("2026-10-07T08:30:00").toISOString(),
-    );
-  });
-
+describe("the shop's calendar", () => {
   it("says the date on the shop's calendar, with the hour for same-day work", () => {
     expect(shopDateLabel(manila("2026-10-08T23:30:00"))).toBe("Thu 8 Oct");
     expect(shopDateTimeLabel(manila("2026-10-08T15:30:00"))).toBe("Thu 8 Oct, 3:30 PM");
     expect(shopDateTimeLabel(manila("2026-10-08T00:05:00"))).toBe("Thu 8 Oct, 12:05 AM");
-    const now = manila("2026-10-06T11:00:00");
-    expect(readyExampleLine(workingDays(2), workingDays(2), now)).toBe("A job that starts now is ready by Thu 8 Oct.");
-    expect(readyExampleLine(workingDays(1), workingDays(3), now)).toBe(
-      "A job that starts now is ready between Wed 7 Oct and Fri 9 Oct.",
+    expect(shopClockLabel(manila("2026-10-08T13:00:00"))).toBe("1:00 PM");
+  });
+});
+
+describe("How long does this take?", () => {
+  it("reads GRIDGO's productionTime, Same day in exact minutes", () => {
+    expect(readProductionChoice({ productionTime: { mode: "same_day", hours: 2 } })).toEqual({ mode: "same_day", minutes: 120 });
+    expect(readProductionChoice({ productionTime: { mode: "same_day", hours: 1.5 } })).toEqual({ mode: "same_day", minutes: 90 });
+    expect(readProductionChoice({ productionTime: { mode: "days", minDays: 1, maxDays: 3 } })).toEqual({
+      mode: "days",
+      minDays: 1,
+      maxDays: 3,
+    });
+  });
+
+  it("reads nothing it cannot hold, rather than guessing", () => {
+    expect(readProductionChoice({ productionTime: null })).toBeNull();
+    expect(readProductionChoice({})).toBeNull();
+    expect(readProductionChoice({ productionTime: { mode: "same_day", hours: 0 } })).toBeNull();
+    expect(readProductionChoice({ productionTime: { mode: "days", minDays: 3, maxDays: 1 } })).toBeNull();
+    expect(readProductionChoice({ productionTime: { mode: "days", minDays: 1.5, maxDays: 2 } })).toBeNull();
+    expect(readProductionChoice({ productionTime: { mode: "weeks" } })).toBeNull();
+  });
+
+  it("sends GRIDGO hours for Same day and whole days for Days", () => {
+    expect(productionTimeBody({ mode: "same_day", minutes: 90 })).toEqual({ mode: "same_day", hours: 1.5 });
+    expect(productionTimeBody({ mode: "days", minDays: 1, maxDays: 3 })).toEqual({ mode: "days", minDays: 1, maxDays: 3 });
+  });
+
+  it("is the same window the rest of the app reads", () => {
+    expect(choiceWindow({ mode: "same_day", minutes: 120 })).toEqual({ min: sameDay(120), max: sameDay(120) });
+    expect(choiceWindow({ mode: "days", minDays: 1, maxDays: 3 })).toEqual({ min: workingDays(1), max: workingDays(3) });
+  });
+
+  it("reads an older window as one answer", () => {
+    expect(choiceFromWindow(null, null)).toBeNull();
+    expect(choiceFromWindow(sameDay(60), sameDay(180))).toEqual({ mode: "same_day", minutes: 180 });
+    expect(choiceFromWindow(workingDays(2), workingDays(4))).toEqual({ mode: "days", minDays: 2, maxDays: 4 });
+    expect(choiceFromWindow(sameDay(60), workingDays(2))).toEqual({ mode: "days", minDays: 1, maxDays: 2 });
+    expect(choiceFromWindow(null, workingDays(2))).toEqual({ mode: "days", minDays: 2, maxDays: 2 });
+  });
+
+  it("says the answer in the dashboard's words", () => {
+    expect(choiceLine({ mode: "same_day", minutes: 120 })).toBe("Same day, ready in 2 hours");
+    expect(choiceLine({ mode: "same_day", minutes: 90 })).toBe("Same day, ready in 1½ hours");
+    expect(choiceLine({ mode: "days", minDays: 1, maxDays: 3 })).toBe("1 to 3 working days");
+    expect(choiceLine({ mode: "days", minDays: 2, maxDays: 2 })).toBe("2 working days");
+  });
+
+  it("tells answers apart", () => {
+    expect(sameChoice(null, null)).toBe(true);
+    expect(sameChoice({ mode: "same_day", minutes: 60 }, null)).toBe(false);
+    expect(sameChoice({ mode: "same_day", minutes: 60 }, { mode: "same_day", minutes: 60 })).toBe(true);
+    expect(sameChoice({ mode: "days", minDays: 1, maxDays: 2 }, { mode: "days", minDays: 1, maxDays: 3 })).toBe(false);
+    expect(sameChoice({ mode: "same_day", minutes: 600 }, { mode: "days", minDays: 1, maxDays: 1 })).toBe(false);
+  });
+
+  it("refuses what GRIDGO would refuse, in the dashboard's sentences", () => {
+    expect(choiceProblem(null)).toBe("Choose how long this takes.");
+    expect(choiceProblem({ mode: "same_day", minutes: 0 })).toBe("Choose how many hours this takes.");
+    expect(choiceProblem({ mode: "same_day", minutes: 90.5 })).toBe("Choose how many hours this takes.");
+    expect(choiceProblem({ mode: "same_day", minutes: MAX_PRODUCTION_MINUTES + 1 })).toBe(
+      "Choose how many hours this takes.",
     );
-    expect(readyExampleLine(sameDay(60), sameDay(120), now)).toBe(
-      "A job that starts now is ready between 12:00 PM and 1:00 PM on Tue 6 Oct.",
-    );
-    expect(readyExampleLine(sameDay(60), sameDay(60), now)).toBe("A job that starts now is ready by Tue 6 Oct, 12:00 PM.");
-    expect(readyExampleLine(sameDay(60), workingDays(1), manila("2026-10-06T17:00:00"))).toBe(
-      "A job that starts now is ready between Tue 6 Oct, 6:00 PM and Wed 7 Oct, 5:00 PM.",
-    );
+    expect(choiceProblem({ mode: "days", minDays: 0, maxDays: 2 })).toBe("Production time is at least 1 working day.");
+    expect(choiceProblem({ mode: "days", minDays: 1, maxDays: 1.5 })).toBe("Production time is at least 1 working day.");
+    expect(choiceProblem({ mode: "days", minDays: 1, maxDays: 31 })).toBe("Production time is at most 30 working days.");
+    expect(choiceProblem({ mode: "days", minDays: 3, maxDays: 2 })).toBe("The soonest can't be later than the latest.");
+    expect(choiceProblem({ mode: "days", minDays: 1, maxDays: 3 })).toBeNull();
+  });
+
+  it("round-trips any whole number of minutes GRIDGO returns as fractional hours", () => {
+    // 31 minutes arrives as 31 / 60 hours; GRIDGO takes that same number back.
+    const choice = readProductionChoice({ productionTime: { mode: "same_day", hours: 31 / 60 } });
+    expect(choice).toEqual({ mode: "same_day", minutes: 31 });
+    expect(choiceProblem(choice, 600)).toBeNull();
+    expect(productionTimeBody(choice!)).toEqual({ mode: "same_day", hours: 31 / 60 });
+    expect(sameDayLadder(600, 31)).toContain(31);
+  });
+
+  it("takes exact hours of a working day or more as they are (gridgo-api#299)", () => {
+    // 12 hours on a 10-hour working day: an older or converted Express time.
+    expect(choiceProblem({ mode: "same_day", minutes: 720 }, 600)).toBeNull();
+    expect(choiceProblem({ mode: "same_day", minutes: 600 }, 600)).toBeNull();
+    expect(sameDayPastOneDay({ mode: "same_day", minutes: 720 }, 600)).toBe(true);
+    expect(sameDayPastOneDay({ mode: "same_day", minutes: 570 }, 600)).toBe(false);
+    expect(sameDayPastOneDay({ mode: "days", minDays: 1, maxDays: 2 }, 600)).toBe(false);
+  });
+
+  it("steps Same day in half hours inside the working day, keeping an off-step time GRIDGO holds", () => {
+    expect(sameDayLadder(600).slice(0, 3)).toEqual([30, 60, 90]);
+    expect(sameDayLadder(600).at(-1)).toBe(570);
+    expect(sameDayLadder(600, 75)).toContain(75);
+    // An exact legacy hour time longer than a day is still shown as it is.
+    expect(sameDayLadder(600, 3000).at(-1)).toBe(3000);
+  });
+});
+
+describe("Check your production time", () => {
+  it("reads GRIDGO's reminder, and an older GRIDGO's silence as clear", () => {
+    expect(
+      readProductionTimeReview({
+        productionTimeReview: { required: true, reasons: ["legacy_one_working_day"], message: "Check your production time" },
+      }),
+    ).toEqual({ required: true, reasons: ["legacy_one_working_day"] });
+    expect(readProductionTimeReview({})).toEqual({ required: false, reasons: [] });
+  });
+
+  it("says why for each reason it knows, and nothing for one it does not, as on the dashboard", () => {
+    expect(reviewLines({ required: true, reasons: ["legacy_one_working_day"] })).toEqual([
+      "This listing has an older 1-working-day setting. Confirm it, or set the time it really takes.",
+    ]);
+    expect(reviewLines({ required: true, reasons: ["express_missing_hours"] })).toEqual([
+      "This was an Express listing with no production time. Express is now Same day: say how many hours it takes.",
+    ]);
+    expect(reviewLines({ required: true, reasons: ["something_new"] })).toEqual([]);
   });
 });

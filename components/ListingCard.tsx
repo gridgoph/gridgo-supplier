@@ -1,8 +1,8 @@
 import { Pressable, Text, View } from "react-native";
 
-import { ExpressChip } from "@/components/ExpressChip";
 import { HuntedName } from "@/components/HuntedName";
 import { SamplePhoto } from "@/components/SamplePhoto";
+import { StatusChip } from "@/components/StatusChip";
 import { StandingChips, standingCaption } from "@/components/listing/StandingChips";
 import {
   boardContextFor,
@@ -14,7 +14,7 @@ import {
   type Listing,
   type ServiceLine,
 } from "@/lib/listings";
-import { isExpressListing } from "@/lib/express";
+import { PRODUCTION_TIME_REVIEW_TITLE } from "@/lib/productionDays";
 import type { ListingReadiness } from "@/lib/readiness";
 import type { ServiceCatalog } from "@/lib/taxonomy";
 
@@ -69,7 +69,7 @@ export function ListingCard({
   const caption = standingCaption(standing);
   const first = listing.photos[0];
   const cap = printerCapLine(listing);
-  const express = isExpressListing(listing);
+  const checkTime = listing.productionTimeReview?.required === true;
 
   return (
     <View collapsable={false} className="rounded-card border border-outline bg-surface">
@@ -83,7 +83,7 @@ export function ListingCard({
         onPress={onPress}
         onLongPress={onRemove}
         accessibilityRole="button"
-        accessibilityLabel={`${listing.name || "Untitled listing"}.${express ? " Express." : ""} ${standing.label}.${standing.revision ? ` ${standing.revision.label}.` : ""}`}
+        accessibilityLabel={`${listing.name || "Untitled listing"}.${checkTime ? ` ${PRODUCTION_TIME_REVIEW_TITLE}.` : ""} ${standing.label}.${standing.revision ? ` ${standing.revision.label}.` : ""}`}
         accessibilityHint={onRemove ? "Press and hold to remove this listing." : undefined}
         accessibilityActions={onRemove ? [{ name: "remove", label: "Remove this listing" }] : undefined}
         onAccessibilityAction={(event) => {
@@ -109,9 +109,9 @@ export function ListingCard({
           <Text className="text-body text-text-primary" numberOfLines={1}>
             {priceLine(listing)}
           </Text>
-          {express ? (
+          {checkTime ? (
             <View className="flex-row">
-              <ExpressChip />
+              <StatusChip tone="warning" icon="triangle-alert" label={PRODUCTION_TIME_REVIEW_TITLE} wrap />
             </View>
           ) : null}
           <View className="mt-1">

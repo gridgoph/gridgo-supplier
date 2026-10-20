@@ -16,18 +16,16 @@ import * as api from "@/lib/api";
 import type { RescheduleRequest } from "@/lib/api";
 import { formatDeadlineFull } from "@/lib/dates";
 import {
-  formatRate,
   lapseStandingLine,
   LATENESS_TIERS,
-  penaltyRates,
   tierDefinition,
   type LapseTier,
-  type PenaltyRates,
   type ProductionLapse,
 } from "@/lib/productionLapse";
 import { orderReference } from "@/lib/orderReference";
-import { performanceHref } from "@/lib/performance";
+import { NO_MONEY_TAKEN, performanceHref } from "@/lib/performance";
 import { rescheduleNotice } from "@/lib/reschedule";
+import { TIGHT_LATE_LINE } from "@/lib/scheduling";
 import {
   FAILURE_LABELS,
   failureReason,
@@ -35,11 +33,11 @@ import {
   type ShopFailure,
 } from "@/lib/shopRecovery";
 
-/** What each tier adds beyond its share, in the shop's words. */
+/** What each tier leads to, in the shop's words. Warnings only: no tier takes money. */
 const TIER_CONSEQUENCE: Record<LapseTier, string> = {
-  minor: "A warning, and the minor share of what GRIDGO still owes you on the job.",
-  moderate: "A formal warning on your shop's record, and the moderate share.",
-  severe: "A formal warning, the severe share, and Operations may hand the job to another shop.",
+  minor: "A warning on the job.",
+  moderate: "A formal warning on your shop's record.",
+  severe: "A formal warning on your shop's record.",
 };
 
 /**
@@ -50,23 +48,24 @@ const TIER_CONSEQUENCE: Record<LapseTier, string> = {
  * is what the accept-screen link promised; the shop's own record follows, so
  * the rule is read before the figures it explains.
  *
- * Rates come from GRIDGO's settings because Super Admin tunes them without a
- * release; an API that sends none gets the rule without numbers rather than
- * numbers this app made up.
+ * Warnings only (gridgo-api `docs/SUPPLIER_PERFORMANCE_API.md`): GRIDGO
+ * assesses no new production deduction, whatever the legacy deductions
+ * setting says, so the rule names no rate or share. Deductions applied before
+ * that stay in the shop's late jobs below, as history.
  */
 export default function LateProductionScreen() {
   const colors = useThemeColors();
   const { read, reload: reloadLapses } = useProductionLapses();
   const record = useShopRecord();
   const reloadRecord = record.reload;
-  const [policy, setPolicy] = useState<PenaltyRates | null>(null);
   const [titles, setTitles] = useState<Record<string, string>>({});
 
   const loadContext = useCallback(async () => {
-    const [settings, jobs] = await Promise.allSettled([api.getSettings(), api.listJobs()]);
-    if (settings.status === "fulfilled") setPolicy(penaltyRates(settings.value));
-    if (jobs.status === "fulfilled") {
-      setTitles(Object.fromEntries(jobs.value.map((job) => [job.id, job.title])));
+    try {
+      const jobs = await api.listJobs();
+      setTitles(Object.fromEntries(jobs.map((job) => [job.id, job.title])));
+    } catch {
+      // Titles are a courtesy; the record still reads by order reference.
     }
   }, []);
 
@@ -95,7 +94,15 @@ export default function LateProductionScreen() {
           <Text className="text-h2 text-text-primary">When a job is ready late</Text>
           <Text className="text-body-lg text-text-secondary">
             Every job carries a ready-by time. If it is not ready by then, GRIDGO records it and
-            tells you first, with the reason spelled out, before anything comes off your payout.
+            tells you, with the reason spelled out.
+          </Text>
+        </View>
+
+        <View className="gg-panel mt-4 gap-1" testID="no-money-taken">
+          <Text className="text-body font-medium text-text-primary">{NO_MONEY_TAKEN}</Text>
+          <Text className="text-body text-text-secondary">
+            A job ready late gets a warning and a written notice. Nothing comes off your payout for
+            it. A deduction taken on an earlier job stays in your late jobs below, as it was.
           </Text>
         </View>
 
@@ -125,10 +132,7 @@ export default function LateProductionScreen() {
             <View className="gg-divider" />
             {LATENESS_TIERS.map((definition) => (
               <View key={definition.tier} className="gap-0.5">
-                <Text className="text-body font-medium text-text-primary">
-                  {definition.label}
-                  {policy ? `: ${formatRate(policy.rates[definition.tier])}` : ""}
-                </Text>
+                <Text className="text-body font-medium text-text-primary">{definition.label}</Text>
                 <Text className="text-caption text-text-muted">{definition.range}</Text>
                 <Text className="text-body text-text-secondary">
                   {TIER_CONSEQUENCE[definition.tier]}
@@ -136,28 +140,15 @@ export default function LateProductionScreen() {
               </View>
             ))}
           </View>
-          {policy && !policy.deductionsEnabled ? (
-            <View className="gg-panel gap-1" testID="deductions-off">
-              <Text className="text-body font-medium text-text-primary">Deductions are off for now</Text>
-              <Text className="text-body text-text-secondary">
-                A late job still gets its warning and still counts toward your place in matching,
-                but nothing comes off your payout.
-              </Text>
-            </View>
-          ) : null}
         </View>
 
         <View className="mt-8 gap-3">
-          <Text className="text-overline text-text-muted">WHAT A DEDUCTION TAKES</Text>
+          <Text className="text-overline text-text-muted">YOUR PLACE IN MATCHING</Text>
           <Text className="text-body text-text-secondary">
-            A share of what GRIDGO still owes you on that one job, worked out once the job is
-            ready — or as soon as it is severe. It is never more than what is still owed, it never
-            touches money already sent to you, and nothing carries over to another job.
+            Jobs ready late in the last 30 days lower your place when GRIDGO matches clients with
+            shops, a little for each one and only up to a limit.
           </Text>
-          <Text className="text-body text-text-secondary">
-            Jobs ready late in the last 30 days also lower your place when GRIDGO matches clients
-            with shops, a little for each one and only up to a limit.
-          </Text>
+          <Text className="text-body text-text-secondary">{TIGHT_LATE_LINE}</Text>
         </View>
 
         <View className="mt-8 gap-3">

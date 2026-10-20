@@ -18,6 +18,7 @@ import {
   eventLine,
   eventsForOrder,
   graceLine,
+  NO_MONEY_TAKEN,
   noticeView,
   onTimeLine,
   onTimeRateLabel,
@@ -124,7 +125,7 @@ export default function PerformanceScreen() {
         </View>
 
         <View className="gg-panel mt-4 gap-1" testID="no-money-taken">
-          <Text className="text-body font-medium text-text-primary">Warnings only — no money is taken</Text>
+          <Text className="text-body font-medium text-text-primary">{NO_MONEY_TAKEN}</Text>
           <Text className="text-body text-text-secondary">
             Nothing on this page changes what your shop is paid for a job. It shows what Operations
             sees, so you can keep your shop at the front.

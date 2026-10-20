@@ -24,6 +24,7 @@ jest.mock("@/lib/listingsApi", () => ({
   createListing: jest.fn(),
   saveListing: jest.fn(),
   setFileFormats: jest.fn(),
+  loadProductionTimePreview: jest.fn(async () => ({ status: "not_open_yet" })),
   addGroup: jest.fn(),
 }));
 
@@ -255,13 +256,16 @@ describe("Add a listing — later steps", () => {
     expect(await screen.findByLabelText("Pieces in a pack")).toBeTruthy();
     expect(screen.getByText(/Cheaper in bulk/)).toBeTruthy();
     expect(screen.getByLabelText("Smallest order you will take")).toBeTruthy();
-    expect(screen.getByLabelText("Soonest production time")).toBeTruthy();
-    expect(screen.getByLabelText("Latest production time")).toBeTruthy();
+    expect(screen.getByText("How long does this take?")).toBeTruthy();
+    expect(screen.getByLabelText("Shortest working days")).toBeTruthy();
+    expect(screen.getByLabelText("Longest working days")).toBeTruthy();
+    // Faster price tiers wait under More options.
     expect(screen.queryByText(/Faster, for more/)).toBeNull();
+    expect(screen.getByRole("button", { name: /More options/ })).toBeTruthy();
     expect(screen.queryByText("Your usual time")).toBeNull();
   });
 
-  it("writes the production window on Speed Proceed and does not send a faster option", async () => {
+  it("saves the time it showed on Speed Proceed, even untouched", async () => {
     openAt(
       "speed",
       listingWith({
@@ -279,17 +283,12 @@ describe("Add a listing — later steps", () => {
     await waitFor(() => {
       expect(saveListing).toHaveBeenCalledWith(
         expect.objectContaining({ id: "item_1" }),
-        expect.objectContaining({
-          turnaroundMode: "override",
-          minimumTurnaroundDays: 2,
-          turnaroundDays: 2,
-          speedTiers: [],
-        }),
+        expect.objectContaining({ productionTime: { mode: "days", minDays: 1, maxDays: 3 } }),
       );
     });
   });
 
-  it("asks for production time in working days, shows a ready date, and saves the days", async () => {
+  it("asks how long it takes and saves the shop's answer", async () => {
     openAt(
       "speed",
       listingWith({
@@ -302,27 +301,43 @@ describe("Add a listing — later steps", () => {
     );
     await render(<NewListingScreen />);
 
-    expect(await screen.findByText(/Hours for work you finish the same day/)).toBeTruthy();
-    expect(screen.getByText(/A job that starts now is ready by/)).toBeTruthy();
-    expect(screen.queryByText(/\d+ hours/)).toBeNull();
-
-    await fireEvent.press(screen.getByLabelText("Increase Latest production time"));
-    expect(screen.getByText(/A job that starts now is ready between/)).toBeTruthy();
+    expect(await screen.findByText("How long does this take?")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Increase Longest working days"));
     await fireEvent.press(screen.getByRole("button", { name: "Proceed" }));
 
     await waitFor(() => {
       expect(saveListing).toHaveBeenCalledWith(
         expect.objectContaining({ id: "item_1" }),
-        expect.objectContaining({
-          turnaroundMode: "override",
-          minimumTurnaroundDays: 2,
-          turnaroundDays: 3,
-        }),
+        expect.objectContaining({ productionTime: { mode: "days", minDays: 1, maxDays: 4 } }),
       );
     });
     const patch = (saveListing as jest.Mock).mock.calls.at(-1)?.[1];
-    expect(patch).not.toHaveProperty("turnaroundHours");
-    expect(patch).not.toHaveProperty("minimumTurnaroundHours");
+    expect(patch).not.toHaveProperty("turnaroundMode");
+    expect(patch).not.toHaveProperty("turnaroundDays");
+  });
+
+  it("leaves an older range that mixes hours and working days as it is until the shop picks", async () => {
+    openAt(
+      "speed",
+      listingWith({
+        photos: [{ fileId: "file_1", sortOrder: 0, altText: null }],
+        name: "Event flyers",
+        basePriceMinor: 45000,
+        productionTime: null,
+        turnaroundMode: "override",
+        minimumTurnaround: { unit: "hours", minutes: 120 },
+        turnaround: { unit: "days", days: 2 },
+      }),
+    );
+    await render(<NewListingScreen />);
+
+    expect(await screen.findByText("Now: Ready in 2 hours to 2 working days")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Proceed" }));
+
+    await waitFor(() => expect(useListingWizard.getState().step).not.toBe("speed"));
+    for (const [, patch] of (saveListing as jest.Mock).mock.calls) {
+      expect(patch).not.toHaveProperty("productionTime");
+    }
   });
 
   it("saves a step as soon as it is added", async () => {
