@@ -65,6 +65,25 @@ export function isCatalogItemStale(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "catalog_item_stale";
 }
 
+/**
+ * GRIDGO refused a listing's production time. Older builds answer a Same day
+ * time of a working day or more with `invalid_catalog_item` naming a
+ * turnaround field; both read as `invalid_production_time`.
+ */
+export function isProductionTimeRefused(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 400) return false;
+  const code = apiErrorCode(error);
+  if (code === "invalid_production_time") return true;
+  const body = error.body as { field?: unknown } | null;
+  const field = typeof body === "object" && body && typeof body.field === "string" ? body.field : "";
+  return code === "invalid_catalog_item" && /^(productionTime|turnaround|minimumTurnaround)/.test(field);
+}
+
+/** A listing was added, removed or changed since the shop's listings were read. */
+export function isCatalogItemsStale(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "catalog_items_stale";
+}
+
 /** The job left production while a photo was on its way; reload it. */
 export function isProductionPhotoUploadNotAllowed(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "production_photo_upload_not_allowed";
@@ -258,6 +277,10 @@ const MESSAGES: Record<string, string> = {
     "That listing is no longer on your board. Pull down to refresh and open it again.",
   catalog_item_stale:
     "This listing changed on another device while you were editing it. Pull down to refresh, then make your change again.",
+  catalog_items_stale:
+    "One of your listings changed while this was being applied, so nothing was changed. Try again.",
+  invalid_production_time:
+    "Choose Same day with a number of hours, or Days with whole working days, then save again.",
   invalid_catalog_item:
     "Some details on this listing are missing or not valid. Check the name, price and pack size, then try again.",
   invalid_catalog_options:

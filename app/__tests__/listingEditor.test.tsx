@@ -9,13 +9,14 @@ import {
   loadListing,
   loadPrepSteps,
   reorderPrepSteps,
+  applyProductionTimeToAll,
+  loadProductionTimePreview,
   saveListing,
-  setExpress,
   submitForReview,
 } from "@/lib/listingsApi";
 import { useSession } from "@/store/session";
 import { usePhotoPolicy } from "@/store/photoPolicy";
-import { settlePhotoPolicy, useSheets } from "@/store/sheets";
+import { settleConfirm, settlePhotoPolicy, useSheets } from "@/store/sheets";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), back: jest.fn() },
@@ -46,7 +47,8 @@ jest.mock("@/lib/listingsApi", () => ({
   loadListing: jest.fn(),
   loadPrepSteps: jest.fn(async () => ({ status: "ok", value: [] })),
   saveListing: jest.fn(),
-  setExpress: jest.fn(),
+  loadProductionTimePreview: jest.fn(),
+  applyProductionTimeToAll: jest.fn(),
   addGroup: jest.fn(),
   addPrepStep: jest.fn(),
   reorderPrepSteps: jest.fn(),
@@ -98,6 +100,18 @@ describe("the listing editor", () => {
     (addGroup as jest.Mock).mockResolvedValue({ status: "ok", value: null });
     (addPrepStep as jest.Mock).mockResolvedValue({ status: "ok", value: null });
     (reorderPrepSteps as jest.Mock).mockResolvedValue({ status: "ok", value: null });
+    (loadProductionTimePreview as jest.Mock).mockResolvedValue({
+      status: "ok",
+      value: {
+        earliestReadyBy: new Date("2026-10-24T05:00:00.000Z"),
+        securedReadyBy: new Date("2026-10-27T05:00:00.000Z"),
+        days: [
+          { day: "2026-10-24", status: "tight", reason: null, readyBy: new Date("2026-10-24T05:00:00.000Z"), rushTier: null },
+          { day: "2026-10-25", status: "not_possible", reason: "gridgo_closed_sunday", readyBy: null, rushTier: null },
+          { day: "2026-10-27", status: "secured", reason: null, readyBy: new Date("2026-10-27T05:00:00.000Z"), rushTier: null },
+        ],
+      },
+    });
     useSession.setState({
       user: {
         id: "u1",
@@ -236,64 +250,85 @@ describe("the listing editor", () => {
     );
   });
 
-  it("sets this listing's own production time in working days and saves the days", async () => {
+  it("asks how long it takes and saves Days as a productionTime range", async () => {
     (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith() });
 
     view = await render(<ListingScreen />);
 
-    await fireEvent.press(
-      within(await screen.findByLabelText("How long this listing takes")).getByText("Just this listing"),
+    expect(await screen.findByText("How long does this take?")).toBeTruthy();
+    // No time anywhere: nothing is chosen until the shop picks.
+    expect(screen.getByText("No production time yet, so clients cannot be offered a date. Pick one.")).toBeTruthy();
+    await fireEvent.press(within(screen.getByLabelText("How long does this take?")).getByText("Days"));
+    expect(screen.getByLabelText("To how many working days").props.accessibilityValue).toEqual({ text: "3 working days" });
+    await fireEvent.press(screen.getByLabelText("Increase To how many working days"));
+    expect(screen.getByLabelText("To how many working days").props.accessibilityValue).toEqual({ text: "4 working days" });
+    expect(screen.queryByRole("switch", { name: "Express" })).toBeNull();
+
+    // GRIDGO's own dates for the answer, once the shop stops tapping, in the dashboard's words.
+    expect(await screen.findByText("Dates clients will see")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "If a client orders now, the soonest it can be ready is Sat 24 Oct, 1:00 PM. Dates from Tue 27 Oct, 1:00 PM are Secured.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Tight")).toBeTruthy();
+    expect(screen.getByText("Ready by Sat 24 Oct, 1:00 PM")).toBeTruthy();
+    expect(screen.getByText("Not offered")).toBeTruthy();
+    expect(screen.getByText("GRIDGO is closed on Sundays")).toBeTruthy();
+    expect(loadProductionTimePreview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "sci_1" }),
+      { mode: "days", minDays: 1, maxDays: 4 },
     );
-    expect(screen.getByText(/Hours for work you finish the same day/)).toBeTruthy();
-    expect(screen.getByText(/A job that starts now is ready/)).toBeTruthy();
-    await fireEvent.press(screen.getByLabelText("Increase Latest production time"));
+
     await fireEvent.changeText(screen.getByLabelText("Your price"), "450");
     await fireEvent.press(screen.getByLabelText("See what clients see"));
 
     await waitFor(() =>
       expect(saveListing).toHaveBeenCalledWith(
         expect.objectContaining({ id: "sci_1" }),
-        expect.objectContaining({
-          turnaroundMode: "override",
-          minimumTurnaroundDays: 2,
-          turnaroundDays: 3,
-        }),
+        expect.objectContaining({ productionTime: { mode: "days", minDays: 1, maxDays: 4 } }),
+      ),
+    );
+    const patch = (saveListing as jest.Mock).mock.calls.at(-1)?.[1];
+    expect(patch).not.toHaveProperty("turnaroundMode");
+    expect(patch).not.toHaveProperty("turnaroundDays");
+    expect(patch).not.toHaveProperty("express");
+  });
+
+  // Report 39853344: a job a shop finishes in an hour was promised a working day later.
+  it("saves Same day as exact hours", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith() });
+
+    view = await render(<ListingScreen />);
+
+    await fireEvent.press(within(await screen.findByLabelText("How long does this take?")).getByText("Same day"));
+    expect(screen.getByText("Ready in")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Increase Ready in how many hours"));
+    expect(screen.getByLabelText("Ready in how many hours").props.accessibilityValue).toEqual({ text: "2½ hours" });
+    await fireEvent.changeText(screen.getByLabelText("Your price"), "450");
+    await fireEvent.press(screen.getByLabelText("See what clients see"));
+
+    await waitFor(() =>
+      expect(saveListing).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "sci_1" }),
+        expect.objectContaining({ productionTime: { mode: "same_day", hours: 2.5 } }),
       ),
     );
   });
 
-  // Report 39853344: a job a shop finishes in an hour was promised a working day later.
-  it("sets a same-day production time in hours and saves exact minutes", async () => {
-    (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith() });
+  it("leaves the production time out of a save that did not touch it", async () => {
+    (loadListing as jest.Mock).mockResolvedValue({
+      status: "ok",
+      value: listingWith({ productionTime: { mode: "days", minDays: 1, maxDays: 2 } }),
+    });
 
     view = await render(<ListingScreen />);
 
-    await fireEvent.press(
-      within(await screen.findByLabelText("How long this listing takes")).getByText("Just this listing"),
-    );
-    await fireEvent.press(
-      within(screen.getByLabelText("Count production time in")).getByText("Hours"),
-    );
-    expect(screen.getByText(/Hours count only while you are open/)).toBeTruthy();
-    await fireEvent.press(screen.getByLabelText("Increase Latest production time"));
-    await fireEvent.press(screen.getByLabelText("Increase Latest production time"));
-    expect(screen.getByLabelText("Latest production time").props.accessibilityValue).toEqual({ text: "2 hours" });
-    await fireEvent.changeText(screen.getByLabelText("Your price"), "450");
+    await fireEvent.changeText(await screen.findByLabelText("Your price"), "450");
     await fireEvent.press(screen.getByLabelText("See what clients see"));
 
-    await waitFor(() =>
-      expect(saveListing).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "sci_1" }),
-        expect.objectContaining({
-          turnaroundMode: "override",
-          minimumTurnaroundMinutes: 60,
-          turnaroundMinutes: 120,
-        }),
-      ),
-    );
-    const patch = (saveListing as jest.Mock).mock.calls.at(-1)?.[1];
-    expect(patch).not.toHaveProperty("turnaroundDays");
-    expect(patch).not.toHaveProperty("minimumTurnaroundDays");
+    await waitFor(() => expect(saveListing).toHaveBeenCalled());
+    expect((saveListing as jest.Mock).mock.calls.at(-1)?.[1]).not.toHaveProperty("productionTime");
   });
 
   /**
@@ -672,52 +707,198 @@ describe("the listing editor under review and take-down", () => {
     expect(screen.getByRole("button", { name: "Take it off the board" })).toBeTruthy();
   });
 
-  describe("Express", () => {
-    it("saves only Express with the listing's version, leaving typed words held", async () => {
-      (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ express: false }) });
-      (setExpress as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ express: true, version: 8 }) });
+  describe("Check your production time", () => {
+    const flagged = (reason: string, productionTime: Listing["productionTime"]) =>
+      listingWith({ productionTime, productionTimeReview: { required: true, reasons: [reason] } });
 
-      view = await render(<ListingScreen />);
-      expect(await screen.findByText("Express is off. Deadlines follow your production time.")).toBeTruthy();
-      expect(screen.getByText(/any deadline from today, the same day included/)).toBeTruthy();
-
-      await fireEvent.changeText(screen.getByLabelText("Your price"), "450");
-      (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ express: true, version: 8 }) });
-      await fireEvent.press(screen.getByRole("switch", { name: "Express" }));
-
-      await waitFor(() => expect(setExpress).toHaveBeenCalledTimes(1));
-      expect(setExpress).toHaveBeenCalledWith(expect.objectContaining({ id: "sci_1", version: 7 }), true);
-      expect(saveListing).not.toHaveBeenCalled();
-      expect(submitForReview).not.toHaveBeenCalled();
-      expect(await screen.findByText("Express is on. Clients can choose today as their deadline.")).toBeTruthy();
-      // The price is still held, for the ordinary save.
-      expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
-    });
-
-    it("says why GRIDGO refused and shows the switch as GRIDGO has it", async () => {
-      (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ express: false }) });
-      (setExpress as jest.Mock).mockResolvedValue({
-        status: "failed",
-        message: "This listing changed on another device, so Express was not changed.",
+    it("asks the shop to confirm a time GRIDGO rounded up, and Keep 1 working day saves it", async () => {
+      (loadListing as jest.Mock).mockResolvedValue({
+        status: "ok",
+        value: flagged("legacy_one_working_day", { mode: "days", minDays: 1, maxDays: 1 }),
       });
 
       view = await render(<ListingScreen />);
-      await fireEvent.press(await screen.findByRole("switch", { name: "Express" }));
 
-      expect(await screen.findByText(/so Express was not changed/)).toBeTruthy();
-      // Read again, so the next change carries GRIDGO's version.
-      expect((loadListing as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
-      const toggle = screen.getByRole("switch", { name: "Express" });
-      expect(toggle.props.accessibilityState).toEqual(expect.objectContaining({ checked: false }));
-      expect(screen.getByText("Express is off. Deadlines follow your production time.")).toBeTruthy();
+      expect(await screen.findByText("Check your production time")).toBeTruthy();
+      expect(
+        screen.getByText(
+          "This listing has an older 1-working-day setting. Confirm it, or set the time it really takes.",
+        ),
+      ).toBeTruthy();
+      await fireEvent.press(screen.getByRole("button", { name: "Keep 1 working day" }));
+
+      // Saves the held time on its own, nothing else.
+      await waitFor(() =>
+        expect(saveListing).toHaveBeenCalledWith(expect.objectContaining({ id: "sci_1" }), {
+          productionTime: { mode: "days", minDays: 1, maxDays: 1 },
+        }),
+      );
     });
 
-    it("shows no switch on a GRIDGO that does not send Express", async () => {
-      (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith({ express: null }) });
+    it("says to save instead once the shop has changed the time", async () => {
+      (loadListing as jest.Mock).mockResolvedValue({
+        status: "ok",
+        value: flagged("legacy_one_working_day", { mode: "days", minDays: 1, maxDays: 1 }),
+      });
 
       view = await render(<ListingScreen />);
-      expect(await screen.findByText("PRICE")).toBeTruthy();
-      expect(screen.queryByRole("switch", { name: "Express" })).toBeNull();
+
+      await fireEvent.press(await screen.findByLabelText("Increase To how many working days"));
+      expect(screen.queryByRole("button", { name: "Keep 1 working day" })).toBeNull();
+      expect(screen.getByText(/Save to confirm it/)).toBeTruthy();
+    });
+
+    it("asks a former Express listing for its hours, with nothing to keep", async () => {
+      (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: flagged("express_missing_hours", null) });
+
+      view = await render(<ListingScreen />);
+
+      expect(await screen.findByText("Check your production time")).toBeTruthy();
+      expect(
+        screen.getByText(
+          "This was an Express listing with no production time. Express is now Same day: say how many hours it takes.",
+        ),
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /^Keep / })).toBeNull();
+      expect(screen.getByText("No production time yet, so clients cannot be offered a date. Pick one.")).toBeTruthy();
+    });
+
+    it("holds a Same day time of a working day or more without breaking, and asks for Days", async () => {
+      (loadListing as jest.Mock).mockResolvedValue({
+        status: "ok",
+        value: listingWith({ productionTime: { mode: "same_day", minutes: 720 } }),
+      });
+
+      view = await render(<ListingScreen />);
+
+      expect(await screen.findByText("How long does this take?")).toBeTruthy();
+      expect(screen.getByLabelText("Ready in how many hours").props.accessibilityValue).toEqual({ text: "12 hours" });
+      expect(
+        screen.getByText(
+          "This listing still holds a time longer than one working day. Choose Days to set it in working days.",
+        ),
+      ).toBeTruthy();
+      // Nothing is asked of GRIDGO for a time it would refuse.
+      expect(screen.getByText("Fix the time above to see the dates.")).toBeTruthy();
+      expect(loadProductionTimePreview).not.toHaveBeenCalled();
+      await fireEvent.press(within(screen.getByLabelText("How long does this take?")).getByText("Days"));
+      expect(await screen.findByText(/^If a client orders now/)).toBeTruthy();
+    });
+
+    it("shows nothing on a listing GRIDGO did not flag", async () => {
+      (loadListing as jest.Mock).mockResolvedValue({
+        status: "ok",
+        value: listingWith({ productionTime: { mode: "same_day", minutes: 120 } }),
+      });
+
+      view = await render(<ListingScreen />);
+
+      expect(await screen.findByText("How long does this take?")).toBeTruthy();
+      expect(screen.queryByText("Check your production time")).toBeNull();
+      expect(screen.getByLabelText("Ready in how many hours").props.accessibilityValue).toEqual({ text: "2 hours" });
+    });
+  });
+
+  describe("More options", () => {
+    it("keeps the faster price tiers under More options", async () => {
+      (loadListing as jest.Mock).mockResolvedValue({
+        status: "ok",
+        value: listingWith({
+          productionTime: { mode: "days", minDays: 2, maxDays: 3 },
+          speedTiers: [
+            { id: "speed_1", label: "Rush", turnaround: { unit: "hours", minutes: 240 }, priceMinor: 90000, surchargeMinor: null },
+          ],
+        }),
+      });
+
+      view = await render(<ListingScreen />);
+
+      await fireEvent.press(await screen.findByRole("button", { name: /More options/ }));
+      expect(screen.getByText("Faster price options")).toBeTruthy();
+      expect(screen.getByText("Rush")).toBeTruthy();
+    });
+
+    it("asks before using this time for all listings, then applies it", async () => {
+      (loadListing as jest.Mock).mockResolvedValue({
+        status: "ok",
+        value: listingWith({ productionTime: { mode: "same_day", minutes: 120 } }),
+      });
+      (applyProductionTimeToAll as jest.Mock).mockResolvedValue({ status: "ok", value: 8 });
+
+      view = await render(<ListingScreen />);
+
+      await fireEvent.press(await screen.findByRole("button", { name: /More options/ }));
+      await fireEvent.press(screen.getByRole("button", { name: "Use for all my listings" }));
+      await waitFor(() => expect(useSheets.getState().confirm).not.toBeNull());
+      expect(useSheets.getState().confirm?.request).toEqual(
+        expect.objectContaining({
+          question: "Use Same day, ready in 2 hours for all your listings?",
+          confirmLabel: "Use for all",
+          cancelLabel: "Cancel",
+        }),
+      );
+      expect(applyProductionTimeToAll).not.toHaveBeenCalled();
+      await act(async () => settleConfirm(true));
+
+      await waitFor(() => expect(applyProductionTimeToAll).toHaveBeenCalledWith({ mode: "same_day", minutes: 120 }));
+      expect(await screen.findByText("Done. All 8 listings take Same day, ready in 2 hours now.")).toBeTruthy();
+    });
+
+    it("keeps an edit made while it applies, and sends it on the new version without the old time", async () => {
+      (loadListing as jest.Mock).mockResolvedValue({
+        status: "ok",
+        value: listingWith({ productionTime: { mode: "days", minDays: 2, maxDays: 3 } }),
+      });
+      let finish: (value: unknown) => void = () => undefined;
+      (applyProductionTimeToAll as jest.Mock).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+
+      view = await render(<ListingScreen />);
+
+      await fireEvent.press(await screen.findByRole("button", { name: /More options/ }));
+      await fireEvent.press(screen.getByRole("button", { name: "Use for all my listings" }));
+      await waitFor(() => expect(useSheets.getState().confirm).not.toBeNull());
+      await act(async () => settleConfirm(true));
+      await waitFor(() => expect(applyProductionTimeToAll).toHaveBeenCalled());
+
+      // The shop types a price while GRIDGO is still applying.
+      await fireEvent.changeText(screen.getByLabelText("Your price"), "450");
+      (loadListing as jest.Mock).mockResolvedValue({
+        status: "ok",
+        value: listingWith({ version: 8, productionTime: { mode: "days", minDays: 2, maxDays: 3 } }),
+      });
+      await act(async () => finish({ status: "ok", value: 8 }));
+      expect(await screen.findByText("Done. All 8 listings take 2 to 3 working days now.")).toBeTruthy();
+      expect(screen.getByLabelText("Your price").props.value).toBe("450");
+      expect(saveListing).not.toHaveBeenCalled();
+
+      await fireEvent.press(screen.getByLabelText("See what clients see"));
+      await waitFor(() =>
+        expect(saveListing).toHaveBeenCalledWith(
+          expect.objectContaining({ version: 8 }),
+          expect.objectContaining({ basePriceMinor: 45000 }),
+        ),
+      );
+      expect((saveListing as jest.Mock).mock.calls.at(-1)?.[1]).not.toHaveProperty("productionTime");
+    });
+
+    it("says so when the listing cannot be refreshed, instead of showing the old one as current", async () => {
+      (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith() });
+      (applyProductionTimeToAll as jest.Mock).mockResolvedValue({ status: "ok", value: 8 });
+
+      view = await render(<ListingScreen />);
+
+      await fireEvent.press(within(await screen.findByLabelText("How long does this take?")).getByText("Days"));
+      (loadListing as jest.Mock).mockResolvedValue({ status: "failed", message: "Check this phone's connection." });
+      await fireEvent.press(screen.getByRole("button", { name: /More options/ }));
+      await fireEvent.press(screen.getByRole("button", { name: "Use for all my listings" }));
+      await waitFor(() => expect(useSheets.getState().confirm).not.toBeNull());
+      await act(async () => settleConfirm(true));
+
+      expect(
+        await screen.findByText(
+          "This listing could not be refreshed, so what you see may be out of date. Check this phone's connection.",
+        ),
+      ).toBeTruthy();
     });
   });
 });

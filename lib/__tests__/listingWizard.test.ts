@@ -1,4 +1,12 @@
-import { aboutBlocker, artworkBlocker, pickReady, priceBlocker, priceReady, productionWindow, speedReady } from "@/lib/listingWizard";
+import {
+  aboutBlocker,
+  artworkBlocker,
+  pickReady,
+  priceBlocker,
+  priceReady,
+  speedReady,
+  wizardProductionTime,
+} from "@/lib/listingWizard";
 import { sameDay, workingDays } from "@/lib/productionDays";
 import { draftFrom } from "@/lib/listingDraft";
 import type { Listing } from "@/lib/listings";
@@ -63,23 +71,34 @@ describe("wizard gates", () => {
     ).toBeNull();
   });
 
-  it("treats a production window as ready when the soonest is not after the latest", () => {
+  it("starts the production-time question from GRIDGO's time, the category line's, or 1 to 3 working days", () => {
     const draft = draftFrom(listing);
-    expect(productionWindow(draft, workingDays(2))).toEqual({ min: workingDays(2), max: workingDays(2) });
-    expect(productionWindow(draft, null)).toEqual({ min: workingDays(2), max: workingDays(2) });
-    expect(
-      productionWindow({ ...draft, minimumTurnaround: workingDays(4), turnaround: workingDays(2) }, null),
-    ).toEqual({ min: workingDays(2), max: workingDays(2) });
+    const lineTwoDays = { inheritedTurnaround: workingDays(2), inheritedFormatCodes: [] };
+    expect(wizardProductionTime(listing, draft, lineTwoDays)).toEqual({ mode: "days", minDays: 2, maxDays: 2 });
     // A same-day line passes its hours down to a listing that follows it.
-    expect(productionWindow(draft, sameDay(90))).toEqual({ min: sameDay(90), max: sameDay(90) });
-    expect(speedReady(listing, draft, { inheritedTurnaround: { unit: "days" as const, days: 2 }, inheritedFormatCodes: [] })).toBe(true);
+    expect(wizardProductionTime(listing, draft, { inheritedTurnaround: sameDay(90), inheritedFormatCodes: [] })).toEqual({
+      mode: "same_day",
+      minutes: 90,
+    });
     expect(
-      speedReady(
-        listing,
-        { ...draft, turnaroundMode: "override", minimumTurnaround: sameDay(60), turnaround: workingDays(3) },
-        { inheritedTurnaround: { unit: "days" as const, days: 2 }, inheritedFormatCodes: [] },
+      wizardProductionTime(
+        { ...listing, productionTime: { mode: "same_day", minutes: 120 } },
+        draft,
+        lineTwoDays,
       ),
-    ).toBe(true);
+    ).toEqual({ mode: "same_day", minutes: 120 });
+    expect(wizardProductionTime(listing, draft, { inheritedTurnaround: null, inheritedFormatCodes: [] })).toEqual({
+      mode: "days",
+      minDays: 1,
+      maxDays: 3,
+    });
+    // The shop's own answer wins.
+    const answered = { ...draft, productionTime: { mode: "days" as const, minDays: 2, maxDays: 4 } };
+    expect(wizardProductionTime(listing, answered, lineTwoDays)).toEqual({ mode: "days", minDays: 2, maxDays: 4 });
+    expect(speedReady(listing, answered, lineTwoDays)).toBe(true);
+    expect(
+      speedReady(listing, { ...draft, productionTime: { mode: "days", minDays: 3, maxDays: 2 } }, lineTwoDays),
+    ).toBe(false);
   });
 
   it("accepts a typed price GRIDGO will take", () => {

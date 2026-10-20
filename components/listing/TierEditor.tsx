@@ -195,7 +195,7 @@ export function SpeedTierEditor({
         <TextField
           value={label}
           onChange={setLabel}
-          placeholder="What you call it — Express, Same day"
+          placeholder="What you call it — Rush, Priority"
           accessibilityLabel="What this speed is called"
         />
         <ProductionTimePicker

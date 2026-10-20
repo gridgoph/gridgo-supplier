@@ -14,7 +14,16 @@ import {
 } from "@/lib/colourPricing";
 import { parseMoney } from "@/lib/money";
 import { samePrintLayouts, type PrintLayoutCode } from "@/lib/printLayout";
-import { listingTimeFields, sameTime, timeFields, timeKey, type ProductionTime } from "@/lib/productionDays";
+import {
+  choiceFromWindow,
+  choiceWindow,
+  productionTimeBody,
+  sameChoice,
+  timeFields,
+  timeKey,
+  type ProductionChoice,
+  type ProductionTime,
+} from "@/lib/productionDays";
 
 /**
  * The words, price and times a shop holds until the foot is pressed.
@@ -44,10 +53,12 @@ export type ListingDraft = {
   minimumOrderQuantity: number | null;
   priceTiers: Listing["priceTiers"];
   speedTiers: Listing["speedTiers"];
-  turnaroundMode: Listing["turnaroundMode"];
-  /** Hours or working days. Null while the listing follows its category line. */
-  turnaround: ProductionTime | null;
-  minimumTurnaround: ProductionTime | null;
+  /**
+   * The shop's answer to "How long does this take?" once it has touched it.
+   * Null leaves the listing's production time as GRIDGO holds it, so an
+   * unrelated save never re-sends it (and never clears GRIDGO's reminder).
+   */
+  productionTime: ProductionChoice | null;
   subcategoryCode: string;
   fileFormatMode: Listing["fileFormatMode"];
   formatCodes: string[];
@@ -74,9 +85,7 @@ export function draftFrom(listing: Listing): ListingDraft {
     minimumOrderQuantity: listing.minimumOrderQuantity,
     priceTiers: listing.priceTiers,
     speedTiers: listing.speedTiers,
-    turnaroundMode: listing.turnaroundMode,
-    turnaround: listing.turnaround,
-    minimumTurnaround: listing.minimumTurnaround ?? null,
+    productionTime: null,
     subcategoryCode: listing.subcategoryCode,
     fileFormatMode: listing.fileFormatMode,
     formatCodes: listing.formatCodes,
@@ -103,9 +112,7 @@ export function sameDraft(left: ListingDraft, right: ListingDraft): boolean {
     left.minimumOrderQuantity === right.minimumOrderQuantity &&
     tierKey(left.priceTiers) === tierKey(right.priceTiers) &&
     speedKey(left.speedTiers) === speedKey(right.speedTiers) &&
-    left.turnaroundMode === right.turnaroundMode &&
-    sameTime(left.turnaround, right.turnaround) &&
-    sameTime(left.minimumTurnaround, right.minimumTurnaround) &&
+    sameChoice(left.productionTime, right.productionTime) &&
     left.subcategoryCode === right.subcategoryCode &&
     left.fileFormatMode === right.fileFormatMode &&
     left.formatCodes.join(",") === right.formatCodes.join(",") &&
@@ -146,9 +153,15 @@ export function applyDraft(listing: Listing, draft: ListingDraft): Listing {
     minimumOrderQuantity: asksQuantity(draft.pricingUnit) ? draft.minimumOrderQuantity : null,
     priceTiers: asksQuantity(draft.pricingUnit) ? draft.priceTiers : [],
     speedTiers: draft.speedTiers,
-    turnaroundMode: draft.turnaroundMode,
-    turnaround: draft.turnaroundMode === "override" ? draft.turnaround : null,
-    minimumTurnaround: draft.turnaroundMode === "override" ? draft.minimumTurnaround : null,
+    ...(draft.productionTime
+      ? {
+          // GRIDGO saves an answer as the listing's own time.
+          turnaroundMode: "override" as const,
+          turnaround: choiceWindow(draft.productionTime).max,
+          minimumTurnaround: choiceWindow(draft.productionTime).min,
+          productionTime: draft.productionTime,
+        }
+      : {}),
     subcategoryCode: draft.subcategoryCode,
     fileFormatMode: draft.fileFormatMode,
     formatCodes: draft.formatCodes,
@@ -195,14 +208,28 @@ export function listingSavePatch(
       ...tier,
       ...timeFields("turnaround", turnaround),
     })),
-    turnaroundMode: working.turnaroundMode,
-    ...(working.turnaroundMode === "override"
-      ? listingTimeFields(working.minimumTurnaround, working.turnaround)
-      : listingTimeFields(null, null)),
+    ...(working.productionTime ? { productionTime: productionTimeBody(working.productionTime) } : {}),
     subcategoryCode: working.subcategoryCode,
     ...colourPatch(working),
     ...(onTheBoard == null ? {} : { active: onTheBoard }),
   };
+}
+
+/**
+ * The answer the production-time question shows: the shop's own if it has
+ * touched it, else GRIDGO's, else one read off an older window (its own, or
+ * its category line's). Null when nothing says how long it takes.
+ */
+export function shownProductionTime(
+  listing: Listing,
+  draft: Pick<ListingDraft, "productionTime">,
+  inherited: ProductionTime | null,
+): ProductionChoice | null {
+  if (draft.productionTime) return draft.productionTime;
+  if (listing.productionTime) return listing.productionTime;
+  return listing.turnaroundMode === "override"
+    ? choiceFromWindow(listing.minimumTurnaround ?? null, listing.turnaround)
+    : choiceFromWindow(null, inherited);
 }
 
 /** Priced by colour only per page: any other unit sends it off. */

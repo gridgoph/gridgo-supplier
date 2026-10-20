@@ -1,35 +1,24 @@
-import { Text } from "react-native";
-
 import { Stepper } from "@/components/controls/Stepper";
 import { ListingSection } from "@/components/listing/ListingSection";
-import { PRODUCTION_TIME_HINT, ProductionTimeField } from "@/components/listing/ProductionTimeField";
+import { ProductionTimeSection } from "@/components/listing/ProductionTimeQuestion";
 import { PriceTierEditor } from "@/components/listing/TierEditor";
 import { asksQuantity, unitLine, type BoardContext, type Listing } from "@/lib/listings";
 import { applyDraft, colourOn, PACK_STEP, type ListingDraft } from "@/lib/listingDraft";
-import { productionWindow } from "@/lib/listingWizard";
-import type { ProductionTime } from "@/lib/productionDays";
+import { wizardProductionTime } from "@/lib/listingWizard";
 
 type Props = {
   listing: Listing;
   working: ListingDraft;
   context: BoardContext;
   onChange: (next: ListingDraft) => void;
+  busy: boolean;
+  /** "Use for all my listings": saves the wizard's changes first. */
+  beforeApply: () => Promise<boolean>;
+  afterApply: () => Promise<void>;
 };
 
-export function SpeedStep({ listing, working, context, onChange }: Props) {
+export function SpeedStep({ listing, working, context, onChange, busy, beforeApply, afterApply }: Props) {
   const merged = applyDraft(listing, working);
-  const dayMinutes = listing.productionDayMinutes ?? undefined;
-  const { min, max } = productionWindow(working, context.inheritedTurnaround, dayMinutes);
-
-  function setWindow(window: { min: ProductionTime; max: ProductionTime }) {
-    onChange({
-      ...working,
-      turnaroundMode: "override",
-      minimumTurnaround: window.min,
-      turnaround: window.max,
-      speedTiers: [],
-    });
-  }
 
   return (
     <>
@@ -74,13 +63,21 @@ export function SpeedStep({ listing, working, context, onChange }: Props) {
         </ListingSection>
       ) : null}
 
-      <ListingSection title="PRODUCTION TIME" hint={PRODUCTION_TIME_HINT}>
-        <ProductionTimeField min={min} max={max} dayMinutes={dayMinutes} onChange={setWindow} />
-        {context.inheritedTurnaround && working.turnaround == null ? (
-          <Text className="text-caption text-text-muted">
-            Starts from your usual time for this category. Change either one for just this listing.
-          </Text>
-        ) : null}
+      <ListingSection
+        title="PRODUCTION TIME"
+        hint="Counted on your shop's open hours. It starts from your usual time for this category when you have one."
+      >
+        <ProductionTimeSection
+          listing={listing}
+          choice={wizardProductionTime(listing, working, context)}
+          touched={working.productionTime != null}
+          onChange={(choice) => onChange({ ...working, productionTime: choice })}
+          speedTiers={working.speedTiers}
+          onSpeedTiersChange={(next) => onChange({ ...working, speedTiers: next })}
+          disabled={busy}
+          beforeApply={beforeApply}
+          afterApply={afterApply}
+        />
       </ListingSection>
     </>
   );

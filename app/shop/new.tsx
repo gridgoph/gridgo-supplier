@@ -29,8 +29,8 @@ import {
   createListingName,
   pickReady,
   priceBlocker,
-  productionWindow,
   speedReady,
+  wizardProductionTime,
   wizardStepIndex,
   type WizardStepId,
 } from "@/lib/listingWizard";
@@ -57,6 +57,7 @@ import {
   addOption,
   addPrepStep,
   BOARD_NOT_OPEN_YET,
+  listingRefreshFailed,
   PREP_STEPS_NOT_OPEN_YET,
   createListing,
   loadProductTypes,
@@ -325,20 +326,11 @@ export default function NewListingScreen() {
         setActionError(held);
         return false;
       }
-      const window = productionWindow(
-        working,
-        context?.inheritedTurnaround ?? null,
-        baseline.productionDayMinutes ?? undefined,
-      );
+      // Leaving the speed step saves the time it showed, even untouched, so a
+      // new listing never goes on without one.
       const toSave =
-        step === "speed"
-          ? {
-              ...working,
-              turnaroundMode: "override" as const,
-              minimumTurnaround: window.min,
-              turnaround: window.max,
-              speedTiers: [],
-            }
+        step === "speed" && context && !working.productionTime
+          ? { ...working, productionTime: wizardProductionTime(baseline, working, context) }
           : working;
       if (toSave !== working) setDraft(toSave);
 
@@ -512,7 +504,7 @@ export default function NewListingScreen() {
     }
     if (step === "speed") {
       if (!speedReady(listing, working, context)) {
-        setActionError("Set the soonest and latest this listing takes.");
+        setActionError("Choose how long this takes.");
         return;
       }
       if (!(await persist())) return;
@@ -745,8 +737,18 @@ export default function NewListingScreen() {
       committed={committed}
       currentCanProceed={currentCanProceed}
       onSelectStep={onSelectStep}
-      error={error && step === "pick" ? error : actionError}
-      onRetryError={error && step === "pick" ? () => void reloadBoard() : undefined}
+      error={
+        error && step === "pick"
+          ? error
+          : (actionError ?? (loaded && listingError ? listingRefreshFailed(listingError) : null))
+      }
+      onRetryError={
+        error && step === "pick"
+          ? () => void reloadBoard()
+          : !actionError && loaded && listingError
+            ? () => void reload()
+            : undefined
+      }
       notOpenMessage={notOpenOnSave}
       leftLabel={leftLabel}
       leftDisabled={leftDisabled}
@@ -860,6 +862,9 @@ export default function NewListingScreen() {
           working={working}
           context={context}
           onChange={setDraft}
+          busy={busy}
+          beforeApply={() => persist()}
+          afterApply={reload}
         />
       ) : null}
 

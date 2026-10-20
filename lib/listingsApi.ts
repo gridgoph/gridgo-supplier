@@ -1,7 +1,6 @@
 import * as api from "@/lib/api";
 import type { ColourPricingPayload } from "@/lib/colourPricing";
-import { apiErrorBlockers, humanizeApiError, isCatalogItemStale, offlineMessage } from "@/lib/apiErrors";
-import { EXPRESS_STALE } from "@/lib/express";
+import { apiErrorBlockers, humanizeApiError, isCatalogItemsStale, isProductionTimeRefused, offlineMessage } from "@/lib/apiErrors";
 import { fileFormatName } from "@/data/fileFormats";
 import { invalidate } from "@/lib/live";
 import {
@@ -20,7 +19,8 @@ import {
   type SpecGroup,
   type SpeedTier,
 } from "@/lib/listings";
-import type { timeFields } from "@/lib/productionDays";
+import { productionTimeBody, type ProductionChoice, type ProductionTimeBody, type timeFields } from "@/lib/productionDays";
+import { normalizePreview, previewQuery, type ProductionTimePreview } from "@/lib/productionTimePreview";
 import type { PrintLayoutCode } from "@/lib/printLayout";
 import {
   normalizeProductTypeRequest,
@@ -56,6 +56,15 @@ export type BoardOutcome<T> =
   | { status: "ok"; value: T }
   | { status: "not_open_yet" }
   | { status: "failed"; message: string };
+
+/**
+ * A listing already on screen that GRIDGO did not answer for again: what is
+ * drawn is the last answer, and the shop is told so rather than shown it as
+ * current. `reason` is the failure's own sentence.
+ */
+export function listingRefreshFailed(reason: string): string {
+  return `This listing could not be refreshed, so what you see may be out of date. ${reason}`;
+}
 
 /** What a shop is told while GRIDGO has no board routes. Promises nothing. */
 export const BOARD_NOT_OPEN_YET =
@@ -228,15 +237,11 @@ export type ListingPatch = {
   priceTiers?: Listing["priceTiers"];
   /** Each speed's time written through `timeFields` in `lib/productionDays.ts`. */
   speedTiers?: (Omit<SpeedTier, "turnaround"> & ReturnType<typeof timeFields<"turnaround">>)[];
-  turnaroundMode?: Listing["turnaroundMode"];
   /**
-   * Working days or same-day minutes, only the chosen unit's field per end,
-   * written through `listingTimeFields` in `lib/productionDays.ts`.
+   * The shop's answer to "How long does this take?". GRIDGO refuses it beside
+   * the older duration fields or `express`, so a save sends only this.
    */
-  turnaroundDays?: number | null;
-  turnaroundMinutes?: number | null;
-  minimumTurnaroundDays?: number | null;
-  minimumTurnaroundMinutes?: number | null;
+  productionTime?: ProductionTimeBody;
   subcategoryCode?: string;
   /** The platform's `active`; "on the board" everywhere a shop can see. */
   active?: boolean;
@@ -265,32 +270,73 @@ export async function saveListing(
       );
     }
     const saved = normalizeListing(
-      await api.updateCatalogItem(listing.id, listing.version, body),
+      await api.updateCatalogItem(listing.id, listing.version, body).catch((error: unknown) => {
+        // One sentence for a refused production time, whichever code GRIDGO used.
+        if (patch.productionTime && isProductionTimeRefused(error)) {
+          throw new api.ApiError(400, { error: "invalid_production_time" });
+        }
+        throw error;
+      }),
     );
     if (!saved) throw new api.ApiError(502, { error: "unreadable" });
     return saved;
   });
 }
 
-/**
- * Express, on its own: only `express` with the listing's version, never the
- * held words, and it never opens review (gridgo-api `docs/EXPRESS_API.md`).
- * A stale version is worded for the switch, which reloads rather than asking
- * the shop to pull down.
- */
-export async function setExpress(listing: Listing, on: boolean): Promise<BoardOutcome<Listing>> {
-  try {
-    const saved = normalizeListing(
-      await api.updateCatalogItem(listing.id, listing.version, { express: on }),
-    );
-    if (!saved) return { status: "failed", message: UNREADABLE_LISTING };
-    invalidate("catalog");
-    return { status: "ok", value: saved };
-  } catch (error) {
-    if (isRouteAbsent(error)) return { status: "not_open_yet" };
-    if (isCatalogItemStale(error)) return { status: "failed", message: EXPRESS_STALE };
-    return { status: "failed", message: humanizeApiError(error, offlineMessage("change Express")) };
+/** The dates clients would see for this answer, before it is saved. */
+export async function loadProductionTimePreview(
+  listing: Listing,
+  choice: ProductionChoice,
+): Promise<BoardOutcome<ProductionTimePreview>> {
+  const result = await attempt("show the dates clients will see", async () =>
+    normalizePreview(await api.getProductionTimePreview(listing.id, previewQuery(choice))),
+  );
+  if (result.status !== "ok") return result;
+  return result.value
+    ? { status: "ok", value: result.value }
+    : { status: "failed", message: "GRIDGO sent dates this version of the app cannot read." };
+}
+
+/** Every listing the shop owns, hidden ones and drafts too, page by page. */
+async function ownListingVersions(): Promise<Record<string, number>> {
+  const versions: Record<string, number> = {};
+  let cursor: string | null = null;
+  // GRIDGO pages at fifty; a hundred pages is far past any shop's board.
+  for (let page = 0; page < 100; page += 1) {
+    const board = normalizeBoardPage(await api.listCatalogItems({ limit: 50, cursor }));
+    for (const listing of board.listings) {
+      if (listing.version != null) versions[listing.id] = listing.version;
+    }
+    if (!board.nextCursor) break;
+    cursor = board.nextCursor;
   }
+  return versions;
+}
+
+/**
+ * "Use for all my listings": one production time on every listing at once.
+ *
+ * GRIDGO applies it only when every listing and its version is named, so the
+ * whole board is read first. A listing that moved in between makes GRIDGO
+ * change nothing (`catalog_items_stale`); the board is read again and sent
+ * once more before the shop is told. Answers how many listings changed.
+ */
+export async function applyProductionTimeToAll(choice: ProductionChoice): Promise<BoardOutcome<number>> {
+  const send = async () => {
+    const body = (await api.applyCatalogProductionTime({
+      productionTime: productionTimeBody(choice),
+      expectedVersions: await ownListingVersions(),
+    })) as { total?: unknown; items?: unknown };
+    return typeof body?.total === "number" ? body.total : Array.isArray(body?.items) ? body.items.length : 0;
+  };
+  return attemptWrite("set the production time on your listings", async () => {
+    try {
+      return await send();
+    } catch (error) {
+      if (!isCatalogItemsStale(error)) throw error;
+      return send();
+    }
+  });
 }
 
 /**

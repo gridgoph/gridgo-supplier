@@ -22,15 +22,14 @@ import { MoneyField } from "@/components/controls/MoneyField";
 import { NoteField } from "@/components/controls/NoteField";
 import { OptionList } from "@/components/controls/OptionList";
 import { DestinationRow } from "@/components/listing/DestinationRow";
-import { ExpressField } from "@/components/listing/ExpressField";
 import { ListingStandingPanel } from "@/components/listing/ListingStandingPanel";
 import { ListingSection as Section } from "@/components/listing/ListingSection";
 import { PrinterCapField } from "@/components/listing/PrinterCapField";
 import { PrintLayoutField } from "@/components/listing/PrintLayoutField";
 import { PagePricingField, pagePricingApplies } from "@/components/listing/PagePricingField";
-import { PRODUCTION_TIME_HINT, ProductionTimeField } from "@/components/listing/ProductionTimeField";
+import { ProductionTimeSection } from "@/components/listing/ProductionTimeQuestion";
 import { SampleStrip } from "@/components/listing/SampleStrip";
-import { PriceTierEditor, SpeedTierEditor } from "@/components/listing/TierEditor";
+import { PriceTierEditor } from "@/components/listing/TierEditor";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import { Stepper } from "@/components/controls/Stepper";
 import { TextField } from "@/components/controls/TextField";
@@ -52,6 +51,7 @@ import {
   packageQtyFor,
   PACK_STEP,
   sameDraft,
+  shownProductionTime,
   type ListingDraft as Draft,
   unitHint,
 } from "@/lib/listingDraft";
@@ -72,7 +72,6 @@ import {
   PRICING_UNITS,
   priceLine,
   unitChoiceLabel,
-  readyInLine,
   reviewNeeds,
   specs,
   subcategoryName,
@@ -84,6 +83,7 @@ import {
   addPrepStep,
   ARCHIVED_SENTENCE,
   BOARD_NOT_OPEN_YET,
+  listingRefreshFailed,
   PREP_STEPS_NOT_OPEN_YET,
   removeGroup,
   removeListing,
@@ -93,14 +93,13 @@ import {
   reorderPrepSteps,
   saveGroup,
   saveListing,
-  setExpress,
   setFileFormats,
   submitForReview,
   type BoardOutcome,
 } from "@/lib/listingsApi";
 import { listingFoot, SUBMITTED_NOTICE } from "@/lib/listingReview";
 import { PRINT_LAYOUTS_HINT, printLayoutsNote, samePrintLayouts } from "@/lib/printLayout";
-import { productionWindow } from "@/lib/listingWizard";
+import { productionTimeBody } from "@/lib/productionDays";
 import { linkFileOptions, uploadedFileOptions } from "@/lib/fileFormatResolve";
 import { parseMoney } from "@/lib/money";
 import { resolveCategoryCode } from "@/lib/taxonomy";
@@ -140,8 +139,6 @@ export default function ListingScreen() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [expressPending, setExpressPending] = useState<boolean | null>(null);
-  const [expressError, setExpressError] = useState<string | null>(null);
 
   // The reload guard and the leaving-the-screen save both need to know whether
   // there are unsaved words, from callbacks that must not re-subscribe on every
@@ -331,27 +328,6 @@ export default function ListingScreen() {
     [persist],
   );
 
-  /**
-   * Express saves on its own, at once: only `express` with the listing's
-   * version, so it never carries half-typed words and never opens review. The
-   * held words stay held, and the reload hands the next save the new version.
-   * A refusal reloads too, so the switch shows what GRIDGO has, and says why
-   * under it.
-   */
-  async function saveExpress(next: boolean) {
-    if (!listing || busy) return;
-    setBusy(true);
-    setExpressPending(next);
-    setExpressError(null);
-    const saved = await setExpress(listing, next);
-    await reload();
-    if (saved.status !== "ok") {
-      setExpressError(saved.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : saved.message);
-    }
-    setExpressPending(null);
-    setBusy(false);
-  }
-
   /** Put it up, after the photo policies if this submission has not passed them. */
   async function putOnBoard() {
     if (!listing) return;
@@ -524,8 +500,7 @@ export default function ListingScreen() {
       ) ??
       null)
     : null;
-  const dayMinutes = listing.productionDayMinutes ?? undefined;
-  const ownWindow = productionWindow(working, context.inheritedTurnaround, dayMinutes);
+  const productionTime = shownProductionTime(listing, working, context.inheritedTurnaround);
   const priceField = (
     <MoneyField
       value={working.price}
@@ -557,6 +532,7 @@ export default function ListingScreen() {
               <Text className="text-body text-text-secondary">{notice}</Text>
             </View>
           ) : null}
+          {error ? <ErrorNotice message={listingRefreshFailed(error)} onRetry={() => void reload()} /> : null}
         </View>
 
         {/* 1. Samples */}
@@ -815,57 +791,33 @@ export default function ListingScreen() {
         </TourTarget>
 
         {/* 4. Production time */}
-        <Section title="PRODUCTION TIME" hint={PRODUCTION_TIME_HINT}>
-          <SegmentedControl
-            options={[
-              { value: "inherit", label: "Your usual time" },
-              { value: "override", label: "Just this listing" },
-            ]}
-            value={working.turnaroundMode}
-            onChange={(value) =>
-              // Its own time starts from the usual one, so "Just this listing"
-              // never saves a listing with no production time at all.
-              setDraft(
-                value === "override" && working.turnaround == null
-                  ? {
-                      ...working,
-                      turnaroundMode: value,
-                      minimumTurnaround: ownWindow.min,
-                      turnaround: ownWindow.max,
-                    }
-                  : { ...working, turnaroundMode: value },
-              )
+        <Section
+          title="PRODUCTION TIME"
+          hint="Counted on your shop's open hours. Changing it moves only the dates of new orders."
+        >
+          <ProductionTimeSection
+            listing={listing}
+            held={shownProductionTime(listing, { productionTime: null }, context.inheritedTurnaround)}
+            choice={productionTime}
+            touched={working.productionTime != null}
+            onChange={(choice) => setDraft({ ...working, productionTime: choice })}
+            // "Keep 1 working day" saves the time GRIDGO holds, which clears
+            // the reminder; only while nothing else is waiting to save.
+            onKeep={
+              dirty || !baseline
+                ? undefined
+                : async (held) => {
+                    await run(() => saveListing(baseline, { productionTime: productionTimeBody(held) }));
+                  }
             }
-            accessibilityLabel="How long this listing takes"
+            speedTiers={working.speedTiers}
+            onSpeedTiersChange={(next) => setDraft({ ...working, speedTiers: next })}
+            disabled={busy}
+            // "Use for all my listings" saves this screen's own changes first,
+            // so the listing's version is current when every listing is sent.
+            beforeApply={async () => (dirtyRef.current && !savingRef.current ? persist() : true)}
+            afterApply={reload}
           />
-          {working.turnaroundMode === "override" ? (
-            <ProductionTimeField
-              min={ownWindow.min}
-              max={ownWindow.max}
-              dayMinutes={dayMinutes}
-              onChange={({ min, max }) => setDraft({ ...working, minimumTurnaround: min, turnaround: max })}
-            />
-          ) : (
-            <Text className="text-caption text-text-muted">
-              {context.inheritedTurnaround
-                ? `${readyInLine(context.inheritedTurnaround)}, the time on your accreditation for this category.`
-                : "Your shop has no usual time on this category yet. Set the production time here, or add one in Services you offer."}
-            </Text>
-          )}
-          <SpeedTierEditor
-            tiers={working.speedTiers}
-            dayMinutes={dayMinutes}
-            onChange={(next) => setDraft({ ...working, speedTiers: next })}
-          />
-          {listing.express != null ? (
-            <ExpressField
-              on={listing.express}
-              pending={expressPending}
-              disabled={busy}
-              error={expressError}
-              onChange={(next) => void saveExpress(next)}
-            />
-          ) : null}
         </Section>
 
         {/* 5. Steps */}
