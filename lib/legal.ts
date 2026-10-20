@@ -20,6 +20,7 @@ import {
   type PrivacyRequest,
   type PrivacyRequestKind,
 } from "@/lib/api";
+import { NO_MONEY_TAKEN } from "@/lib/performance";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 import type { Href } from "expo-router";
 
@@ -135,15 +136,23 @@ export function changeNote(doc: Pick<LegalVersion, "version" | "changeSummary">)
   return summary;
 }
 
+export type PenaltyNote = { promise: string; clause: string };
+
 /**
- * The one clause in this library that moves a shop's money. GRIDGO deducts
- * for late production only under a Supplier Agreement version that says so
- * and that the shop accepted, so the shop hears it at the moment it agrees —
- * not later, on a payout that came in short.
+ * The one clause in this library that could move a shop's money, said at the
+ * moment the shop agrees. The clause is part of the agreement, but during the
+ * pilot GRIDGO assesses no new late deduction, even under an accepted version
+ * that allows one (gridgo-api `docs/SUPPLIER_PERFORMANCE_API.md`, "Warnings
+ * only"). So the shop hears the Performance page's promise first, and agreeing
+ * is never worded as what turns deductions on.
  */
-export function penaltyNote(doc: Pick<LegalVersion, "penalties" | "documentId">): string | null {
+export function penaltyNote(doc: Pick<LegalVersion, "penalties" | "documentId">): PenaltyNote | null {
   if (!doc.penalties) return null;
-  return "This version allows GRIDGO to deduct from a job's pay when production runs late. It applies only once you agree to it.";
+  return {
+    promise: NO_MONEY_TAKEN,
+    clause:
+      "This version includes a clause that lets GRIDGO deduct from a job's pay when production runs late. GRIDGO does not use it during the current pilot: a late finish gets a warning, and agreeing does not change that.",
+  };
 }
 
 // ---------------------------------------------------------------------------
