@@ -21,6 +21,12 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.324 (Improvement)
+
+- Job offers and late-job notices now say plainly that a late finish gets a warning only, with no money taken.
+- The Supplier Agreement now says plainly that late finishes get warnings only and no money is taken.
+- Accreditation papers sent from the app now reach Operations instead of failing to send.
+
 ## 1.0.318 (New feature)
 
 - Set how long a listing takes in one question, Same day or Days, and see the dates clients will be offered.
