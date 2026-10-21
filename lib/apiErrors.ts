@@ -137,6 +137,54 @@ export function isNonSupplierIdentity(error: unknown): boolean {
   return code === "supplier_account_not_found" || code === "membership_required";
 }
 
+/**
+ * What stopped Sign in with Apple's disconnect, in the words of gridgo-api
+ * `docs/APPLE_REVOCATION_API.md`'s error table. `lib/appleRevocation.ts` turns
+ * each into a sentence and decides whether the same code may be sent again.
+ * No answer at all (offline, timed out) is `lost`: the code may or may not
+ * have been spent, so the same code goes again before Apple is asked.
+ */
+export type AppleRevocationRefusal =
+  | "lost"
+  | "busy"
+  | "sign_in_unchecked"
+  | "deletion_request_missing"
+  | "code_expired"
+  | "apple_unreachable"
+  | "apple_unchecked"
+  | "apple_unconfirmed"
+  | "wrong_apple_id"
+  | "not_linked"
+  | "not_configured"
+  | "app_setup"
+  | "signed_out";
+
+const APPLE_REVOCATION_REFUSALS: Record<string, AppleRevocationRefusal> = {
+  apple_revocation_in_progress: "busy",
+  clerk_unavailable: "sign_in_unchecked",
+  account_deletion_request_required: "deletion_request_missing",
+  invalid_apple_authorization_code: "code_expired",
+  apple_unavailable: "apple_unreachable",
+  apple_token_exchange_failed: "apple_unreachable",
+  apple_identity_invalid: "apple_unchecked",
+  apple_revocation_failed: "apple_unconfirmed",
+  apple_identity_mismatch: "wrong_apple_id",
+  apple_account_not_linked: "not_linked",
+  apple_revocation_not_configured: "not_configured",
+  invalid_apple_client_id: "app_setup",
+  confirmation_required: "app_setup",
+};
+
+export function appleRevocationRefusal(error: unknown): AppleRevocationRefusal {
+  if (!(error instanceof ApiError)) return "lost";
+  const known = APPLE_REVOCATION_REFUSALS[apiErrorCode(error)];
+  if (known) return known;
+  if (error.status === 401) return "signed_out";
+  // An answer GRIDGO's table does not name: the code may be unspent, and a
+  // replay is answered from the record, so the same code is the safe retry.
+  return "lost";
+}
+
 const MESSAGES: Record<string, string> = {
   transition_not_allowed:
     "This job has already moved on. Pull down to refresh and take the step the job now shows.",

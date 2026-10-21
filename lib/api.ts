@@ -2737,3 +2737,62 @@ export async function listPrivacyRequests(): Promise<PrivacyRequest[]> {
   const result = await request<{ requests: PrivacyRequest[] }>("/me/privacy-requests");
   return result.requests ?? [];
 }
+
+/**
+ * The account deletion request Sign in with Apple's disconnect hangs off
+ * (gridgo-api `docs/APPLE_REVOCATION_API.md`). The privacy request above is
+ * still what this app files and shows; this one is filed beside it only for an
+ * Apple-linked iPhone, because the revocation route refuses without it.
+ * Idempotent: a repeat answers the same `202`.
+ */
+export async function fileAccountDeletionRequest(): Promise<void> {
+  await request("/me/account-deletion-request", {
+    method: "POST",
+    body: JSON.stringify({ confirmed: true }),
+  });
+}
+
+export type AppleRevocation = {
+  clientId: string;
+  status: "revoked" | "retry_required" | string;
+  attemptedAt?: string | null;
+  revokedAt: string | null;
+  error: string | null;
+};
+
+/** The pending deletion request, with the latest Apple attempt per app. */
+export type AccountDeletionRequest = {
+  id: string;
+  status: string;
+  /** Latest attempt per bundle. Empty means unknown, not "not needed". */
+  appleRevocations: AppleRevocation[];
+};
+
+/** `GET /me/account-deletion-request`: `null` when none is pending. */
+export async function getAccountDeletionRequest(): Promise<AccountDeletionRequest | null> {
+  const result = await request<{ request?: AccountDeletionRequest | null }>(
+    "/me/account-deletion-request",
+  );
+  const found = result.request;
+  if (!found) return null;
+  return { ...found, appleRevocations: found.appleRevocations ?? [] };
+}
+
+/**
+ * Hand GRIDGO a fresh Apple authorization code to revoke. The code is single
+ * use and never stored or logged here; sending the same code again replays the
+ * recorded result instead of spending it twice.
+ */
+export async function revokeAppleAuthorization(
+  clientId: string,
+  authorizationCode: string,
+): Promise<{ requestId: string | null; appleRevocation: AppleRevocation | null }> {
+  const result = await request<{ requestId?: string; appleRevocation?: AppleRevocation }>(
+    "/me/account-deletion-request/apple-revocation",
+    {
+      method: "POST",
+      body: JSON.stringify({ confirmed: true, clientId, authorizationCode }),
+    },
+  );
+  return { requestId: result.requestId ?? null, appleRevocation: result.appleRevocation ?? null };
+}
