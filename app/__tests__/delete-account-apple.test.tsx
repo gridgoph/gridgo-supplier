@@ -1,8 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import type React from "react";
 import { Platform } from "react-native";
 
 import DeleteAccountScreen from "@/app/delete-account";
-import { createPrivacyRequest, fileAccountDeletionRequest, revokeAppleAuthorization } from "@/lib/api";
+import {
+  createPrivacyRequest,
+  fileAccountDeletionRequest,
+  getAccountDeletionRequest,
+  revokeAppleAuthorization,
+} from "@/lib/api";
 import { ApiError } from "@/lib/apiErrors";
 import {
   APPLE_CANCELLED,
@@ -16,6 +22,7 @@ jest.mock("expo-router", () => ({ router: { push: jest.fn(), back: jest.fn() } }
 jest.mock("@/lib/api", () => ({
   createPrivacyRequest: jest.fn(),
   fileAccountDeletionRequest: jest.fn(),
+  getAccountDeletionRequest: jest.fn(),
   revokeAppleAuthorization: jest.fn(),
 }));
 jest.mock("react-native-safe-area-context", () => ({
@@ -29,6 +36,7 @@ jest.mock("@clerk/expo", () => ({
   useUser: () => ({
     isLoaded: true,
     user: {
+      id: "user_apple_1",
       passwordEnabled: true,
       primaryEmailAddress: { emailAddress: "shop@example.com" },
       externalAccounts: mockProviders.map((provider) => ({ provider })),
@@ -47,6 +55,7 @@ jest.mock("@clerk/expo", () => ({
 const send = createPrivacyRequest as jest.Mock;
 const file = fileAccountDeletionRequest as jest.Mock;
 const revoke = revokeAppleAuthorization as jest.Mock;
+const readRequest = getAccountDeletionRequest as jest.Mock;
 const signInAsync = jest.requireMock("expo-apple-authentication").signInAsync as jest.Mock;
 
 const REVOKED = { clientId: "ph.gridgo.supplier", status: "revoked", revokedAt: "2026-10-21T02:00:00.000Z", error: null };
@@ -57,23 +66,37 @@ function setOS(os: typeof Platform.OS) {
 }
 
 beforeEach(() => {
-  useAccountDeletion.getState().reset();
+  useAccountDeletion.getState().forgetAccount();
   mockProviders = ["apple"];
   setOS("ios");
   send.mockReset().mockResolvedValue({ id: "pr_1", kind: "deletion", status: "pending", requestedAt: "2026-10-21T02:00:00.000Z", dueAt: "2026-11-20T02:00:00.000Z" });
   file.mockReset().mockResolvedValue(undefined);
-  revoke.mockReset().mockResolvedValue(REVOKED);
+  revoke.mockReset().mockResolvedValue({ requestId: "req_1", appleRevocation: REVOKED });
+  readRequest.mockReset().mockResolvedValue({ id: "req_1", status: "pending", appleRevocations: [] });
   signInAsync.mockReset().mockResolvedValue({ authorizationCode: "fresh-apple-code", identityToken: "id", user: "000123.abc" });
 });
 
 afterAll(() => setOS(realOS));
 
-async function deleteMyAccount() {
-  await render(<DeleteAccountScreen />);
+async function confirmAndSend() {
   fireEvent.changeText(screen.getByLabelText("Your password"), "secret-pass");
   await waitFor(() => expect(screen.getByLabelText("Your password").props.value).toBe("secret-pass"));
   fireEvent.press(screen.getByRole("button", { name: "Delete my account" }));
   await waitFor(() => expect(screen.getByText("Request sent")).toBeTruthy());
+}
+
+async function deleteMyAccount() {
+  await render(<DeleteAccountScreen />);
+  await confirmAndSend();
+}
+
+/**
+ * Leave Delete account and open it again: a new key unmounts the screen (its
+ * cleanup resets the visit) and mounts a fresh one.
+ */
+async function leaveAndReopen(rerender: (element: React.ReactElement) => unknown) {
+  await rerender(<DeleteAccountScreen key="second-visit" />);
+  await waitFor(() => expect(screen.getByLabelText("Your password")).toBeTruthy());
 }
 
 describe("Delete account on an Apple-linked iPhone", () => {
@@ -134,6 +157,36 @@ describe("Delete account on an Apple-linked iPhone", () => {
     expect(screen.queryByText(APPLE_REVOKED)).toBeNull();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Sign in with Apple again" })).toBeNull();
+  });
+});
+
+describe("Delete account opened again", () => {
+  it("after a disconnect shows it again without Apple's sheet", async () => {
+    const { rerender } = await render(<DeleteAccountScreen />);
+    await confirmAndSend();
+    await waitFor(() => expect(screen.getByText(APPLE_REVOKED)).toBeTruthy());
+
+    await leaveAndReopen(rerender);
+    await confirmAndSend();
+    await waitFor(() => expect(screen.getByText(APPLE_REVOKED)).toBeTruthy());
+    expect(signInAsync).toHaveBeenCalledTimes(1);
+    expect(revoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("after a lost answer resends the same code", async () => {
+    signInAsync
+      .mockResolvedValueOnce({ authorizationCode: "fresh-apple-code" })
+      .mockResolvedValueOnce({ authorizationCode: "second-code" });
+    revoke.mockRejectedValueOnce(new TypeError("Network request failed"));
+    const { rerender } = await render(<DeleteAccountScreen />);
+    await confirmAndSend();
+    await waitFor(() => expect(screen.getByText(appleRevocationFailure("lost").message)).toBeTruthy());
+
+    await leaveAndReopen(rerender);
+    await confirmAndSend();
+    await waitFor(() => expect(screen.getByText(APPLE_REVOKED)).toBeTruthy());
+    expect(signInAsync).toHaveBeenCalledTimes(1);
+    expect(revoke.mock.calls.map((call) => call[1])).toEqual(["fresh-apple-code", "fresh-apple-code"]);
   });
 });
 

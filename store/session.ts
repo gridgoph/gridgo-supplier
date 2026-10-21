@@ -4,6 +4,7 @@ import { useAccountDeletion } from "@/store/accountDeletion";
 import { useShopHours } from "@/store/shopHours";
 import { afterShopPlanLoads, useShopPlan } from "@/store/shopPlan";
 import { usePrivacyRequests } from "@/store/privacyRequests";
+import { useSignInNotice } from "@/store/signInNotice";
 import { liveGeneration, setLiveOwner } from "@/lib/live";
 import { create } from "zustand";
 
@@ -376,7 +377,9 @@ useSession.subscribe((state, previous) => {
   useToasts.getState().clear();
   // One shop's privacy requests are never drawn for the next one on this phone.
   usePrivacyRequests.getState().reset();
-  useAccountDeletion.getState().reset();
+  // A Sign in with Apple disconnect belongs to the account that started it.
+  useAccountDeletion.getState().forgetAccount();
+  if (next) useSignInNotice.getState().clear();
   useShopHours.getState().reset();
   // Phone-only closures carry no account. They leave with the shop that was
   // signed in, and the next shop claims only what is left unclaimed.

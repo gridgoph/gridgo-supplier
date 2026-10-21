@@ -41,6 +41,7 @@ import { SessionWait } from "@/components/SessionWait";
 import { appleSignInOutcome, isAppleCancel, type AppleFlowResult } from "@/lib/appleSignIn";
 import { completeGoogleSso } from "@/lib/googleSso";
 import { SESSION_ENDED_MESSAGE, useSession } from "@/store/session";
+import { useSignInNotice } from "@/store/signInNotice";
 
 type HealthState = "checking" | "reachable" | "unreachable";
 
@@ -59,6 +60,8 @@ export default function LoginScreen() {
   const [healthState, setHealthState] = useState<HealthState>("checking");
   const sessionWait = useSession((state) => state.sessionWait);
   const identity = useSession((state) => state.identity);
+  // What a screen the ended session took down still had to say.
+  const endedTaskNotice = useSignInNotice((state) => state.message);
   const shown =
     problem ??
     (identity.kind === "signed_out" && identity.reason === "refused" ? emailUnavailableMessage : null);
@@ -326,6 +329,9 @@ export default function LoginScreen() {
               <Text className="text-body-lg text-text-secondary">Let’s sign in</Text>
               {identity.kind === "signed_out" && identity.reason === "session_ended" ? (
                 <Text className="text-body text-text-secondary" accessibilityRole="alert">{SESSION_ENDED_MESSAGE}</Text>
+              ) : null}
+              {identity.kind === "signed_out" && identity.reason === "session_ended" && endedTaskNotice ? (
+                <Text className="text-body text-text-secondary">{endedTaskNotice}</Text>
               ) : null}
             </View>
 

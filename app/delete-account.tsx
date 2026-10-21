@@ -55,6 +55,7 @@ export default function DeleteAccountScreen() {
   const { session } = useClerkSession();
   const method = deletionConfirmMethod(clerkUser);
   const appleLinked = appleRevocationApplies(clerkUser, Platform.OS);
+  const appleAccount = appleLinked ? (clerkUser?.id ?? null) : null;
 
   const secret = useAccountDeletion((s) => s.secret);
   const codeSent = useAccountDeletion((s) => s.codeSent);
@@ -199,7 +200,7 @@ export default function DeleteAccountScreen() {
                 placeholder="Your password"
                 kind="password"
                 returnKeyType="go"
-                onSubmit={() => void submit(method, session, appleLinked)}
+                onSubmit={() => void submit(method, session, appleAccount)}
                 editable={busy == null}
               />
             </FieldShell>
@@ -222,7 +223,7 @@ export default function DeleteAccountScreen() {
                   placeholder="6-digit code"
                   kind="code"
                   returnKeyType="go"
-                  onSubmit={() => void submit(method, session, appleLinked)}
+                  onSubmit={() => void submit(method, session, appleAccount)}
                   editable={busy == null}
                 />
               </FieldShell>
@@ -265,7 +266,7 @@ export default function DeleteAccountScreen() {
                       : "Delete my account"
               }
               disabled={busy != null}
-              onPress={() => void submit(method, session, appleLinked)}
+              onPress={() => void submit(method, session, appleAccount)}
             />
           )}
           <SecondaryButton

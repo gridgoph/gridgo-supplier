@@ -2760,6 +2760,24 @@ export type AppleRevocation = {
   error: string | null;
 };
 
+/** The pending deletion request, with the latest Apple attempt per app. */
+export type AccountDeletionRequest = {
+  id: string;
+  status: string;
+  /** Latest attempt per bundle. Empty means unknown, not "not needed". */
+  appleRevocations: AppleRevocation[];
+};
+
+/** `GET /me/account-deletion-request`: `null` when none is pending. */
+export async function getAccountDeletionRequest(): Promise<AccountDeletionRequest | null> {
+  const result = await request<{ request?: AccountDeletionRequest | null }>(
+    "/me/account-deletion-request",
+  );
+  const found = result.request;
+  if (!found) return null;
+  return { ...found, appleRevocations: found.appleRevocations ?? [] };
+}
+
 /**
  * Hand GRIDGO a fresh Apple authorization code to revoke. The code is single
  * use and never stored or logged here; sending the same code again replays the
@@ -2768,13 +2786,13 @@ export type AppleRevocation = {
 export async function revokeAppleAuthorization(
   clientId: string,
   authorizationCode: string,
-): Promise<AppleRevocation | null> {
-  const result = await request<{ appleRevocation?: AppleRevocation }>(
+): Promise<{ requestId: string | null; appleRevocation: AppleRevocation | null }> {
+  const result = await request<{ requestId?: string; appleRevocation?: AppleRevocation }>(
     "/me/account-deletion-request/apple-revocation",
     {
       method: "POST",
       body: JSON.stringify({ confirmed: true, clientId, authorizationCode }),
     },
   );
-  return result.appleRevocation ?? null;
+  return { requestId: result.requestId ?? null, appleRevocation: result.appleRevocation ?? null };
 }

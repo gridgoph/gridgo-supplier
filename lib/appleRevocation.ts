@@ -16,7 +16,10 @@ import type { AppleRevocationRefusal } from "@/lib/apiErrors";
  * - **A lost answer resends the same code** before Apple is asked again.
  *   GRIDGO replays a recorded attempt instead of spending the code twice.
  * - **After a disconnect, Apple is never asked again.** A new sign-in could
- *   authorize the app all over again.
+ *   authorize the app all over again. The store remembers a disconnect and a
+ *   held code across visits to the screen, for the same account and deletion
+ *   request, and reads GRIDGO's record (`GET /me/account-deletion-request`)
+ *   before every fresh Apple sign-in, so a phone that forgot still knows.
  *
  * The same in the client and rider apps except `APPLE_CLIENT_ID`.
  */
@@ -60,6 +63,8 @@ export const APPLE_REVOKED = "Sign in with Apple is disconnected from this app."
 export const APPLE_CANCELLED = `You closed Apple's sign-in, so Sign in with Apple is still connected to this app. ${STILL_STANDS}`;
 export const APPLE_SIGN_IN_FAILED = `Apple could not confirm it is you, so Sign in with Apple is still connected to this app. ${STILL_STANDS} Sign in with Apple again to retry.`;
 export const APPLE_FILE_FAILED = `GRIDGO could not get ready to disconnect Sign in with Apple. ${STILL_STANDS} Check this phone's connection and try again.`;
+/** GRIDGO's record could not be read, so Apple is not asked yet. */
+export const APPLE_CHECK_FAILED = `GRIDGO could not check whether Sign in with Apple is already disconnected. ${STILL_STANDS} Check this phone's connection and try again.`;
 /** A 200 that does not say "revoked": never read as a disconnect. */
 export const APPLE_NOT_CONFIRMED = `GRIDGO did not confirm that Sign in with Apple is disconnected. ${STILL_STANDS} Sign in with Apple again to retry.`;
 

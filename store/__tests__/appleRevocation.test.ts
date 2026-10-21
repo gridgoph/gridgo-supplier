@@ -1,18 +1,26 @@
-import { createPrivacyRequest, fileAccountDeletionRequest, revokeAppleAuthorization } from "@/lib/api";
+import {
+  createPrivacyRequest,
+  fileAccountDeletionRequest,
+  getAccountDeletionRequest,
+  revokeAppleAuthorization,
+} from "@/lib/api";
 import { ApiError } from "@/lib/apiErrors";
 import { reauthorizeWithApple } from "@/lib/appleReauthorize";
 import {
   APPLE_BUSY_RETRIES,
+  APPLE_CHECK_FAILED,
   APPLE_FILE_FAILED,
   APPLE_NOT_CONFIRMED,
   APPLE_SIGN_IN_FAILED,
   appleRevocationFailure,
 } from "@/lib/appleRevocation";
 import { useAccountDeletion } from "@/store/accountDeletion";
+import { useSignInNotice } from "@/store/signInNotice";
 
 jest.mock("@/lib/api", () => ({
   createPrivacyRequest: jest.fn(),
   fileAccountDeletionRequest: jest.fn(),
+  getAccountDeletionRequest: jest.fn(),
   revokeAppleAuthorization: jest.fn(),
 }));
 jest.mock("@/lib/appleReauthorize", () => ({ reauthorizeWithApple: jest.fn() }));
@@ -20,6 +28,7 @@ jest.mock("@/lib/appleReauthorize", () => ({ reauthorizeWithApple: jest.fn() }))
 const send = createPrivacyRequest as jest.Mock;
 const file = fileAccountDeletionRequest as jest.Mock;
 const revoke = revokeAppleAuthorization as jest.Mock;
+const readRequest = getAccountDeletionRequest as jest.Mock;
 const askApple = reauthorizeWithApple as jest.Mock;
 
 const REVOKED = { clientId: "ph.gridgo.supplier", status: "revoked", revokedAt: "2026-10-21T02:00:00.000Z", error: null };
@@ -32,20 +41,29 @@ function session() {
   };
 }
 
-async function deleteAccount(appleLinked: boolean) {
+const ACCOUNT = "user_apple_1";
+const PENDING = { id: "req_1", status: "pending", appleRevocations: [] };
+const answered = (appleRevocation: unknown) => ({ requestId: "req_1", appleRevocation });
+
+async function deleteAccount(appleLinked: boolean, account = ACCOUNT) {
   useAccountDeletion.getState().setSecret("secret-pass");
-  await useAccountDeletion.getState().submit("password", session(), appleLinked);
+  await useAccountDeletion.getState().submit("password", session(), appleLinked ? account : null);
 }
+
+/** What the screen's unmount cleanup runs: the visit ends, the account stays. */
+const leaveScreen = () => useAccountDeletion.getState().reset();
 
 let codes = 0;
 beforeEach(() => {
   jest.useRealTimers();
-  useAccountDeletion.getState().reset();
+  useAccountDeletion.getState().forgetAccount();
+  useSignInNotice.getState().clear();
   send.mockReset().mockImplementation(async () => {
     return { id: "pr_1", kind: "deletion", status: "pending", requestedAt: "2026-10-21T02:00:00.000Z", dueAt: "2026-11-20T02:00:00.000Z" };
   });
   file.mockReset().mockResolvedValue(undefined);
-  revoke.mockReset().mockResolvedValue(REVOKED);
+  revoke.mockReset().mockResolvedValue(answered(REVOKED));
+  readRequest.mockReset().mockResolvedValue(PENDING);
   askApple.mockReset().mockImplementation(async () => ({ status: "ok", authorizationCode: `apple-code-${++codes}` }));
 });
 
@@ -59,7 +77,8 @@ describe("an Apple-linked iPhone", () => {
     expect(revoke).toHaveBeenCalledWith("ph.gridgo.supplier", `apple-code-${codes}`);
     // The deletion request is on file before Apple is ever asked.
     expect(send.mock.invocationCallOrder[0]).toBeLessThan(file.mock.invocationCallOrder[0]);
-    expect(file.mock.invocationCallOrder[0]).toBeLessThan(askApple.mock.invocationCallOrder[0]);
+    expect(file.mock.invocationCallOrder[0]).toBeLessThan(readRequest.mock.invocationCallOrder[0]);
+    expect(readRequest.mock.invocationCallOrder[0]).toBeLessThan(askApple.mock.invocationCallOrder[0]);
     expect(useAccountDeletion.getState()).toMatchObject({ sent: true, apple: "revoked", busy: null, appleError: null });
   });
 
@@ -111,7 +130,7 @@ describe("an Apple-linked iPhone", () => {
     jest.useFakeTimers();
     revoke
       .mockRejectedValueOnce(new ApiError(409, { error: "apple_revocation_in_progress" }))
-      .mockResolvedValueOnce(REVOKED);
+      .mockResolvedValueOnce(answered(REVOKED));
     const done = deleteAccount(true);
     await jest.advanceTimersByTimeAsync(5000);
     await done;
@@ -157,7 +176,7 @@ describe("an Apple-linked iPhone", () => {
   });
 
   it("never reads a 200 without 'revoked' as a disconnect", async () => {
-    revoke.mockResolvedValueOnce({ ...REVOKED, status: "retry_required", revokedAt: null });
+    revoke.mockResolvedValueOnce(answered({ ...REVOKED, status: "retry_required", revokedAt: null }));
     await deleteAccount(true);
     expect(useAccountDeletion.getState()).toMatchObject({ apple: "failed", appleError: APPLE_NOT_CONFIRMED, appleRetry: "fresh" });
   });
@@ -219,6 +238,129 @@ describe("an Apple-linked iPhone", () => {
     expect(file).not.toHaveBeenCalled();
     expect(askApple).not.toHaveBeenCalled();
     expect(useAccountDeletion.getState().apple).toBe("none");
+  });
+});
+
+describe("leaving the screen and coming back", () => {
+  it("keeps a disconnect: Apple is not asked again on the next visit", async () => {
+    await deleteAccount(true);
+    expect(useAccountDeletion.getState().apple).toBe("revoked");
+    leaveScreen();
+
+    await deleteAccount(true);
+    expect(askApple).toHaveBeenCalledTimes(1);
+    expect(revoke).toHaveBeenCalledTimes(1);
+    expect(useAccountDeletion.getState()).toMatchObject({ sent: true, apple: "revoked" });
+  });
+
+  it("replays a lost answer's code on the next visit, never a new one", async () => {
+    revoke.mockRejectedValueOnce(new TypeError("Network request failed"));
+    await deleteAccount(true);
+    const firstCode = revoke.mock.calls[0][1];
+    leaveScreen();
+
+    await deleteAccount(true);
+    expect(askApple).toHaveBeenCalledTimes(1);
+    expect(revoke.mock.calls[1][1]).toBe(firstCode);
+    expect(useAccountDeletion.getState().apple).toBe("revoked");
+  });
+
+  it("does not start Apple after a privacy response that lands once the screen is gone", async () => {
+    let finishSend!: (value: unknown) => void;
+    send.mockImplementationOnce(() => new Promise((resolve) => { finishSend = resolve; }));
+    const pending = deleteAccount(true);
+    for (let n = 0; n < 12 && !finishSend; n += 1) await Promise.resolve();
+    expect(send).toHaveBeenCalledTimes(1);
+    leaveScreen();
+    finishSend({ id: "pr_1", kind: "deletion", status: "pending", requestedAt: "x", dueAt: "y" });
+    await pending;
+
+    expect(askApple).not.toHaveBeenCalled();
+    expect(file).not.toHaveBeenCalled();
+    // The next visit's state is untouched by the old submission.
+    expect(useAccountDeletion.getState()).toMatchObject({ sent: false, busy: null, request: null });
+  });
+
+  it("does not send after a password check that lands once the screen is gone", async () => {
+    let finishCheck!: (value: { status: string }) => void;
+    const s = session();
+    s.attemptFirstFactorVerification.mockImplementationOnce(() => new Promise((resolve) => { finishCheck = resolve; }));
+    useAccountDeletion.getState().setSecret("secret-pass");
+    const pending = useAccountDeletion.getState().submit("password", s, ACCOUNT);
+    for (let n = 0; n < 12 && !finishCheck; n += 1) await Promise.resolve();
+    leaveScreen();
+    finishCheck({ status: "complete" });
+    await pending;
+
+    expect(send).not.toHaveBeenCalled();
+    expect(useAccountDeletion.getState()).toMatchObject({ busy: null, confirmedAt: null });
+  });
+
+  it("reads GRIDGO's record first: a disconnect this phone forgot is not undone", async () => {
+    readRequest.mockResolvedValueOnce({ ...PENDING, appleRevocations: [{ clientId: "ph.gridgo.client", status: "retry_required" }, REVOKED] });
+    await deleteAccount(true);
+
+    expect(askApple).not.toHaveBeenCalled();
+    expect(revoke).not.toHaveBeenCalled();
+    expect(useAccountDeletion.getState().apple).toBe("revoked");
+  });
+
+  it("does not read another app's disconnect as this one's", async () => {
+    readRequest.mockResolvedValueOnce({ ...PENDING, appleRevocations: [{ ...REVOKED, clientId: "ph.gridgo.client" }] });
+    await deleteAccount(true);
+    expect(askApple).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not ask Apple when GRIDGO's record cannot be read", async () => {
+    readRequest.mockRejectedValueOnce(new TypeError("Network request failed"));
+    await deleteAccount(true);
+
+    expect(askApple).not.toHaveBeenCalled();
+    expect(useAccountDeletion.getState()).toMatchObject({ apple: "failed", appleError: APPLE_CHECK_FAILED, appleRetry: "same" });
+    await useAccountDeletion.getState().revokeApple();
+    expect(askApple).toHaveBeenCalledTimes(1);
+  });
+
+  it("files the deletion request again when GRIDGO has none pending", async () => {
+    readRequest.mockResolvedValueOnce(null);
+    await deleteAccount(true);
+    expect(askApple).not.toHaveBeenCalled();
+    expect(useAccountDeletion.getState()).toMatchObject({ apple: "failed", appleRetry: "same" });
+
+    await useAccountDeletion.getState().revokeApple();
+    expect(file).toHaveBeenCalledTimes(2);
+    expect(useAccountDeletion.getState().apple).toBe("revoked");
+  });
+
+  it("drops the held code when the signed-in account changes", async () => {
+    revoke.mockRejectedValueOnce(new TypeError("Network request failed"));
+    await deleteAccount(true);
+    const firstCode = revoke.mock.calls[0][1];
+    useAccountDeletion.getState().forgetAccount();
+
+    await deleteAccount(true);
+    expect(askApple).toHaveBeenCalledTimes(2);
+    expect(revoke.mock.calls[1][1]).not.toBe(firstCode);
+  });
+
+  it("starts afresh for a different Clerk user on the same phone", async () => {
+    await deleteAccount(true);
+    leaveScreen();
+    await deleteAccount(true, "user_apple_2");
+    expect(askApple).toHaveBeenCalledTimes(2);
+    expect(file).toHaveBeenCalledTimes(2);
+  });
+
+  it("hands a final 401's explanation to Sign in", async () => {
+    revoke.mockRejectedValueOnce(new ApiError(401, { error: "unauthorized" }));
+    await deleteAccount(true);
+    expect(useSignInNotice.getState().message).toBe(appleRevocationFailure("signed_out").message);
+  });
+
+  it("leaves Sign in alone for every other failure", async () => {
+    revoke.mockRejectedValueOnce(new ApiError(503, { error: "apple_revocation_not_configured" }));
+    await deleteAccount(true);
+    expect(useSignInNotice.getState().message).toBeNull();
   });
 });
 
