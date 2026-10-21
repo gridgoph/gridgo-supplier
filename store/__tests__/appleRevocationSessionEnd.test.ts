@@ -78,6 +78,46 @@ it.each<Stage>(["file", "read", "revoke"])(
   },
 );
 
+it("keeps a newer visit's sentence when an abandoned visit's answer lands late", async () => {
+  const revokes: ((value: Response) => void)[] = [];
+  jest.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/apple-revocation")) {
+      // The first two are held open; the refreshed retry is the final 401.
+      if (revokes.length < 2) return new Promise<Response>((resolve) => revokes.push(resolve));
+      return response(401, { error: "unauthorized" });
+    }
+    if (url.endsWith("/me/privacy-requests")) return response(201, { request: PRIVACY });
+    if ((init?.method ?? "GET") === "GET") {
+      return response(200, { request: { id: "req_1", status: "pending", appleRevocations: [] } });
+    }
+    return response(202, { ok: true });
+  });
+  const until = async (ready: () => boolean) => {
+    for (let n = 0; n < 50 && !ready(); n += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ready()).toBe(true);
+  };
+  const visit = () => {
+    useAccountDeletion.getState().setSecret("secret-pass");
+    return useAccountDeletion.getState().submit("password", reverify(), "clerk-user-1");
+  };
+
+  const first = visit();
+  await until(() => revokes.length === 1);
+  useAccountDeletion.getState().reset(); // the screen is left mid-call
+  const second = visit();
+  await until(() => revokes.length === 2);
+
+  revokes[0](response(200, { ok: true, requestId: "req_1", appleRevocation: null }));
+  await first;
+  expect(useSignInNotice.getState().held?.message).toBe(appleRevocationFailure("signed_out").message);
+
+  revokes[1](response(401, { error: "unauthorized" }));
+  await second;
+  expect(useSession.getState().identity).toEqual({ kind: "signed_out", reason: "session_ended" });
+  expect(useSignInNotice.getState().message).toBe(appleRevocationFailure("signed_out").message);
+});
+
 it("says nothing extra when the session ends outside the Apple step", async () => {
   jest.spyOn(global, "fetch").mockResolvedValue(response(401, { error: "unauthorized" }));
   await expect(api.listJobs()).rejects.toBeInstanceOf(api.ApiError);

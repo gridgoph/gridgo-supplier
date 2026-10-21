@@ -353,7 +353,7 @@ describe("leaving the screen and coming back", () => {
 
   it("holds Sign in's sentence only while a call is out", async () => {
     const heldDuring: (string | null)[] = [];
-    const note = () => heldDuring.push(useSignInNotice.getState().held);
+    const note = () => heldDuring.push(useSignInNotice.getState().held?.message ?? null);
     file.mockImplementation(async () => note());
     readRequest.mockImplementation(async () => (note(), PENDING));
     revoke.mockImplementation(async () => (note(), answered(REVOKED)));

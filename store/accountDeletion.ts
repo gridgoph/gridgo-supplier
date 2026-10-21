@@ -145,11 +145,11 @@ function scopeTo(current: AppleAttempt, requestId: string) {
  * shows it only if the session ends while this call is out.
  */
 async function untilAnswered<T>(call: () => Promise<T>): Promise<T> {
-  useSignInNotice.getState().hold(appleRevocationFailure("signed_out").message);
+  const hold = useSignInNotice.getState().hold(appleRevocationFailure("signed_out").message);
   try {
     return await call();
   } finally {
-    useSignInNotice.getState().release();
+    useSignInNotice.getState().release(hold);
   }
 }
 
