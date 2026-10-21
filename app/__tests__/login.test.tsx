@@ -79,7 +79,8 @@ describe("Sign in", () => {
     const { useSignInNotice } = jest.requireActual("@/store/signInNotice") as typeof import("@/store/signInNotice");
     const { appleRevocationFailure } = jest.requireActual("@/lib/appleRevocation") as typeof import("@/lib/appleRevocation");
     const notice = appleRevocationFailure("signed_out").message;
-    useSignInNotice.getState().say(notice);
+    useSignInNotice.getState().hold(notice);
+    useSignInNotice.getState().sessionEnded();
     useSession.setState({ identity: { kind: "signed_out", reason: "session_ended" } });
     await render(<LoginScreen />);
     expect(screen.getByText("Your session ended. Sign in again to keep working.")).toBeTruthy();

@@ -356,6 +356,9 @@ export const useSession = create<SessionState>((set, get) => ({
 api.setUnauthorizedHandler(() => {
   const { authSource, identity } = useSession.getState();
   if (signedOutWithNotice(identity)) return;
+  // What the task whose call this was still had to say, before the teardown
+  // below drops it with the account.
+  useSignInNotice.getState().sessionEnded();
   if (authSource === "clerk") {
     useSession.getState().endClerkSession();
     return;
@@ -380,6 +383,7 @@ useSession.subscribe((state, previous) => {
   // A Sign in with Apple disconnect belongs to the account that started it.
   useAccountDeletion.getState().forgetAccount();
   if (next) useSignInNotice.getState().clear();
+  else useSignInNotice.getState().forgetHeld();
   useShopHours.getState().reset();
   // Phone-only closures carry no account. They leave with the shop that was
   // signed in, and the next shop claims only what is left unclaimed.

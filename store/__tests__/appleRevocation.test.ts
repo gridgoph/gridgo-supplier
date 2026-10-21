@@ -351,16 +351,90 @@ describe("leaving the screen and coming back", () => {
     expect(file).toHaveBeenCalledTimes(2);
   });
 
-  it("hands a final 401's explanation to Sign in", async () => {
-    revoke.mockRejectedValueOnce(new ApiError(401, { error: "unauthorized" }));
+  it("holds Sign in's sentence only while a call is out", async () => {
+    const heldDuring: (string | null)[] = [];
+    const note = () => heldDuring.push(useSignInNotice.getState().held);
+    file.mockImplementation(async () => note());
+    readRequest.mockImplementation(async () => (note(), PENDING));
+    revoke.mockImplementation(async () => (note(), answered(REVOKED)));
     await deleteAccount(true);
-    expect(useSignInNotice.getState().message).toBe(appleRevocationFailure("signed_out").message);
+    expect(heldDuring).toEqual(Array(3).fill(appleRevocationFailure("signed_out").message));
+    expect(useSignInNotice.getState()).toMatchObject({ held: null, message: null });
   });
 
   it("leaves Sign in alone for every other failure", async () => {
     revoke.mockRejectedValueOnce(new ApiError(503, { error: "apple_revocation_not_configured" }));
     await deleteAccount(true);
-    expect(useSignInNotice.getState().message).toBeNull();
+    expect(useSignInNotice.getState()).toMatchObject({ held: null, message: null });
+  });
+});
+
+describe("a different deletion request", () => {
+  const RETRY = { ...REVOKED, status: "retry_required", revokedAt: null, error: "apple_revocation_failed" };
+
+  it("does not use an earlier request's disconnect for the pending one", async () => {
+    await deleteAccount(true);
+    leaveScreen();
+    readRequest.mockResolvedValue({ id: "req_2", status: "pending", appleRevocations: [RETRY] });
+    revoke.mockRejectedValue(new ApiError(502, { error: "apple_revocation_failed" }));
+    await deleteAccount(true);
+    expect(askApple).toHaveBeenCalledTimes(2);
+    expect(useAccountDeletion.getState().apple).toBe("failed");
+  });
+
+  it("does not read a replay for an earlier request as the pending one's", async () => {
+    revoke.mockRejectedValueOnce(new TypeError("Network request failed"));
+    await deleteAccount(true);
+    leaveScreen();
+    readRequest.mockResolvedValue({ id: "req_2", status: "pending", appleRevocations: [RETRY] });
+    // GRIDGO replays a code's recorded attempt even once its request is done.
+    revoke.mockResolvedValue({ requestId: "req_1", appleRevocation: REVOKED });
+    await deleteAccount(true);
+    expect(useAccountDeletion.getState().apple).not.toBe("revoked");
+  });
+
+  it("lets GRIDGO's later failed attempt outrank a disconnect this phone remembers", async () => {
+    await deleteAccount(true);
+    leaveScreen();
+    readRequest.mockResolvedValue({ id: "req_1", status: "pending", appleRevocations: [RETRY] });
+    revoke.mockRejectedValue(new ApiError(502, { error: "apple_revocation_failed" }));
+    await deleteAccount(true);
+    expect(askApple).toHaveBeenCalledTimes(2);
+    expect(useAccountDeletion.getState().apple).toBe("failed");
+  });
+
+  it("falls back to a remembered disconnect only when GRIDGO's record cannot be read", async () => {
+    await deleteAccount(true);
+    leaveScreen();
+    readRequest.mockRejectedValue(new TypeError("Network request failed"));
+    await deleteAccount(true);
+    expect(askApple).toHaveBeenCalledTimes(1);
+    expect(useAccountDeletion.getState().apple).toBe("revoked");
+  });
+
+  it("settles a late answer on the attempt it was sent for, not on the screen", async () => {
+    let answer!: (value: unknown) => void;
+    revoke.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+    const first = deleteAccount(true);
+    for (let n = 0; n < 30 && !answer; n += 1) await Promise.resolve();
+    leaveScreen();
+    answer(answered(REVOKED));
+    await first;
+    expect(useAccountDeletion.getState().apple).toBe("none");
+    readRequest.mockRejectedValue(new TypeError("Network request failed"));
+    await deleteAccount(true);
+    expect(askApple).toHaveBeenCalledTimes(1);
+    expect(revoke).toHaveBeenCalledTimes(1);
+    expect(useAccountDeletion.getState().apple).toBe("revoked");
+  });
+
+  it("files the legacy request again on a new confirmation", async () => {
+    await deleteAccount(true);
+    leaveScreen();
+    await deleteAccount(true);
+    expect(file).toHaveBeenCalledTimes(2);
+    expect(askApple).toHaveBeenCalledTimes(1);
+    expect(useAccountDeletion.getState().apple).toBe("revoked");
   });
 });
 
