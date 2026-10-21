@@ -10,7 +10,28 @@ import {
   type DeletionConfirmMethod,
   type ReverifySession,
 } from "@/lib/accountDeletion";
-import { createPrivacyRequest, type PrivacyRequest } from "@/lib/api";
+import {
+  createPrivacyRequest,
+  fileAccountDeletionRequest,
+  getAccountDeletionRequest,
+  revokeAppleAuthorization,
+  type AccountDeletionRequest,
+  type PrivacyRequest,
+} from "@/lib/api";
+import { appleRevocationRefusal, type AppleRevocationRefusal } from "@/lib/apiErrors";
+import { reauthorizeWithApple } from "@/lib/appleReauthorize";
+import {
+  APPLE_BUSY_RETRIES,
+  APPLE_BUSY_WAIT_MS,
+  APPLE_CHECK_FAILED,
+  APPLE_CLIENT_ID,
+  APPLE_FILE_FAILED,
+  APPLE_NOT_CONFIRMED,
+  APPLE_SIGN_IN_FAILED,
+  appleRevocationFailure,
+  type AppleRetry,
+} from "@/lib/appleRevocation";
+import { useSignInNotice } from "@/store/signInNotice";
 
 /**
  * The Delete account screen's flow: confirm it is the account holder, then
@@ -20,7 +41,11 @@ import { createPrivacyRequest, type PrivacyRequest } from "@/lib/api";
  * every step lands from an async continuation, and on this test stack a plain
  * `useState` write there never re-renders. Nothing is persisted — the password
  * and the code live only while the screen is open, and `reset` on leaving
- * drops them.
+ * drops them. Only the Apple attempt below outlives the screen, in memory.
+ *
+ * On an Apple-linked iPhone the sent request is followed by disconnecting
+ * Sign in with Apple (`lib/appleRevocation.ts`). The request is already filed
+ * by then, so nothing in that step can take it back.
  */
 type AccountDeletionState = {
   /** Typed password or emailed code. Never persisted, never logged. */
@@ -29,7 +54,7 @@ type AccountDeletionState = {
   codeSent: boolean;
   /** Where Clerk sent the code, masked by Clerk. */
   destination: string;
-  busy: "checking" | "sending" | "emailing" | null;
+  busy: "checking" | "sending" | "emailing" | "apple" | "revoking" | null;
   /** About what was typed: drawn under the field. */
   fieldError: string | null;
   /** About everything else: drawn as a notice. */
@@ -39,13 +64,27 @@ type AccountDeletionState = {
   sent: boolean;
   /** The privacy request the send created, for its answer-by date. */
   request: PrivacyRequest | null;
+  /** Sign in with Apple's disconnect; `none` wherever it does not apply. */
+  apple: "none" | "asking" | "sending" | "revoked" | "cancelled" | "failed";
+  appleError: string | null;
+  appleRetry: AppleRetry;
   setSecret: (secret: string) => void;
   emailCode: (session: ReverifySession | null | undefined) => Promise<void>;
   submit: (
     method: DeletionConfirmMethod,
     session: ReverifySession | null | undefined,
+    /**
+     * The Clerk user ID when `appleRevocationApplies` (an iPhone whose Clerk
+     * user has an Apple account); null keeps today's flow.
+     */
+    appleAccount?: string | null,
   ) => Promise<void>;
+  /** Disconnect Sign in with Apple, or retry it: after the request is sent only. */
+  revokeApple: () => Promise<void>;
+  /** Leaving the screen: drops what was typed, keeps the Apple attempt. */
   reset: () => void;
+  /** The signed-in account changed: drops the Apple attempt too. */
+  forgetAccount: () => void;
 };
 
 const initial = {
@@ -58,7 +97,66 @@ const initial = {
   confirmedAt: null,
   sent: false,
   request: null,
+  apple: "none" as const,
+  appleError: null,
+  appleRetry: null,
 };
+
+/**
+ * One account's Sign in with Apple disconnect, kept in memory across visits
+ * to the screen: leaving Delete account must neither forget a disconnect
+ * (asking Apple again could authorize the app again) nor drop a code whose
+ * answer was lost (it is replayed, never swapped for a new one).
+ *
+ * Scoped to the Clerk user and, once GRIDGO names it, the deletion request;
+ * `forgetAccount` drops it when the signed-in account changes. Outside the
+ * store's state, so nothing that reads or renders state sees the code; never
+ * persisted, never logged.
+ */
+type AppleAttempt = {
+  account: string;
+  requestId: string | null;
+  deletionFiled: boolean;
+  heldCode: string | null;
+  revoked: boolean;
+};
+let attempt: AppleAttempt | null = null;
+
+function attemptFor(account: string): AppleAttempt {
+  if (attempt?.account !== account) {
+    attempt = { account, requestId: null, deletionFiled: false, heldCode: null, revoked: false };
+  }
+  return attempt;
+}
+
+/** A different deletion request starts its own disconnect. */
+function scopeTo(current: AppleAttempt, requestId: string) {
+  if (current.requestId && current.requestId !== requestId) {
+    current.heldCode = null;
+    current.revoked = false;
+  }
+  current.requestId = requestId;
+}
+
+/**
+ * A final 401 ends the session inside `lib/api.ts`, synchronously and before
+ * the call throws, so by the time this store could explain it the flow is
+ * already over. Sign in is handed the sentence up front instead; the session
+ * shows it only if the session ends while this call is out.
+ */
+async function untilAnswered<T>(call: () => Promise<T>): Promise<T> {
+  const hold = useSignInNotice.getState().hold(appleRevocationFailure("signed_out").message);
+  try {
+    return await call();
+  } finally {
+    useSignInNotice.getState().release(hold);
+  }
+}
+
+/** Bumped by `reset`, so a continuation from a left screen changes nothing. */
+let flow = 0;
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const useAccountDeletion = create<AccountDeletionState>((set, get) => ({
   ...initial,
@@ -84,8 +182,12 @@ export const useAccountDeletion = create<AccountDeletionState>((set, get) => ({
     }
   },
 
-  submit: async (method, session) => {
+  submit: async (method, session, appleAccount = null) => {
     if (get().busy) return;
+    // Taken before any await: a screen left mid-request bumps `flow`, and
+    // nothing from this submission may then touch state or start Apple.
+    const mine = flow;
+    const live = () => mine === flow;
     set({ error: null, fieldError: null });
 
     // Only the send can fail once the person is confirmed. A retry inside the
@@ -101,6 +203,7 @@ export const useAccountDeletion = create<AccountDeletionState>((set, get) => ({
         method === "password"
           ? await confirmWithPassword(session, secret)
           : await confirmWithCode(session, secret);
+      if (!live()) return;
       if (outcome.status !== "ok") {
         set(
           outcome.status === "refused"
@@ -116,15 +219,145 @@ export const useAccountDeletion = create<AccountDeletionState>((set, get) => ({
     try {
       // The privacy queue (`docs/LEGAL_API.md`), not the legacy
       // `/me/account-deletion-request`: it is where See my data and Correct my
-      // data land too, with a due date and a record of what was kept.
+      // data land too, with a due date and a record of what was kept. An
+      // Apple-linked iPhone files the legacy one too, in `revokeApple`,
+      // because Apple's disconnect is checked against it.
       const request = await createPrivacyRequest("deletion");
+      if (!live()) return;
       set({ sent: true, secret: "", request });
     } catch {
-      set({ error: DELETION_REQUEST_FAILED });
+      if (live()) set({ error: DELETION_REQUEST_FAILED });
     } finally {
-      set({ busy: null });
+      if (live()) set({ busy: null });
+    }
+    if (!live() || !appleAccount || !get().sent) return;
+    // A new confirmation files the legacy request again (it is idempotent):
+    // the one this attempt began with may have been completed since.
+    attemptFor(appleAccount).deletionFiled = false;
+    await get().revokeApple();
+  },
+
+  revokeApple: async () => {
+    const { busy, sent } = get();
+    const current = attempt;
+    if (busy || !sent || !current) return;
+    const mine = flow;
+    const live = () => mine === flow && attempt === current;
+    const fail = (message: string, retry: AppleRetry) =>
+      live() && set({ apple: "failed", appleError: message, appleRetry: retry });
+    const failFor = (refusal: AppleRevocationRefusal) => {
+      const failure = appleRevocationFailure(refusal);
+      fail(failure.message, failure.retry);
+    };
+    set({ appleError: null, appleRetry: null, busy: "revoking", apple: "sending" });
+    try {
+      if (!current.deletionFiled) {
+        try {
+          await untilAnswered(fileAccountDeletionRequest);
+        } catch (error) {
+          if (!live()) return;
+          const refusal = appleRevocationRefusal(error);
+          if (refusal === "signed_out") failFor(refusal);
+          else fail(APPLE_FILE_FAILED, "same");
+          return;
+        }
+        if (!live()) return;
+        current.deletionFiled = true;
+      }
+
+      // GRIDGO's record first, every time: a disconnect this phone forgot is
+      // not undone by a new sign-in, and a remembered one (or a held code)
+      // counts only for the deletion request that is pending now.
+      let pending: AccountDeletionRequest | null;
+      try {
+        pending = await untilAnswered(getAccountDeletionRequest);
+      } catch (error) {
+        if (!live()) return;
+        const refusal = appleRevocationRefusal(error);
+        if (refusal === "signed_out") failFor(refusal);
+        // Unread, a disconnect this phone saw stands; nothing else goes to Apple.
+        else if (current.revoked) set({ apple: "revoked" });
+        else fail(APPLE_CHECK_FAILED, "same");
+        return;
+      }
+      if (!live()) return;
+      if (!pending) {
+        current.deletionFiled = false;
+        failFor("deletion_request_missing");
+        return;
+      }
+      scopeTo(current, pending.id);
+      const latest = pending.appleRevocations.find((entry) => entry.clientId === APPLE_CLIENT_ID);
+      // GRIDGO's latest attempt outranks this phone's memory of an earlier one.
+      if (latest) current.revoked = latest.status === "revoked";
+      if (current.revoked) {
+        current.heldCode = null;
+        set({ apple: "revoked" });
+        return;
+      }
+
+      let code = current.heldCode;
+      if (!code) {
+        set({ busy: "apple", apple: "asking" });
+        const outcome = await reauthorizeWithApple();
+        if (!live()) return;
+        if (outcome.status === "cancelled") {
+          set({ apple: "cancelled" });
+          return;
+        }
+        if (outcome.status === "failed") {
+          fail(APPLE_SIGN_IN_FAILED, "fresh");
+          return;
+        }
+        code = current.heldCode = outcome.authorizationCode;
+      }
+
+      set({ busy: "revoking", apple: "sending" });
+      for (let tries = 0; ; tries += 1) {
+        try {
+          const sending = code;
+          const result = await untilAnswered(() => revokeAppleAuthorization(APPLE_CLIENT_ID, sending));
+          // An answer that lands after the screen was left still settles the
+          // attempt it was sent for, never a newer one.
+          if (attempt !== current) return;
+          // Spent either way: a recorded result is all this code can return now.
+          if (current.heldCode === sending) current.heldCode = null;
+          // A replay of another deletion request's attempt says nothing about this one.
+          const thisRequest = !result.requestId || result.requestId === current.requestId;
+          const revoked = thisRequest && result.appleRevocation?.status === "revoked";
+          if (revoked) current.revoked = true;
+          if (!live()) return;
+          if (revoked) set({ apple: "revoked" });
+          else fail(APPLE_NOT_CONFIRMED, "fresh");
+          return;
+        } catch (error) {
+          if (!live()) return;
+          const refusal = appleRevocationRefusal(error);
+          // GRIDGO's own attempt is still in flight: the same code, after a pause.
+          if (refusal === "busy" && tries < APPLE_BUSY_RETRIES) {
+            await wait(APPLE_BUSY_WAIT_MS);
+            if (!live()) return;
+            continue;
+          }
+          if (refusal === "deletion_request_missing") current.deletionFiled = false;
+          if (appleRevocationFailure(refusal).retry !== "same") current.heldCode = null;
+          failFor(refusal);
+          return;
+        }
+      }
+    } finally {
+      if (live()) set({ busy: null });
     }
   },
 
-  reset: () => set(initial),
+  reset: () => {
+    flow += 1;
+    set(initial);
+  },
+
+  forgetAccount: () => {
+    flow += 1;
+    attempt = null;
+    set(initial);
+  },
 }));

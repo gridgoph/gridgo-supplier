@@ -75,6 +75,19 @@ describe("Sign in", () => {
     expect(screen.queryByText("This shop is still closed")).toBeNull();
   });
 
+  it("says what a screen the ended session took down left unfinished", async () => {
+    const { useSignInNotice } = jest.requireActual("@/store/signInNotice") as typeof import("@/store/signInNotice");
+    const { appleRevocationFailure } = jest.requireActual("@/lib/appleRevocation") as typeof import("@/lib/appleRevocation");
+    const notice = appleRevocationFailure("signed_out").message;
+    useSignInNotice.getState().hold(notice);
+    useSignInNotice.getState().sessionEnded();
+    useSession.setState({ identity: { kind: "signed_out", reason: "session_ended" } });
+    await render(<LoginScreen />);
+    expect(screen.getByText("Your session ended. Sign in again to keep working.")).toBeTruthy();
+    expect(screen.getByText(notice)).toBeTruthy();
+    useSignInNotice.getState().clear();
+  });
+
   it("keeps Clerk fields empty and does not offer a local demo", async () => {
     await render(<LoginScreen />);
 
