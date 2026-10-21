@@ -2737,3 +2737,44 @@ export async function listPrivacyRequests(): Promise<PrivacyRequest[]> {
   const result = await request<{ requests: PrivacyRequest[] }>("/me/privacy-requests");
   return result.requests ?? [];
 }
+
+/**
+ * The account deletion request Sign in with Apple's disconnect hangs off
+ * (gridgo-api `docs/APPLE_REVOCATION_API.md`). The privacy request above is
+ * still what this app files and shows; this one is filed beside it only for an
+ * Apple-linked iPhone, because the revocation route refuses without it.
+ * Idempotent: a repeat answers the same `202`.
+ */
+export async function fileAccountDeletionRequest(): Promise<void> {
+  await request("/me/account-deletion-request", {
+    method: "POST",
+    body: JSON.stringify({ confirmed: true }),
+  });
+}
+
+export type AppleRevocation = {
+  clientId: string;
+  status: "revoked" | "retry_required" | string;
+  attemptedAt?: string | null;
+  revokedAt: string | null;
+  error: string | null;
+};
+
+/**
+ * Hand GRIDGO a fresh Apple authorization code to revoke. The code is single
+ * use and never stored or logged here; sending the same code again replays the
+ * recorded result instead of spending it twice.
+ */
+export async function revokeAppleAuthorization(
+  clientId: string,
+  authorizationCode: string,
+): Promise<AppleRevocation | null> {
+  const result = await request<{ appleRevocation?: AppleRevocation }>(
+    "/me/account-deletion-request/apple-revocation",
+    {
+      method: "POST",
+      body: JSON.stringify({ confirmed: true, clientId, authorizationCode }),
+    },
+  );
+  return result.appleRevocation ?? null;
+}
