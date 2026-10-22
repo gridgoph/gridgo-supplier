@@ -28,20 +28,23 @@ describe("parseMoney", () => {
     expect(parseMoney("1200.50")).toEqual({ ok: true, minor: 120050 });
   });
 
-  it("rounds rather than truncating a fractional centavo", () => {
-    expect(parseMoney("10.005")).toEqual({ ok: true, minor: 1001 });
+  it("refuses a third decimal instead of rounding it into different centavos", () => {
+    const result = parseMoney("10.005");
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error).toContain("1200.00");
   });
 
-  it("rejects an amount below one peso with a fix", () => {
-    const result = parseMoney("0.50");
-    expect(result.ok).toBe(false);
-    expect(result.ok === false && result.error).toContain("at least ₱1.00");
+  it("keeps zero, a sub-peso amount, and a price above ₱1,000,000", () => {
+    expect(parseMoney("0")).toEqual({ ok: true, minor: 0 });
+    expect(parseMoney("0.50")).toEqual({ ok: true, minor: 50 });
+    expect(parseMoney("1000001")).toEqual({ ok: true, minor: 100000100 });
+    expect(parseMoney("2000000")).toEqual({ ok: true, minor: 200000000 });
   });
 
-  it("rejects an amount above the limit with a route out", () => {
-    const result = parseMoney("2000000");
+  it("refuses an amount past the safe centavo integer", () => {
+    const result = parseMoney("90071992547409.92");
     expect(result.ok).toBe(false);
-    expect(result.ok === false && result.error).toContain("Operations");
+    expect(result.ok === false && result.error).toContain("largest whole-centavo");
   });
 
   it("rejects something that is not a number", () => {

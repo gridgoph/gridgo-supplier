@@ -67,7 +67,7 @@ export function aboutBlocker(listing: Listing, name: string): string | null {
   return null;
 }
 
-/** A price GRIDGO will accept as typed. Empty is not set; ₱0 fails parseMoney. */
+/** A price GRIDGO will accept as typed. Empty is not set. ₱0 is a price. */
 export function priceReady(price: string): boolean {
   const money = parseMoney(price);
   return money.ok && money.minor != null;

@@ -8,7 +8,16 @@ import { TextField } from "@/components/controls/TextField";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";
+import {
+  BULK_BREAK_CAP,
+  CATALOG_COUNT_MAX,
+  DUPLICATE_BULK_BREAK,
+  MAX_BULK_BREAKS,
+  MAX_SPEEDS,
+  SPEED_CAP,
+} from "@/lib/catalogBounds";
 import type { PriceTier, SpeedTier } from "@/lib/listings";
+import { parseMoney } from "@/lib/money";
 import { ProductionTimePicker } from "@/components/listing/ProductionTimeField";
 import {
   sameTime,
@@ -69,22 +78,40 @@ export function PriceTierEditor({
 }) {
   const [draftQty, setDraftQty] = useState(0);
   const [draftPrice, setDraftPrice] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const sorted = [...tiers].sort((left, right) => left.minQuantity - right.minQuantity);
+  const full = sorted.length >= MAX_BULK_BREAKS;
 
   const add = () => {
-    const pesos = Number.parseFloat(draftPrice);
-    if (!draftQty || draftQty < 1 || !Number.isFinite(pesos) || pesos < 0) return;
-    if (sorted.some((tier) => tier.minQuantity === draftQty)) return;
-    onChange([...sorted, { minQuantity: draftQty, unitPriceMinor: Math.round(pesos * 100) }]);
+    if (!draftQty || draftQty < 1) {
+      setError("A bulk break starts at a whole quantity of at least 1.");
+      return;
+    }
+    if (sorted.some((tier) => tier.minQuantity === draftQty)) {
+      setError(DUPLICATE_BULK_BREAK);
+      return;
+    }
+    const money = parseMoney(draftPrice);
+    if (!money.ok) {
+      setError(money.error);
+      return;
+    }
+    if (money.minor == null) {
+      setError("Enter the unit price for this quantity.");
+      return;
+    }
+    onChange([...sorted, { minQuantity: draftQty, unitPriceMinor: money.minor }]);
     setDraftQty(0);
     setDraftPrice("");
+    setError(null);
   };
 
   return (
     <View className="gap-2">
       <Text className="text-caption text-text-muted">
         Cheaper in bulk — optional. From this many, your rate becomes the one you set here.
+        This is a unit price ({unitLabel}), not a price for the whole job.
       </Text>
 
       {sorted.map((tier) => (
@@ -98,31 +125,48 @@ export function PriceTierEditor({
           </Text>
           <Text className="text-body-lg text-text-primary font-medium">
             {api.formatPhp(tier.unitPriceMinor)}{" "}
-            <Text className="text-caption text-text-muted">{unitLabel}</Text>
+            <Text className="text-caption text-text-muted">{unitLabel} · Unit price</Text>
           </Text>
         </RowShell>
       ))}
 
       <View className="gg-panel gap-2 p-3">
+        {full ? (
+          <Text className="text-caption text-text-muted">{BULK_BREAK_CAP}</Text>
+        ) : (
+          <>
         <Stepper
           value={draftQty}
-          onChange={setDraftQty}
+          onChange={(value) => {
+            setDraftQty(value);
+            setError(null);
+          }}
           min={0}
-          max={100000}
+          max={CATALOG_COUNT_MAX}
           step={10}
           unit={draftQty ? "and over" : "from how many"}
           accessibilityLabel="Quantity this break starts at"
         />
         <MoneyField
           value={draftPrice}
-          onChange={setDraftPrice}
+          onChange={(value) => {
+            setDraftPrice(value);
+            setError(null);
+          }}
           accessibilityLabel="Rate at this quantity"
         />
+        {error ? (
+          <Text className="text-caption text-error" accessibilityRole="alert">
+            {error}
+          </Text>
+        ) : null}
         <SecondaryButton
           label="Add this break"
           onPress={add}
           disabled={!draftQty || !draftPrice.trim()}
         />
+          </>
+        )}
       </View>
     </View>
   );
@@ -141,31 +185,41 @@ export function SpeedTierEditor({
   const [label, setLabel] = useState("");
   const [time, setTime] = useState<ProductionTime>(workingDays(1));
   const [price, setPrice] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const sorted = [...tiers].sort(
     (left, right) => timeMinutes(left.turnaround, dayMinutes) - timeMinutes(right.turnaround, dayMinutes),
   );
   // One speed per time: a second "1 hour" would leave a client's date nothing to choose between.
   const taken = sorted.some((tier) => sameTime(tier.turnaround, time));
+  const full = sorted.length >= MAX_SPEEDS;
 
   const add = () => {
-    const pesos = Number.parseFloat(price);
-    if (!label.trim() || taken || !Number.isFinite(pesos) || pesos < 0) return;
+    if (!label.trim() || taken) return;
+    const money = parseMoney(price);
+    if (!money.ok) {
+      setError(money.error);
+      return;
+    }
+    if (money.minor == null) {
+      setError("Enter the price for this speed.");
+      return;
+    }
     onChange([
       ...sorted,
       {
         id: `speed_${timeKey(time)}`,
         label: label.trim(),
         turnaround: time,
-        // A speed the shop prices is a price for the job at that speed, not a
-        // fee on top. A rush fee is the other shape and is not offered here,
-        // because a shop that wants one writes it as an add-on.
-        priceMinor: Math.round(pesos * 100),
+        // A speed the shop prices is a price for the whole job at that speed,
+        // not a fee on top and not an Express surcharge.
+        priceMinor: money.minor,
         surchargeMinor: null,
       },
     ]);
     setLabel("");
     setPrice("");
+    setError(null);
   };
 
   return (
@@ -185,7 +239,7 @@ export function SpeedTierEditor({
           <Text className="text-body-lg text-text-primary font-medium">
             {tier.priceMinor != null ? api.formatPhp(tier.priceMinor) : `+${api.formatPhp(tier.surchargeMinor ?? 0)}`}{" "}
             <Text className="text-caption text-text-muted">
-              {timeLabel(tier.turnaround)}
+              {timeLabel(tier.turnaround)} · {tier.priceMinor != null ? "Whole-job price" : "Fee on top"}
             </Text>
           </Text>
         </RowShell>
@@ -210,12 +264,30 @@ export function SpeedTierEditor({
             You already sell a speed at {timeLabel(time)}. Pick another time, or remove that one first.
           </Text>
         ) : null}
-        <MoneyField value={price} onChange={setPrice} accessibilityLabel="Price at this speed" />
+        {full ? (
+          <Text className="text-caption text-text-muted">{SPEED_CAP}</Text>
+        ) : (
+          <>
+        <MoneyField
+          value={price}
+          onChange={(value) => {
+            setPrice(value);
+            setError(null);
+          }}
+          accessibilityLabel="Price at this speed"
+        />
+        {error ? (
+          <Text className="text-caption text-error" accessibilityRole="alert">
+            {error}
+          </Text>
+        ) : null}
         <SecondaryButton
           label="Add this speed"
           onPress={add}
           disabled={!label.trim() || !price.trim() || taken}
         />
+          </>
+        )}
       </View>
     </View>
   );

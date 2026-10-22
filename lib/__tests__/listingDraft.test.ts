@@ -5,6 +5,7 @@ import {
   draftFrom,
   heldMixedRange,
   listingSavePatch,
+  withProductionWindow,
   measureUnitFor,
   packageQtyFor,
   rebaseEdits,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/listingDraft";
 import type { Listing } from "@/lib/listings";
 import { sameDay, workingDays } from "@/lib/productionDays";
+import { CATALOG_PACK_INVALID, minimumOrderProblem, packProblem } from "@/lib/catalogBounds";
 
 const listing: Listing = {
   id: "item_1",
@@ -159,6 +161,59 @@ describe("listingSavePatch measured units", () => {
     expect(rebaseEdits(edits, v8)).toEqual({ name: "Flyers A5" });
     // An edit GRIDGO now holds too is no longer the shop's.
     expect(rebaseEdits(edits, { ...v8, name: "Flyers A5" })).toBeNull();
+  });
+
+  it("does not drop speed tiers when the production window changes", () => {
+    const speed = {
+      id: "s1",
+      label: "Rush",
+      turnaround: sameDay(120),
+      priceMinor: 50_000,
+      surchargeMinor: null,
+    };
+    const stored = { ...listing, speedTiers: [speed] };
+    const working = withProductionWindow(draftFrom(stored), {
+      mode: "days",
+      minDays: 1,
+      maxDays: 3,
+    });
+    const changed = withProductionWindow(working, { mode: "days", minDays: 2, maxDays: 4 });
+    expect(changed.speedTiers).toEqual([speed]);
+    const patch = listingSavePatch(changed, 0, undefined, stored);
+    expect(patch.productionTime).toEqual({ mode: "days", minDays: 2, maxDays: 4 });
+    expect(patch).not.toHaveProperty("speedTiers");
+    expect(patch).not.toHaveProperty("express");
+  });
+
+  it("sends a speed the existing editor changed, and leaves an untouched set out", () => {
+    const speed = {
+      id: "s1",
+      label: "Rush",
+      turnaround: sameDay(120),
+      priceMinor: 50_000,
+      surchargeMinor: null,
+    };
+    const stored = { ...listing, speedTiers: [speed] };
+    expect(listingSavePatch(draftFrom(stored), 0, undefined, stored)).not.toHaveProperty("speedTiers");
+    const edited = {
+      ...draftFrom(stored),
+      speedTiers: [{ ...speed, priceMinor: 70_050 }],
+    };
+    expect(listingSavePatch(edited, 0, undefined, stored).speedTiers).toEqual([
+      expect.objectContaining({
+        label: "Rush",
+        turnaroundMinutes: 120,
+        priceMinor: 70_050,
+        surchargeMinor: null,
+      }),
+    ]);
+  });
+
+  it("uses the catalogue's pack and minimum-order rules", () => {
+    expect(packProblem("per_package", 1)).toBe(CATALOG_PACK_INVALID);
+    expect(packProblem("per_package", 5001)).toBeNull();
+    expect(minimumOrderProblem("per_unit", 1001, true)).toBeNull();
+    expect(minimumOrderProblem("per_unit", 0, true)).toBeNull();
   });
 
   it("sends each faster price tier in its own unit, as before", () => {

@@ -39,6 +39,7 @@ import {
   type WizardStepId,
 } from "@/lib/listingWizard";
 import {
+  asksQuantity,
   boardContextFor,
   boardTargets,
   gridgoNeeds,
@@ -77,6 +78,7 @@ import {
   submitForReview,
   type BoardOutcome,
 } from "@/lib/listingsApi";
+import { minimumOrderProblem, packProblem } from "@/lib/catalogBounds";
 import { parseMoney } from "@/lib/money";
 import { seedStarterSample } from "@/lib/starterSample";
 import { useAcceptedFileFormats } from "@/hooks/useAcceptedFileFormats";
@@ -331,6 +333,17 @@ export default function NewListingScreen() {
         setActionError(held);
         return false;
       }
+      const counted =
+        packProblem(working.pricingUnit, working.packageQty) ??
+        minimumOrderProblem(
+          working.pricingUnit,
+          working.minimumOrderQuantity,
+          asksQuantity(working.pricingUnit),
+        );
+      if (counted) {
+        setActionError(counted);
+        return false;
+      }
       // Leaving the speed step saves the time it showed, even untouched, so a
       // new listing never goes on without one.
       // An older range that mixes hours and working days is kept as it is.
@@ -348,7 +361,7 @@ export default function NewListingScreen() {
       try {
         const saved = await saveListing(
           baseline,
-          listingSavePatch(toSave, money.minor ?? 0, onTheBoard),
+          listingSavePatch(toSave, money.minor ?? 0, onTheBoard, baseline),
         );
         if (saved.status !== "ok") {
           if (saved.status === "not_open_yet") setNotOpenOnSave(BOARD_NOT_OPEN_YET);
@@ -423,7 +436,7 @@ export default function NewListingScreen() {
       setActionError(null);
       setNotOpenOnSave(null);
       try {
-        const saved = await saveListing(listing, listingSavePatch(next, money.minor ?? 0));
+        const saved = await saveListing(listing, listingSavePatch(next, money.minor ?? 0, undefined, listing));
         if (saved.status !== "ok") {
           if (saved.status === "not_open_yet") setNotOpenOnSave(BOARD_NOT_OPEN_YET);
           else setActionError(saved.message);

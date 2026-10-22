@@ -1,9 +1,10 @@
 import { Stepper } from "@/components/controls/Stepper";
+import { CATALOG_COUNT_MAX } from "@/lib/catalogBounds";
 import { ListingSection } from "@/components/listing/ListingSection";
 import { ProductionTimeSection } from "@/components/listing/ProductionTimeQuestion";
 import { PriceTierEditor } from "@/components/listing/TierEditor";
 import { asksQuantity, unitLine, type BoardContext, type Listing } from "@/lib/listings";
-import { applyDraft, colourOn, PACK_STEP, type ListingDraft } from "@/lib/listingDraft";
+import { applyDraft, colourOn, PACK_STEP, withProductionWindow, type ListingDraft } from "@/lib/listingDraft";
 import { wizardProductionTime } from "@/lib/listingWizard";
 
 type Props = {
@@ -28,7 +29,7 @@ export function SpeedStep({ listing, working, context, onChange, busy, beforeApp
             value={working.packageQty ?? 100}
             onChange={(value) => onChange({ ...working, packageQty: value })}
             min={2}
-            max={5000}
+            max={CATALOG_COUNT_MAX}
             step={PACK_STEP}
             unit="pieces"
             accessibilityLabel="Pieces in a pack"
@@ -55,7 +56,7 @@ export function SpeedStep({ listing, working, context, onChange, busy, beforeApp
               onChange({ ...working, minimumOrderQuantity: value || null })
             }
             min={0}
-            max={1000}
+            max={CATALOG_COUNT_MAX}
             step={1}
             unit={working.minimumOrderQuantity ? "minimum" : "no minimum"}
             accessibilityLabel="Smallest order you will take"
@@ -71,7 +72,7 @@ export function SpeedStep({ listing, working, context, onChange, busy, beforeApp
           listing={listing}
           choice={wizardProductionTime(listing, working, context)}
           touched={working.productionTime != null}
-          onChange={(choice) => onChange({ ...working, productionTime: choice })}
+          onChange={(choice) => onChange(withProductionWindow(working, choice))}
           speedTiers={working.speedTiers}
           onSpeedTiersChange={(next) => onChange({ ...working, speedTiers: next })}
           disabled={busy}

@@ -222,13 +222,25 @@ export function applyDraft(listing: Listing, draft: ListingDraft): Listing {
   };
 }
 
+/**
+ * A new production window never clears faster prices. The existing editor
+ * still edits those tiers itself; this only replaces the window.
+ */
+export function withProductionWindow<T extends { speedTiers: ListingDraft["speedTiers"] }>(
+  draft: T,
+  productionTime: ProductionChoice,
+): T {
+  return { ...draft, productionTime };
+}
+
 /** The PATCH the editor and the wizard both send. `active` only when asked. */
 export function listingSavePatch(
   working: ListingDraft,
   moneyMinor: number,
   onTheBoard?: boolean,
+  baseline?: Listing | null,
 ): ListingPatch {
-  return {
+  const patch: ListingPatch = {
     name: working.name.trim(),
     description: working.description.trim(),
     basePriceMinor: moneyMinor,
@@ -257,6 +269,13 @@ export function listingSavePatch(
     ...colourPatch(working),
     ...(onTheBoard == null ? {} : { active: onTheBoard }),
   };
+  if (baseline) {
+    const nextBreaks = asksQuantity(working.pricingUnit) ? working.priceTiers : [];
+    const heldBreaks = asksQuantity(baseline.pricingUnit) ? baseline.priceTiers : [];
+    if (tierKey(nextBreaks) === tierKey(heldBreaks)) delete patch.priceTiers;
+    if (speedKey(working.speedTiers) === speedKey(baseline.speedTiers)) delete patch.speedTiers;
+  }
+  return patch;
 }
 
 /**

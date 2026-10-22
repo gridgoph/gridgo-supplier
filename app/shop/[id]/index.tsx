@@ -39,6 +39,7 @@ import { useVisibleTourStep } from "@/hooks/useTourStep";
 import type { TourStepId } from "@/lib/tour";
 import { fileFormatName, linkFormatInvitation } from "@/data/fileFormats";
 import { spacing } from "@/constants/theme";
+import { CATALOG_COUNT_MAX, minimumOrderProblem, packProblem } from "@/lib/catalogBounds";
 import {
   applyDraft,
   colourHold,
@@ -47,6 +48,7 @@ import {
   draftFrom,
   formatsMoved,
   listingSavePatch,
+  withProductionWindow,
   measureUnitFor,
   needsMeasure,
   packageQtyFor,
@@ -278,6 +280,17 @@ export default function ListingScreen() {
         setActionError(held);
         return false;
       }
+      const counted =
+        packProblem(working.pricingUnit, working.packageQty) ??
+        minimumOrderProblem(
+          working.pricingUnit,
+          working.minimumOrderQuantity,
+          asksQuantity(working.pricingUnit),
+        );
+      if (counted) {
+        setActionError(counted);
+        return false;
+      }
 
       savingRef.current = true;
       setBusy(true);
@@ -285,7 +298,7 @@ export default function ListingScreen() {
       try {
         const saved = await saveListing(
           baseline,
-          listingSavePatch(working, money.minor ?? 0, onTheBoard),
+          listingSavePatch(working, money.minor ?? 0, onTheBoard, baseline),
         );
         if (saved.status !== "ok") {
           setActionError(saved.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : saved.message);
@@ -705,7 +718,7 @@ export default function ListingScreen() {
                   value={working.packageQty ?? 100}
                   onChange={(value) => setDraft({ ...working, packageQty: value })}
                   min={2}
-                  max={5000}
+                  max={CATALOG_COUNT_MAX}
                   step={PACK_STEP}
                   unit="pieces"
                   accessibilityLabel="Pieces in a pack"
@@ -796,7 +809,7 @@ export default function ListingScreen() {
                   value={working.minimumOrderQuantity ?? 0}
                   onChange={(value) => setDraft({ ...working, minimumOrderQuantity: value || null })}
                   min={0}
-                  max={1000}
+                  max={CATALOG_COUNT_MAX}
                   step={1}
                   unit={working.minimumOrderQuantity ? "minimum" : "no minimum"}
                   accessibilityLabel="Smallest order you will take"
@@ -817,7 +830,7 @@ export default function ListingScreen() {
               held={shownProductionTime(listing, { productionTime: null }, context.inheritedTurnaround)}
               choice={productionTime}
               touched={working.productionTime != null}
-              onChange={(choice) => setDraft({ ...working, productionTime: choice })}
+              onChange={(choice) => setDraft(withProductionWindow(working, choice))}
               // "Keep 1 working day" saves the time GRIDGO holds, which clears
               // the reminder; only while nothing else is waiting to save.
               onKeep={
