@@ -2,6 +2,8 @@ import { Pressable, Text, View, type PressableProps } from "react-native";
 
 type Props = {
   label: string;
+  /** Spoken name when the visible label is shared by more than one row. */
+  accessibilityLabel?: string;
   onPress?: PressableProps["onPress"];
   disabled?: boolean;
 };
@@ -11,12 +13,13 @@ type Props = {
  *
  * Stays monochrome so the single yellow CTA keeps its meaning.
  */
-export function SecondaryButton({ label, onPress, disabled }: Props) {
+export function SecondaryButton({ label, accessibilityLabel, onPress, disabled }: Props) {
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: Boolean(disabled) }}
       className={disabled ? "gg-btn-secondary gg-disabled" : "gg-btn-secondary"}
     >
