@@ -11,7 +11,7 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { UploadList } from "@/components/UploadList";
 import { LISTING_CAPS, photoViewUrl } from "@/lib/listings";
-import { attachPhoto, BOARD_NOT_OPEN_YET, removePhoto, setPhotoOrder } from "@/lib/listingsApi";
+import { attachPhoto, BOARD_NOT_OPEN_YET, photoOrderMoved, removePhoto, setPhotoOrder } from "@/lib/listingsApi";
 import { endPhotoPolicySubmission, ensurePhotoPolicy } from "@/store/photoPolicy";
 import { askConfirm } from "@/store/sheets";
 import { WhyWeAsk } from "@/components/legal/WhyWeAsk";
@@ -25,9 +25,9 @@ import { useThemeColors } from "@/hooks/useTheme";
  *
  * Its own screen because this is a camera roll, not a form: a shop photographs
  * a tarpaulin on the rack, checks it is the right one, and puts it first. The
- * board photo is the only ordering decision a client ever sees, so it is the
- * only one offered — as "make this the board photo", not a drag handle nobody
- * finds.
+ * board photo is the first sample. Any sample can also move one place earlier
+ * or later, so a shop can reach any order without making each one the board
+ * photo in turn.
  *
  * Nothing counts as filed until GRIDGO returns a stored id and accepts the
  * attach. An upload that reached 100% and then failed is still a listing with
@@ -93,6 +93,7 @@ export default function SamplePhotosScreen() {
       const result = await attachPhoto(
         stored.fileId as string,
         listing.id,
+        // A replacement keeps the slot's sort order. A new sample goes on the end.
         replacing ?? photos.length,
       );
       if (result.status === "ok") {
@@ -137,6 +138,30 @@ export default function SamplePhotosScreen() {
       setBusy(false);
     },
     [listing, reload],
+  );
+
+  const place = useCallback(
+    async (fileId: string, direction: -1 | 1) => {
+      if (!listing) return;
+      const next = photoOrderMoved(
+        photos.map((photo) => photo.fileId),
+        fileId,
+        direction,
+      );
+      if (!next) return;
+      setBusy(true);
+      const result = await setPhotoOrder(listing, next);
+      if (result.status === "ok") {
+        setActionError(null);
+        await reload();
+      } else {
+        setActionError(
+          result.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : result.message,
+        );
+      }
+      setBusy(false);
+    },
+    [listing, photos, reload],
   );
 
   const makeFirst = useCallback(
@@ -246,10 +271,26 @@ export default function SamplePhotosScreen() {
                         </Pressable>
                       )}
                     </View>
+                    {index > 0 ? (
+                      <SecondaryButton
+                        label="Move earlier"
+                        accessibilityLabel={`Move sample ${index + 1} earlier`}
+                        disabled={picking}
+                        onPress={() => void place(photo.fileId, -1)}
+                      />
+                    ) : null}
+                    {index < photos.length - 1 ? (
+                      <SecondaryButton
+                        label="Move later"
+                        accessibilityLabel={`Move sample ${index + 1} later`}
+                        disabled={picking}
+                        onPress={() => void place(photo.fileId, 1)}
+                      />
+                    ) : null}
                     <SecondaryButton
-                      label={replacing === index ? "Choosing…" : "Replace"}
+                      label={replacing === photo.sortOrder ? "Choosing…" : "Replace"}
                       disabled={picking}
-                      onPress={() => void choose("library", index)}
+                      onPress={() => void choose("library", photo.sortOrder)}
                     />
                     <SecondaryButton
                       label="Remove"
