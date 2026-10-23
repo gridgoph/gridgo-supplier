@@ -6,6 +6,7 @@ import {
   loadBoard,
   loadListing,
   removeListing,
+  photoOrderMoved,
   removePhoto,
   reorderPrepSteps,
   applyProductionTimeToAll,
@@ -537,5 +538,19 @@ describe("the production-time question on the wire", () => {
       status: "failed",
       message: "One of your listings changed while this was being applied, so nothing was changed. Try again.",
     });
+  });
+});
+
+describe("photoOrderMoved", () => {
+  const ids = ["a", "b", "c"];
+
+  it("moves a sample one place and keeps the complete list", () => {
+    expect(photoOrderMoved(ids, "b", -1)).toEqual(["b", "a", "c"]);
+    expect(photoOrderMoved(ids, "b", 1)).toEqual(["a", "c", "b"]);
+  });
+
+  it("has no earlier place for the first and no later place for the last", () => {
+    expect(photoOrderMoved(ids, "a", -1)).toBeNull();
+    expect(photoOrderMoved(ids, "c", 1)).toBeNull();
   });
 });

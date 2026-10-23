@@ -26,7 +26,7 @@ import {
   type SpecGroup,
   type SpeedTier,
 } from "@/lib/listings";
-import { productionTimeBody, type ProductionChoice, type ProductionTimeBody, type timeFields } from "@/lib/productionDays";
+import { productionTimeBody, type ProductionChoice, type ProductionTimeBody, type speedTimeFields } from "@/lib/productionDays";
 import { normalizePreview, previewQuery, type ProductionTimePreview } from "@/lib/productionTimePreview";
 import type { PrintLayoutCode } from "@/lib/printLayout";
 import {
@@ -242,8 +242,8 @@ export type ListingPatch = {
   minimumOrderQuantity?: number | null;
   /** Replaced as a set: removing a break removes it. */
   priceTiers?: Listing["priceTiers"];
-  /** Each speed's time written through `timeFields` in `lib/productionDays.ts`. */
-  speedTiers?: (Omit<SpeedTier, "turnaround"> & ReturnType<typeof timeFields<"turnaround">>)[];
+  /** Each speed's time written through `speedTimeFields` in `lib/productionDays.ts`. */
+  speedTiers?: (Omit<SpeedTier, "turnaround"> & ReturnType<typeof speedTimeFields>)[];
   /**
    * The shop's answer to "How long does this take?". GRIDGO refuses it beside
    * the older duration fields or `express`, so a save sends only this.
@@ -584,6 +584,25 @@ export async function removeOption(
 /* --------------------------------------------------------------------------
    Sample photos
    -------------------------------------------------------------------------- */
+
+/**
+ * Move one sample one place earlier or later. The result is the complete id
+ * list, or null at either end. The first has no earlier place and the last
+ * has no later place.
+ */
+export function photoOrderMoved(
+  fileIds: readonly string[],
+  fileId: string,
+  direction: -1 | 1,
+): string[] | null {
+  const index = fileIds.indexOf(fileId);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= fileIds.length) return null;
+  const next = [...fileIds];
+  const [moved] = next.splice(index, 1);
+  next.splice(target, 0, moved);
+  return next;
+}
 
 /**
  * Set the order of a listing's samples. The first one is the board thumbnail.

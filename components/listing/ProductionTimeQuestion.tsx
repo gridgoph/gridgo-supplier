@@ -248,6 +248,7 @@ export function ProductionTimeCheckJump({ listing, onCheck }: { listing: Listing
 export function ProductionTimeMoreOptions({
   choice,
   speedTiers,
+  unitLabel,
   onSpeedTiersChange,
   dayMinutes,
   disabled,
@@ -256,6 +257,7 @@ export function ProductionTimeMoreOptions({
 }: {
   choice: ProductionChoice | null;
   speedTiers: SpeedTier[];
+  unitLabel: string;
   onSpeedTiersChange: (next: SpeedTier[]) => void;
   dayMinutes?: number;
   disabled?: boolean;
@@ -353,7 +355,7 @@ export function ProductionTimeMoreOptions({
             <Text className="text-caption text-text-muted">
               A client sees these as Rush, costs more on dates only a faster option reaches.
             </Text>
-            <SpeedTierEditor tiers={speedTiers} dayMinutes={dayMinutes} onChange={onSpeedTiersChange} />
+            <SpeedTierEditor tiers={speedTiers} unitLabel={unitLabel} dayMinutes={dayMinutes} onChange={onSpeedTiersChange} />
           </View>
         </View>
       ) : null}
@@ -364,6 +366,7 @@ export function ProductionTimeMoreOptions({
 /** The whole production-time section a listing screen draws. */
 export function ProductionTimeSection({
   listing,
+  unitLabel,
   held,
   choice,
   touched,
@@ -384,6 +387,7 @@ export function ProductionTimeSection({
   onChange: (choice: ProductionChoice) => void;
   onKeep?: (held: ProductionChoice) => Promise<void>;
   speedTiers: SpeedTier[];
+  unitLabel: string;
   onSpeedTiersChange: (next: SpeedTier[]) => void;
   disabled?: boolean;
   beforeApply: () => Promise<boolean>;
@@ -417,6 +421,7 @@ export function ProductionTimeSection({
       ) : null}
       <ProductionTimeMoreOptions
         choice={choice}
+        unitLabel={unitLabel}
         speedTiers={speedTiers}
         onSpeedTiersChange={onSpeedTiersChange}
         dayMinutes={dayMinutes}
