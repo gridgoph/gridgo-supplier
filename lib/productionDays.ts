@@ -124,6 +124,18 @@ export function timeFields<P extends string>(
   return fields as Partial<Record<`${P}Days` | `${P}Minutes`, number | null>>;
 }
 
+/** Keep older speeds in exact hours when they exceed today's same-day limit. */
+export function speedTimeFields(
+  time: ProductionTime,
+  dayMinutes: number = DEFAULT_DAY_MINUTES,
+): Partial<Record<"turnaroundDays" | "turnaroundMinutes" | "turnaroundHours", number | null>> {
+  if (time.unit === "hours" && time.minutes >= dayMinutes) {
+    // GRIDGO accepts its legacy hours without rounding them into working days.
+    return { turnaroundHours: time.minutes / 60 };
+  }
+  return timeFields("turnaround", time);
+}
+
 /* --------------------------------------------------------------------------
    Comparing
    -------------------------------------------------------------------------- */

@@ -1,16 +1,18 @@
-import { parseMoney, sanitizeMoneyInput } from "@/lib/money";
+import { formatPhp, moneyInputValue, parseMoney, sanitizeMoneyInput } from "@/lib/money";
 
 describe("sanitizeMoneyInput", () => {
   it("drops anything that is not a digit or a point", () => {
     expect(sanitizeMoneyInput("₱1,200.50 pesos")).toBe("1200.50");
   });
 
-  it("keeps only the first decimal point", () => {
-    expect(sanitizeMoneyInput("12.3.4")).toBe("12.34");
+  it("keeps extra decimal points for validation", () => {
+    expect(parseMoney(sanitizeMoneyInput("12.3.4")).ok).toBe(false);
   });
 
-  it("caps the decimals at two", () => {
-    expect(sanitizeMoneyInput("12.3456")).toBe("12.34");
+  it("refuses extra decimals and oversized amounts without changing their value", () => {
+    expect(sanitizeMoneyInput("12.3456")).toBe("12.3456");
+    expect(parseMoney(sanitizeMoneyInput("12.3456")).ok).toBe(false);
+    expect(parseMoney(sanitizeMoneyInput("100000000000000")).ok).toBe(false);
   });
 
   it("leaves a half-typed amount alone", () => {
@@ -49,5 +51,20 @@ describe("parseMoney", () => {
 
   it("rejects something that is not a number", () => {
     expect(parseMoney(".").ok).toBe(false);
+  });
+});
+
+describe("moneyInputValue", () => {
+  it.each([0, 50, 100000100, Number.MAX_SAFE_INTEGER - 1, Number.MAX_SAFE_INTEGER])(
+    "round trips %i centavos without rounding",
+    (minor) => expect(parseMoney(moneyInputValue(minor))).toEqual({ ok: true, minor }),
+  );
+});
+
+describe("formatPhp", () => {
+  it("shows safe-integer centavos exactly, including negative adjustments", () => {
+    expect(formatPhp(Number.MAX_SAFE_INTEGER)).toBe("₱90,071,992,547,409.91");
+    expect(formatPhp(Number.MAX_SAFE_INTEGER - 1)).toBe("₱90,071,992,547,409.90");
+    expect(formatPhp(-50)).toBe("₱-0.50");
   });
 });

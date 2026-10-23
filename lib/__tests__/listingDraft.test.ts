@@ -300,3 +300,22 @@ describe("colour pricing", () => {
     expect(colourHold(table)).toBeNull();
   });
 });
+
+it("keeps a saved zero price ready after reload", () => {
+  expect(draftFrom({ ...listing, basePriceMinor: 0 }).price).toBe("0.00");
+});
+
+it("preserves legacy hour speeds when another speed is added", () => {
+  const stored = {
+    ...listing,
+    productionDayMinutes: 600,
+    speedTiers: [{ id: "old", label: "Next day", turnaround: sameDay(1440), priceMinor: 50000, surchargeMinor: null }],
+  };
+  const draft = { ...draftFrom(stored), speedTiers: [...stored.speedTiers,
+    { id: "new", label: "Quick", turnaround: sameDay(120), priceMinor: 70050, surchargeMinor: null },
+  ] };
+  const patch = listingSavePatch(draft, 25000, undefined, stored);
+  expect(patch.speedTiers?.[0]).toMatchObject({ turnaroundHours: 24 });
+  expect(patch.speedTiers?.[0]).not.toHaveProperty("turnaroundMinutes");
+  expect(patch.speedTiers?.[1]).toMatchObject({ turnaroundMinutes: 120 });
+});

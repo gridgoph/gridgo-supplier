@@ -120,7 +120,10 @@ describe("wizard gates", () => {
 
   it("accepts a typed price GRIDGO will take", () => {
     expect(priceReady("")).toBe(false);
-    expect(priceReady("0")).toBe(false);
+    expect(priceReady("0")).toBe(true);
+    expect(priceReady("0.50")).toBe(true);
+    expect(priceReady("1000001")).toBe(true);
+    expect(priceReady("10.005")).toBe(false);
     expect(priceReady("450")).toBe(true);
   });
 
@@ -143,7 +146,8 @@ describe("priceBlocker", () => {
   const perPage = { ...draftFrom(listing), pricingUnit: "per_page" as const, pricedByColour: false, printLayouts: ["fit_to_paper" as const] };
 
   it("asks a fixed listing for its one price", () => {
-    expect(priceBlocker(perPage)).toBe("Set your price before it can go on the board.");
+    expect(priceBlocker({ ...perPage, price: "" })).toBe("Set your price before it can go on the board.");
+    expect(priceBlocker(perPage)).toBeNull();
     expect(priceBlocker({ ...perPage, price: "30" })).toBeNull();
   });
 

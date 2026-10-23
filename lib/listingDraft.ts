@@ -12,14 +12,14 @@ import {
   sameColourDraft,
   type ColourDraft,
 } from "@/lib/colourPricing";
-import { parseMoney } from "@/lib/money";
+import { moneyInputValue, parseMoney } from "@/lib/money";
 import { samePrintLayouts, type PrintLayoutCode } from "@/lib/printLayout";
 import {
   choiceFromWindow,
   choiceWindow,
   productionTimeBody,
   sameChoice,
-  timeFields,
+  speedTimeFields,
   timeKey,
   type ProductionChoice,
   type ProductionTime,
@@ -73,7 +73,7 @@ export function draftFrom(listing: Listing): ListingDraft {
   return {
     name: listing.name,
     description: listing.description,
-    price: listing.basePriceMinor ? (listing.basePriceMinor / 100).toFixed(2) : "",
+    price: moneyInputValue(listing.basePriceMinor),
     pricingUnit: listing.pricingUnit,
     packageQty: listing.packageQty,
     measureUnit: listing.measureUnit,
@@ -262,7 +262,7 @@ export function listingSavePatch(
     priceTiers: asksQuantity(working.pricingUnit) ? working.priceTiers : [],
     speedTiers: working.speedTiers.map(({ turnaround, ...tier }) => ({
       ...tier,
-      ...timeFields("turnaround", turnaround),
+      ...speedTimeFields(turnaround, baseline?.productionDayMinutes ?? undefined),
     })),
     ...(working.productionTime ? { productionTime: productionTimeBody(working.productionTime) } : {}),
     subcategoryCode: working.subcategoryCode,

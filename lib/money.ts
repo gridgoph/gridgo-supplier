@@ -11,22 +11,21 @@ import { CATALOG_MONEY_INVALID, CATALOG_MONEY_MAX_MINOR, CATALOG_MONEY_OVER } fr
 
 /** Format PHP minor units (centavos) for display. */
 export function formatPhp(minor: number): string {
-  return `₱${(minor / 100).toLocaleString("en-PH", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  const cents = BigInt(Math.abs(minor));
+  const whole = Number(cents / 100n).toLocaleString("en-PH");
+  const fraction = String(cents % 100n).padStart(2, "0");
+  return `₱${minor < 0 ? "-" : ""}${whole}.${fraction}`;
 }
 
-/**
- * Digits, at most one decimal point, at most two decimal places.
- * Fourteen whole digits is the longest peso amount whose centavos still fit
- * in the catalogue's safe integer.
- */
+/** Remove presentation characters, keeping the amount intact for validation. */
 export function sanitizeMoneyInput(text: string): string {
-  const cleaned = text.replace(/[^0-9.]/g, "");
-  const [whole, ...rest] = cleaned.split(".");
-  if (!rest.length) return whole.slice(0, 14);
-  return `${whole.slice(0, 14)}.${rest.join("").slice(0, 2)}`;
+  return text.replace(/[^0-9.]/g, "");
+}
+
+/** Exact peso text for editing; dividing a large centavo integer loses precision. */
+export function moneyInputValue(minor: number): string {
+  const cents = BigInt(minor);
+  return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
 }
 
 /**
