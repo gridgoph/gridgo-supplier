@@ -19,7 +19,7 @@ export function SecondaryButton({ label, accessibilityLabel, onPress, disabled }
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: Boolean(disabled) }}
       className={disabled ? "gg-btn-secondary gg-disabled" : "gg-btn-secondary"}
     >
