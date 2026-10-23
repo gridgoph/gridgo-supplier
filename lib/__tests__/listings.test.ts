@@ -5,6 +5,7 @@ import {
   boardPrompt,
   boardStanding,
   boardTargets,
+  editorGuidance,
   fromPriceMinor,
   hasRequiredSpec,
   measurementKind,
@@ -720,4 +721,10 @@ describe("listing review", () => {
     expect(standing.label).toBe("Live");
     expect(standing.revision).toBeNull();
   });
+});
+
+it("does not ask for a price when the stored fixed price is zero", () => {
+  expect(editorGuidance({ ...READY, basePriceMinor: 0 }, NOTHING_INHERITED)).not.toContain(
+    "Set your price before it can go on the board.",
+  );
 });

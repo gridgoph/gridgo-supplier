@@ -1015,7 +1015,7 @@ export function editorGuidance(listing: Listing, context: BoardContext): string[
   }
   if (listing.pricedByColour) {
     if (lowestSheetRate(listing.colourPricing ?? null) == null) out.push(COLOUR_PRICES_NEEDED);
-  } else if (listing.basePriceMinor === 0) {
+  } else if (!Number.isSafeInteger(listing.basePriceMinor) || listing.basePriceMinor < 0) {
     out.push(PRICE_NEEDED);
   }
   if (listing.pricingUnit === "per_package" && (listing.packageQty ?? 0) < 2) {
