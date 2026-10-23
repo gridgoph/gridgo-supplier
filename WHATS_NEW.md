@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.341 (Improvement)
+
+- Listing prices keep exact centavos, and changing production time preserves your bulk breaks and speeds.
+- Move any sample photo earlier or later to arrange the order clients see.
+
 ## 1.0.332 (New feature)
 
 - Deleting an account on iPhone now also disconnects Sign in with Apple from the app.
