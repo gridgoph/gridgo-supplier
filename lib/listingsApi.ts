@@ -586,6 +586,25 @@ export async function removeOption(
    -------------------------------------------------------------------------- */
 
 /**
+ * Move one sample one place earlier or later. The result is the complete id
+ * list, or null at either end. The first has no earlier place and the last
+ * has no later place.
+ */
+export function photoOrderMoved(
+  fileIds: readonly string[],
+  fileId: string,
+  direction: -1 | 1,
+): string[] | null {
+  const index = fileIds.indexOf(fileId);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= fileIds.length) return null;
+  const next = [...fileIds];
+  const [moved] = next.splice(index, 1);
+  next.splice(target, 0, moved);
+  return next;
+}
+
+/**
  * Set the order of a listing's samples. The first one is the board thumbnail.
  *
  * The ids are the samples that stay, in board order. A shorter list is how a
