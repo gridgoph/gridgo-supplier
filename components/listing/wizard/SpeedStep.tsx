@@ -70,6 +70,7 @@ export function SpeedStep({ listing, working, context, onChange, busy, beforeApp
       >
         <ProductionTimeSection
           listing={listing}
+          unitLabel={unitLine(merged)}
           choice={wizardProductionTime(listing, working, context)}
           touched={working.productionTime != null}
           onChange={(choice) => onChange(withProductionWindow(working, choice))}

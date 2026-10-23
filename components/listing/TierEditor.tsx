@@ -176,11 +176,13 @@ export function SpeedTierEditor({
   tiers,
   onChange,
   dayMinutes,
+  unitLabel,
 }: {
   tiers: SpeedTier[];
   onChange: (next: SpeedTier[]) => void;
   /** The shop's working day, which a same-day speed must stay under. */
   dayMinutes?: number;
+  unitLabel: string;
 }) {
   const [label, setLabel] = useState("");
   const [time, setTime] = useState<ProductionTime>(workingDays(1));
@@ -211,8 +213,7 @@ export function SpeedTierEditor({
         id: `speed_${timeKey(time)}`,
         label: label.trim(),
         turnaround: time,
-        // A speed the shop prices is a price for the whole job at that speed,
-        // not a fee on top and not an Express surcharge.
+        // A priced speed replaces the listing rate for the same pricing unit.
         priceMinor: money.minor,
         surchargeMinor: null,
       },
@@ -225,8 +226,8 @@ export function SpeedTierEditor({
   return (
     <View className="gap-2">
       <Text className="text-caption text-text-muted">
-        Faster, for more — optional. A client&rsquo;s date picks one of these, so each is a
-        price for the whole job at that speed, not a fee on top.
+        Faster, for more — optional. A client&rsquo;s date picks one of these. Set your price
+        {" "}{unitLabel} at each speed. This replaces your usual rate.
       </Text>
 
       {sorted.map((tier) => (
@@ -239,7 +240,7 @@ export function SpeedTierEditor({
           <Text className="text-body-lg text-text-primary font-medium">
             {tier.priceMinor != null ? api.formatPhp(tier.priceMinor) : `+${api.formatPhp(tier.surchargeMinor ?? 0)}`}{" "}
             <Text className="text-caption text-text-muted">
-              {timeLabel(tier.turnaround)} · {tier.priceMinor != null ? "Whole-job price" : "Fee on top"}
+              {timeLabel(tier.turnaround)} · {tier.priceMinor != null ? unitLabel : "Fee on top"}
             </Text>
           </Text>
         </RowShell>
@@ -268,6 +269,7 @@ export function SpeedTierEditor({
           <Text className="text-caption text-text-muted">{SPEED_CAP}</Text>
         ) : (
           <>
+        <Text className="text-caption text-text-secondary">Price {unitLabel} at this speed</Text>
         <MoneyField
           value={price}
           onChange={(value) => {

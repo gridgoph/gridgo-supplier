@@ -827,6 +827,7 @@ export default function ListingScreen() {
           >
             <ProductionTimeSection
               listing={listing}
+              unitLabel={unitLine(merged)}
               held={shownProductionTime(listing, { productionTime: null }, context.inheritedTurnaround)}
               choice={productionTime}
               touched={working.productionTime != null}
