@@ -1,10 +1,12 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
 const os = require("os");
+const path = require("path");
 const { getDefaultConfig } = require("expo/metro-config");
 const { withNativewind } = require("nativewind/metro");
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const base = getDefaultConfig(__dirname);
+base.projectRoot = __dirname;
 
 const config = withNativewind(base, {
   // The whole theme is driven by :root variables that carry a
@@ -12,6 +14,7 @@ const config = withNativewind(base, {
   // token to its Light value and break theme switching for that token.
   inlineVariables: false,
 });
+config.projectRoot = __dirname;
 
 /**
  * Resolve zustand through its CommonJS build on web.
@@ -35,7 +38,12 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       filePath: require.resolve(moduleName, { paths: [__dirname] }),
     };
   }
-  return next(context, moduleName, platform);
+  // A parent lockfile can make Expo miss this app's tsconfig paths. Anchor
+  // aliases here, then let Metro choose platform files, indexes and assets.
+  const request = moduleName.startsWith("@/")
+    ? path.resolve(__dirname, moduleName.slice(2))
+    : moduleName;
+  return next(context, request, platform);
 };
 
 // Windows caps a process around 512 open handles. Metro's cache and transform
