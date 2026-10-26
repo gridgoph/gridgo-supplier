@@ -1,10 +1,13 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
+const fs = require("fs");
 const os = require("os");
+const path = require("path");
 const { getDefaultConfig } = require("expo/metro-config");
 const { withNativewind } = require("nativewind/metro");
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const base = getDefaultConfig(__dirname);
+base.projectRoot = __dirname;
 
 const config = withNativewind(base, {
   // The whole theme is driven by :root variables that carry a
@@ -12,6 +15,7 @@ const config = withNativewind(base, {
   // token to its Light value and break theme switching for that token.
   inlineVariables: false,
 });
+config.projectRoot = __dirname;
 
 /**
  * Resolve zustand through its CommonJS build on web.
@@ -28,6 +32,8 @@ const config = withNativewind(base, {
 const wrapped = config.resolver.resolveRequest;
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const aliased = resolveAtAlias(moduleName);
+  if (aliased) return aliased;
   const next = wrapped ?? context.resolveRequest;
   if (platform === "web" && /^zustand($|\/)/.test(moduleName)) {
     return {
@@ -59,6 +65,39 @@ if (process.platform === "win32") {
   const cpus = os.cpus().length || 2;
   config.maxWorkers = Math.min(config.maxWorkers ?? cpus, 2);
   config.transformer.unstable_workerThreads = false;
+}
+
+/**
+ * A parent `package-lock.json` under C:\Mobile_App makes Expo treat this as a
+ * workspace. Web then fails to apply `tsconfig` `@/*` paths and looks for
+ * `@/components/...` in `node_modules`. Map the alias onto this app's files.
+ */
+function resolveAtAlias(moduleName) {
+  if (!moduleName.startsWith("@/")) return null;
+  const basePath = path.resolve(__dirname, moduleName.slice(2));
+  const candidates = [
+    `${basePath}.web.tsx`,
+    `${basePath}.web.ts`,
+    `${basePath}.tsx`,
+    `${basePath}.ts`,
+    `${basePath}.jsx`,
+    `${basePath}.js`,
+    `${basePath}.css`,
+    basePath,
+    path.join(basePath, "index.tsx"),
+    path.join(basePath, "index.ts"),
+    path.join(basePath, "index.js"),
+  ];
+  for (const filePath of candidates) {
+    try {
+      if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+        return { type: "sourceFile", filePath };
+      }
+    } catch {
+      /* A missing candidate is not an error; try the next extension. */
+    }
+  }
+  return null;
 }
 
 function createLimiter(concurrency) {
