@@ -1,5 +1,4 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
-const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { getDefaultConfig } = require("expo/metro-config");
@@ -32,8 +31,6 @@ config.projectRoot = __dirname;
 const wrapped = config.resolver.resolveRequest;
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  const aliased = resolveAtAlias(moduleName);
-  if (aliased) return aliased;
   const next = wrapped ?? context.resolveRequest;
   if (platform === "web" && /^zustand($|\/)/.test(moduleName)) {
     return {
@@ -41,7 +38,12 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       filePath: require.resolve(moduleName, { paths: [__dirname] }),
     };
   }
-  return next(context, moduleName, platform);
+  // A parent lockfile can make Expo miss this app's tsconfig paths. Anchor
+  // aliases here, then let Metro choose platform files, indexes and assets.
+  const request = moduleName.startsWith("@/")
+    ? path.resolve(__dirname, moduleName.slice(2))
+    : moduleName;
+  return next(context, request, platform);
 };
 
 // Windows caps a process around 512 open handles. Metro's cache and transform
@@ -65,39 +67,6 @@ if (process.platform === "win32") {
   const cpus = os.cpus().length || 2;
   config.maxWorkers = Math.min(config.maxWorkers ?? cpus, 2);
   config.transformer.unstable_workerThreads = false;
-}
-
-/**
- * A parent `package-lock.json` under C:\Mobile_App makes Expo treat this as a
- * workspace. Web then fails to apply `tsconfig` `@/*` paths and looks for
- * `@/components/...` in `node_modules`. Map the alias onto this app's files.
- */
-function resolveAtAlias(moduleName) {
-  if (!moduleName.startsWith("@/")) return null;
-  const basePath = path.resolve(__dirname, moduleName.slice(2));
-  const candidates = [
-    `${basePath}.web.tsx`,
-    `${basePath}.web.ts`,
-    `${basePath}.tsx`,
-    `${basePath}.ts`,
-    `${basePath}.jsx`,
-    `${basePath}.js`,
-    `${basePath}.css`,
-    basePath,
-    path.join(basePath, "index.tsx"),
-    path.join(basePath, "index.ts"),
-    path.join(basePath, "index.js"),
-  ];
-  for (const filePath of candidates) {
-    try {
-      if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-        return { type: "sourceFile", filePath };
-      }
-    } catch {
-      /* A missing candidate is not an error; try the next extension. */
-    }
-  }
-  return null;
 }
 
 function createLimiter(concurrency) {
