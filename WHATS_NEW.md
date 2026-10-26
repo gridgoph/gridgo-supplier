@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.347 (Fix)
+
+- Maps work again on phones, with Apple sign-in and push notifications restored on iPhone.
+
 ## 1.0.341 (Improvement)
 
 - Listing prices keep exact centavos, and changing production time preserves your bulk breaks and speeds.
