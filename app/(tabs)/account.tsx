@@ -19,6 +19,7 @@ import { WHATS_NEW_HISTORY_COPY } from "@/lib/whatsNewHistory";
 import { useThemeColors } from "@/hooks/useTheme";
 import { askConfirm } from "@/store/sheets";
 import { isMatchable, useSession } from "@/store/session";
+import { useShopContact } from "@/store/shopContact";
 import { useShopHours } from "@/store/shopHours";
 import { useTour } from "@/store/tour";
 
@@ -44,7 +45,12 @@ export default function AccountScreen() {
   const { user: clerkUser } = useUser();
   const colors = useThemeColors();
   const approved = isMatchable(user);
-  const personName = clerkDisplayName(clerkUser) || user?.name || "—";
+  // The card is the way into "Your shop details", so it names the shop's
+  // contact person from there; the sign-in's own name is the fallback until
+  // that record has been read (gridgo-supplier#217).
+  const contactName = useShopContact((s) => s.contactName);
+  const loadContact = useShopContact((s) => s.load);
+  const personName = contactName || clerkDisplayName(clerkUser) || user?.name || "—";
 
   /*
    * Read the account again every time this screen comes back into view.
@@ -53,12 +59,14 @@ export default function AccountScreen() {
    * one tap away — so the moment a shop is most likely to look at this card is
    * the moment straight after changing it. Trusting whatever the session held
    * on the way out is how a shop renames itself, comes back, and finds the old
-   * name still sitting here.
+   * name still sitting here. The contact person is on the shop's own record,
+   * so it is read alongside.
    */
   useFocusEffect(
     useCallback(() => {
       void refresh();
-    }, [refresh]),
+      void loadContact();
+    }, [loadContact, refresh]),
   );
 
   /*

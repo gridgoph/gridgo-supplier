@@ -36,6 +36,7 @@ import {
   type ShopDetailProblems,
 } from "@/lib/shopProfile";
 import { useSession } from "@/store/session";
+import { useShopContact } from "@/store/shopContact";
 import { useThemeColors } from "@/hooks/useTheme";
 
 /**
@@ -167,6 +168,8 @@ export default function ShopDetailsScreen() {
       // Adopt the version GRIDGO answered with, so a second save from this
       // screen builds on the record it just wrote rather than the one before.
       setDetails({ profile: outcome.value, draft: draftFromProfile(outcome.value) });
+      // Account names the contact person from this record, not the session.
+      useShopContact.getState().adopt(outcome.value);
       // Account reads the shop's name from the session, so it has to be
       // re-read before this screen closes over it.
       await refresh();
