@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.351 (Fix)
+
+- Sign-up states the real 15-character password rule, shop hours time lists scroll, and Account shows your contact.
+
 ## 1.0.347 (Fix)
 
 - Maps work again on phones, with Apple sign-in and push notifications restored on iPhone.
