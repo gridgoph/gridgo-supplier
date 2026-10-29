@@ -48,15 +48,15 @@ describe("app.json iOS", () => {
     for (const value of strings) expect(value).toMatch(/^GRIDGO /);
   });
 
-  it("keeps the call microphone and leaves expo-audio's Android settings alone", () => {
+  it("keeps the call microphone and disables background playback on both platforms", () => {
     // A shop still talks to the rider on an in-app call. Background audio is
-    // taken out on iOS only (plugins/withIosStoreBuild.js), because
-    // enableBackgroundPlayback: false would also change the Android build.
+    // disabled in the native config too, so Android declares no media-playback
+    // foreground service. Foreground calls keep their microphone permission.
     const audio = appJson.expo.plugins.find(
       (entry) => Array.isArray(entry) && entry[0] === "expo-audio",
     ) as [string, Record<string, unknown>];
     expect(audio[1].microphonePermission).toMatch(/^GRIDGO uses the microphone/);
-    expect(audio[1]).not.toHaveProperty("enableBackgroundPlayback");
+    expect(audio[1].enableBackgroundPlayback).toBe(false);
   });
 
   it("registers Sign in with Apple's plugin", () => {
