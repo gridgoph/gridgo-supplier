@@ -14,10 +14,10 @@ import { PasswordField } from "@/components/controls/PasswordField";
 import {
   changeSignInPassword,
   EMPTY_PASSWORD_DRAFT,
-  MIN_PASSWORD_LENGTH,
   passwordProblems,
   PASSWORD_CHANGED,
   PASSWORD_NO_PASSWORD_SET,
+  PASSWORD_RULE,
   PASSWORD_WRONG_CURRENT,
   type PasswordDraft,
   type PasswordField as PasswordFieldName,
@@ -188,7 +188,7 @@ export default function ChangePasswordScreen() {
 
           <FieldShell
             label="New password"
-            hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+            hint={PASSWORD_RULE}
             error={fieldError("next")}
           >
             <PasswordField

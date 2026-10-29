@@ -14,7 +14,7 @@ function draft(partial: Partial<SignupDraft> = {}): SignupDraft {
     contactName: "Ben Santos",
     email: "ben@printright.ph",
     phone: "0917 123 4567",
-    password: "at-least-8",
+    password: "at-least-fifteen",
     pin: { lat: 7.0644, lng: 125.6085, label: "C.M. Recto St, Poblacion, Davao City" },
     categoryCodes: ["marketing_collateral"],
     ...partial,

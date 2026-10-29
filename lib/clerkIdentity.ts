@@ -3,7 +3,7 @@ import * as ImagePicker from "expo-image-picker";
 
 import { clerkErrorCode, clerkErrorMessage } from "@/lib/clerk";
 import { isEmailish } from "@/lib/onboardingSteps";
-import { MIN_PASSWORD_LENGTH } from "@/lib/signup";
+import { PASSWORD_RULE, passwordLengthProblem } from "@/lib/signup";
 import { canPickOnWeb, pickFileOnWeb } from "@/lib/webFilePick";
 
 /**
@@ -316,9 +316,9 @@ export const PASSWORD_CHANGED =
  * What still stops the change, per field. Nothing here costs a round trip.
  *
  * The new password is held to the same bar the shop met when it opened the
- * account — at least eight characters — and Clerk's own refusals (a pwned
- * password, a complexity rule this instance adds) land afterwards as the
- * sentence Clerk sent, never silently.
+ * account — Clerk's own minimum, `passwordLengthProblem` — and Clerk's other
+ * refusals (a pwned password, a complexity rule this instance adds) land
+ * afterwards as the sentence Clerk sent, never silently.
  */
 export function passwordProblems(draft: PasswordDraft): Partial<Record<PasswordField, string>> {
   const problems: Partial<Record<PasswordField, string>> = {};
@@ -327,10 +327,9 @@ export function passwordProblems(draft: PasswordDraft): Partial<Record<PasswordF
     problems.current = "Enter the password you sign in with now.";
   }
 
-  if (!draft.next) {
-    problems.next = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
-  } else if (draft.next.length < MIN_PASSWORD_LENGTH) {
-    problems.next = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+  const tooShort = passwordLengthProblem(draft.next);
+  if (tooShort) {
+    problems.next = tooShort;
   } else if (draft.next === draft.current) {
     problems.next = "This is the password you already have. Choose a different one.";
   }
@@ -417,4 +416,4 @@ function isNewPasswordRejected(error: unknown): boolean {
 }
 
 /** Restated where the screen needs it, so the rule is written in one place. */
-export { MIN_PASSWORD_LENGTH };
+export { PASSWORD_RULE };

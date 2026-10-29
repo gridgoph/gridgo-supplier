@@ -6,6 +6,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 import ShopDetailsScreen from "@/app/shop-details";
 import { ApiError, getSupplierProfile, updateSupplierProfile, type SupplierProfile } from "@/lib/api";
 import { useSession } from "@/store/session";
+import { useShopContact } from "@/store/shopContact";
 
 jest.mock("@/lib/clerkIdentity", () => ({
   ...jest.requireActual("@/lib/clerkIdentity"),
@@ -216,6 +217,29 @@ describe("the shop's own details", () => {
     // Account reads the shop's name from the session, so it has to be re-read.
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    await view.unmount();
+  });
+
+  /**
+   * gridgo-supplier#217: the contact person is on the shop's record, not the
+   * session, so the saved one is handed to Account before this screen closes.
+   */
+  it("hands Account the saved contact person before going back", async () => {
+    load();
+    useShopContact.getState().reset();
+    (updateSupplierProfile as jest.Mock).mockResolvedValue({
+      ...PROFILE,
+      contactName: "Ana Reyes",
+      version: 4,
+    });
+
+    const view = await render(<ShopDetailsScreen />);
+    await fireEvent.changeText(await screen.findByLabelText("Contact person"), "Ana Reyes");
+    await fireEvent.press(screen.getByLabelText("Save changes"));
+
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    expect(updateSupplierProfile).toHaveBeenCalledWith(3, { contactName: "Ana Reyes" });
+    expect(useShopContact.getState().contactName).toBe("Ana Reyes");
     await view.unmount();
   });
 

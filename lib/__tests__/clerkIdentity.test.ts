@@ -261,34 +261,34 @@ describe("when GRIDGO keeps its own address", () => {
 
 describe("passwordProblems", () => {
   it("passes a real change", () => {
-    const draft = { current: "oldpassword", next: "newpassword", confirm: "newpassword" };
+    const draft = { current: "old-shop-password-1", next: "new-shop-password-2", confirm: "new-shop-password-2" };
     expect(passwordProblems(draft)).toEqual({});
     expect(passwordReady(draft)).toBe(true);
   });
 
   it("asks for the current password before anything else", () => {
     expect(
-      passwordProblems({ current: "", next: "newpassword", confirm: "newpassword" }).current,
+      passwordProblems({ current: "", next: "new-shop-password-2", confirm: "new-shop-password-2" }).current,
     ).toMatch(/sign in with now/i);
   });
 
   it("holds the new one to apply's own bar, in apply's own words", () => {
     expect(
-      passwordProblems({ current: "oldpassword", next: "short", confirm: "short" }).next,
-    ).toMatch(/at least 8 characters/i);
+      passwordProblems({ current: "old-shop-password-1", next: "short", confirm: "short" }).next,
+    ).toMatch(/at least 15 characters/i);
   });
 
   it("refuses the password the shop already has", () => {
     expect(
-      passwordProblems({ current: "samepassword", next: "samepassword", confirm: "samepassword" })
+      passwordProblems({ current: "same-shop-password", next: "same-shop-password", confirm: "same-shop-password" })
         .next,
     ).toMatch(/already have/i);
   });
 
   it("catches a typo in the confirmation, on the confirmation", () => {
     const problems = passwordProblems({
-      current: "oldpassword",
-      next: "newpassword",
+      current: "old-shop-password-1",
+      next: "new-shop-password-2",
       confirm: "newpasswrod",
     });
     expect(problems.confirm).toMatch(/do not match/i);
@@ -297,14 +297,14 @@ describe("passwordProblems", () => {
 });
 
 describe("changeSignInPassword", () => {
-  const draft = { current: "oldpassword", next: "newpassword", confirm: "newpassword" };
+  const draft = { current: "old-shop-password-1", next: "new-shop-password-2", confirm: "new-shop-password-2" };
 
   it("signs every other session out, and does not offer not to", async () => {
     const user = { updatePassword: jest.fn(async () => undefined) };
     expect(await changeSignInPassword(user, draft)).toEqual({ status: "ok" });
     expect(user.updatePassword).toHaveBeenCalledWith({
-      currentPassword: "oldpassword",
-      newPassword: "newpassword",
+      currentPassword: "old-shop-password-1",
+      newPassword: "new-shop-password-2",
       signOutOfOtherSessions: true,
     });
   });

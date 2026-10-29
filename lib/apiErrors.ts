@@ -1,3 +1,5 @@
+import { MIN_PASSWORD_LENGTH } from "@/lib/signup";
+
 /** Shared with the transport without importing it back into its error helpers. */
 export class ApiError extends Error {
   status: number;
@@ -281,8 +283,7 @@ const MESSAGES: Record<string, string> = {
     "This GRIDGO is not taking public shop applications. Ask Operations for an invitation link.",
   invalid_signup:
     "Some required details are missing or too short. Check every field, then try again.",
-  invalid_password:
-    "Choose a password of at least 8 characters, then try again.",
+  invalid_password: `Choose a password of at least ${MIN_PASSWORD_LENGTH} characters, then try again.`,
   invalid_email: "Enter a working email address — GRIDGO sends your job alerts to it.",
   invalid_phone: "Enter a mobile number GRIDGO and the rider can reach you on.",
   invalid_shop_location:

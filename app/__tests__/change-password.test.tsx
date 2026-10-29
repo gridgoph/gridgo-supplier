@@ -58,16 +58,16 @@ describe("changing the sign-in password", () => {
     expect(screen.getByLabelText("Show New password")).toBeTruthy();
     expect(screen.getByLabelText("Show Confirm new password")).toBeTruthy();
 
-    await type("Current password", "oldpassword");
-    await type("New password", "newpassword");
-    await type("Confirm new password", "newpassword");
+    await type("Current password", "old-shop-password-1");
+    await type("New password", "new-shop-password-2");
+    await type("Confirm new password", "new-shop-password-2");
 
     fireEvent.press(screen.getByText("Change password"));
 
     await waitFor(() =>
       expect(mockUpdatePassword).toHaveBeenCalledWith({
-        currentPassword: "oldpassword",
-        newPassword: "newpassword",
+        currentPassword: "old-shop-password-1",
+        newPassword: "new-shop-password-2",
         signOutOfOtherSessions: true,
       }),
     );

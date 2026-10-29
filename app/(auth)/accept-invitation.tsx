@@ -12,6 +12,7 @@ import { FieldShell } from "@/components/controls/FieldShell";
 import { PasswordField } from "@/components/controls/PasswordField";
 import { TextField } from "@/components/controls/TextField";
 import { clerkErrorMessage } from "@/lib/clerk";
+import { PASSWORD_RULE, passwordLengthProblem } from "@/lib/signup";
 
 export default function AcceptInvitationScreen() {
   const params = useLocalSearchParams<{ __clerk_ticket?: string | string[] }>();
@@ -22,6 +23,7 @@ export default function AcceptInvitationScreen() {
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [checkedPassword, setCheckedPassword] = useState(false);
 
   if (!ticket) {
     return (
@@ -45,6 +47,8 @@ export default function AcceptInvitationScreen() {
 
   async function accept() {
     if (!ticket || !name.trim() || !password) return;
+    setCheckedPassword(true);
+    if (passwordLengthProblem(password)) return;
     if (password !== confirmation) {
       setProblem("The two passwords do not match.");
       return;
@@ -117,12 +121,16 @@ export default function AcceptInvitationScreen() {
               returnKeyType="next"
             />
           </FieldShell>
-          <FieldShell label="Choose a password">
+          <FieldShell
+            label="Choose a password"
+            hint={PASSWORD_RULE}
+            error={checkedPassword ? passwordLengthProblem(password) : null}
+          >
             <PasswordField
               value={password}
               onChange={setPassword}
               kind="new-password"
-              placeholder="At least 8 characters"
+              placeholder="Choose a password"
               accessibilityLabel="Choose a password"
               returnKeyType="next"
             />
