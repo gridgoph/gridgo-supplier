@@ -11,6 +11,7 @@ import { PasswordField } from "@/components/controls/PasswordField";
 import { TextField } from "@/components/controls/TextField";
 import { WHY_WE_ASK } from "@/lib/legal";
 import { hasProblems, shopStepProblems, stepAt } from "@/lib/onboardingSteps";
+import { PASSWORD_RULE } from "@/lib/signup";
 import { useSignupDraft } from "@/store/signupDraft";
 
 /**
@@ -123,7 +124,7 @@ export default function ShopIdentityStep() {
       {isSignedIn ? null : (
         <FieldShell
           label="Password"
-          hint="At least 8 characters. This is the only thing GRIDGO does not keep while you finish signing up."
+          hint={`${PASSWORD_RULE} This is the only thing GRIDGO does not keep while you finish signing up.`}
           error={problem("password")}
         >
           <PasswordField

@@ -13,6 +13,7 @@ import { PasswordField } from "@/components/controls/PasswordField";
 import { TextField } from "@/components/controls/TextField";
 import { enterAfterClerkSession, hrefAfterClerkAuth, prepareApplyDraft } from "@/lib/afterClerkAuth";
 import { clerkErrorMessage, type ClerkGetToken } from "@/lib/clerk";
+import { PASSWORD_RULE, passwordLengthProblem } from "@/lib/signup";
 
 type Step = "email" | "code" | "password";
 
@@ -26,6 +27,7 @@ export default function RecoverPasswordScreen() {
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [checkedPassword, setCheckedPassword] = useState(false);
 
   async function sendCode() {
     if (!email.trim()) return;
@@ -57,6 +59,8 @@ export default function RecoverPasswordScreen() {
 
   async function savePassword() {
     if (!password) return;
+    setCheckedPassword(true);
+    if (passwordLengthProblem(password)) return;
     if (password !== confirmation) {
       setProblem("The two passwords do not match.");
       return;
@@ -124,12 +128,16 @@ export default function RecoverPasswordScreen() {
                 </FieldShell>
               ) : (
                 <>
-                  <FieldShell label="New password">
+                  <FieldShell
+                    label="New password"
+                    hint={PASSWORD_RULE}
+                    error={checkedPassword ? passwordLengthProblem(password) : null}
+                  >
                     <PasswordField
                       value={password}
                       onChange={setPassword}
                       kind="new-password"
-                      placeholder="At least 8 characters"
+                      placeholder="Choose a new password"
                       accessibilityLabel="New password"
                     />
                   </FieldShell>

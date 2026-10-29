@@ -17,7 +17,7 @@ function draft(partial: Partial<SignupDraft> = {}): SignupDraft {
     contactName: "Ben Santos",
     email: "ben@printright.ph",
     phone: "0917 123 4567",
-    password: "at-least-8",
+    password: "at-least-fifteen",
     pin: { lat: 7.0644, lng: 125.6085, label: "C.M. Recto St, Davao City" },
     categoryCodes: ["marketing_collateral"],
     ...partial,
@@ -48,8 +48,13 @@ describe("what each step still needs", () => {
   });
 
   it("rejects a password the platform would reject anyway, before sending it", () => {
-    expect(shopStepProblems(draft({ password: "short" })).password).toContain("8");
-    expect(shopStepProblems(draft({ password: "12345678" })).password).toBeUndefined();
+    // Clerk's production minimum is 15 (gridgo-supplier#215): eight used to
+    // pass here and fail at "Send my application".
+    expect(shopStepProblems(draft({ password: "12345678" })).password).toBe(
+      "Use at least 15 characters.",
+    );
+    expect(shopStepProblems(draft({ password: "a".repeat(14) })).password).toBeTruthy();
+    expect(shopStepProblems(draft({ password: "a".repeat(15) })).password).toBeUndefined();
   });
 
   it("catches an email typo without inventing a rule the platform does not have", () => {

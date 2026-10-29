@@ -1,6 +1,6 @@
 import type { SignupDraft } from "@/store/signupDraft";
 import { isPlaced, pinProblem } from "@/lib/shopLocation";
-import { MIN_PASSWORD_LENGTH } from "@/lib/signup";
+import { passwordLengthProblem } from "@/lib/signup";
 
 /**
  * Opening a shop account, as a sequence rather than one long form.
@@ -101,9 +101,8 @@ export function shopStepProblems(draft: SignupDraft, options?: ApplyOptions): St
   if (!isPhoneish(draft.phone)) {
     problems.phone = "Enter a mobile number GRIDGO and the rider can reach you on.";
   }
-  if (!options?.clerkSession && draft.password.length < MIN_PASSWORD_LENGTH) {
-    problems.password = `Choose a password of at least ${MIN_PASSWORD_LENGTH} characters.`;
-  }
+  const passwordProblem = options?.clerkSession ? null : passwordLengthProblem(draft.password);
+  if (passwordProblem) problems.password = passwordProblem;
   return problems;
 }
 
