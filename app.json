@@ -39,6 +39,7 @@
       [
         "expo-audio",
         {
+          "enableBackgroundPlayback": false,
           "microphonePermission": "GRIDGO uses the microphone only while you are on a call with the rider collecting a job. Calls are never recorded."
         }
       ],
