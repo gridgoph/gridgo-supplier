@@ -1,6 +1,7 @@
 import { useAlertsStore } from "@/store/alerts";
 import { useToasts } from "@/store/toasts";
 import { useAccountDeletion } from "@/store/accountDeletion";
+import { useShopContact } from "@/store/shopContact";
 import { useShopHours } from "@/store/shopHours";
 import { afterShopPlanLoads, useShopPlan } from "@/store/shopPlan";
 import { usePrivacyRequests } from "@/store/privacyRequests";
@@ -385,6 +386,7 @@ useSession.subscribe((state, previous) => {
   if (next) useSignInNotice.getState().clear();
   else useSignInNotice.getState().forgetHeld();
   useShopHours.getState().reset();
+  useShopContact.getState().reset();
   // Phone-only closures carry no account. They leave with the shop that was
   // signed in, and the next shop claims only what is left unclaimed.
   afterShopPlanLoads(() => {

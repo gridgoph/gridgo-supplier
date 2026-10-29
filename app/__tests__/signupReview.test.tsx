@@ -126,7 +126,7 @@ describe("signup verify then enroll", () => {
         contactName: "Ben Santos",
         email: "shop@example.com",
         phone: "09171234567",
-        password: "secretpass",
+        password: "secret-shop-pass-15",
         pin: { lat: 7.06, lng: 125.6, label: "Davao" },
         categoryCodes: ["marketing_collateral"],
         enrollKey: "supplier-enroll-test",

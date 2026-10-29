@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 /**
  * Expo Router runs a screen's focus effect every time it comes back into view.
@@ -42,11 +42,13 @@ jest.mock("react-native-safe-area-context", () => {
 jest.mock("@/lib/api", () => ({
   ...jest.requireActual("@/lib/api"),
   me: jest.fn(),
+  getSupplierProfile: jest.fn(),
 }));
 
 import AccountScreen from "@/app/(tabs)/account";
-import { me } from "@/lib/api";
+import { getSupplierProfile, me } from "@/lib/api";
 import { useSession } from "@/store/session";
+import { useShopContact } from "@/store/shopContact";
 import { useTour } from "@/store/tour";
 import { router } from "expo-router";
 
@@ -71,6 +73,8 @@ describe("the shop's account", () => {
     jest.clearAllMocks();
     focusCallbacks.length = 0;
     (me as jest.Mock).mockResolvedValue(shop);
+    (getSupplierProfile as jest.Mock).mockResolvedValue({ contactName: "Ben Santos" });
+    useShopContact.getState().reset();
     useSession.setState({
       user: shop,
       loading: false,
@@ -132,6 +136,38 @@ describe("the shop's account", () => {
    * the screen that corrects it, so coming back is exactly when it must ask
    * GRIDGO again rather than redraw what the session happened to be holding.
    */
+  /**
+   * gridgo-supplier#217: the contact person was changed in "Your shop details"
+   * and this card kept the name from sign-up, because it read the sign-in's
+   * name — which saving the contact person never changes.
+   */
+  it("names the saved contact person, not the sign-in's name, after a save", async () => {
+    view = await render(<AccountScreen />);
+    expect(await screen.findByText("Ben Santos")).toBeTruthy();
+
+    // What Shop details does on a save, and what GRIDGO answers from then on.
+    (getSupplierProfile as jest.Mock).mockResolvedValue({ contactName: "Ana Reyes" });
+    await act(async () => {
+      useShopContact.getState().adopt({ contactName: "Ana Reyes" });
+    });
+    expect(await screen.findByText("Ana Reyes")).toBeTruthy();
+
+    await act(async () => {
+      await refocus();
+    });
+    // Clerk still calls the sign-in Ben Santos; the card follows the shop.
+    expect(mockClerkUser.firstName).toBe("Ben");
+    expect(screen.getByText("Ana Reyes")).toBeTruthy();
+    expect(screen.queryByText("Ben Santos")).toBeNull();
+  });
+
+  it("reads the contact person GRIDGO holds when it comes into view", async () => {
+    (getSupplierProfile as jest.Mock).mockResolvedValue({ contactName: "Ana Reyes" });
+    view = await render(<AccountScreen />);
+
+    expect(await screen.findByText("Ana Reyes")).toBeTruthy();
+  });
+
   it("shows the renamed shop when it comes back into view", async () => {
     view = await render(<AccountScreen />);
 

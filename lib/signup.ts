@@ -16,7 +16,26 @@ import type { SignupDraft } from "@/store/signupDraft";
  * the map would price every delivery from the Gulf of Guinea.
  */
 
-export const MIN_PASSWORD_LENGTH = 8;
+/**
+ * Clerk's password policy, restated so a shop hears it on the field instead of
+ * after the last step. Production and development both set
+ * `auth_password.min_length` to 15 (`clerk config pull --instance prod`); the
+ * app saying 8 let a shop fill in all four apply steps and then be refused at
+ * "Send my application" (gridgo-supplier#215). Change it here when the policy
+ * changes — the policy itself is the captain's call, not this app's.
+ */
+export const MIN_PASSWORD_LENGTH = 15;
+
+/** The rule, said before the shop types — on every screen that sets a password. */
+export const PASSWORD_RULE = `At least ${MIN_PASSWORD_LENGTH} characters.`;
+
+/** The same rule, said when a password falls short of it. */
+export const PASSWORD_TOO_SHORT = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+
+/** `null` when the password is long enough for Clerk to take it. */
+export function passwordLengthProblem(password: string): string | null {
+  return password.length < MIN_PASSWORD_LENGTH ? PASSWORD_TOO_SHORT : null;
+}
 
 /** Position becomes rank: first in the list is what the shop does best. */
 export function categoryRanks(categoryCodes: string[]): CategoryRank[] {

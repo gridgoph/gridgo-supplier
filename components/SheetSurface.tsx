@@ -38,6 +38,28 @@ export function sheetBottomPadding(insetBottom: number, os: typeof Platform.OS =
   return (os === "ios" ? 0 : insetBottom) + spacing.xl;
 }
 
+/**
+ * Tallest a list inside a sheet may draw before it scrolls.
+ *
+ * A content-sized sheet is only as tall as the screen allows, and whatever it
+ * cannot fit is cut off with nothing to scroll: Shop hours' half-hour lists
+ * stopped at 7:30 AM and 3:00 PM on a small Android phone, with every later
+ * time below the navigation bar (gridgo-supplier#216). So a long list is held
+ * to the room the screen leaves once the system insets and the sheet's own
+ * heading and actions (`SHEET_CHROME`) are taken out, and scrolls inside it.
+ * Never more than 60% of the screen, so it still reads as a sheet over the
+ * page; never fewer than about three rows.
+ */
+const SHEET_CHROME = 300;
+
+export function sheetListMaxHeight(
+  windowHeight: number,
+  insets: { top: number; bottom: number },
+): number {
+  const room = windowHeight - insets.top - insets.bottom - SHEET_CHROME;
+  return Math.max(176, Math.min(Math.round(windowHeight * 0.6), room));
+}
+
 export function SheetSurface({ title, body, children, footer }: Props) {
   const insets = useSafeAreaInsets();
 

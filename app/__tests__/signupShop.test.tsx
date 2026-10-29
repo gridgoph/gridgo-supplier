@@ -79,3 +79,46 @@ describe("apply shop step with a live Clerk session", () => {
     });
   });
 });
+
+/**
+ * gridgo-supplier#215: the hint said 8 and Clerk wanted 15, so a short password
+ * cleared this step and was refused at "Send my application", three steps on.
+ * The rule is said and held here, before Continue.
+ */
+describe("apply shop step for a new sign-in", () => {
+  beforeEach(() => {
+    mockIsSignedIn = false;
+    mockClerkEmail = null;
+    mockRouter.push.mockClear();
+    useSignupDraft.setState({
+      draft: {
+        ...EMPTY_SIGNUP_DRAFT,
+        shopName: "Mark Prints",
+        contactName: "Mark David",
+        email: "shop@example.com",
+        phone: "09975643866",
+      },
+      hydrated: true,
+    });
+  });
+
+  it("states Clerk's minimum and stops a shorter password before Continue", async () => {
+    await render(<ShopIdentityStep />);
+
+    expect(screen.getByText(/^At least 15 characters\./)).toBeTruthy();
+
+    await fireEvent.changeText(screen.getByLabelText("Password"), "eight-ok");
+    await fireEvent.press(screen.getByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByText("Use at least 15 characters.")).toBeTruthy();
+    expect(mockRouter.push).not.toHaveBeenCalled();
+
+    await fireEvent.changeText(screen.getByLabelText("Password"), "fifteen-or-more");
+    await fireEvent.press(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => {
+      expect(mockRouter.push).toHaveBeenCalledWith("/(auth)/signup/location");
+    });
+    expect(screen.queryByText("Use at least 15 characters.")).toBeNull();
+  });
+});
