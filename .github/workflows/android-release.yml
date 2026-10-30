@@ -1,4 +1,4 @@
-name: Android release APK
+name: Android release APK or Play testing bundle
 
 # Suppliers, riders and customers in Davao sideload this file, so every build
 # that reaches them must be a real signed release pointed at the deployed API —
@@ -10,9 +10,9 @@ name: Android release APK
 # no GitHub Release, no release push. See README.md "Google Play bundle".
 #
 # submit_to_play, together with play_bundle, also hands that verified AAB to
-# EAS Submit for Google Play's internal testing track (eas.json). Builds stay
-# here with the upload key; EAS only uploads. Never production, never a
-# promotion: the captain promotes by hand in Play Console.
+# EAS Submit for the selected Play testing track: internal by default, or
+# closed (alpha) when explicitly selected. Builds stay here with the upload
+# key; EAS only uploads. Never the production track, never a promotion.
 
 on:
   push:
@@ -33,9 +33,18 @@ on:
       submit_to_play:
         description: >-
           With play_bundle only: also upload the verified AAB to Google Play's
-          internal testing track with EAS Submit. Ignored without play_bundle.
+          selected testing track with EAS Submit. Ignored without play_bundle.
         type: boolean
         default: false
+      play_track:
+        description: >-
+          Testing track for submit_to_play only: internal or closed (alpha).
+          Ignored unless play_bundle and submit_to_play are both enabled.
+        type: choice
+        default: internal
+        options:
+          - internal
+          - closed
 
 # A release build takes ~20 minutes; never run two for the same ref.
 # A Play bundle run gets its own group, so it never cancels a main release.
@@ -487,6 +496,32 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+      # Explicit allowlist: dispatch input can never name a production track.
+      # Resolve once so EAS Submit, release notes and summaries agree.
+      - name: Select the Play testing track
+        id: play-track
+        if: github.event.inputs.play_bundle == 'true' && github.event.inputs.submit_to_play == 'true'
+        env:
+          REQUESTED_TRACK: ${{ github.event.inputs.play_track }}
+        run: |
+          set -euo pipefail
+          case "$REQUESTED_TRACK" in
+            ""|internal)
+              echo "profile=production" >> "$GITHUB_OUTPUT"
+              echo "track=internal" >> "$GITHUB_OUTPUT"
+              echo "label=internal testing" >> "$GITHUB_OUTPUT"
+              ;;
+            closed)
+              echo "profile=closed" >> "$GITHUB_OUTPUT"
+              echo "track=alpha" >> "$GITHUB_OUTPUT"
+              echo "label=closed testing" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::unsupported Play testing track"
+              exit 1
+              ;;
+          esac
+
       - name: Name the Play bundle
         if: github.event.inputs.play_bundle == 'true'
         env:
@@ -494,6 +529,7 @@ jobs:
           CODE: ${{ steps.config.outputs.code }}
           AAB: ${{ steps.config.outputs.aab }}
           SUBMIT: ${{ github.event.inputs.submit_to_play }}
+          TRACK_LABEL: ${{ steps.play-track.outputs.label }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/play"
@@ -512,9 +548,9 @@ jobs:
             echo "| Updates | self-update prompt and side-load links off (Play build) |"
             echo
             if [ "$SUBMIT" = "true" ]; then
-              echo "EAS Submit uploads it to the internal testing track below."
+              echo "EAS Submit uploads it to the $TRACK_LABEL track below."
             else
-              echo "Upload it in Play Console under Testing > Internal testing. Nothing was published."
+              echo "Upload it in Play Console under Testing. Nothing was published."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -530,7 +566,9 @@ jobs:
 
       # Only after the AAB is verified and kept as an artifact, so a failed
       # submission still leaves the bundle to upload by hand. The track and
-      # release status live in eas.json (internal, completed) and nowhere else.
+      # release status live in eas.json: internal or alpha, both completed.
+      # Closed releases still require Google review; a draft would need a
+      # manual Play Console step for every submission.
       #
       # The service-account key is written outside the workspace, mode 600,
       # and eas.json reads its path from GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_PATH.
@@ -542,10 +580,13 @@ jobs:
       # version's What's new on that release through Play's edits API and
       # reads them back (scripts/play-release-notes.mjs). Testers see what
       # changed; the versionCode is the run number, so each upload is newer.
-      - name: Submit the Play bundle to the internal testing track
+      - name: Submit the Play bundle to ${{ steps.play-track.outputs.label }}
         id: play_submit
         if: github.event.inputs.play_bundle == 'true' && github.event.inputs.submit_to_play == 'true'
         env:
+          SUBMIT_PROFILE: ${{ steps.play-track.outputs.profile }}
+          PLAY_TRACK: ${{ steps.play-track.outputs.track }}
+          TRACK_LABEL: ${{ steps.play-track.outputs.label }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           AAB: ${{ steps.config.outputs.aab }}
@@ -585,7 +626,7 @@ jobs:
 
           npx --yes eas-cli@24.12.1 submit \
             --platform android \
-            --profile production \
+            --profile "$SUBMIT_PROFILE" \
             --path "$RUNNER_TEMP/play/$AAB" \
             --non-interactive \
             --wait
@@ -599,8 +640,10 @@ jobs:
 
           {
             echo
-            echo "Submitted \`$AAB\` (versionCode $CODE) to Google Play's **internal testing** track with EAS Submit."
-            echo "Promote it to another track by hand in Play Console."
+            echo "Submitted \`$AAB\` (versionCode $CODE) to Google Play's **$TRACK_LABEL** track with EAS Submit."
+            if [ "$PLAY_TRACK" = "alpha" ]; then
+              echo "Google reviews closed releases before testers can access them."
+            fi
             echo
             echo '```'
             cat "$notes"

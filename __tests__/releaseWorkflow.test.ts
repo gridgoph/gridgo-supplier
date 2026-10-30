@@ -1,4 +1,6 @@
-import { readFileSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync } from "fs";
+import { execFileSync } from "child_process";
+import { tmpdir } from "os";
 import { join } from "path";
 
 /**
@@ -425,10 +427,53 @@ describe("a manual play_bundle run builds a Google Play bundle and publishes not
   });
 });
 
-describe("submit_to_play hands the verified AAB to EAS Submit for the internal track only", () => {
+describe("submit_to_play hands the verified AAB to the selected testing track only", () => {
   const eas = JSON.parse(readFileSync(join(__dirname, "..", "eas.json"), "utf8"));
   const appJson = JSON.parse(readFileSync(join(__dirname, "..", "app.json"), "utf8"));
   const submitStep = () => apkSteps.find((step) => step.includes("eas-cli@"));
+
+  const selectStep = apkSteps.find((step) => step.includes("id: play-track")) as string;
+
+  // Exercise the actual shell allowlist without running EAS or touching credentials.
+  function selectTrack(requested: string): Record<string, string> {
+    const directory = mkdtempSync(join(tmpdir(), "gridgo-play-track-"));
+    const output = join(directory, "outputs");
+    const script = selectStep.split("run: |\n")[1].replace(/^ {10}/gm, "");
+    try {
+      execFileSync("bash", ["-c", script], {
+        env: { ...process.env, REQUESTED_TRACK: requested, GITHUB_OUTPUT: output },
+        stdio: "pipe",
+      });
+      return Object.fromEntries(
+        readFileSync(output, "utf8").trim().split("\n").map((line) => line.split("=")),
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
+
+  it("offers only internal and closed, defaulting to internal", () => {
+    expect(workflow).toMatch(
+      / {6}play_track:\n[\s\S]*?type: choice\n\s+default: internal\n\s+options:\n\s+- internal\n\s+- closed\n\n/,
+    );
+    expect(selectTrack("")).toEqual(selectTrack("internal"));
+    expect(selectTrack("internal")).toEqual({
+      profile: "production", track: "internal", label: "internal testing",
+    });
+    expect(selectTrack("closed")).toEqual({
+      profile: "closed", track: "alpha", label: "closed testing",
+    });
+    for (const requested of ["", "internal", "closed"]) {
+      const selected = selectTrack(requested);
+      expect(eas.submit[selected.profile].android.track).toBe(selected.track);
+      expect(selected.track).not.toBe("production");
+    }
+  });
+
+  it.each(["production", "alpha", "beta", "invalid", "closed; echo production"])(
+    "rejects unsupported track input %s before submitting",
+    (requested) => expect(() => selectTrack(requested)).toThrow(),
+  );
 
   it("is a manual dispatch input that defaults off", () => {
     expect(workflow).toMatch(/ {6}submit_to_play:\n[\s\S]*?type: boolean\n\s+default: false/);
@@ -438,10 +483,15 @@ describe("submit_to_play hands the verified AAB to EAS Submit for the internal t
     expect(submitStep()).toMatch(
       /if: github\.event\.inputs\.play_bundle == 'true' && github\.event\.inputs\.submit_to_play == 'true'\n/,
     );
-    // Nothing else in the job reads the new input, so the APK path cannot change.
+    expect(selectStep).toMatch(
+      /if: github\.event\.inputs\.play_bundle == 'true' && github\.event\.inputs\.submit_to_play == 'true'\n/,
+    );
+    expect(selectStep).toContain("REQUESTED_TRACK: ${{ github.event.inputs.play_track }}");
+    expect(apkSteps.filter((step) => /inputs\.play_track/.test(step))).toEqual([selectStep]);
+    // The APK path cannot change.
     const readers = apkSteps.filter((step) => /inputs\.submit_to_play/.test(step));
     const named = apkSteps.find((step) => step.includes("Name the Play bundle"));
-    expect(readers).toEqual([named, submitStep()]);
+    expect(readers).toEqual([selectStep, named, submitStep()]);
   });
 
   it("submits the AAB after it is verified and kept as an artifact", () => {
@@ -458,7 +508,8 @@ describe("submit_to_play hands the verified AAB to EAS Submit for the internal t
     const step = submitStep() as string;
     expect(step).toMatch(/npx --yes eas-cli@\d+\.\d+\.\d+ submit/);
     expect(step).toContain("--platform android");
-    expect(step).toContain("--profile production");
+    expect(step).toContain('--profile "$SUBMIT_PROFILE"');
+    expect(step).toContain("SUBMIT_PROFILE: ${{ steps.play-track.outputs.profile }}");
     expect(step).toContain('--path "$RUNNER_TEMP/play/$AAB"');
     expect(step).toContain("--non-interactive");
     expect(step).toMatch(/EXPO_TOKEN:\s*\$\{\{\s*secrets\.EXPO_TOKEN\s*\}\}/);
@@ -493,16 +544,35 @@ describe("submit_to_play hands the verified AAB to EAS Submit for the internal t
     expect(step).toContain('PLAY_VERSION_CODE="$CODE"');
     expect(step).toContain('PLAY_VERSION="$VERSION"');
     expect(step).toContain('PLAY_PACKAGE="$PACKAGE"');
+    expect(step).toContain("PLAY_TRACK: ${{ steps.play-track.outputs.track }}");
     expect(jobBody("check")).toContain("node --test scripts/play-release-notes.test.mjs");
   });
 
-  it("submits to internal testing only and never promotes", () => {
+  it("uses the selected testing track in the step name and summaries", () => {
+    const step = submitStep() as string;
+    const named = apkSteps.find((s) => s.includes("Name the Play bundle"));
+    expect(step).toContain("Submit the Play bundle to ${{ steps.play-track.outputs.label }}");
+    for (const summary of [step, named]) {
+      expect(summary).toContain("TRACK_LABEL: ${{ steps.play-track.outputs.label }}");
+      expect(summary).toContain("$TRACK_LABEL");
+      expect(summary).not.toContain("to the internal testing track");
+    }
+    expect(step).toContain('if [ "$PLAY_TRACK" = "alpha" ]');
+    expect(step).toContain("Google reviews closed releases");
+  });
+
+  it("keeps internal unchanged and adds completed closed testing without production", () => {
     expect(eas.submit.production.android).toEqual({
       serviceAccountKeyPath: "$GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_PATH",
       track: "internal",
       releaseStatus: "completed",
     });
-    expect(Object.keys(eas.submit)).toEqual(["production"]);
+    expect(eas.submit.closed.android).toEqual({
+      ...eas.submit.production.android,
+      track: "alpha",
+    });
+    expect(eas.submit.closed.ios).toBeUndefined();
+    expect(Object.keys(eas.submit).sort()).toEqual(["closed", "production"]);
     // Android builds stay in this workflow with the upload key, never on EAS.
     expect(eas.build?.production?.android).toBeUndefined();
   });

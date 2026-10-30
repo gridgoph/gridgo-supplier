@@ -14,6 +14,13 @@
     }
   },
   "submit": {
+    "closed": {
+      "android": {
+        "serviceAccountKeyPath": "$GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_PATH",
+        "track": "alpha",
+        "releaseStatus": "completed"
+      }
+    },
     "production": {
       "android": {
         "serviceAccountKeyPath": "$GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_PATH",
