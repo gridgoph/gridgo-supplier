@@ -31,7 +31,7 @@ import { ShopReleasePanel } from "@/components/ShopReleasePanel";
 import { SpecialInstructionsPanel } from "@/components/SpecialInstructionsPanel";
 import { StatusChip } from "@/components/StatusChip";
 import { acceptWindow } from "@/lib/acceptWindow";
-import { formatDeadlineFull } from "@/lib/dates";
+import { formatDeadlineFull, shopDueAt } from "@/lib/dates";
 import { EXPRESS_JOB_NOTE, isExpressOrder } from "@/lib/express";
 import { defaultBriefSection, hasHandoff, workspaceBriefSections } from "@/lib/jobBrief";
 import {
@@ -163,7 +163,8 @@ export default function JobWorkspaceScreen() {
   }
 
   const status = presentJobStatus(job);
-  const clientDate = job.promisedDate || job.deadline;
+  // The shop's own date only; a job without one is undated here, never dated by the client.
+  const dueAt = shopDueAt(job);
   const actions = actionsForJob(job);
   const primary = actions.find((a) => a.primary) ?? null;
   const secondary = actions.filter((a) => !a.primary);
@@ -173,7 +174,7 @@ export default function JobWorkspaceScreen() {
   const requestStopped = deadlineRequest ? rescheduleNotice(deadlineRequest).stopped : false;
   // A job stopped or closed by a refund, let go, or paused by a declined deadline is not due anywhere.
   const urgency = deadlineUrgency(
-    refundStanding(job) === "none" && !release && !requestStopped ? job.promisedDate || job.deadline : null,
+    refundStanding(job) === "none" && !release && !requestStopped ? dueAt : null,
   );
   const waiting = waitingOnJob(job, payoutPlanOf(job));
   // The newer handover: GRIDGO's review of the finished photos, and the counter once a rider is there.
@@ -310,10 +311,9 @@ export default function JobWorkspaceScreen() {
             </View>
           ) : null}
           <SchedulingNotice order={job} />
-          {clientDate ? (
+          {dueAt ? (
             <Text className="text-body-lg text-text-secondary">
-              {job.promisedDate ? "Promised" : "Client needs it by"}{" "}
-              {formatDeadlineFull(clientDate)}
+              Ready by {formatDeadlineFull(dueAt)}
             </Text>
           ) : null}
           {reviewPaused ? (

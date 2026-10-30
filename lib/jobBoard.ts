@@ -8,6 +8,7 @@
  * already on the phone.
  */
 import type { Order } from "@/lib/api";
+import { shopDueAt } from "@/lib/dates";
 import { deadlineUrgency } from "@/lib/urgency";
 
 export type JobStageFilter =
@@ -70,10 +71,6 @@ export function isJobBoardNarrowed(query: JobBoardQuery): boolean {
   return query.q.trim().length > 0 || query.stage !== "all";
 }
 
-export function jobDueAt(job: Pick<Order, "promisedDate" | "deadline" | "readyBy">): string | null {
-  return job.promisedDate || job.deadline || job.readyBy || null;
-}
-
 export function jobMatchesFind(job: Pick<Order, "title">, q: string): boolean {
   const needle = q.trim().toLowerCase();
   if (!needle) return true;
@@ -81,12 +78,12 @@ export function jobMatchesFind(job: Pick<Order, "title">, q: string): boolean {
 }
 
 export function jobMatchesStage(
-  job: Pick<Order, "state" | "promisedDate" | "deadline" | "readyBy">,
+  job: Pick<Order, "state" | "readyBy">,
   stage: JobStageFilter,
   now: Date = new Date(),
 ): boolean {
   if (stage === "all") return true;
-  if (stage === "late") return deadlineUrgency(jobDueAt(job), now).level === "overdue";
+  if (stage === "late") return deadlineUrgency(shopDueAt(job), now).level === "overdue";
   if (stage === "on_press") {
     return job.state === "payment_authorized" || job.state === "production" || job.state === "supplier_self_qc";
   }
@@ -107,7 +104,7 @@ export function jobMatchesStage(
   );
 }
 
-export function sortJobs<T extends Pick<Order, "promisedDate" | "deadline" | "readyBy" | "createdAt" | "title" | "id">>(
+export function sortJobs<T extends Pick<Order, "readyBy" | "createdAt" | "title" | "id">>(
   jobs: readonly T[],
   sort: JobSort,
   now: Date = new Date(),
@@ -121,8 +118,8 @@ export function sortJobs<T extends Pick<Order, "promisedDate" | "deadline" | "re
     if (sort === "newest") {
       return String(b.createdAt).localeCompare(String(a.createdAt)) || a.id.localeCompare(b.id);
     }
-    const aDue = jobDueAt(a);
-    const bDue = jobDueAt(b);
+    const aDue = shopDueAt(a);
+    const bDue = shopDueAt(b);
     if (!aDue && !bDue) return a.id.localeCompare(b.id);
     if (!aDue) return 1;
     if (!bDue) return -1;
@@ -132,7 +129,7 @@ export function sortJobs<T extends Pick<Order, "promisedDate" | "deadline" | "re
   return copy;
 }
 
-export function filterJobs<T extends Pick<Order, "title" | "state" | "promisedDate" | "deadline" | "readyBy" | "createdAt" | "id">>(
+export function filterJobs<T extends Pick<Order, "title" | "state" | "readyBy" | "createdAt" | "id">>(
   jobs: readonly T[],
   query: JobBoardQuery,
   now: Date = new Date(),
@@ -144,7 +141,7 @@ export function filterJobs<T extends Pick<Order, "title" | "state" | "promisedDa
 }
 
 export function jobStageCounts(
-  jobs: readonly Pick<Order, "state" | "promisedDate" | "deadline" | "readyBy">[],
+  jobs: readonly Pick<Order, "state" | "readyBy">[],
   now: Date = new Date(),
 ): Record<JobStageFilter, number> {
   const counts = {

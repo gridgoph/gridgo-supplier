@@ -21,7 +21,7 @@ describe("packaging to joint pickup checks", () => {
     expect(journeyIndex("supplier_self_qc")).toBe(journeyIndex("production"));
     expect(JOB_JOURNEY.map((step) => step.label)).not.toContain("Self-QC");
     expect(JOB_STAGE_TICKETS.map((step) => step.label)).not.toContain("Self-QC");
-    expect(jobMatchesStage({ state: "supplier_self_qc", deadline: null, promisedDate: null }, "on_press")).toBe(true);
+    expect(jobMatchesStage({ state: "supplier_self_qc", readyBy: null }, "on_press")).toBe(true);
   });
   it("keeps package proof distinct from joint pickup quality checks", () => {
     expect(milestoneDefinition("packaging_qc")).toMatchObject({ label: "Packaging", proofOwner: "shop" });

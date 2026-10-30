@@ -16,16 +16,14 @@ function job(partial: {
   id: string;
   title?: string;
   state: string;
-  promisedDate?: string | null;
+  readyBy?: string | null;
   createdAt?: string;
 }) {
   return {
     id: partial.id,
     title: partial.title ?? partial.id,
     state: partial.state,
-    promisedDate: partial.promisedDate ?? null,
-    deadline: null,
-    readyBy: null,
+    readyBy: partial.readyBy ?? null,
     createdAt: partial.createdAt ?? "2026-08-31T00:00:00.000Z",
   };
 }
@@ -38,16 +36,21 @@ describe("job board find and stamps", () => {
     expect(jobMatchesFind(job({ id: "a", title: "Flyers", state: "production" }), "thesis")).toBe(false);
   });
 
-  it("stamps late from the promised date, not from the status chip", () => {
+  it("never stamps late from the client's deadline", () => {
+    const clientDated = { ...job({ id: "c", state: "production" }), deadline: "2026-08-31T04:00:00.000Z", promisedDate: "2026-08-31T04:00:00.000Z" };
+    expect(jobMatchesStage(clientDated, "late", NOW)).toBe(false);
+  });
+
+  it("stamps late from the shop's ready-by date, not from the status chip", () => {
     const late = job({
       id: "late",
       state: "awaiting_collection",
-      promisedDate: "2026-08-31T04:00:00.000Z",
+      readyBy: "2026-08-31T04:00:00.000Z",
     });
     const ok = job({
       id: "ok",
       state: "awaiting_collection",
-      promisedDate: "2026-09-04T04:00:00.000Z",
+      readyBy: "2026-09-04T04:00:00.000Z",
     });
     expect(jobMatchesStage(late, "late", NOW)).toBe(true);
     expect(jobMatchesStage(ok, "late", NOW)).toBe(false);
@@ -62,10 +65,10 @@ describe("job board find and stamps", () => {
   });
 
   it("puts the soonest due first — overdue is already first — and undated last", () => {
-    const undated = job({ id: "u", state: "out_for_delivery", promisedDate: null });
-    const later = job({ id: "b", state: "production", promisedDate: "2026-09-10T00:00:00.000Z" });
-    const soon = job({ id: "a", state: "production", promisedDate: "2026-09-03T00:00:00.000Z" });
-    const overdue = job({ id: "z", state: "production", promisedDate: "2026-08-01T00:00:00.000Z" });
+    const undated = job({ id: "u", state: "out_for_delivery", readyBy: null });
+    const later = job({ id: "b", state: "production", readyBy: "2026-09-10T00:00:00.000Z" });
+    const soon = job({ id: "a", state: "production", readyBy: "2026-09-03T00:00:00.000Z" });
+    const overdue = job({ id: "z", state: "production", readyBy: "2026-08-01T00:00:00.000Z" });
     expect(sortJobs([undated, later, soon, overdue], "due_first", NOW).map((row) => row.id)).toEqual([
       "z",
       "a",
@@ -90,8 +93,8 @@ describe("job board find and stamps", () => {
 
   it("narrows then sorts", () => {
     const jobs = [
-      job({ id: "fly-b", title: "Flyers", state: "out_for_delivery", promisedDate: "2026-09-08T00:00:00.000Z" }),
-      job({ id: "fly-a", title: "Flyers", state: "out_for_delivery", promisedDate: "2026-09-02T00:00:00.000Z" }),
+      job({ id: "fly-b", title: "Flyers", state: "out_for_delivery", readyBy: "2026-09-08T00:00:00.000Z" }),
+      job({ id: "fly-a", title: "Flyers", state: "out_for_delivery", readyBy: "2026-09-02T00:00:00.000Z" }),
       job({ id: "thesis", title: "Thesis reprint", state: "supplier_self_qc" }),
     ];
     const found = filterJobs(jobs, { ...DEFAULT_JOB_BOARD_QUERY, q: "flyer", sort: "due_first" }, NOW);

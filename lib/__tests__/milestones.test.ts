@@ -153,13 +153,13 @@ describe("plan 2 milestone views", () => {
     expect(delivered.stage).toBe("waiting_on_delivery");
     expect(delivered.canAddProof).toBe(false);
     expect(window.stage).toBe("waiting_on_window");
-    expect(window.statusLabel).toBe("After window closes");
+    expect(window.statusLabel).toBe("After window to report a problem");
   });
 
   it("times the delivered part and the window part apart before delivery", () => {
     const [, delivered, window] = milestoneViews(order({ state: "production" }));
     expect(delivered.statusLabel).toBe("After delivery");
-    expect(window.statusLabel).toBe("After window closes");
+    expect(window.statusLabel).toBe("After window to report a problem");
     expect(delivered.statusLabel).not.toBe(window.statusLabel);
     // Amounts and the API's order stand as they were.
     expect([delivered.amountMinor, window.amountMinor]).toEqual([35000, 25000]);
@@ -241,7 +241,7 @@ describe("plan 1 milestone views", () => {
   it("times retention by the window, apart from the delivered part, with amounts unchanged", () => {
     const [, , delivered, retention] = milestoneViews(order({ payoutPlanVersion: 1, payoutMilestones: legacy() }));
     expect(delivered.statusLabel).toBe("After delivery");
-    expect(retention.statusLabel).toBe("After window closes");
+    expect(retention.statusLabel).toBe("After window to report a problem");
     expect([delivered.amountMinor, retention.amountMinor]).toEqual([25000, 10000]);
     expect(retention.stage).toBe("waiting_on_delivery");
   });

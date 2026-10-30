@@ -131,8 +131,8 @@ describe("the day's obligations", () => {
   it("puts money sitting still ahead of a job that is merely running", () => {
     const list = buildObligations(
       [
-        filed({ id: "just-running", state: "production", deadline: "2026-08-11T10:00:00+08:00" }),
-        job({ id: "owes-proof", state: "supplier_self_qc", deadline: "2026-08-20T10:00:00+08:00" }),
+        filed({ id: "just-running", state: "production", readyBy: "2026-08-11T10:00:00+08:00" }),
+        job({ id: "owes-proof", state: "supplier_self_qc", readyBy: "2026-08-20T10:00:00+08:00" }),
       ],
       now,
     );
@@ -143,9 +143,9 @@ describe("the day's obligations", () => {
   it("ranks a decision above a production step, and orders each kind by date", () => {
     const list = buildObligations(
       [
-        filed({ id: "produce", state: "production", deadline: "2026-08-11T09:00:00+08:00" }),
-        filed({ id: "later", state: "supplier_assigned", deadline: "2026-08-20T10:00:00+08:00" }),
-        filed({ id: "sooner", state: "supplier_assigned", deadline: "2026-08-12T10:00:00+08:00" }),
+        filed({ id: "produce", state: "production", readyBy: "2026-08-11T09:00:00+08:00" }),
+        filed({ id: "later", state: "supplier_assigned", readyBy: "2026-08-20T10:00:00+08:00" }),
+        filed({ id: "sooner", state: "supplier_assigned", readyBy: "2026-08-12T10:00:00+08:00" }),
       ],
       now,
     );
@@ -192,11 +192,20 @@ describe("the day's obligations", () => {
 
   it("marks a job past its promised time as late without relying on colour", () => {
     const [obligation] = buildObligations(
-      [filed({ id: "a", state: "supplier_assigned", deadline: "2026-08-10T10:00:00+08:00" })],
+      [filed({ id: "a", state: "supplier_assigned", readyBy: "2026-08-10T10:00:00+08:00" })],
       now,
     );
     expect(obligation.urgency).toBe("overdue");
     expect(obligation.detail).toMatch(/late by/i);
+  });
+
+  it("never dates an obligation from the client's deadline", () => {
+    const [obligation] = buildObligations(
+      [filed({ id: "a", state: "supplier_assigned", readyBy: null, deadline: "2026-08-10T10:00:00+08:00", promisedDate: "2026-08-10T09:00:00+08:00" })],
+      now,
+    );
+    expect(obligation.urgency).toBe("undated");
+    expect(obligation.detail).not.toMatch(/late by/i);
   });
 
   it("never puts a platform state string on a row", () => {

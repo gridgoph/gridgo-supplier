@@ -1,4 +1,4 @@
-import { formatClockTime, formatRelativeDay, nextPromisedDeadline } from "@/lib/dates";
+import { formatClockTime, formatRelativeDay, shopDueAt } from "@/lib/dates";
 
 describe("formatRelativeDay", () => {
   const now = new Date("2026-08-08T12:00:00+08:00");
@@ -27,21 +27,16 @@ describe("formatClockTime", () => {
   });
 });
 
-describe("nextPromisedDeadline", () => {
-  const now = new Date("2026-08-08T12:00:00+08:00");
-
-  it("returns the earliest upcoming promised or deadline stamp", () => {
-    const next = nextPromisedDeadline(
-      [
-        { promisedDate: "2026-08-12T17:00:00+08:00", deadline: null },
-        { promisedDate: null, deadline: "2026-08-10T09:00:00+08:00" },
-      ],
-      now,
-    );
-    expect(next).toBe("2026-08-10T09:00:00+08:00");
+describe("shopDueAt", () => {
+  it("is the shop's own readyBy", () => {
+    expect(shopDueAt({ readyBy: "2026-08-10T09:00:00+08:00" })).toBe("2026-08-10T09:00:00+08:00");
   });
 
-  it("returns null when nothing is dated", () => {
-    expect(nextPromisedDeadline([{ promisedDate: null, deadline: null }], now)).toBeNull();
+  it("never falls back to the client's deadline or promised date", () => {
+    const clientDated = { readyBy: null, promisedDate: "2026-08-12T17:00:00+08:00", deadline: "2026-08-13T09:00:00+08:00" };
+    expect(shopDueAt(clientDated)).toBeNull();
+    const blankReadyBy = { readyBy: "", deadline: "2026-08-13T09:00:00+08:00" };
+    expect(shopDueAt(blankReadyBy)).toBeNull();
+    expect(shopDueAt({})).toBeNull();
   });
 });
