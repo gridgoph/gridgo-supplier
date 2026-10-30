@@ -12,8 +12,8 @@ type Props = {
   onRetry: () => void;
   /** What this screen is for, in a verb. */
   title: string;
-  /** One sentence of what taking this step means. */
-  lede: string;
+  /** One sentence of what taking this step means. Left out where the screen says it beside the action. */
+  lede?: string;
   /** The job's name, so the shop always knows what it is acting on. */
   subject?: string;
   children: ReactNode;
@@ -89,7 +89,7 @@ export function FlowScreen({
           {subject ? (
             <Text className="text-body-lg font-medium text-text-primary">{subject}</Text>
           ) : null}
-          <Text className="text-body text-text-secondary">{lede}</Text>
+          {lede ? <Text className="text-body text-text-secondary">{lede}</Text> : null}
         </View>
 
         <View className="mt-8 gap-6">{children}</View>
