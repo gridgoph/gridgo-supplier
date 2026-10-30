@@ -7,8 +7,8 @@ import { monthGrid } from "@/lib/queueCalendar";
 const service = (capacityDaily: number | null): SupplierService =>
   ({ id: "svc", state: "live", capacityDaily, capacityWeekly: null } as unknown as SupplierService);
 
-const job = (promisedDate: string, quantity: number): Order =>
-  ({ id: `job_${promisedDate}_${quantity}`, promisedDate, quantity } as unknown as Order);
+const job = (readyBy: string, quantity: number): Order =>
+  ({ id: `job_${readyBy}_${quantity}`, readyBy, quantity } as unknown as Order);
 
 const MARCH = new Date(2026, 2, 9);
 const NOW = new Date(2026, 2, 9, 12, 59, 30);

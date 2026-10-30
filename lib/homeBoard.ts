@@ -7,6 +7,7 @@ import {
   type StatePresentation,
   type SupplierActionRoute,
 } from "@/lib/jobState";
+import { shopDueAt } from "@/lib/dates";
 import { nextShopProof } from "@/lib/milestones";
 import { summarizePayouts, unreleasedMinor } from "@/lib/payout";
 import { deadlineUrgency, type UrgencyLevel } from "@/lib/urgency";
@@ -143,7 +144,7 @@ const RANK: Record<ObligationKind, number> = {
 };
 
 function when(job: Order): number {
-  const raw = job.promisedDate || job.deadline;
+  const raw = shopDueAt(job);
   const at = raw ? new Date(raw).getTime() : Number.NaN;
   return Number.isNaN(at) ? Number.POSITIVE_INFINITY : at;
 }
@@ -159,7 +160,7 @@ export function buildObligations(jobs: Order[], now: Date = new Date()): Obligat
   for (const job of jobs) {
     // A job the shop let go is GRIDGO's until the client chooses; nothing on it is the shop's.
     if (shopRelease(job)) continue;
-    const urgency = deadlineUrgency(job.promisedDate || job.deadline, now);
+    const urgency = deadlineUrgency(shopDueAt(job), now);
     const status = presentJobStatus(job);
     const action = primaryAction(job, now);
 

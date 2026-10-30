@@ -530,27 +530,31 @@ describe("job workspace late production", () => {
   });
 });
 
-describe("job workspace client date", () => {
+describe("job workspace due date", () => {
   afterEach(() => jest.clearAllMocks());
 
-  it.each([null, "2026-10-14T18:00:00+08:00"])(
-    "hides the absent client date with readyBy %s",
-    async (readyBy) => {
-      (getOrder as jest.Mock).mockResolvedValue(job({ promisedDate: null, deadline: null, readyBy }));
-      await render(<JobWorkspaceScreen />);
-      expect(await screen.findByText("Order ord_1")).toBeTruthy();
-      expect(screen.queryByText(/Client needs it by|Promised/)).toBeNull();
-    },
-  );
+  it("states the shop's own ready-by date", async () => {
+    const readyBy = "2026-10-14T18:00:00+08:00";
+    (getOrder as jest.Mock).mockResolvedValue(job({ promisedDate: null, deadline: "2026-10-15T18:00:00+08:00", readyBy }));
+    await render(<JobWorkspaceScreen />);
+    const dates = await screen.findAllByText(`Ready by ${formatDeadlineFull(readyBy)}`);
+    expect(dates[0].props.className).toBe("text-body-lg text-text-secondary");
+    expect(screen.queryByText(new RegExp(formatDeadlineFull("2026-10-15T18:00:00+08:00")))).toBeNull();
+  });
 
   it.each([
-    { promisedDate: null, deadline: "2026-10-15T18:00:00+08:00", label: "Client needs it by" },
-    { promisedDate: "2026-10-14T18:00:00+08:00", deadline: "2026-10-15T18:00:00+08:00", label: "Promised" },
-  ])("keeps the real $label date", async ({ promisedDate, deadline, label }) => {
-    (getOrder as jest.Mock).mockResolvedValue(job({ promisedDate, deadline }));
+    { promisedDate: null, deadline: null },
+    { promisedDate: null, deadline: "2026-10-15T18:00:00+08:00" },
+    { promisedDate: "2026-10-14T18:00:00+08:00", deadline: "2026-10-15T18:00:00+08:00" },
+  ])("never shows a client date when readyBy is missing ($promisedDate, $deadline)", async ({ promisedDate, deadline }) => {
+    (getOrder as jest.Mock).mockResolvedValue(job({ promisedDate, deadline, readyBy: null }));
     await render(<JobWorkspaceScreen />);
-    const dates = await screen.findAllByText(`${label} ${formatDeadlineFull(promisedDate || deadline)}`);
-    expect(dates[0].props.className).toBe("text-body-lg text-text-secondary");
+    expect(await screen.findByText("Order ord_1")).toBeTruthy();
+    expect(screen.queryByText(/Client needs it by|Promised/)).toBeNull();
+    expect(screen.queryByText(/Due in|Late by/)).toBeNull();
+    for (const date of [promisedDate, deadline]) {
+      if (date) expect(screen.queryByText(new RegExp(formatDeadlineFull(date)))).toBeNull();
+    }
   });
 });
 

@@ -1,6 +1,7 @@
 import type { Order } from "@/lib/api";
 import { addDays, daysBetween, startOfDay, toDayKey } from "@/lib/day";
 import { loadByDay, type DayLoad } from "@/lib/capacity";
+import { shopDueAt } from "@/lib/dates";
 
 /**
  * The working agenda: what is due, what is late, what is next.
@@ -84,7 +85,7 @@ export function buildSchedule(
   const dated: Order[] = [];
   const undatedJobs: Order[] = [];
   for (const job of eligible) {
-    const when = job.promisedDate || job.deadline;
+    const when = shopDueAt(job);
     const key = when ? toDayKey(when) : "";
     if (!key) undatedJobs.push(job);
     else dated.push(job);
@@ -96,7 +97,7 @@ export function buildSchedule(
 
   const grouped = new Map<string, Order[]>();
   for (const job of dated) {
-    const key = toDayKey(job.promisedDate || job.deadline || "");
+    const key = toDayKey(shopDueAt(job) ?? "");
     const list = grouped.get(key) ?? [];
     list.push(job);
     grouped.set(key, list);
@@ -138,7 +139,7 @@ export function buildSchedule(
   const weekEnd = addDays(startOfDay(now), 8).getTime();
   const summary: ScheduleSummary = {
     late: lateJobs.length,
-    today: dated.filter((job) => toDayKey(job.promisedDate || job.deadline || "") === todayKey)
+    today: dated.filter((job) => toDayKey(shopDueAt(job) ?? "") === todayKey)
       .length,
     week: dated.filter((job) => {
       const at = whenOf(job);
@@ -150,7 +151,7 @@ export function buildSchedule(
 }
 
 function whenOf(job: Order): number {
-  const raw = job.promisedDate || job.deadline;
+  const raw = shopDueAt(job);
   const at = raw ? new Date(raw).getTime() : Number.NaN;
   return Number.isNaN(at) ? Number.POSITIVE_INFINITY : at;
 }

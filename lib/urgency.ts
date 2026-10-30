@@ -4,8 +4,9 @@ import type { StatusIconName, StatusTone } from "@/components/StatusChip";
  * How much time is left on a job, in plain language.
  *
  * The demo API carries no accept-SLA timer, so nothing here invents one. Every
- * value is derived from the client's own deadline (or the promised finish the
- * shop committed to), which is the only real clock on an order.
+ * value is derived from the shop's own `readyBy` (`shopDueAt` in
+ * `lib/dates.ts`), which is the only clock a shop is held to. The client's
+ * deadline is never passed in.
  */
 
 export type UrgencyLevel = "overdue" | "urgent" | "soon" | "ok" | "undated";
