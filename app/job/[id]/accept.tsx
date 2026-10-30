@@ -8,6 +8,7 @@ import { LATE_PRODUCTION_HREF } from "@/components/LatenessPanel";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SchedulingNotice } from "@/components/SchedulingNotice";
 import { SecondaryButton } from "@/components/SecondaryButton";
+import { SpecRow } from "@/components/SpecRow";
 import { SpecialInstructionsPanel } from "@/components/SpecialInstructionsPanel";
 import { CheckboxRow } from "@/components/controls/CheckboxRow";
 import * as api from "@/lib/api";
@@ -136,6 +137,15 @@ export default function AcceptJobScreen() {
     >
       {job ? (
         <>
+          {/*
+            The two facts the shop commits to, before anything it has to read
+            or tick: its own price and its own date. The full card and the
+            docket below still say both.
+          */}
+          <View className="gg-card py-1" testID="accept-commitment">
+            <SpecRow label="You earn" value={priceMinor != null ? api.formatPhp(priceMinor) : "—"} />
+            <SpecRow label="Ready by" value={formatDeadlineFull(job.readyBy)} muted={!readyAt} />
+          </View>
           {answerLine ? (
             <Text className="text-body font-medium text-warning" testID="accept-window-line">
               {answerLine}

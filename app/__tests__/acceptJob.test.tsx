@@ -27,3 +27,25 @@ it("states the no-subcontracting term in one line under what the shop agrees to"
   expect(screen.getByText(NO_SUBCONTRACTING_ACCEPT_LINE)).toBeTruthy();
   await view.unmount();
 });
+
+it("puts the shop's own pay and ready-by date above the instructions it must tick", async () => {
+  (api.getOrder as jest.Mock).mockResolvedValue({
+    ...job,
+    totalMinor: 150000,
+    supplierPriceMinor: 100000,
+    readyBy: "2026-11-03T10:00:00+08:00",
+    productionItems: [{ name: "Flyers", quantity: 1, specialInstructions: "Keep the pages in order." }],
+  });
+  const view = await render(<AcceptJobScreen />);
+  const commitment = await screen.findByTestId("accept-commitment");
+  expect(screen.getByText("You earn")).toBeTruthy();
+  // The shop's price, never the client's total.
+  expect(screen.getAllByText(api.formatPhp(100000)).length).toBeGreaterThan(0);
+  expect(screen.queryByText(api.formatPhp(150000))).toBeNull();
+  expect(screen.getByText("Ready by")).toBeTruthy();
+  // Drawn before the tick the shop owes, so the commitment is read first.
+  const tree = JSON.stringify(view.toJSON());
+  expect(tree.indexOf("You earn")).toBeLessThan(tree.indexOf("I've read the special instructions"));
+  expect(commitment).toBeTruthy();
+  await view.unmount();
+});
