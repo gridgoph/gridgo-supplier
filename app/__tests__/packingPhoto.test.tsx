@@ -190,6 +190,13 @@ describe("the newer handover", () => {
     expect(screen.getAllByText("Ready for rider pickup").length).toBeGreaterThan(0);
     expect(screen.queryByLabelText("Take a packing photo")).toBeNull();
     expect(screen.queryByLabelText("Add a production photo")).toBeNull();
+    // Said once, in the custody card; the lede leads with the situation.
+    expect(screen.getByText("GRIDGO approved your finished products.")).toBeTruthy();
+    expect(screen.getByTestId("handoff-instruction")).toBeTruthy();
+    expect(screen.getAllByText(/Do not pack yet/)).toHaveLength(1);
+    // What follows is folded, one tap away.
+    expect(screen.queryByText("The rider checks the unpacked products")).toBeNull();
+    await fireEvent.press(screen.getByLabelText("What happens next, 5 steps"));
     expect(screen.getByText("The rider checks the unpacked products")).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("Ready for rider pickup"));
     expect(askConfirm).toHaveBeenCalledWith(
@@ -199,6 +206,28 @@ describe("the newer handover", () => {
       }),
     );
     expect(mockRun).toHaveBeenCalledWith(expect.objectContaining({ targetState: "ready_for_dispatch" }));
+    await view.unmount();
+  });
+
+  it("waits for a rider with one current instruction and nothing to press", async () => {
+    mockJob = {
+      ...mockJob,
+      supplierId: "shop",
+      state: "ready_for_dispatch",
+      handoverFlow: "rider_packs",
+      shopHandover: { finished: SENT, review: APPROVED },
+    };
+    const view = await render(<HandoffScreen />);
+    expect(screen.getByText("Riders have been notified.")).toBeTruthy();
+    expect(screen.getByText("Waiting for a rider")).toBeTruthy();
+    expect(screen.getByTestId("handoff-instruction")).toBeTruthy();
+    expect(
+      screen.getAllByText("Prepare packing materials. Do not pack yet; the rider checks the unpacked items first."),
+    ).toHaveLength(1);
+    expect(screen.getByText("No invoice or receipt in the package")).toBeTruthy();
+    // Custody moves at the rider's counter, never from here.
+    expect(screen.queryByLabelText("Ready for rider pickup")).toBeNull();
+    expect(screen.queryByLabelText("Take a packing photo")).toBeNull();
     await view.unmount();
   });
 

@@ -38,9 +38,11 @@ export function ridersPack(order: FlowOrder | null | undefined): boolean {
   return handoverFlowOf(order) === "rider_packs";
 }
 
+/** The rule on its own, where packing materials are not the next thing yet. */
+export const KEEP_UNPACKED = "Do not pack yet; the rider checks the unpacked items first.";
+
 /** The words the shop is told wherever a rider is called on the newer handover. */
-export const DO_NOT_PACK_YET =
-  "Prepare packing materials. Do not pack yet; the rider checks the unpacked items first.";
+export const DO_NOT_PACK_YET = `Prepare packing materials. ${KEEP_UNPACKED}`;
 
 // ---------------------------------------------------------------------------
 // Reading the record

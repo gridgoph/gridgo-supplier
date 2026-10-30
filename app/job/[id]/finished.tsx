@@ -1,4 +1,4 @@
-import { Camera } from "lucide-react-native";
+import { Camera, Check, PackageOpen } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -15,7 +15,7 @@ import { humanizeApiError, isFinishedPhotoNotAllowed, offlineMessage } from "@/l
 import { formatTimelineAt } from "@/lib/dates";
 import { probeStorage, type StorageAvailability } from "@/lib/files";
 import { WHY_WE_ASK } from "@/lib/legal";
-import { DO_NOT_PACK_YET, finishedStage } from "@/lib/shopHandover";
+import { DO_NOT_PACK_YET, KEEP_UNPACKED, finishedStage } from "@/lib/shopHandover";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { useJob } from "@/hooks/useJob";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -136,7 +136,7 @@ export default function FinishedProductsScreen() {
       lede={
         !open
           ? "This job has moved past this step. Its latest step is on the job."
-          : "Photograph the finished products, unpacked, so GRIDGO can check them before a rider is called. Do not pack yet; the rider checks the unpacked items first."
+          : "Send GRIDGO photos of the finished products."
       }
       actionError={open ? sendError : null}
       footer={
@@ -181,15 +181,7 @@ export default function FinishedProductsScreen() {
         </View>
       ) : null}
 
-      {open ? (
-        <View className="gg-panel gap-2">
-          <Text className="text-body font-medium text-text-primary">What to photograph</Text>
-          <Text className="text-body text-text-secondary">
-            Every finished piece, out of its packing, in good light. Show the printed side and enough of the stack that
-            GRIDGO can see the quantity and the finish.
-          </Text>
-        </View>
-      ) : null}
+      {open ? <PhotoChecklist /> : null}
 
       {availability === "unavailable" && open ? (
         <View className="gg-panel gap-1">
@@ -206,7 +198,7 @@ export default function FinishedProductsScreen() {
       ) : null}
 
       {ready ? (
-        <FieldShell label="Photos of the finished products" hint="Unpacked, every piece in view. JPEG, PNG or WebP.">
+        <FieldShell label="Photos of the finished products" hint="JPEG, PNG or WebP.">
           {upload.items.length ? (
             <UploadList
               items={upload.items}
@@ -224,6 +216,45 @@ export default function FinishedProductsScreen() {
   );
 }
 
+/**
+ * What a photo has to show, as things the shop can see through the camera
+ * rather than a paragraph to remember, and the one thing not to do yet, said
+ * once and on its own line.
+ */
+const PHOTO_CHECKLIST = [
+  "Products out of their packing",
+  "Printed side showing",
+  "Enough of every stack to see the quantity and finish",
+  "Good light",
+] as const;
+
+function PhotoChecklist() {
+  const colors = useThemeColors();
+  return (
+    <View className="gap-3" testID="finished-checklist">
+      <View className="gg-panel gap-2">
+        <Text className="text-body font-medium text-text-primary">Each photo shows</Text>
+        <View className="gap-2" accessibilityRole="list">
+          {PHOTO_CHECKLIST.map((item) => (
+            <View key={item} className="flex-row items-start gap-2">
+              <View className="pt-0.5">
+                <Check size={16} color={colors.textSecondary} strokeWidth={2} aria-hidden />
+              </View>
+              <Text className="min-w-0 flex-1 text-body text-text-secondary">{item}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      <View className="flex-row items-start gap-3 rounded-field border border-warning bg-surface p-3">
+        <View className="pt-0.5">
+          <PackageOpen size={16} color={colors.warning} strokeWidth={2} aria-hidden />
+        </View>
+        <Text className="min-w-0 flex-1 text-body font-medium text-text-primary">{KEEP_UNPACKED}</Text>
+      </View>
+    </View>
+  );
+}
+
 /** The empty frame a photo will fill, so the shop sees the shape of what is missing. */
 function Viewfinder() {
   const colors = useThemeColors();
@@ -231,7 +262,7 @@ function Viewfinder() {
     <View className="h-40 items-center justify-center gap-2 rounded-card border border-dashed border-outline bg-surface px-6">
       <Camera size={28} color={colors.textMuted} strokeWidth={1.75} aria-hidden />
       <Text className="text-center text-body font-medium text-text-primary">No photo yet</Text>
-      <Text className="text-center text-caption text-text-muted">The finished products, unpacked.</Text>
+      <Text className="text-center text-caption text-text-muted">Take a photo, or choose one from your gallery.</Text>
     </View>
   );
 }
