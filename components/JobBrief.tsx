@@ -232,15 +232,13 @@ function SectionBody({
     case "delivery": {
       const distance = distanceLabel(order.deliveryDistanceMeters);
       const details = jobDetailsOf(order);
-      const readyBy = order.readyBy || details?.promisedDate;
+      // The shop's own date only: without it the row says so, never the client's.
       return (
         <View>
-          {readyBy ? (
-            <SpecRow label="Have it ready by" value={formatDeadlineFull(readyBy)} />
-          ) : details ? (
-            <SpecRow label="Have it ready by" value={NOT_SPECIFIED} muted />
+          {order.readyBy ? (
+            <SpecRow label="Have it ready by" value={formatDeadlineFull(order.readyBy)} />
           ) : (
-            <SpecRow label="Client needs it by" value={formatDeadlineFull(order.promisedDate || order.deadline)} />
+            <SpecRow label="Have it ready by" value={NOT_SPECIFIED} muted />
           )}
           {details ? (
             <SpecRow label="Zone" value={details.zone} muted={details.zone === NOT_SPECIFIED} />

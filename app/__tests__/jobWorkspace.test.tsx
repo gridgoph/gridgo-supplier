@@ -758,7 +758,7 @@ describe("job workspace before packaging", () => {
     expect(screen.queryByTestId("packaging-checklist")).toBeNull();
   });
 
-  it("shows the zone and date GRIDGO filled, and says Not specified for what it could not", async () => {
+  it("shows the zone GRIDGO filled, and says Not specified for what it could not, the date included", async () => {
     (getOrder as jest.Mock).mockResolvedValue(
       job({
         readyBy: null,
@@ -784,7 +784,9 @@ describe("job workspace before packaging", () => {
     fireEvent.press(screen.getByRole("button", { name: /^Where and when/ }));
     const delivery = await screen.findByTestId("job-brief-delivery");
     expect(within(delivery).getByText("Zone")).toBeTruthy();
-    expect(within(delivery).getByText(formatDeadlineFull("2026-08-12T02:00:00.000Z"))).toBeTruthy();
+    // Without readyBy, GRIDGO's filled date is the client's deadline: the row says Not specified instead.
+    expect(within(delivery).getAllByText("Not specified")).toHaveLength(2);
+    expect(within(delivery).queryByText(new RegExp(formatDeadlineFull("2026-08-12T02:00:00.000Z")))).toBeNull();
     fireEvent.press(screen.getByRole("button", { name: /^What happened so far/ }));
     const history = await screen.findByTestId("job-brief-history");
     // No internal payout label, and an unnamed row is not attributed to GRIDGO.

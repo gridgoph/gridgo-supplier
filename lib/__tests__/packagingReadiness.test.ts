@@ -98,12 +98,23 @@ describe("job details and update labels", () => {
 
   it("adds the zone to the closed delivery row", () => {
     const order = {
-      readyBy: null,
+      readyBy: "2026-10-20T03:00:00.000Z",
       promisedDate: null,
       deadline: null,
       jobDetails: { material: "Vinyl", zone: "Away", promisedDate: "2026-10-20T03:00:00.000Z", missing: [] },
     } as unknown as Order;
     expect(deliverySummary(order as Parameters<typeof deliverySummary>[0])).toMatch(/^Ready by .* · Away$/);
+  });
+
+  it("does not date the row from GRIDGO's fill when the shop's readyBy is missing", () => {
+    // GRIDGO fills jobDetails.promisedDate from the client's deadline when readyBy is missing.
+    const order = {
+      readyBy: null,
+      promisedDate: null,
+      deadline: "2026-10-21T03:00:00.000Z",
+      jobDetails: { material: "Vinyl", zone: "Away", promisedDate: "2026-10-21T03:00:00.000Z", missing: [] },
+    } as unknown as Order;
+    expect(deliverySummary(order as Parameters<typeof deliverySummary>[0])).toBe("Date not set yet · Away");
   });
 
   it("never shows an internal payout label in an update", () => {

@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 
 import { JobBrief } from "@/components/JobBrief";
 import type { Order } from "@/lib/api";
+import { formatDeadlineFull } from "@/lib/dates";
 
 jest.mock("@/components/ArtworkPanel", () => ({
   ArtworkPanel: ({ kinds }: { kinds?: string[] }) => {
@@ -232,6 +233,24 @@ describe("JobBrief", () => {
     expect(screen.getByText("Have it ready by")).toBeTruthy();
     expect(screen.getByText("Bajada, Davao City")).toBeTruthy();
     expect(screen.getByText("3.2 km from your shop")).toBeTruthy();
+  });
+
+  it("never states the client's deadline when the shop's own date is missing", async () => {
+    const clientDated = order({
+      readyBy: null,
+      promisedDate: "2026-09-21T09:00:00+08:00",
+      jobDetails: { material: "Vinyl", zone: "Nearby", promisedDate: "2026-09-22T09:00:00+08:00", missing: [] },
+    });
+    const view = await render(<JobBrief order={clientDated} defaultOpen="delivery" />);
+
+    expect(screen.getByText("Have it ready by")).toBeTruthy();
+    expect(screen.getByText("Not specified")).toBeTruthy();
+    expect(screen.getByText("Date not set yet · Nearby")).toBeTruthy();
+    expect(screen.queryByText("Client needs it by")).toBeNull();
+    const tree = JSON.stringify(view.toJSON());
+    for (const clientDate of ["2026-09-21T09:00:00+08:00", "2026-09-22T09:00:00+08:00"]) {
+      expect(tree).not.toContain(formatDeadlineFull(clientDate));
+    }
   });
 
   it("does not open a row with nothing behind it", async () => {
