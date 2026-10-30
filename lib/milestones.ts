@@ -255,9 +255,10 @@ const PRODUCING = new Set([
 /**
  * The chip for a part that waits on the client's window to report a problem,
  * before that window has opened. It must differ from the delivered part's
- * "After delivery", or two parts paid at different times read as one.
+ * "After delivery", or two parts paid at different times read as one, and it
+ * names the window in the words every detail line here already uses.
  */
-const AFTER_WINDOW = "After window closes";
+const AFTER_WINDOW = "After window to report a problem";
 
 /** The client has the job and may still report a problem. */
 const WINDOW_OPEN = new Set(["delivered", "issue_window_open"]);
