@@ -128,3 +128,23 @@ it("shows a refusal in GRIDGO's words and keeps the photos ready to send again",
   expect(screen.queryByText(/finished_product_photo_required/)).toBeNull();
   await view.unmount();
 });
+
+it("lists what each photo shows once, and says not to pack exactly once", async () => {
+  (api.getOrder as jest.Mock).mockResolvedValue(job());
+  const view = await render(<FinishedProductsScreen />);
+  expect(await screen.findByTestId("finished-checklist")).toBeTruthy();
+  for (const item of [
+    "Products out of their packing",
+    "Printed side showing",
+    "Enough of every stack to see the quantity and finish",
+    "Good light",
+  ]) {
+    expect(screen.getByText(item)).toBeTruthy();
+  }
+  expect(screen.getAllByText(/Do not pack yet/)).toHaveLength(1);
+  // "Unpacked" is said by the checklist, not again by the lede, the frame and the hint.
+  expect(screen.queryAllByText(/unpacked\.?$/i)).toHaveLength(0);
+  expect(screen.getByLabelText("Take a photo")).toBeTruthy();
+  expect(screen.getByText("Choose from gallery")).toBeTruthy();
+  await view.unmount();
+});
