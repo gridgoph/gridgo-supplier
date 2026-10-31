@@ -252,6 +252,14 @@ const PRODUCING = new Set([
   "payout_released",
 ]);
 
+/**
+ * The chip for a part that waits on the client's window to report a problem,
+ * before that window has opened. It must differ from the delivered part's
+ * "After delivery", or two parts paid at different times read as one, and it
+ * names the window in the words every detail line here already uses.
+ */
+const AFTER_WINDOW = "After window to report a problem";
+
 /** The client has the job and may still report a problem. */
 const WINDOW_OPEN = new Set(["delivered", "issue_window_open"]);
 /** The window has closed with nothing held: Operations may release the last part. */
@@ -397,7 +405,8 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
     return {
       ...base,
       stage: "waiting_on_window",
-      statusLabel: WINDOW_OPEN.has(order.state) ? "Window open" : "After delivery",
+      // Not "After delivery": the delivered part says that, and this one comes later.
+      statusLabel: WINDOW_OPEN.has(order.state) ? "Window open" : AFTER_WINDOW,
       tone: "neutral",
       icon: "clock",
       detail: WINDOW_OPEN.has(order.state)
@@ -454,7 +463,8 @@ export function viewMilestone(order: Order, milestone: PayoutMilestone): Milesto
   return {
     ...base,
     stage: "waiting_on_delivery",
-    statusLabel: "After delivery",
+    // Retention waits on the same evidence and then on the window, so it says the later of the two.
+    statusLabel: owner === "inherited" ? AFTER_WINDOW : "After delivery",
     tone: "neutral",
     icon: "clock",
     detail:

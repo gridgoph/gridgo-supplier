@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 
-import { Camera } from "lucide-react-native";
+import { Camera, ChevronDown, PackageOpen } from "lucide-react-native";
 import { ProgressPhotoStrip } from "@/components/ProgressPhotoStrip";
 import { UploadList } from "@/components/UploadList";
 import { useFileUpload } from "@/hooks/useFileUpload";
@@ -238,14 +238,17 @@ export default function HandoffScreen() {
       subject={job?.title}
       // A stopped pickup is explained once, in its own panel below.
       lede={
+        // The instruction about the products is said once, in the custody card.
         newer && !held && !counterIssue
           ? step
-            ? `GRIDGO approved your finished products. ${DO_NOT_PACK_YET}`
+            ? "GRIDGO approved your finished products."
             : sendFinished
               ? "Before a rider is called, GRIDGO checks photos of the finished, unpacked products."
               : finished?.stage === "in_review" || finished?.stage === "with_gridgo"
                 ? (waiting?.body ?? "")
-                : (custody?.detail ?? "Getting a job ready for the rider who collects it.")
+                : (custody?.now?.situation ??
+                  custody?.detail ??
+                  "Getting a job ready for the rider who collects it.")
           : held
           ? "This job cannot be packaged yet. What is holding it, and who can clear it, is below."
           : photoGate
@@ -428,7 +431,20 @@ export default function HandoffScreen() {
               icon={custody.icon}
             />
           </View>
-          {counterIssue ? null : (
+          {counterIssue ? null : custody.now ? (
+            // The one thing to do with the products now, on its own line.
+            <View
+              className="flex-row items-start gap-3 rounded-field border border-warning bg-surface p-3"
+              testID="handoff-instruction"
+            >
+              <View className="pt-0.5">
+                <PackageOpen size={16} color={colors.warning} strokeWidth={2} aria-hidden />
+              </View>
+              <Text className="min-w-0 flex-1 text-body font-medium text-text-primary">
+                {custody.now.instruction}
+              </Text>
+            </View>
+          ) : (
             <Text className="text-body text-text-secondary">
               {custody.detail}
             </Text>
@@ -488,12 +504,42 @@ export default function HandoffScreen() {
  * What marking the package ready sets in motion, in the order it happens.
  * Numbered because it is a sequence, and monochrome because the one yellow on
  * this screen is the button that starts it.
+ *
+ * Folded, like the job docket: at the counter the shop needs who moves next
+ * and what to do now, which the custody card says. The steps after that are
+ * one tap away rather than a recap standing between the shop and the action.
  */
 function HandoffSequence({ newer }: { newer: boolean }) {
+  const colors = useThemeColors();
+  const [open, setOpen] = useState(false);
   const sequence = newer ? RIDER_PACKS_SEQUENCE : HANDOFF_SEQUENCE;
   return (
-    <View className="gg-panel gap-4" accessibilityRole="list">
-      <Text className="text-overline text-text-muted">WHAT HAPPENS NEXT</Text>
+    <View className="gg-panel gap-4">
+      <Pressable
+        onPress={() => setOpen(!open)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={`What happens next, ${sequence.length} steps`}
+        accessibilityHint={open ? "Closes the steps" : "Opens the steps"}
+        className="gg-touch flex-row items-center justify-between gap-3"
+      >
+        <Text className="text-overline text-text-muted">WHAT HAPPENS NEXT</Text>
+        <View style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }}>
+          <ChevronDown size={18} color={colors.textMuted} strokeWidth={2} />
+        </View>
+      </Pressable>
+      {open ? <SequenceSteps sequence={sequence} /> : null}
+    </View>
+  );
+}
+
+function SequenceSteps({
+  sequence,
+}: {
+  sequence: typeof RIDER_PACKS_SEQUENCE | typeof HANDOFF_SEQUENCE;
+}) {
+  return (
+    <View className="gap-4" accessibilityRole="list">
       {sequence.map((step, index) => {
         const last = index === sequence.length - 1;
         return (

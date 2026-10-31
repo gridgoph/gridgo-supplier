@@ -6,7 +6,7 @@ import { OrderReference } from "@/components/OrderReference";
 import { orderReferenceSpoken } from "@/lib/orderReference";
 import { SchedulingNotice } from "@/components/SchedulingNotice";
 import { StatusChip } from "@/components/StatusChip";
-import { formatDeadlineFull } from "@/lib/dates";
+import { formatDeadlineFull, shopDueAt } from "@/lib/dates";
 import { formatPhp, type Order } from "@/lib/api";
 import { isFulfilmentFinished, presentJobStatus } from "@/lib/jobState";
 import { deadlineUrgency } from "@/lib/urgency";
@@ -45,7 +45,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
   const now = useNow(ticking ? 30_000 : null);
   const window = acceptWindow(job, now);
   const answerLine = acceptWindowLine(window, now);
-  const dueAt = job.readyBy || job.promisedDate || job.deadline;
+  const dueAt = shopDueAt(job);
   // Keep the recorded date, but finished or released work is no longer due.
   const urgency = deadlineUrgency(shopRelease(job) || isFulfilmentFinished(job) ? null : dueAt, now);
   const spec = orderSpecSummary(job);
@@ -93,7 +93,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
                 : "text-body text-text-secondary"
           }
         >
-          {job.readyBy ? "Ready by " : ""}{formatDeadlineFull(dueAt)}
+          {dueAt ? "Ready by " : ""}{formatDeadlineFull(dueAt)}
           {urgency.level === "undated" ? "" : ` · ${urgency.label}`}
         </Text>
         {express ? (

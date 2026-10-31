@@ -67,9 +67,15 @@ describe("job brief summaries", () => {
     expect(mockupSummary(order())).toEqual({ summary: "None attached — go by the artwork", empty: true });
   });
 
-  it("prefers the shop's own ready-by date over the client's need-by", () => {
+  it("states the shop's own ready-by date and never the client's deadline", () => {
     expect(deliverySummary(order({ readyBy: "2026-09-20T17:00:00+08:00" }))).toMatch(/^Ready by /);
-    expect(deliverySummary(order())).toMatch(/^Client needs it by /);
+    // No readyBy: the client's deadline, promised date and GRIDGO's filled date all stay unsaid.
+    const clientDated = order({
+      promisedDate: "2026-09-21T09:00:00+08:00",
+      jobDetails: { material: "Vinyl", zone: "Nearby", promisedDate: "2026-09-22T09:00:00+08:00", missing: [] },
+    });
+    expect(deliverySummary(clientDated)).toBe("Date not set yet · Nearby");
+    expect(deliverySummary(order())).toBe("Date not set yet");
     expect(deliverySummary(order({ deadline: null }))).toBe("Date not set yet");
   });
 

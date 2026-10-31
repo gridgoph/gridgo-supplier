@@ -15,8 +15,8 @@ import {
 const service = (capacityDaily: number | null): SupplierService =>
   ({ id: "svc", state: "live", capacityDaily, capacityWeekly: null } as unknown as SupplierService);
 
-const job = (promisedDate: string, quantity: number): Order =>
-  ({ id: `job_${promisedDate}_${quantity}`, promisedDate, quantity } as unknown as Order);
+const job = (readyBy: string, quantity: number): Order =>
+  ({ id: `job_${readyBy}_${quantity}`, readyBy, quantity } as unknown as Order);
 
 // A Monday, so the grid's first column is a real Monday and nothing is
 // off-by-one in the week maths.

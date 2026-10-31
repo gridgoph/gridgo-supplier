@@ -5,7 +5,7 @@ import { OrderReference } from "@/components/OrderReference";
 import { orderReferenceSpoken } from "@/lib/orderReference";
 import { StatusChip } from "@/components/StatusChip";
 import type { Order } from "@/lib/api";
-import { formatDeadlineTime } from "@/lib/dates";
+import { formatDeadlineTime, shopDueAt } from "@/lib/dates";
 import { isExpressOrder } from "@/lib/express";
 import { presentJobStatus, primaryAction } from "@/lib/jobState";
 import { deadlineUrgency } from "@/lib/urgency";
@@ -29,9 +29,9 @@ type Props = {
  */
 export function JobRow({ job, now = new Date(), onPress }: Props) {
   const status = presentJobStatus(job);
-  const urgency = deadlineUrgency(job.promisedDate || job.deadline, now);
+  const urgency = deadlineUrgency(shopDueAt(job), now);
   const next = primaryAction(job);
-  const time = formatDeadlineTime(job.promisedDate || job.deadline);
+  const time = formatDeadlineTime(shopDueAt(job));
   const late = urgency.level === "overdue";
   const express = isExpressOrder(job);
 

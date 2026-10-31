@@ -108,8 +108,11 @@ it("reminds the shop to keep its invoice out of the package on the packaging evi
   const view = await render(<FulfilmentProofScreen />);
   expect(await screen.findByText("Packaging evidence")).toBeTruthy();
   expect(screen.getByText("No invoice or receipt in the package")).toBeTruthy();
-  expect(screen.getByText(/Do not put your own invoice or receipt inside the package/)).toBeTruthy();
   expect(screen.getByText(/collects invoices from each shop monthly/)).toBeTruthy();
+  // The reason is one tap away.
+  expect(screen.queryByText(/Do not put your own invoice or receipt inside the package/)).toBeNull();
+  await fireEvent.press(screen.getByLabelText("Why"));
+  expect(screen.getByText(/Do not put your own invoice or receipt inside the package/)).toBeTruthy();
   await view.unmount();
 });
 

@@ -153,7 +153,27 @@ describe("plan 2 milestone views", () => {
     expect(delivered.stage).toBe("waiting_on_delivery");
     expect(delivered.canAddProof).toBe(false);
     expect(window.stage).toBe("waiting_on_window");
-    expect(window.statusLabel).toBe("After delivery");
+    expect(window.statusLabel).toBe("After window to report a problem");
+  });
+
+  it("times the delivered part and the window part apart before delivery", () => {
+    const [, delivered, window] = milestoneViews(order({ state: "production" }));
+    expect(delivered.statusLabel).toBe("After delivery");
+    expect(window.statusLabel).toBe("After window to report a problem");
+    expect(delivered.statusLabel).not.toBe(window.statusLabel);
+    // Amounts and the API's order stand as they were.
+    expect([delivered.amountMinor, window.amountMinor]).toEqual([35000, 25000]);
+    expect(milestoneViews(order()).map((view) => view.code)).toEqual(["production_started", "delivered", "issue_window"]);
+  });
+
+  it("keeps the window part With GRIDGO after the window, never Released until it is", () => {
+    const closed = order({ state: "completed", payoutMilestones: escrow({ production_started: "released", delivered: "released" }) });
+    expect(milestoneViews(closed)[2].statusLabel).toBe("With GRIDGO");
+    const paid = order({
+      state: "payout_released",
+      payoutMilestones: escrow({ production_started: "released", delivered: "released", issue_window: "released" }),
+    });
+    expect(milestoneViews(paid)[2].statusLabel).toBe("Released");
   });
 
   it("says the rider's automatic delivery proof is filed, not the shop's", () => {
@@ -216,6 +236,14 @@ describe("plan 1 milestone views", () => {
     const printed = order({ payoutPlanVersion: 1, payoutMilestones: legacy({ printing: "pof_attached" }) });
     expect(nextShopProof(printed)?.code).toBe("packaging_qc");
     expect(milestoneViews(printed)[3].detail).toMatch(/^Retention rides on the same delivery evidence/);
+  });
+
+  it("times retention by the window, apart from the delivered part, with amounts unchanged", () => {
+    const [, , delivered, retention] = milestoneViews(order({ payoutPlanVersion: 1, payoutMilestones: legacy() }));
+    expect(delivered.statusLabel).toBe("After delivery");
+    expect(retention.statusLabel).toBe("After window to report a problem");
+    expect([delivered.amountMinor, retention.amountMinor]).toEqual([25000, 10000]);
+    expect(retention.stage).toBe("waiting_on_delivery");
   });
 });
 

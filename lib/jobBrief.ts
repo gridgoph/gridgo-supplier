@@ -84,8 +84,6 @@ type BriefOrder = Pick<
   | "artworkFileIds"
   | "mockupFileIds"
   | "readyBy"
-  | "promisedDate"
-  | "deadline"
   | "address"
   | "deliveryDistanceMeters"
   | "supplierPriceMinor"
@@ -102,7 +100,10 @@ export const NOT_SPECIFIED = "Not specified";
 export type FilledJobDetails = {
   material: string;
   zone: string;
-  /** The date the shop is held to; null when GRIDGO could not fill it. */
+  /**
+   * GRIDGO's fill, which falls back to the client's deadline when the order
+   * has no `readyBy`. Never drawn: a shop's date is `readyBy` and nothing else.
+   */
   promisedDate: string | null;
   /** Which of the three were not on the order. */
   missing: Set<string>;
@@ -185,14 +186,15 @@ export function approvalSummary(order: BriefOrder): { summary: string; empty: bo
   return summary ? approvalRowSummary(summary) : { summary: "Not recorded", empty: true };
 }
 
-/** The date the shop is held to first; the client's need-by only when GRIDGO has not set one. Then the zone. */
+/**
+ * The date the shop is held to, then the zone. Only `readyBy`: GRIDGO fills
+ * `promisedDate` (and `jobDetails.promisedDate`) from the client's `deadline`
+ * when `readyBy` is missing, so neither may stand in for it.
+ */
 export function deliverySummary(order: BriefOrder): string {
   const details = jobDetailsOf(order);
   const zone = details && details.zone !== NOT_SPECIFIED ? ` · ${details.zone}` : "";
-  const readyBy = order.readyBy || details?.promisedDate;
-  if (readyBy) return `Ready by ${formatDeadlineFull(readyBy)}${zone}`;
-  const needBy = order.promisedDate || order.deadline;
-  if (needBy) return `Client needs it by ${formatDeadlineFull(needBy)}${zone}`;
+  if (order.readyBy) return `Ready by ${formatDeadlineFull(order.readyBy)}${zone}`;
   return `Date not set yet${zone}`;
 }
 

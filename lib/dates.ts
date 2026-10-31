@@ -94,16 +94,13 @@ export function formatTimelineAt(iso: string): string {
   });
 }
 
-/** Earliest promised/deadline among jobs, or null. */
-export function nextPromisedDeadline(
-  jobs: { promisedDate: string | null; deadline: string | null }[],
-  now: Date = new Date(),
-): string | null {
-  const stamps = jobs
-    .map((j) => j.promisedDate || j.deadline)
-    .filter((v): v is string => Boolean(v))
-    .filter((v) => !Number.isNaN(new Date(v).getTime()))
-    .filter((v) => new Date(v).getTime() >= now.getTime() - 86_400_000)
-    .sort((a, b) => a.localeCompare(b));
-  return stamps[0] ?? null;
+/**
+ * The date a shop is held to: its own `readyBy`, and nothing else.
+ *
+ * `deadline` is the client's, and GRIDGO fills `promisedDate` from it when
+ * `readyBy` is missing, so neither may stand in for it. A job without
+ * `readyBy` is undated on every shop screen, never dated by the client.
+ */
+export function shopDueAt(job: { readyBy?: string | null }): string | null {
+  return job.readyBy || null;
 }

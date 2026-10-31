@@ -1,4 +1,5 @@
 import type { Order, SupplierService, SupplierServicePatch } from "@/lib/api";
+import { shopDueAt } from "@/lib/dates";
 import { toDayKey } from "@/lib/day";
 import {
   DEFAULT_WORKING_DAYS,
@@ -124,7 +125,7 @@ export type DayLoad = {
 export function loadByDay(jobs: Order[]): Map<string, DayLoad> {
   const map = new Map<string, DayLoad>();
   for (const job of jobs) {
-    const when = job.promisedDate || job.deadline;
+    const when = shopDueAt(job);
     if (!when) continue;
     const dayKey = toDayKey(when);
     if (!dayKey) continue;

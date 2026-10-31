@@ -35,8 +35,14 @@ jest.mock("@/hooks/useFileUpload", () => ({
   useFileUpload: () => ({ items: [], busy: false }),
 }));
 jest.mock("@/lib/api", () => ({ attachPackingPhoto: jest.fn() }));
-jest.mock("lucide-react-native", () => ({ ReceiptText: "ReceiptText" }));
-jest.mock("@/hooks/useTheme", () => ({ useThemeColors: () => ({ info: "#1565C0" }) }));
+jest.mock("lucide-react-native", () => ({
+  ReceiptText: "ReceiptText",
+  ChevronDown: "ChevronDown",
+  PackageOpen: "PackageOpen",
+}));
+jest.mock("@/hooks/useTheme", () => ({
+  useThemeColors: () => ({ info: "#1565C0", brand: "#D4A017", textMuted: "#7A7A7A", warning: "#F57F17" }),
+}));
 let mockJobState = "production";
 let mockPlan = {};
 jest.mock("@/hooks/useJob", () => ({
@@ -72,13 +78,24 @@ function texts() {
 
 function press() { rendered.root.findByType("PrimaryButton").props.onPress(); }
 
-it("draws no checklist: readiness is a single signal", () => {
+/** Taps the disclosure whose accessibility label starts with `label`. */
+async function open(label) {
+  const toggle = rendered.root.find(
+    (node) => node.type === "Pressable" && String(node.props.accessibilityLabel ?? "").startsWith(label),
+  );
+  await act(async () => toggle.props.onPress());
+}
+
+it("draws no checklist: readiness is a single signal", async () => {
   const checkboxes = rendered.root.findAll(
     (node) => node.props && node.props.accessibilityRole === "checkbox",
   );
   expect(checkboxes).toHaveLength(0);
-  const texts = rendered.root.findAllByType("Text").map((node) => node.props.children);
-  expect(texts).toContain("The rider comes to your counter");
+  // What follows is folded: one tap away, not a recap in front of the action.
+  expect(texts()).toContain("WHAT HAPPENS NEXT");
+  expect(texts()).not.toContain("The rider comes to your counter");
+  await open("What happens next");
+  expect(texts()).toContain("The rider comes to your counter");
 });
 
 it("submits packaging readiness directly, then returns to the job on confirmed success", async () => {
@@ -109,13 +126,15 @@ it("retains packing answers after failure and permits an explicit retry", async 
   expect(mockClear).toHaveBeenCalledWith("job");
 });
 
-it("reminds the shop to keep its own invoice out of the package it is packing", () => {
-  const shown = texts();
-  expect(shown).toContain("No invoice or receipt in the package");
-  expect(shown).toContain(
-    "Do not put your own invoice or receipt inside the package. GRIDGO buys this job from you and gives the customer its own receipt.",
-  );
-  expect(shown).toContain("Keep your invoice for GRIDGO. It collects invoices from each shop monthly.");
+it("reminds the shop to keep its own invoice out of the package it is packing", async () => {
+  const why =
+    "Do not put your own invoice or receipt inside the package. GRIDGO buys this job from you and gives the customer its own receipt.";
+  expect(texts()).toContain("No invoice or receipt in the package");
+  expect(texts()).toContain("Keep your invoice for GRIDGO. It collects invoices from each shop monthly.");
+  // The reason is one tap away, not a second paragraph at the counter.
+  expect(texts()).not.toContain(why);
+  await open("Why");
+  expect(texts()).toContain(why);
 });
 
 it.each(["ready_for_dispatch", "rider_assigned"])("keeps the invoice reminder up at the counter (%s)", async (state) => {

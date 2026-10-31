@@ -27,6 +27,12 @@ export type Custody = {
   icon: StatusIconName;
   /** What happens next and who does it. */
   detail: string;
+  /**
+   * Where `detail` is a situation followed by the one thing to do with the
+   * products now, the two apart, so the handover screen can lead with the
+   * situation and say the instruction once, on its own.
+   */
+  now?: { situation: string; instruction: string };
   /** Whose move it is now. */
   nextActor: "You" | "Rider" | "Operations" | "Client";
 };
@@ -127,6 +133,7 @@ function riderPacksCustody(
         tone: "info",
         icon: "clock",
         detail: `Riders have been notified. ${DO_NOT_PACK_YET}`,
+        now: { situation: "Riders have been notified.", instruction: DO_NOT_PACK_YET },
         nextActor: "Rider",
       };
     case "rider_assigned":
@@ -176,6 +183,10 @@ function riderPacksCustody(
           tone: "neutral",
           icon: "clock",
           detail: `GRIDGO approved your finished products. Mark the job ready for rider pickup. ${DO_NOT_PACK_YET}`,
+          now: {
+            situation: "GRIDGO approved your finished products. Mark the job ready for rider pickup.",
+            instruction: DO_NOT_PACK_YET,
+          },
           nextActor: "You",
         };
       }
@@ -263,7 +274,8 @@ export const HANDOFF_SEQUENCE = [
  */
 export const PACKAGE_INVOICE_REMINDER = {
   title: "No invoice or receipt in the package",
+  keep: "Keep your invoice for GRIDGO. It collects invoices from each shop monthly.",
+  /** The reason, one tap away: the rule is the title. */
   detail:
     "Do not put your own invoice or receipt inside the package. GRIDGO buys this job from you and gives the customer its own receipt.",
-  keep: "Keep your invoice for GRIDGO. It collects invoices from each shop monthly.",
 } as const;

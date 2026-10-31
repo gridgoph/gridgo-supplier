@@ -81,15 +81,12 @@ it("uses the ready-by date for due wording when the client deadline has passed",
   expect(screen.getByText(`Ready by ${formatDeadlineFull(readyBy)} · Due in 6 hours`)).toBeTruthy();
 });
 
-it.each([null, undefined])("falls back to the promised date when readyBy is %s", async (readyBy) => {
+it.each([null, undefined])("never shows a client date when readyBy is %s", async (readyBy) => {
   await render(<JobCard job={{ ...job, readyBy, promisedDate, deadline }} />);
-  expect(screen.getByText(`${formatDeadlineFull(promisedDate)} · Due in 24 hours`)).toBeTruthy();
-  expect(screen.queryByText(/^Ready by/)).toBeNull();
-});
-
-it("uses the legacy deadline when neither ready-by nor promised date is available", async () => {
-  await render(<JobCard job={{ ...job, deadline }} />);
-  expect(screen.getByText(`${formatDeadlineFull(deadline)} · Due in 2 days`)).toBeTruthy();
+  expect(screen.getByText("Not set")).toBeTruthy();
+  expect(screen.queryByText(/Ready by|Due in|Late by/)).toBeNull();
+  expect(screen.queryByText(new RegExp(formatDeadlineFull(promisedDate), "i"))).toBeNull();
+  expect(screen.queryByText(new RegExp(formatDeadlineFull(deadline), "i"))).toBeNull();
 });
 
 it("keeps an undated job readable without inventing a date or urgency", async () => {

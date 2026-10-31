@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
@@ -28,9 +28,10 @@ import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
  *
  * This is a short, reversible step over a job the shop is already looking at,
  * so it is presented as a sheet rather than pushed as a place: the job stays
- * behind it and the sheet drags away. The consequence sits directly above the
- * action, which is why there is no second confirmation on top of it — asking
- * the same question twice teaches a shop to stop reading either time.
+ * behind it and the sheet drags away. The consequence is said once, directly
+ * above the action, as the exact note the client will read — which is why
+ * there is no second confirmation on top of it, and no lede or hint repeating
+ * it: asking the same question twice teaches a shop to stop reading either time.
  */
 export default function AdvanceJobScreen() {
   const { id, action: actionKind } = useLocalSearchParams<{ id: string; action?: string }>();
@@ -51,21 +52,31 @@ export default function AdvanceJobScreen() {
     chosen && templates.some((t) => t.id === chosen) ? chosen : (templates[0]?.id ?? null);
   const template = PRODUCTION_UPDATE_TEMPLATES.find((t) => t.id === templateId);
   const status = job ? presentOrderState(job.state, job) : null;
+  // The note exactly as it is sent: the preview above the action reads this too.
+  const headline = template?.timelineNote ?? step?.resultLabel ?? "";
+  const extra = draft.note.trim();
+  const timelineNote = extra ? `${headline}. ${extra}` : headline;
+
+  // A second tap before the first one re-renders the button disabled sends nothing.
+  const pending = useRef(false);
 
   async function advance() {
     // A step with no target state is not a transition at all (a proof is sent
     // by attaching a file), so it never reaches this screen.
-    if (!job || !step?.targetState) return;
-    const headline = template?.timelineNote ?? step.resultLabel;
-    const extra = draft.note.trim();
-    const updated = await action.run({
-      jobId: job.id,
-      targetState: step.targetState,
-      note: extra ? `${headline}. ${extra}` : headline,
-    });
-    if (!updated) return;
-    clearDraft(job.id);
-    router.back();
+    if (!job || !step?.targetState || pending.current) return;
+    pending.current = true;
+    try {
+      const updated = await action.run({
+        jobId: job.id,
+        targetState: step.targetState,
+        note: timelineNote,
+      });
+      if (!updated) return;
+      clearDraft(job.id);
+      router.back();
+    } finally {
+      pending.current = false;
+    }
   }
 
   const unavailable = Boolean(job) && !step;
@@ -77,10 +88,7 @@ export default function AdvanceJobScreen() {
       onRetry={() => void reload()}
       title={step?.label ?? "Production update"}
       subject={job?.title}
-      lede={
-        step?.consequence ??
-        "This job has already moved on, so there is nothing to update from here."
-      }
+      lede={step ? undefined : "This job has already moved on, so there is nothing to update from here."}
       actionError={action.error}
       footer={
         unavailable ? (
@@ -107,21 +115,11 @@ export default function AdvanceJobScreen() {
           <View className="flex-row">
             <StatusChip tone={status.tone} label={status.label} icon={status.icon} />
           </View>
-          {step ? (
-            <Text className="text-body text-text-secondary">
-              After this step the job reads{" "}
-              <Text className="font-medium text-text-primary">{step.resultLabel}</Text> for you, the
-              client, and Operations.
-            </Text>
-          ) : null}
         </View>
       ) : null}
 
       {step && templates.length > 1 && templateId ? (
-        <FieldShell
-          label="What happened"
-          hint="This is the headline the client reads on their order."
-        >
+        <FieldShell label="What happened">
           <SegmentedControl
             options={templates.map((t) => ({ value: t.id, label: t.label }))}
             value={templateId}
@@ -146,10 +144,12 @@ export default function AdvanceJobScreen() {
       ) : null}
 
       {step ? (
-        <Text className="text-caption text-text-muted">
-          {template?.timelineNote ?? step.resultLabel} appears on the client&apos;s order
-          timeline straight away.
-        </Text>
+        <View className="gg-panel gap-1" testID="timeline-preview">
+          <Text className="text-caption text-text-muted">
+            The client&apos;s order shows this straight away. The job then reads {step.resultLabel}.
+          </Text>
+          <Text className="text-body text-text-primary">“{timelineNote}”</Text>
+        </View>
       ) : null}
     </FlowScreen>
   );

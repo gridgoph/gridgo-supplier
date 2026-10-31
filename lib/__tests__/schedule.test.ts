@@ -48,12 +48,24 @@ describe("isStillInShop", () => {
 describe("buildSchedule", () => {
   const now = new Date("2026-08-08T08:00:00+08:00");
 
+  it("never dates a job by the client's deadline or promised date", () => {
+    const clientDated = job({
+      id: "client-dated", state: "production", readyBy: null,
+      deadline: "2026-08-07T15:00:00+08:00", promisedDate: "2026-08-08T15:00:00+08:00",
+    });
+    const schedule = buildSchedule([clientDated], "week", now);
+    expect(schedule.undatedJobs.map((j) => j.id)).toEqual(["client-dated"]);
+    expect(schedule.lateJobs).toEqual([]);
+    expect(schedule.days.flatMap((day) => day.jobs)).toEqual([]);
+    expect(schedule.summary).toEqual({ late: 0, today: 0, week: 0 });
+  });
+
   it("puts each dated job on its own calendar day", () => {
     const schedule = buildSchedule(
       [
-        job({ id: "today", state: "production", promisedDate: "2026-08-08T15:00:00+08:00" }),
-        job({ id: "friday", state: "supplier_accepted", promisedDate: "2026-08-12T15:00:00+08:00" }),
-        job({ id: "pending", state: "supplier_assigned", promisedDate: "2026-08-08T12:00:00+08:00" }),
+        job({ id: "today", state: "production", readyBy: "2026-08-08T15:00:00+08:00" }),
+        job({ id: "friday", state: "supplier_accepted", readyBy: "2026-08-12T15:00:00+08:00" }),
+        job({ id: "pending", state: "supplier_assigned", readyBy: "2026-08-08T12:00:00+08:00" }),
       ],
       "week",
       now,
@@ -79,7 +91,7 @@ describe("buildSchedule", () => {
 
   it("lifts jobs promised in the past into the late list", () => {
     const schedule = buildSchedule(
-      [job({ id: "overdue", state: "production", promisedDate: "2026-08-05T15:00:00+08:00" })],
+      [job({ id: "overdue", state: "production", readyBy: "2026-08-05T15:00:00+08:00" })],
       "week",
       now,
     );
@@ -90,7 +102,7 @@ describe("buildSchedule", () => {
 
   it("does not call a job late once the rider has taken it", () => {
     const schedule = buildSchedule(
-      [job({ id: "gone", state: "picked_up", promisedDate: "2026-08-05T15:00:00+08:00" })],
+      [job({ id: "gone", state: "picked_up", readyBy: "2026-08-05T15:00:00+08:00" })],
       "week",
       now,
     );
@@ -105,10 +117,10 @@ describe("buildSchedule", () => {
   it("counts today and the week from real dates", () => {
     const schedule = buildSchedule(
       [
-        job({ id: "a", state: "production", promisedDate: "2026-08-08T09:00:00+08:00" }),
-        job({ id: "b", state: "production", promisedDate: "2026-08-08T17:00:00+08:00" }),
-        job({ id: "c", state: "production", promisedDate: "2026-08-14T09:00:00+08:00" }),
-        job({ id: "d", state: "production", promisedDate: "2026-09-30T09:00:00+08:00" }),
+        job({ id: "a", state: "production", readyBy: "2026-08-08T09:00:00+08:00" }),
+        job({ id: "b", state: "production", readyBy: "2026-08-08T17:00:00+08:00" }),
+        job({ id: "c", state: "production", readyBy: "2026-08-14T09:00:00+08:00" }),
+        job({ id: "d", state: "production", readyBy: "2026-09-30T09:00:00+08:00" }),
       ],
       "week",
       now,
@@ -119,7 +131,7 @@ describe("buildSchedule", () => {
   });
 
   it("shows work beyond the window only in the All range", () => {
-    const far = job({ id: "far", state: "production", promisedDate: "2026-09-30T09:00:00+08:00" });
+    const far = job({ id: "far", state: "production", readyBy: "2026-09-30T09:00:00+08:00" });
 
     expect(buildSchedule([far], "week", now).days.some((d) => d.jobs.length)).toBe(false);
     expect(buildSchedule([far], "all", now).days.some((d) => d.jobs.length)).toBe(true);

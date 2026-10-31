@@ -140,18 +140,20 @@ describe("shopDailyCapacity", () => {
 describe("loadByDay", () => {
   it("adds up quantities on the day each job is promised", () => {
     const load = loadByDay([
-      job({ id: "a", quantity: 5, promisedDate: "2026-08-08T10:00:00+08:00" }),
-      job({ id: "b", quantity: 3, promisedDate: "2026-08-08T18:00:00+08:00" }),
-      job({ id: "c", quantity: 7, promisedDate: "2026-08-09T10:00:00+08:00" }),
+      job({ id: "a", quantity: 5, readyBy: "2026-08-08T10:00:00+08:00" }),
+      job({ id: "b", quantity: 3, readyBy: "2026-08-08T18:00:00+08:00" }),
+      job({ id: "c", quantity: 7, readyBy: "2026-08-09T10:00:00+08:00" }),
     ]);
 
     expect(load.get("2026-08-08")).toEqual({ dayKey: "2026-08-08", jobCount: 2, units: 8 });
     expect(load.get("2026-08-09")?.units).toBe(7);
   });
 
-  it("falls back to the client deadline when nothing is promised", () => {
-    const load = loadByDay([job({ id: "a", quantity: 2, deadline: "2026-08-08T10:00:00+08:00" })]);
-    expect(load.get("2026-08-08")?.units).toBe(2);
+  it("never books a day from the client's deadline or promised date", () => {
+    const load = loadByDay([
+      job({ id: "a", quantity: 2, deadline: "2026-08-08T10:00:00+08:00", promisedDate: "2026-08-08T09:00:00+08:00" }),
+    ]);
+    expect(load.size).toBe(0);
   });
 
   it("ignores a job with no date at all", () => {
