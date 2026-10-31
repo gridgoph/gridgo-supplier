@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.364 (Improvement)
+
+- Job steps now lead with your pay, due date and the one thing to do now, with the details a tap away.
+- Jobs now show only your own ready-by date, and the last payout part names the window to report a problem.
+
 ## 1.0.351 (Fix)
 
 - Sign-up states the real 15-character password rule, shop hours time lists scroll, and Account shows your contact.
