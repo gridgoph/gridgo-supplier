@@ -15,7 +15,9 @@ import { handoverFlowOf, type HandoverFlow } from "@/lib/shopHandover";
  * It is a snapshot, not a promise: the step is checked again when pressed, and
  * a refusal then is shown in GRIDGO's words too (`stepRefusal`). A job read
  * from an older GRIDGO has no list, and the screens keep their older photo
- * gates. A receipt scan is optional and never in the list; it is said as such.
+ * gates. A receipt scan is optional unless GRIDGO's Finance switch asks for one
+ * (`lib/receiptScan.ts`); then it is one more of the shop's own things to do,
+ * never a hold.
  *
  * The steps depend on the job's handover (`lib/shopHandover.ts`). A legacy job
  * needs its production photo and its packing photo. A job on the newer
@@ -42,8 +44,10 @@ export type PackagingCheck = {
    * photos and GRIDGO's review on the newer handover.
    */
   steps: { kind: PackagingStepKind; done: boolean }[];
-  /** True once a receipt scan is on the job. It never holds the step. */
+  /** True once a receipt scan is on the job. */
   receiptAttached: boolean;
+  /** GRIDGO's Finance switch wants a scan before "Ready for dispatch". Off by default. */
+  receiptRequired: boolean;
 };
 
 type ReadinessOrder = Pick<Order, "state" | "transitionReadiness" | "handoverFlow">;
@@ -63,6 +67,7 @@ export function packagingCheck(order: ReadinessOrder): PackagingCheck | null {
     flow,
     steps: kinds.map((kind) => ({ kind, done: !owes(kind) })),
     receiptAttached: raw.receiptScan?.attached === true,
+    receiptRequired: raw.receiptScan?.required === true,
   };
 }
 
@@ -77,7 +82,13 @@ export function packagingHeld(check: PackagingCheck | null): boolean {
 }
 
 function isStep(kind: RequirementKind): boolean {
-  return kind === "production_photo" || kind === "packing_photo" || kind === "finished_photos" || kind === "review";
+  return (
+    kind === "production_photo" ||
+    kind === "packing_photo" ||
+    kind === "finished_photos" ||
+    kind === "review" ||
+    kind === "receipt_scan"
+  );
 }
 
 /** The requirements that are not the shop's own steps, which the checklist lists after them. */
@@ -101,6 +112,8 @@ export function requirementTitle(kind: RequirementKind): string {
       return "Finished-product photos";
     case "review":
       return "GRIDGO's review";
+    case "receipt_scan":
+      return "Receipt scan";
     case "claim":
       return "Client claim open";
     case "job_stopped":
