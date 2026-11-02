@@ -650,9 +650,12 @@ describe("the listing editor", () => {
       view = await render(<ListingScreen />);
 
       await fireEvent.press(await screen.findByRole("switch", { name: "Sample available" }));
+      // The next step is said at the field itself, before any save.
+      expect(screen.getByText("Set a price for one sample before offering it.")).toBeTruthy();
       await fireEvent.press(screen.getByLabelText("See what clients see"));
 
-      expect(await screen.findByText("Set a price for one sample before offering it.")).toBeTruthy();
+      // The refused save says it again where the editor reports a failed save.
+      expect(await screen.findAllByText("Set a price for one sample before offering it.")).toHaveLength(2);
       expect(saveListing).not.toHaveBeenCalled();
       expect(router.push).not.toHaveBeenCalled();
 

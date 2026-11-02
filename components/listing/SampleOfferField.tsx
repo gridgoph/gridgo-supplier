@@ -31,8 +31,9 @@ export function SampleOfferField({ working, onChange, holdDays, disabled = false
   if (colourOn(working)) {
     return <Text className="text-body text-text-secondary">{SAMPLE_COLOUR_NOTE}</Text>;
   }
-  // A blank price is still being typed; the save names it if it stays blank.
-  const problem = working.sampleAvailable && working.samplePrice.trim() ? sampleHold(working) : null;
+  // A blank price is the next step, said quietly; a wrong one is an error.
+  const problem = working.sampleAvailable ? sampleHold(working) : null;
+  const blank = !working.samplePrice.trim();
   return (
     <View className="gap-3">
       <SwitchRow
@@ -51,7 +52,9 @@ export function SampleOfferField({ working, onChange, holdDays, disabled = false
             accessibilityLabel={SAMPLE_PRICE_LABEL}
             editable={!disabled}
           />
-          {problem ? <Text className="text-caption text-error">{problem}</Text> : null}
+          {problem ? (
+            <Text className={blank ? "text-caption text-text-secondary" : "text-caption text-error"}>{problem}</Text>
+          ) : null}
           <Text className="text-caption text-text-muted">{sampleHoldLine(holdDays)}</Text>
         </View>
       ) : null}
