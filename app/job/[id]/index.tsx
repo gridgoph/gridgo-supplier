@@ -25,6 +25,8 @@ import { PushEnableCard } from "@/components/PushEnableCard";
 import { RefundNoticePanel } from "@/components/RefundNoticePanel";
 import { RiderApproachPanel } from "@/components/RiderApproachPanel";
 import { RiderPackingPanel } from "@/components/RiderPackingPanel";
+import { SampleDecisionPanel } from "@/components/SampleDecisionPanel";
+import { SampleTagChip } from "@/components/SampleTagChip";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { ShopReleasePanel } from "@/components/ShopReleasePanel";
@@ -33,6 +35,7 @@ import { StatusChip } from "@/components/StatusChip";
 import { acceptWindow } from "@/lib/acceptWindow";
 import { formatDeadlineFull, shopDueAt } from "@/lib/dates";
 import { EXPRESS_JOB_NOTE, isExpressOrder } from "@/lib/express";
+import { SAMPLE_JOB_NOTE, sampleTagOf, showsSampleDecision } from "@/lib/sampleFirst";
 import { defaultBriefSection, hasHandoff, workspaceBriefSections } from "@/lib/jobBrief";
 import {
   actionsForJob,
@@ -163,6 +166,7 @@ export default function JobWorkspaceScreen() {
   }
 
   const status = presentJobStatus(job);
+  const sampleTag = sampleTagOf(job);
   // The shop's own date only; a job without one is undated here, never dated by the client.
   const dueAt = shopDueAt(job);
   const actions = actionsForJob(job);
@@ -310,6 +314,14 @@ export default function JobWorkspaceScreen() {
               <Text className="text-body text-text-secondary">{EXPRESS_JOB_NOTE}</Text>
             </View>
           ) : null}
+          {sampleTag ? (
+            <View className="gap-1.5">
+              <View className="flex-row">
+                <SampleTagChip tag={sampleTag} />
+              </View>
+              <Text className="text-body text-text-secondary">{SAMPLE_JOB_NOTE[sampleTag]}</Text>
+            </View>
+          ) : null}
           <SchedulingNotice order={job} />
           {dueAt ? (
             <Text className="text-body-lg text-text-secondary">
@@ -404,6 +416,19 @@ export default function JobWorkspaceScreen() {
               readAt={instructionsReadAt(job)}
               offer={job.state === "supplier_assigned"}
               onRequestChange={canChange ? requestChange : undefined}
+            />
+          </View>
+        ) : null}
+
+        {/*
+          Sample First: on a batch, the approved sample is the standard the
+          work is held to; on a sample, what the client decided and why.
+        */}
+        {showsSampleDecision(job) ? (
+          <View className="mt-6">
+            <SampleDecisionPanel
+              job={job}
+              onOpenJob={(orderId) => router.push({ pathname: "/job/[id]", params: { id: orderId } })}
             />
           </View>
         ) : null}

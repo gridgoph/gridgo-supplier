@@ -28,6 +28,7 @@ import { SUPPORT_MESSAGE_PUSH_TYPE } from "@/lib/push";
 import { installChannel } from "@/lib/buildDistribution";
 import { openRelease, releaseNoticeOpen } from "@/lib/releasePush";
 import { isRefundAlert } from "@/lib/refund";
+import { isSampleAlert } from "@/lib/sampleFirst";
 import { SHOP_HOURS_NOTICE, SHOP_HOURS_ROUTE } from "@/lib/shopHours";
 import { isAlertUnread, useAlertsStore, visibleAlerts } from "@/store/alerts";
 import { askConfirm } from "@/store/sheets";
@@ -295,6 +296,7 @@ export default function NotificationsScreen() {
                   alert.type === "shop_production_inactive" ||
                   alert.type === PICKUP_ISSUE_ALERT ||
                   isRefundAlert(alert.type) ||
+                  isSampleAlert(alert.type) ||
                   isLapseAlert(alert.type))
               ? () => router.push(jobScreenHref(alert.orderId as string))
               : undefined

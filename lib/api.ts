@@ -353,6 +353,18 @@ export type Order = {
    * checkout; absent on orders placed before Express, which reads as false.
    */
   express?: boolean;
+  /**
+   * Sample First (gridgo-api `docs/SAMPLE_FIRST_API.md`): `sample` on a paid
+   * one-piece sample, `batch_from_sample` on the batch ordered after it.
+   * Read, with the links and the decision below, only through `lib/sampleFirst.ts`.
+   */
+  orderTags?: string[];
+  /** On a batch: the sample job it was ordered from. */
+  sampleOrderId?: string | null;
+  /** On a sample: the batch job, once the client orders it. */
+  batchOrderId?: string | null;
+  /** The client's approval or rejection of the sample — the batch's standard. */
+  sampleDecision?: unknown;
   /** Client-visible print subtotal. Includes commission the shop cannot see. */
   subtotalMinor?: number;
   totalMinor: number;
@@ -608,6 +620,8 @@ export type Settings = {
    * limit (`lib/colourPricing.ts`). Absent from an API older than colour pricing.
    */
   colourDetection?: { a3MonochromeMaxBps?: number };
+  /** Days a sampled batch keeps the shop's old prices after the sample arrives. */
+  sampleBatchHoldDays?: number;
 };
 
 /** Stored file metadata. `fileId` is the only durable identity a client keeps. */

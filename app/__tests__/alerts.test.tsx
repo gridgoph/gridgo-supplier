@@ -180,6 +180,62 @@ it("rewrites a refund notice for the shop and opens its job", async () => {
   expect(JSON.stringify(router.push.mock.calls[0][0])).toContain("ord_refunded");
 });
 
+it("opens the sample job from a sample decision, with the client's reason", async () => {
+  useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, localOnly: false });
+  const { router } = jest.requireMock("expo-router") as { router: { push: jest.Mock } };
+  router.push.mockClear();
+  api.listNotifications.mockResolvedValue([{
+    id: "ntf_sample",
+    userId: "user_supplier",
+    type: "shop_sample_rejected",
+    orderId: "ord_sample",
+    title: "Sample rejected",
+    body: "Open GRIDGO to see the client's decision on the sample.",
+    read: false,
+    at: "2026-11-02T04:25:00.000Z",
+  }]);
+  api.listJobs.mockResolvedValue([{
+    id: "ord_sample", clientId: "c", supplierId: "s", riderId: null, state: "delivered", productId: "p",
+    title: "Business cards", quantity: 1, size: "", material: "", deadline: null, address: "", zone: "",
+    totalMinor: 0, deliveryFeeMinor: 0, paymentMethod: null, paymentStatus: "paid", promisedDate: null,
+    artworkName: null, createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-02T00:00:00Z", timeline: [],
+    orderTags: ["sample"],
+    sampleDecision: { decision: "rejected", reason: "Too dark", next: "resample" },
+  }]);
+
+  await render(<AlertsScreen />);
+
+  expect(await screen.findByText("Sample not approved")).toBeTruthy();
+  expect(screen.queryByText(/Open GRIDGO to see/)).toBeNull();
+  expect(await screen.findByText("Reason: “Too dark”")).toBeTruthy();
+  fireEvent.press(screen.getByText("The client turned down your sample. Open the job to read why."));
+  await waitFor(() => expect(router.push).toHaveBeenCalled());
+  expect(JSON.stringify(router.push.mock.calls[0][0])).toContain("ord_sample");
+});
+
+it("opens an approved sample's job even before the job list has it", async () => {
+  useAlertsStore.setState({ dismissed: [], deleted: [], unreadCount: 0, localOnly: false });
+  const { router } = jest.requireMock("expo-router") as { router: { push: jest.Mock } };
+  router.push.mockClear();
+  api.listNotifications.mockResolvedValue([{
+    id: "ntf_sample_ok",
+    userId: "user_supplier",
+    type: "shop_sample_approved",
+    orderId: "ord_sample_done",
+    title: "Sample approved",
+    body: "Open GRIDGO to see the client's decision on the sample.",
+    read: false,
+    at: "2026-11-02T04:25:00.000Z",
+  }]);
+  api.listJobs.mockResolvedValue([]);
+
+  await render(<AlertsScreen />);
+
+  fireEvent.press(await screen.findByText(/approved your sample/));
+  await waitFor(() => expect(router.push).toHaveBeenCalled());
+  expect(JSON.stringify(router.push.mock.calls[0][0])).toContain("ord_sample_done");
+});
+
 describe("Alerts screen — app updates", () => {
   beforeEach(() => {
     api.listNotifications.mockReset();

@@ -145,7 +145,7 @@ function ApprovalRecord({ record }: { record: ApprovalProofRecord }) {
  * left to expire. A signature is drawn on paper in both themes: dark ink on a
  * dark card would vanish.
  */
-function EvidencePicture({ fileId, label, signature = false }: { fileId: string; label: string; signature?: boolean }) {
+export function EvidencePicture({ fileId, label, signature = false }: { fileId: string; label: string; signature?: boolean }) {
   const colors = useThemeColors();
   const picture = useSignedLink(fileId);
   return (

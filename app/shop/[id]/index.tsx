@@ -28,6 +28,7 @@ import { PrinterCapField } from "@/components/listing/PrinterCapField";
 import { PrintLayoutField } from "@/components/listing/PrintLayoutField";
 import { PagePricingField, pagePricingApplies } from "@/components/listing/PagePricingField";
 import { ProductionTimeCheckJump, ProductionTimeSection } from "@/components/listing/ProductionTimeQuestion";
+import { SampleOfferField } from "@/components/listing/SampleOfferField";
 import { SampleStrip } from "@/components/listing/SampleStrip";
 import { PriceTierEditor } from "@/components/listing/TierEditor";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
@@ -55,6 +56,7 @@ import {
   PACK_STEP,
   rebaseEdits,
   sameDraft,
+  sampleHold,
   shownProductionTime,
   type DraftEdits,
   type ListingDraft as Draft,
@@ -104,6 +106,7 @@ import {
   type BoardOutcome,
 } from "@/lib/listingsApi";
 import { listingFoot, SUBMITTED_NOTICE } from "@/lib/listingReview";
+import { SAMPLE_SECTION_HINT } from "@/lib/sampleFirst";
 import { PRINT_LAYOUTS_HINT, printLayoutsNote, samePrintLayouts } from "@/lib/printLayout";
 import { productionTimeBody } from "@/lib/productionDays";
 import { linkFileOptions, uploadedFileOptions } from "@/lib/fileFormatResolve";
@@ -112,6 +115,7 @@ import { resolveCategoryCode } from "@/lib/taxonomy";
 import { useAcceptedFileFormats } from "@/hooks/useAcceptedFileFormats";
 import { routeId, useListing } from "@/hooks/useBoard";
 import { useReadiness } from "@/hooks/useReadiness";
+import { useSampleHoldDays } from "@/hooks/useSampleHoldDays";
 import { listingReadinessFor, stepTarget } from "@/lib/readiness";
 import { useThemeColors } from "@/hooks/useTheme";
 import { useListingWizard } from "@/store/listingWizard";
@@ -140,6 +144,7 @@ export default function ListingScreen() {
   const insets = useSafeAreaInsets();
   const approved = isMatchable(useSession((s) => s.user));
   const formats = useAcceptedFileFormats();
+  const sampleHoldDays = useSampleHoldDays();
 
   const [edits, storeEdits] = useState<DraftEdits | null>(null);
   const [busy, setBusy] = useState(false);
@@ -275,7 +280,7 @@ export default function ListingScreen() {
         setActionError(money.error);
         return false;
       }
-      const held = colourHold(working);
+      const held = colourHold(working) ?? sampleHold(working);
       if (held) {
         setActionError(held);
         return false;
@@ -818,6 +823,22 @@ export default function ListingScreen() {
             ) : null}
           </Section>
         </TourTarget>
+
+        {/*
+          A paid sample before the full run. Saved with the listing, but live
+          at once — GRIDGO does not review it — so it says so. Absent from a
+          GRIDGO without Sample First.
+        */}
+        {working.sampleAvailable != null ? (
+          <Section title="PAID SAMPLE" hint={SAMPLE_SECTION_HINT}>
+            <SampleOfferField
+              working={working}
+              onChange={setDraft}
+              holdDays={sampleHoldDays}
+              disabled={busy}
+            />
+          </Section>
+        ) : null}
 
         {/* 4. Production time */}
         <View onLayout={(event) => (productionY.current = event.nativeEvent.layout.y)}>
