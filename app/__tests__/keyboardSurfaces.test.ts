@@ -59,6 +59,7 @@ const HANDLED_BY_ITS_CALLERS = [
   "components/listing/ProductionTimeQuestion.tsx",
   "components/listing/ColourPricingField.tsx",
   "components/listing/PagePricingField.tsx",
+  "components/listing/SampleOfferField.tsx",
   "components/listing/wizard/AboutStep.tsx",
   "components/listing/wizard/PriceStep.tsx",
   "components/listing/wizard/SpeedStep.tsx",
@@ -105,6 +106,8 @@ const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
   // wizard's Price step and the listing screen's Price section.
   { component: "ColourPricingField", users: /<ColourPricingField\b/, least: 1 },
   { component: "PagePricingField", users: /<PagePricingField\b/, least: 2 },
+  // The sample price is typed in the listing screen's Paid sample section.
+  { component: "SampleOfferField", users: /<SampleOfferField\b/, least: 1 },
   { component: "SpeedStep", users: /<SpeedStep\b/, least: 1 },
   { component: "StepsStep", users: /<StepsStep\b/, least: 1 },
   { component: "ArtworkStep", users: /<ArtworkStep\b/, least: 1 },

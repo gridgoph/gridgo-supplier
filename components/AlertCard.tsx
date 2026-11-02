@@ -13,6 +13,7 @@ import { StatusChip } from "@/components/StatusChip";
 import { notificationImageUrl, type Notification, type Order } from "@/lib/api";
 import { formatNotificationAt } from "@/lib/dates";
 import { owedProductionMove } from "@/lib/productionNudge";
+import { sampleAlertReason } from "@/lib/sampleFirst";
 import { useThemeColors } from "@/hooks/useTheme";
 
 type Props = {
@@ -26,7 +27,7 @@ type Props = {
   /** Absent when the alert is not about a job the shop can open. */
   onOpen?: () => void;
   /** The live job, when the inbox has it. The owed-move line reads this, not the snapshot. */
-  job?: Pick<Order, "state" | "title" | "payoutMilestones" | "payoutHold" | "payoutPlanVersion"> | null;
+  job?: Pick<Order, "state" | "title" | "payoutMilestones" | "payoutHold" | "payoutPlanVersion" | "sampleDecision"> | null;
 };
 
 /**
@@ -70,6 +71,8 @@ export function AlertCard({
   const inactive = alert.type === "shop_production_inactive";
   const jobTitle = job?.title || alert.orderTitle;
   const owed = inactive ? owedProductionMove(job, alert.orderState) : null;
+  // A turned-down sample's reason, once the job is on the phone (`lib/sampleFirst.ts`).
+  const sampleReason = sampleAlertReason(alert, job);
   const openJob = () => {
     onMarkRead();
     onOpen?.();
@@ -126,6 +129,9 @@ export function AlertCard({
           >
             {presentAlertBody(alert)}
           </Text>
+          {sampleReason ? (
+            <Text className="text-body text-text-primary">Reason: “{sampleReason}”</Text>
+          ) : null}
           <Text className="text-caption text-text-muted">{formatNotificationAt(alert.at)}</Text>
           {owed ? <Text className="text-body font-medium text-text-primary">{owed}</Text> : null}
         </View>

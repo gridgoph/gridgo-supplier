@@ -303,6 +303,16 @@ export type Listing = {
   colourPricing?: ListingColourPricing | null;
   /** False from a GRIDGO that predates colour pricing: nothing is shown or sent. */
   colourSupported?: boolean;
+  /**
+   * "Order a sample first" (gridgo-api `docs/SAMPLE_FIRST_API.md`). Applies
+   * at once, without listing review. Absent (undefined) from a GRIDGO that
+   * predates it: nothing is shown or sent.
+   */
+  sampleAvailable?: boolean;
+  /** The shop's price for one sample piece, kept while the offer is off. */
+  samplePriceMinor?: number | null;
+  /** A private quote listing (Operations'): it never offers a sample. */
+  quoteListing?: boolean;
   /** The least the shop will run. */
   minimumOrderQuantity: number | null;
   priceTiers: PriceTier[];
@@ -624,6 +634,13 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     oneColour: pick(raw, "oneColour", "one_colour") === true,
     colourPricing: readColourPricing(pick(raw, "colourPricing", "colour_pricing")),
     colourSupported: typeof pick(raw, "pricedByColour", "priced_by_colour") === "boolean",
+    ...(typeof pick(raw, "sampleAvailable", "sample_available") === "boolean"
+      ? {
+          sampleAvailable: pick(raw, "sampleAvailable", "sample_available") === true,
+          samplePriceMinor: num(pick(raw, "samplePriceMinor", "sample_price_minor")),
+        }
+      : {}),
+    ...(str(pick(raw, "quoteRequestId", "quote_request_id")) ? { quoteListing: true } : {}),
     minimumOrderQuantity: num(pick(raw, "minimumOrderQuantity", "minimum_order_quantity")),
     priceTiers: readPriceTiers(pick(raw, "priceTiers", "price_tiers")),
     speedTiers: readSpeedTiers(pick(raw, "speedTiers", "speed_tiers")),

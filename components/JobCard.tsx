@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { ExpressChip } from "@/components/ExpressChip";
 import { OrderReference } from "@/components/OrderReference";
+import { SampleTagChip } from "@/components/SampleTagChip";
 import { orderReferenceSpoken } from "@/lib/orderReference";
 import { SchedulingNotice } from "@/components/SchedulingNotice";
 import { StatusChip } from "@/components/StatusChip";
@@ -12,6 +13,7 @@ import { isFulfilmentFinished, presentJobStatus } from "@/lib/jobState";
 import { deadlineUrgency } from "@/lib/urgency";
 import { acceptWindow, acceptWindowLine } from "@/lib/acceptWindow";
 import { isExpressOrder } from "@/lib/express";
+import { SAMPLE_TAG_LABEL, sampleTagOf } from "@/lib/sampleFirst";
 import { isTightBeforeAccepting, sameDayReadyLine, TIGHT_DEADLINE_LABEL } from "@/lib/scheduling";
 import { orderSpecSummary } from "@/lib/productionSpecs";
 import { shopRelease } from "@/lib/shopRecovery";
@@ -50,6 +52,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
   const urgency = deadlineUrgency(shopRelease(job) || isFulfilmentFinished(job) ? null : dueAt, now);
   const spec = orderSpecSummary(job);
   const express = isExpressOrder(job);
+  const sampleTag = sampleTagOf(job);
   const tight = isTightBeforeAccepting(job);
   const sameDay = sameDayReadyLine(job);
   const price = job.supplierPriceMinor != null
@@ -96,9 +99,10 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
           {dueAt ? "Ready by " : ""}{formatDeadlineFull(dueAt)}
           {urgency.level === "undated" ? "" : ` · ${urgency.label}`}
         </Text>
-        {express ? (
-          <View className="flex-row py-1">
-            <ExpressChip />
+        {express || sampleTag ? (
+          <View className="flex-row flex-wrap gap-2 py-1">
+            {express ? <ExpressChip /> : null}
+            {sampleTag ? <SampleTagChip tag={sampleTag} /> : null}
           </View>
         ) : null}
         {tight || sameDay ? (
@@ -125,7 +129,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`${job.title}, ${orderReferenceSpoken(job.id) ?? `order ${job.id}`}, ${status.label}${
         urgency.level === "overdue" ? ", late" : ""
-      }${express ? ", Express" : ""}${tight ? `, ${TIGHT_DEADLINE_LABEL}` : ""}`}
+      }${express ? ", Express" : ""}${sampleTag ? `, ${SAMPLE_TAG_LABEL[sampleTag]}` : ""}${tight ? `, ${TIGHT_DEADLINE_LABEL}` : ""}`}
       className="gg-touch"
     >
       {({ pressed }) => (

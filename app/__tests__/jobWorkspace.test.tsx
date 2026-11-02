@@ -824,3 +824,63 @@ describe("job workspace on an Express job", () => {
     expect(screen.queryByText("Express")).toBeNull();
   });
 });
+
+describe("Sample First on the job screen", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("shows a batch's approved sample as the standard to match, with the way to the sample job", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(job({
+      orderTags: ["batch_from_sample"],
+      sampleOrderId: "ord_sample",
+      sampleDecision: {
+        draftId: "sbd_1",
+        decision: "approved",
+        method: "tick",
+        at: "2026-11-02T03:00:00.000Z",
+        samplePhotoFileId: "file_sample_photo",
+        note: "Match this red",
+      },
+    }));
+
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByText("Batch from sample")).toBeTruthy();
+    expect(screen.getByText("THE STANDARD TO MATCH")).toBeTruthy();
+    expect(screen.getByText("Sample approved")).toBeTruthy();
+    expect(screen.getByText("“Match this red”")).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByLabelText("The client's photo of the sample").props.source).toEqual({
+        uri: "https://example.test/file_sample_photo.jpg",
+      }),
+    );
+
+    fireEvent.press(screen.getByRole("button", { name: "Open the sample job" }));
+    expect(router.push).toHaveBeenCalledWith({ pathname: "/job/[id]", params: { id: "ord_sample" } });
+  });
+
+  it("tags a sample and says why the client turned it down", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(job({
+      state: "delivered",
+      orderTags: ["sample"],
+      sampleDecision: { draftId: "sbd_1", decision: "rejected", at: "2026-11-02T03:00:00.000Z", reason: "Too dark", next: "resample" },
+    }));
+
+    await render(<JobWorkspaceScreen />);
+
+    expect(await screen.findByText("Sample")).toBeTruthy();
+    expect(screen.getByText(/One piece at your sample price/)).toBeTruthy();
+    expect(screen.getByText("Sample not approved")).toBeTruthy();
+    expect(screen.getByText("Reason: “Too dark”")).toBeTruthy();
+    expect(screen.getByText("The client may order another sample with changes.")).toBeTruthy();
+  });
+
+  it("draws no sample panel on an ordinary job", async () => {
+    (getOrder as jest.Mock).mockResolvedValue(job());
+    await render(<JobWorkspaceScreen />);
+    expect(await screen.findByText("Barangay tarpaulin")).toBeTruthy();
+    expect(screen.queryByTestId("sample-decision")).toBeNull();
+    expect(screen.queryByText("Batch from sample")).toBeNull();
+  });
+});

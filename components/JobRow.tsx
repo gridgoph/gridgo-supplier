@@ -1,12 +1,14 @@
 import { Pressable, Text, View } from "react-native";
 
 import { ExpressChip } from "@/components/ExpressChip";
+import { SampleTagChip } from "@/components/SampleTagChip";
 import { OrderReference } from "@/components/OrderReference";
 import { orderReferenceSpoken } from "@/lib/orderReference";
 import { StatusChip } from "@/components/StatusChip";
 import type { Order } from "@/lib/api";
 import { formatDeadlineTime, shopDueAt } from "@/lib/dates";
 import { isExpressOrder } from "@/lib/express";
+import { SAMPLE_TAG_LABEL, sampleTagOf } from "@/lib/sampleFirst";
 import { presentJobStatus, primaryAction } from "@/lib/jobState";
 import { deadlineUrgency } from "@/lib/urgency";
 
@@ -34,12 +36,13 @@ export function JobRow({ job, now = new Date(), onPress }: Props) {
   const time = formatDeadlineTime(shopDueAt(job));
   const late = urgency.level === "overdue";
   const express = isExpressOrder(job);
+  const sampleTag = sampleTagOf(job);
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${job.title}, ${orderReferenceSpoken(job.id) ?? `order ${job.id}`}, ${status.label}${late ? ", late" : ""}${express ? ", Express" : ""}`}
+      accessibilityLabel={`${job.title}, ${orderReferenceSpoken(job.id) ?? `order ${job.id}`}, ${status.label}${late ? ", late" : ""}${express ? ", Express" : ""}${sampleTag ? `, ${SAMPLE_TAG_LABEL[sampleTag]}` : ""}`}
       className="gg-touch flex-row items-start gap-3 rounded-field border border-outline bg-surface px-3 py-3"
       style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
     >
@@ -67,6 +70,7 @@ export function JobRow({ job, now = new Date(), onPress }: Props) {
             <StatusChip tone={status.tone} label={status.label} icon={status.icon} />
           )}
           {express ? <ExpressChip /> : null}
+          {sampleTag ? <SampleTagChip tag={sampleTag} /> : null}
           <Text className="min-w-0 flex-1 text-caption text-text-muted" numberOfLines={1}>
             {job.quantity} × {job.size || "size not set"}
             {next ? ` · ${next.label}` : ""}

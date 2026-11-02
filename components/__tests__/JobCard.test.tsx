@@ -159,3 +159,14 @@ it("badges a Tight job still waiting for the shop's answer", async () => {
   await view.rerender(<JobCard job={{ ...job, state: "production", scheduling: tight }} />);
   expect(screen.queryByText("Tight deadline")).toBeNull();
 });
+
+it("tags a sample and a batch from a sample, in words a screen reader hears too", async () => {
+  await render(<JobCard job={{ ...job, orderTags: ["sample"] }} onPress={jest.fn()} />);
+  expect(screen.getByText("Sample")).toBeTruthy();
+  expect(screen.getByRole("button", { name: /, Sample$/ })).toBeTruthy();
+  await render(<JobCard job={{ ...job, orderTags: ["batch_from_sample"] }} />);
+  expect(screen.getByText("Batch from sample")).toBeTruthy();
+  await render(<JobCard job={job} />);
+  expect(screen.queryByTestId("sample-tag-sample")).toBeNull();
+  expect(screen.queryByTestId("sample-tag-batch_from_sample")).toBeNull();
+});

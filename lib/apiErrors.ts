@@ -360,6 +360,8 @@ const MESSAGES: Record<string, string> = {
     "GRIDGO could not save this production time. Choose Same day with a number of hours, or Days with whole working days.",
   invalid_catalog_item:
     "Some details on this listing are missing or not valid. Check the name, price and pack size, then try again.",
+  sample_price_required: "Set a price for one sample before offering it.",
+  sample_not_supported: "Listings priced by colour cannot offer a sample. Turn the sample off, then save.",
   invalid_catalog_options:
     "Every step needs at least one option a client can choose. Add one, or remove the step.",
   invalid_subcategory_code:
