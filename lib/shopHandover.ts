@@ -252,6 +252,7 @@ const SKIPPED_CHECKS: Record<string, string> = {
   production_review_required: "GRIDGO's review",
   production_photo_required: "Production photo",
   packing_photo_required: "Packing photo",
+  receipt_scan_required: "Receipt scan",
 };
 
 export type ForcedStepView = {

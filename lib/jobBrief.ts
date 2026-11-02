@@ -318,6 +318,7 @@ export function defaultBriefSection(order: BriefOrder): JobBriefSectionId {
     step === "ready_for_pickup" ||
     step === "add_production_photo" ||
     step === "add_packing_photo" ||
+    step === "add_receipt_scan" ||
     step === "send_finished_photos"
   ) {
     return "make";

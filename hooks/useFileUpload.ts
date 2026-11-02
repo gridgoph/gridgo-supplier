@@ -38,7 +38,8 @@ function fromWeb(picked: WebPickedAsset, fallbackName: string): PickedFile {
   };
 }
 
-export function useFileUpload(purpose: StoredFile["purpose"]) {
+/** `maxBytes`: a purpose GRIDGO caps lower than proof (a receipt scan: 15 MiB) is refused here first. */
+export function useFileUpload(purpose: StoredFile["purpose"], { maxBytes = MAX_PROOF_BYTES }: { maxBytes?: number } = {}) {
   const [items, setItems] = useState<UploadItem[]>([]);
   const counter = useRef(0);
 
@@ -79,10 +80,10 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
       counter.current += 1;
       const item = newUploadItem({ key: `up_${counter.current}`, ...input });
 
-      if (item.sizeBytes != null && item.sizeBytes > MAX_PROOF_BYTES) {
+      if (item.sizeBytes != null && item.sizeBytes > maxBytes) {
         setItems((current) => [
           ...current,
-          { ...item, stage: "failed", error: tooLargeMessage(item.sizeBytes ?? 0) },
+          { ...item, stage: "failed", error: tooLargeMessage(item.sizeBytes ?? 0, maxBytes) },
         ]);
         return;
       }
@@ -90,7 +91,7 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
       setItems((current) => [...current, item]);
       await send(item);
     },
-    [send],
+    [maxBytes, send],
   );
 
   /**
@@ -105,8 +106,8 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
       const added = inputs.map((input) => {
         counter.current += 1;
         const item = newUploadItem({ key: `up_${counter.current}`, ...input });
-        if (item.sizeBytes != null && item.sizeBytes > MAX_PROOF_BYTES) {
-          return { ...item, stage: "failed" as const, error: tooLargeMessage(item.sizeBytes) };
+        if (item.sizeBytes != null && item.sizeBytes > maxBytes) {
+          return { ...item, stage: "failed" as const, error: tooLargeMessage(item.sizeBytes, maxBytes) };
         }
         queued.push(item);
         return item;
@@ -115,7 +116,7 @@ export function useFileUpload(purpose: StoredFile["purpose"]) {
       setItems((current) => [...current, ...added]);
       for (const item of queued) await send(item);
     },
-    [send],
+    [maxBytes, send],
   );
 
   const failWith = useCallback((fileName: string, error: string) => {

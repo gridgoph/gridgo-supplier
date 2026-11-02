@@ -7,11 +7,13 @@ import { ProgressPhotoStrip } from "@/components/ProgressPhotoStrip";
 import { UploadList } from "@/components/UploadList";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { useThemeColors } from "@/hooks/useTheme";
-import { attachPackingPhoto } from "@/lib/api";
+import { attachPackingPhoto, attachReceiptScan } from "@/lib/api";
 import { needsPackingPhoto, packingPhotoViews } from "@/lib/packingPhoto";
 import { CounterCheckPanel } from "@/components/CounterCheckPanel";
 import { PackagingChecklist } from "@/components/PackagingChecklist";
-import { packagingCheck, packagingHeld } from "@/lib/packagingReadiness";
+import { packagingCheck, packagingHeld, stepRequirement } from "@/lib/packagingReadiness";
+import { ReceiptScanCard } from "@/components/ReceiptScanCard";
+import { RECEIPT_SCAN_MAX_BYTES, RECEIPT_SCAN_NEEDED, receiptScanOf } from "@/lib/receiptScan";
 import { FlowScreen } from "@/components/FlowScreen";
 import { PackageInvoiceNotice } from "@/components/PackageInvoiceNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -33,6 +35,7 @@ import {
   humanizeApiError,
   isPackingPhotoRequired,
   isProductionPhotoRequired,
+  isReceiptScanRequired,
   offlineMessage,
 } from "@/lib/apiErrors";
 import { findAction, waitingOnJob } from "@/lib/jobState";
@@ -70,6 +73,12 @@ import { WHY_WE_ASK } from "@/lib/legal";
  * finished photos, and the shop prepares packing materials while the products
  * stay unpacked. With a rider at the counter, the screen follows the counter:
  * the rider checks, the shop packs in front of the rider, the shop signs.
+ *
+ * When GRIDGO's Finance switch asks for it (`lib/receiptScan.ts`, off by
+ * default), the shop's own receipt or invoice scan is the last thing before a
+ * rider is called: the footer turns into the way to scan it, the same way it
+ * turns into the packing photo, and "Ready for dispatch" comes back once the
+ * scan is on the job. Off, nothing here changes.
  */
 export default function HandoffScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -78,13 +87,15 @@ export default function HandoffScreen() {
   const action = useJobAction();
   const colors = useThemeColors();
   const upload = useFileUpload("packing_photo");
+  const receipt = useFileUpload("supplier_invoice", { maxBytes: RECEIPT_SCAN_MAX_BYTES });
+  const [replacing, setReplacing] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const clearDraft = useJobDrafts((s) => s.clearDraft);
 
   const [confirming, setConfirming] = useState(false);
   const pending = useRef(false);
-  const busy = confirming || action.busy || sending || upload.busy;
+  const busy = confirming || action.busy || sending || upload.busy || receipt.busy;
 
   useFocusEffect(
     useCallback(() => {
@@ -117,8 +128,30 @@ export default function HandoffScreen() {
   // A claim or a stop only Operations can lift: nothing here would be taken.
   const packaging = job ? packagingCheck(job) : null;
   const held = packagingHeld(packaging);
-  // A refusal the checklist already says, word for word, is not said twice.
-  const refusalShown = Boolean(action.error && packaging?.missing.some((item) => item.message === action.error));
+  // The receipt scan, when GRIDGO's Finance switch wants one before a rider is called.
+  const scan = job ? receiptScanOf(job) : null;
+  const scanRefused = isReceiptScanRequired(action.failure);
+  const receiptGate =
+    Boolean(job) &&
+    !held &&
+    !photoGate &&
+    !packingGate &&
+    Boolean((job && findAction(job, "add_receipt_scan")) || (scanRefused && !scan?.attached));
+  const showReceipt = receiptGate || Boolean(scan?.required && scan.attached && step && !held);
+  const scanPicking = receiptGate || (showReceipt && replacing);
+  const receiptToSend = receipt.items.filter((item) => item.stage === "stored" && item.fileId);
+  const receiptReason =
+    (packaging && stepRequirement(packaging, "receipt_scan")?.message) ||
+    (scanRefused ? action.error : null) ||
+    RECEIPT_SCAN_NEEDED;
+  // A refusal the checklist or the scan card already says, word for word, is not said twice.
+  const refusalShown = Boolean(
+    action.error &&
+      (packaging?.missing.some((item) => item.message === action.error) ||
+        (receiptGate && action.error === receiptReason)),
+  );
+  // The checklist is not drawn on this screen for a scan alone: the scan card says it.
+  const checklistOwed = Boolean(packaging?.missing.some((item) => item.kind !== "receipt_scan"));
   const toSend = upload.items.filter(
     (item) => item.stage === "stored" && item.fileId,
   );
@@ -172,9 +205,32 @@ export default function HandoffScreen() {
     }
   }
 
+  async function attachScan() {
+    if (!job || !scanPicking || !receiptToSend.length || pending.current) return;
+    pending.current = true;
+    setSending(true);
+    setSendError(null);
+    try {
+      for (const item of receiptToSend) {
+        await attachReceiptScan(item.fileId!, job.id);
+        receipt.markAttached(item.key);
+      }
+      setReplacing(false);
+      // The refusal that sent the shop here is answered now.
+      action.clearError();
+      await reload();
+    } catch (error) {
+      setSendError(humanizeApiError(error, offlineMessage("attach this receipt scan")));
+      void reload();
+    } finally {
+      pending.current = false;
+      setSending(false);
+    }
+  }
+
   async function markReady() {
     if (pending.current) return;
-    if (!job || !step?.targetState || photoGate || packingGate || held) return;
+    if (!job || !step?.targetState || photoGate || packingGate || held || scanPicking) return;
 
     pending.current = true;
     setConfirming(true);
@@ -239,7 +295,9 @@ export default function HandoffScreen() {
       // A stopped pickup is explained once, in its own panel below.
       lede={
         // The instruction about the products is said once, in the custody card.
-        newer && !held && !counterIssue
+        receiptGate
+          ? "Before a rider is called, attach a scan of your own receipt or invoice for this order."
+          : newer && !held && !counterIssue
           ? step
             ? "GRIDGO approved your finished products."
             : sendFinished
@@ -322,6 +380,30 @@ export default function HandoffScreen() {
               <WhyWeAsk>{WHY_WE_ASK.packedPhoto}</WhyWeAsk>
             </>
           )
+        ) : scanPicking && job ? (
+          receiptToSend.length ? (
+            <>
+              <PrimaryButton
+                label={sending ? "Attaching receipt scan…" : "Attach receipt scan"}
+                disabled={busy}
+                onPress={() => void attachScan()}
+              />
+              <SecondaryButton label="Back to job" disabled={busy} onPress={() => router.back()} />
+            </>
+          ) : (
+            <>
+              <PrimaryButton
+                label={receipt.busy ? "Saving scan…" : "Scan the receipt"}
+                disabled={busy}
+                onPress={() => void receipt.takePhoto()}
+              />
+              <SecondaryButton
+                label="Upload a photo or PDF"
+                disabled={busy}
+                onPress={() => void receipt.pickDocument()}
+              />
+            </>
+          )
         ) : step && !packingGate ? (
           <>
             <PrimaryButton
@@ -340,7 +422,7 @@ export default function HandoffScreen() {
         )
       }
     >
-      {(held || (newer && packaging && !packaging.allowed)) && packaging ? (
+      {(held || (newer && packaging && !packaging.allowed && checklistOwed)) && packaging ? (
         <PackagingChecklist check={packaging} stage={finished} onMessageOperations={messageOperations} />
       ) : null}
 
@@ -349,6 +431,24 @@ export default function HandoffScreen() {
       ) : null}
 
       {job && isForcedByGridgo(job) ? <ForcedStepNotice steps={forcedSteps(job)} /> : null}
+
+      {showReceipt ? (
+        <ReceiptScanCard
+          attached={scan?.attached === true}
+          replacing={replacing}
+          reason={receiptReason}
+          nextStep={newer ? "Ready for rider pickup" : "Ready for dispatch"}
+          items={receipt.items}
+          onRetry={(key) => void receipt.retry(key)}
+          onRemove={receipt.remove}
+          onReplace={() => setReplacing(true)}
+          onKeep={() => {
+            for (const item of receipt.items) if (item.stage !== "attached") receipt.remove(item.key);
+            setReplacing(false);
+          }}
+          disabled={busy}
+        />
+      ) : null}
 
       {photoGate && !held ? (
         <View className="gg-card gap-2">

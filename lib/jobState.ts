@@ -7,6 +7,7 @@ import { needsPackingPhoto } from "@/lib/packingPhoto";
 import { packagingCheck, packagingHeld } from "@/lib/packagingReadiness";
 import { paysInFull } from "@/lib/payment";
 import { needsProductionPhoto } from "@/lib/productionPhoto";
+import { owesReceiptScan } from "@/lib/receiptScan";
 import { presentRefundTimelineNote, refundStanding, refundStatus } from "@/lib/refund";
 import { rescheduleNotice } from "@/lib/reschedule";
 import { shopRelease } from "@/lib/shopRecovery";
@@ -37,6 +38,8 @@ export type SupplierActionKind =
   | "ready_for_pickup"
   | "add_production_photo"
   | "add_packing_photo"
+  /** The shop's own receipt or invoice scan, when GRIDGO's Finance switch asks for one first. */
+  | "add_receipt_scan"
   /** Newer handover: photograph the finished, unpacked products for GRIDGO's review. */
   | "send_finished_photos"
   | "add_proof";
@@ -301,6 +304,7 @@ export function actionsForJob(order: JobActionOrder, now: Date = new Date()): Su
           resultLabel: "Packing photo sent",
         });
       }
+      if (owesReceiptScan(order)) return demote(proofStep, receiptScanStep());
       return demote(proofStep, {
         kind: "ready_for_pickup",
         label: "Package for pickup",
@@ -339,6 +343,7 @@ function riderPacksSteps(order: JobActionOrder, proofStep: SupplierAction | null
     });
   }
   if (finished?.stage === "approved") {
+    if (owesReceiptScan(order)) return demote(proofStep, receiptScanStep());
     return demote(proofStep, {
       kind: "ready_for_pickup",
       label: "Ready for rider pickup",
@@ -371,6 +376,23 @@ export type JobActionOrder = Pick<
 > &
   Partial<Pick<Order, "supplierId">>;
 
+/**
+ * GRIDGO's Finance switch wants the shop's receipt scan before a rider is
+ * called, so the step it would refuse is replaced by the one that files it.
+ * Off by default, and then this is never offered.
+ */
+function receiptScanStep(): SupplierAction {
+  return {
+    kind: "add_receipt_scan",
+    label: "Add receipt scan",
+    targetState: null,
+    primary: true,
+    consequence:
+      "GRIDGO needs a scan of your own receipt or invoice for this order before a rider is called. Operations sees it straight away.",
+    resultLabel: "Receipt scan attached",
+  };
+}
+
 /** Put the outstanding proof first and hand the forward step the quiet slot. */
 function demote(proof: SupplierAction | null, forward: SupplierAction): SupplierAction[] {
   if (!proof) return [forward];
@@ -401,6 +423,7 @@ export function routeForAction(kind: SupplierActionKind): SupplierActionRoute {
     case "add_proof":
       return "/job/[id]/fulfilment";
     case "add_packing_photo":
+    case "add_receipt_scan":
     case "ready_for_pickup":
       return "/job/[id]/handoff";
     case "add_production_photo":
