@@ -12,6 +12,7 @@ import {
   type PackagingCheck,
   type PackagingStepKind,
 } from "@/lib/packagingReadiness";
+import { RECEIPT_SCAN_NEEDED } from "@/lib/receiptScan";
 import type { FinishedStage } from "@/lib/shopHandover";
 
 type Props = {
@@ -76,18 +77,7 @@ export function PackagingChecklist({ check, stage = null, onMessageOperations }:
             onMessageOperations={onMessageOperations}
           />
         ))}
-        <Row
-          state="optional"
-          title="Receipt scan"
-          detail={
-            check.receiptAttached
-              ? "On the job."
-              : ridersPack
-                ? "Not needed. It never holds up pickup."
-                : "Not needed. It never holds up packing."
-          }
-          colors={colors}
-        />
+        <Row {...receiptRow(check, ridersPack)} colors={colors} />
       </View>
     </View>
   );
@@ -135,6 +125,32 @@ function stepRow(
     };
   }
   return { state: owed ? "needed" : "done", title, detail: owed ? owed.message : "On the job." };
+}
+
+/**
+ * The shop's receipt scan. Optional while GRIDGO's Finance switch is off, as
+ * it always was; with the switch on it is one more of the shop's own steps
+ * before a rider is called (`lib/receiptScan.ts`).
+ */
+function receiptRow(check: PackagingCheck, ridersPack: boolean): { state: RowState; title: string; detail: string } {
+  const title = requirementTitle("receipt_scan");
+  if (check.receiptRequired) {
+    if (check.receiptAttached) return { state: "done", title, detail: "On the job. Operations can see it." };
+    return {
+      state: "needed",
+      title,
+      detail: stepRequirement(check, "receipt_scan")?.message ?? RECEIPT_SCAN_NEEDED,
+    };
+  }
+  return {
+    state: "optional",
+    title,
+    detail: check.receiptAttached
+      ? "On the job."
+      : ridersPack
+        ? "Not needed. It never holds up pickup."
+        : "Not needed. It never holds up packing.",
+  };
 }
 
 type Colors = ReturnType<typeof useThemeColors>;

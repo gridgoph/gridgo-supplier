@@ -28,6 +28,7 @@ export function owedProductionMove(
     }
     if (proof?.kind === "add_production_photo") return "Photograph the job so it can be packed";
     if (proof?.kind === "add_packing_photo") return "Photograph the packed job before dispatch";
+    if (proof?.kind === "add_receipt_scan") return "Scan your receipt before calling a rider";
     if (proof?.kind === "send_finished_photos") return "Photograph the finished products for GRIDGO's review";
     if (proof?.kind === "ready_for_pickup" && ridersPack(order)) return "Call a rider; do not pack yet";
     if (order.state === "payment_authorized") return "Start production";

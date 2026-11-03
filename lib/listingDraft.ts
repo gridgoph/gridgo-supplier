@@ -13,6 +13,7 @@ import {
   type ColourDraft,
 } from "@/lib/colourPricing";
 import { moneyInputValue, parseMoney } from "@/lib/money";
+import { sampleOfferProblem } from "@/lib/sampleFirst";
 import { samePrintLayouts, type PrintLayoutCode } from "@/lib/printLayout";
 import {
   choiceFromWindow,
@@ -67,6 +68,13 @@ export type ListingDraft = {
   oneColour: boolean;
   /** The tier table as typed; a blank price is a tier not offered. */
   colour: ColourDraft;
+  /**
+   * "Sample available" (`lib/sampleFirst.ts`). Null from a GRIDGO without
+   * Sample First, or on a quote listing: nothing is shown or sent.
+   */
+  sampleAvailable: boolean | null;
+  /** Pesos as typed for one sample; kept while the offer is off. */
+  samplePrice: string;
 };
 
 export function draftFrom(listing: Listing): ListingDraft {
@@ -92,6 +100,9 @@ export function draftFrom(listing: Listing): ListingDraft {
     pricedByColour: listing.colourSupported ? listing.pricedByColour === true : null,
     oneColour: listing.oneColour === true,
     colour: colourDraftFrom(listing.colourPricing ?? null),
+    sampleAvailable:
+      listing.sampleAvailable === undefined || listing.quoteListing ? null : listing.sampleAvailable,
+    samplePrice: listing.samplePriceMinor != null ? moneyInputValue(listing.samplePriceMinor) : "",
   };
 }
 
@@ -120,6 +131,8 @@ const SAME_FIELD: { [K in keyof ListingDraft]: (left: ListingDraft[K], right: Li
   pricedByColour: same,
   oneColour: same,
   colour: sameColourDraft,
+  sampleAvailable: same,
+  samplePrice: same,
 };
 
 const DRAFT_FIELDS = Object.keys(SAME_FIELD) as (keyof ListingDraft)[];
@@ -219,6 +232,12 @@ export function applyDraft(listing: Listing, draft: ListingDraft): Listing {
             colourPricing: colourOn(draft) && read.ok ? read.pricing : listing.colourPricing,
           };
         })()),
+    ...(draft.sampleAvailable == null
+      ? {}
+      : {
+          sampleAvailable: sampleOn(draft),
+          samplePriceMinor: samplePriceMinor(draft.samplePrice),
+        }),
   };
 }
 
@@ -267,6 +286,7 @@ export function listingSavePatch(
     ...(working.productionTime ? { productionTime: productionTimeBody(working.productionTime) } : {}),
     subcategoryCode: working.subcategoryCode,
     ...colourPatch(working),
+    ...samplePatch(working, baseline),
     ...(onTheBoard == null ? {} : { active: onTheBoard }),
   };
   if (baseline) {
@@ -348,6 +368,43 @@ export function colourHold(draft: ListingDraft): string | null {
   if (!read.ok) return read.problem.message;
   if (!draft.printLayouts.length) return COLOUR_LAYOUT_NEEDED;
   return null;
+}
+
+/** A colour-priced listing cannot offer a sample, so its offer reads (and saves) as off. */
+export function sampleOn(draft: Pick<ListingDraft, "sampleAvailable" | "pricedByColour" | "pricingUnit">): boolean {
+  return draft.sampleAvailable === true && !colourOn(draft);
+}
+
+/** A sample costs at least a centavo; anything else is no price at all. */
+function samplePriceMinor(text: string): number | null {
+  const money = parseMoney(text);
+  return money.ok && money.minor != null && money.minor >= 1 ? money.minor : null;
+}
+
+/**
+ * The sample fields a save sends: only from a GRIDGO with Sample First, and,
+ * against a stored listing, only when the shop changed them.
+ */
+export function samplePatch(
+  draft: ListingDraft,
+  baseline?: Listing | null,
+): Pick<ListingPatch, "sampleAvailable" | "samplePriceMinor"> {
+  if (draft.sampleAvailable == null) return {};
+  const next = { sampleAvailable: sampleOn(draft), samplePriceMinor: samplePriceMinor(draft.samplePrice) };
+  if (
+    baseline &&
+    next.sampleAvailable === (baseline.sampleAvailable === true) &&
+    next.samplePriceMinor === (baseline.samplePriceMinor ?? null)
+  ) {
+    return {};
+  }
+  return next;
+}
+
+/** Why the sample offer cannot be sent yet, or null when it can. */
+export function sampleHold(draft: ListingDraft): string | null {
+  if (draft.sampleAvailable == null) return null;
+  return sampleOfferProblem(draft, colourOn(draft));
 }
 
 export function formatsMoved(working: ListingDraft, baseline: Listing): boolean {

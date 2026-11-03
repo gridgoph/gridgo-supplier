@@ -299,7 +299,11 @@ export type MissingRequirement = { code: string; message: string };
 export type TransitionReadiness = {
   allowed: boolean;
   missing: MissingRequirement[];
-  /** Optional, and never in `missing`: a receipt scan never stops packing. */
+  /**
+   * The shop's receipt or invoice scan (`lib/receiptScan.ts`). Optional unless
+   * GRIDGO's Finance switch sets `required`; then a missing scan is in `missing`
+   * as `receipt_scan_required` and holds "Ready for dispatch".
+   */
   receiptScan?: { required: boolean; attached: boolean } | null;
 };
 
@@ -349,6 +353,18 @@ export type Order = {
    * checkout; absent on orders placed before Express, which reads as false.
    */
   express?: boolean;
+  /**
+   * Sample First (gridgo-api `docs/SAMPLE_FIRST_API.md`): `sample` on a paid
+   * one-piece sample, `batch_from_sample` on the batch ordered after it.
+   * Read, with the links and the decision below, only through `lib/sampleFirst.ts`.
+   */
+  orderTags?: string[];
+  /** On a batch: the sample job it was ordered from. */
+  sampleOrderId?: string | null;
+  /** On a sample: the batch job, once the client orders it. */
+  batchOrderId?: string | null;
+  /** The client's approval or rejection of the sample — the batch's standard. */
+  sampleDecision?: unknown;
   /** Client-visible print subtotal. Includes commission the shop cannot see. */
   subtotalMinor?: number;
   totalMinor: number;
@@ -604,6 +620,8 @@ export type Settings = {
    * limit (`lib/colourPricing.ts`). Absent from an API older than colour pricing.
    */
   colourDetection?: { a3MonochromeMaxBps?: number };
+  /** Days a sampled batch keeps the shop's old prices after the sample arrives. */
+  sampleBatchHoldDays?: number;
 };
 
 /** Stored file metadata. `fileId` is the only durable identity a client keeps. */
@@ -626,6 +644,8 @@ export type StoredFile = {
     | "catalog_item_photo"
     /** The shop's own receiving QR, bound through `updatePayoutAccount`. */
     | "supplier_payout_qr"
+    /** The shop's own receipt or invoice for an order, scanned before a rider is called. */
+    | "supplier_invoice"
     | "support_chat_image";
   originalFilename: string;
   declaredContentType: string;
@@ -1625,6 +1645,16 @@ export async function submitFinishedProducts(orderId: string): Promise<Order> {
     body: JSON.stringify({}),
   });
   return result.order;
+}
+
+/**
+ * Put a stored `supplier_invoice` scan on the job (gridgo-api
+ * `docs/SHOP_RECEIPT_SCAN_API.md`). Moves no state and no money; Operations
+ * sees it at once. A second scan does not remove the first: Operations reads
+ * the newest.
+ */
+export async function attachReceiptScan(fileId: string, orderId: string): Promise<{ file: StoredFile; order?: Order }> {
+  return request(`/files/${fileId}/attach`, { method: "POST", body: JSON.stringify({ orderId }) });
 }
 
 /** Attach packed-work evidence without changing state or payout. */

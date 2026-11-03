@@ -257,6 +257,10 @@ export type ListingPatch = {
   oneColour?: boolean;
   /** The whole tier table, replaced as a set. Omitted to keep it. */
   colourPricing?: ColourPricingPayload;
+  /** Sample First: applies at once, without listing review. */
+  sampleAvailable?: boolean;
+  /** Centavos, at least 1; null clears it. Kept while the offer is off. */
+  samplePriceMinor?: number | null;
 
   sortOrder?: number;
 };

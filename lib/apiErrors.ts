@@ -1,4 +1,5 @@
 import { MIN_PASSWORD_LENGTH } from "@/lib/signup";
+import { RECEIPT_SCAN_NEEDED } from "@/lib/receiptScan";
 
 /** Shared with the transport without importing it back into its error helpers. */
 export class ApiError extends Error {
@@ -55,6 +56,11 @@ export function isFinishedPhotoNotAllowed(error: unknown): boolean {
 
 export function isPackingPhotoRequired(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "packing_photo_required";
+}
+
+/** GRIDGO refused "Ready for dispatch" for want of the shop's receipt scan (`lib/receiptScan.ts`). */
+export function isReceiptScanRequired(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "receipt_scan_required";
 }
 
 /** The shop's record moved on since it was read (shop details and shop hours share one version). */
@@ -325,6 +331,7 @@ const MESSAGES: Record<string, string> = {
     "This job has moved past production, so it no longer takes finished-product photos. Its latest step is on the job.",
   production_finished_required:
     "Send photos of the finished, unpacked products for GRIDGO's review first.",
+  receipt_scan_required: RECEIPT_SCAN_NEEDED,
   production_review_required:
     "Wait for GRIDGO to approve the finished-product photos before calling a rider. Do not pack yet.",
   production_finish_not_available:
@@ -353,6 +360,8 @@ const MESSAGES: Record<string, string> = {
     "GRIDGO could not save this production time. Choose Same day with a number of hours, or Days with whole working days.",
   invalid_catalog_item:
     "Some details on this listing are missing or not valid. Check the name, price and pack size, then try again.",
+  sample_price_required: "Set a price for one sample before offering it.",
+  sample_not_supported: "Listings priced by colour cannot offer a sample. Turn the sample off, then save.",
   invalid_catalog_options:
     "Every step needs at least one option a client can choose. Add one, or remove the step.",
   invalid_subcategory_code:
@@ -432,6 +441,8 @@ export type RequirementKind =
   | "finished_photos"
   /** Newer handover: GRIDGO's review of those photos. */
   | "review"
+  /** The shop's own receipt or invoice scan, when GRIDGO's Finance switch asks for one. */
+  | "receipt_scan"
   | "claim"
   | "job_stopped"
   | "moved_on"
@@ -445,6 +456,7 @@ const REQUIREMENT_KINDS: Record<string, RequirementKind> = {
   production_finished_required: "finished_photos",
   finished_product_photo_required: "finished_photos",
   production_review_required: "review",
+  receipt_scan_required: "receipt_scan",
   claim_hold_active: "claim",
   refund_fulfillment_stopped: "job_stopped",
   reschedule_fulfillment_stopped: "job_stopped",

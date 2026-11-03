@@ -42,6 +42,7 @@ jest.mock("@/lib/api", () => ({
   listMyCatalogServices: jest.fn(async () => []),
   getAcceptedFileFormats: jest.fn(async () => []),
   getDownloadUrl: jest.fn(async () => ({ url: "https://example.test/photo", expiresInSeconds: 300 })),
+  getSettings: jest.fn(async () => ({ sampleBatchHoldDays: 10 })),
 }));
 
 jest.mock("@/lib/listingsApi", () => ({
@@ -610,6 +611,82 @@ describe("the listing editor", () => {
     expect(screen.getByLabelText("Your price").props.value).toBe("150");
     await fireEvent.press(screen.getByLabelText("See what clients see"));
     expect(saveListing).toHaveBeenCalledWith(expect.objectContaining({ version: 7 }), expect.objectContaining({ basePriceMinor: 15000 }));
+  });
+
+  describe("Sample available", () => {
+    it("offers a paid sample with its price, saved live without review", async () => {
+      (loadListing as jest.Mock).mockResolvedValue({
+        status: "ok",
+        value: listingWith({ basePriceMinor: 45000, sampleAvailable: false, samplePriceMinor: null }),
+      });
+      view = await render(<ListingScreen />);
+
+      expect(await screen.findByText("PAID SAMPLE")).toBeTruthy();
+      expect(screen.getByText("Goes live as soon as you save. Operations does not review it.")).toBeTruthy();
+      expect(screen.queryByLabelText("Your price for one sample")).toBeNull();
+
+      await fireEvent.press(screen.getByRole("switch", { name: "Sample available" }));
+      expect(screen.getByRole("switch", { name: "Sample available" }).props.accessibilityState).toEqual(
+        expect.objectContaining({ checked: true }),
+      );
+      // The hold comes from GRIDGO's settings, not a number written here.
+      expect(await screen.findByText(/for 10 days after it arrives/)).toBeTruthy();
+      await fireEvent.changeText(screen.getByLabelText("Your price for one sample"), "120");
+      await fireEvent.press(screen.getByLabelText("See what clients see"));
+
+      await waitFor(() =>
+        expect(saveListing).toHaveBeenCalledWith(
+          expect.objectContaining({ id: "sci_1" }),
+          expect.objectContaining({ sampleAvailable: true, samplePriceMinor: 12000 }),
+        ),
+      );
+    });
+
+    it("holds an offer without a price, and names what is missing", async () => {
+      (loadListing as jest.Mock).mockResolvedValue({
+        status: "ok",
+        value: listingWith({ basePriceMinor: 45000, sampleAvailable: false, samplePriceMinor: null }),
+      });
+      view = await render(<ListingScreen />);
+
+      await fireEvent.press(await screen.findByRole("switch", { name: "Sample available" }));
+      // The next step is said at the field itself, before any save.
+      expect(screen.getByText("Set a price for one sample before offering it.")).toBeTruthy();
+      await fireEvent.press(screen.getByLabelText("See what clients see"));
+
+      // The refused save says it again where the editor reports a failed save.
+      expect(await screen.findAllByText("Set a price for one sample before offering it.")).toHaveLength(2);
+      expect(saveListing).not.toHaveBeenCalled();
+      expect(router.push).not.toHaveBeenCalled();
+
+      await fireEvent.changeText(screen.getByLabelText("Your price for one sample"), "0");
+      expect(screen.getAllByText("Set a price for one sample before offering it.").length).toBeGreaterThan(0);
+    });
+
+    it("says a colour-priced listing cannot offer one, instead of a switch", async () => {
+      (loadListing as jest.Mock).mockResolvedValue({
+        status: "ok",
+        value: listingWith({
+          pricingUnit: "per_page",
+          colourSupported: true,
+          pricedByColour: true,
+          sampleAvailable: false,
+          samplePriceMinor: null,
+        }),
+      });
+      view = await render(<ListingScreen />);
+
+      expect(await screen.findByText("Listings priced by colour cannot offer a sample.")).toBeTruthy();
+      expect(screen.queryByRole("switch", { name: "Sample available" })).toBeNull();
+    });
+
+    it("draws nothing for a GRIDGO without Sample First", async () => {
+      (loadListing as jest.Mock).mockResolvedValue({ status: "ok", value: listingWith() });
+      view = await render(<ListingScreen />);
+
+      expect(await screen.findByText("PRICE")).toBeTruthy();
+      expect(screen.queryByText("PAID SAMPLE")).toBeNull();
+    });
   });
 
 });
