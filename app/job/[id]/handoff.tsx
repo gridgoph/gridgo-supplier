@@ -5,6 +5,7 @@ import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "exp
 import { Camera, ChevronDown, PackageOpen } from "lucide-react-native";
 import { ProgressPhotoStrip } from "@/components/ProgressPhotoStrip";
 import { UploadList } from "@/components/UploadList";
+import { useDispatchHours } from "@/hooks/useDispatchHours";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { useThemeColors } from "@/hooks/useTheme";
 import { attachPackingPhoto, attachReceiptScan } from "@/lib/api";
@@ -38,6 +39,7 @@ import {
   isReceiptScanRequired,
   offlineMessage,
 } from "@/lib/apiErrors";
+import { waitsForDispatch } from "@/lib/dispatchHours";
 import { findAction, waitingOnJob } from "@/lib/jobState";
 import { payoutPlanOf } from "@/lib/milestones";
 import {
@@ -49,6 +51,7 @@ import { counterCheck, countTargets } from "@/lib/pickupCheck";
 import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
 import { useJobDrafts } from "@/store/jobDrafts";
+import { useToasts } from "@/store/toasts";
 import { askConfirm } from "@/store/sheets";
 import { WhyWeAsk } from "@/components/legal/WhyWeAsk";
 import { WHY_WE_ASK } from "@/lib/legal";
@@ -79,6 +82,11 @@ import { WHY_WE_ASK } from "@/lib/legal";
  * rider is called: the footer turns into the way to scan it, the same way it
  * turns into the packing photo, and "Ready for dispatch" comes back once the
  * scan is on the job. Off, nothing here changes.
+ *
+ * Marking ready stays allowed after GRIDGO's dispatch closes, with the same
+ * steps. Riders cannot see the job until it opens (`lib/dispatchHours.ts`), so
+ * the shop is told when that is: in the question, in a toast once it is marked,
+ * and here while the job waits. Open, nothing here changes.
  */
 export default function HandoffScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -103,12 +111,18 @@ export default function HandoffScreen() {
     }, [reload]),
   );
 
-  const custody = job ? custodyForOrder(job) : null;
+  const step = job ? findAction(job, "ready_for_pickup") : null;
+  const waitingForRider = job ? waitsForDispatch(job) : false;
+  const dispatch = useDispatchHours(Boolean(step) || waitingForRider);
+  const refreshDispatch = dispatch.refresh;
+  const closedLine = dispatch.closedLine;
+  const custody = job
+    ? custodyForOrder(job, { dispatchClosed: waitingForRider && Boolean(closedLine) })
+    : null;
   // The package is still at the counter until the rider confirms pickup.
   const packing = custody
     ? custody.state !== "with_rider" && custody.state !== "delivered"
     : false;
-  const step = job ? findAction(job, "ready_for_pickup") : null;
   // The newer handover has no photo gates here: its finished photos have their own screen.
   const newer = ridersPack(job);
   const finished = job ? finishedStage(job) : null;
@@ -236,18 +250,18 @@ export default function HandoffScreen() {
     setConfirming(true);
     let saved = false;
     try {
+      const whenRiders = closedLine ?? "Riders will be notified to accept this pickup.";
       const confirmed = await askConfirm(
         newer
           ? {
               question: `Call a rider for ${job.title}?`,
-              consequence: `Riders will be notified to accept this pickup. ${DO_NOT_PACK_YET}`,
+              consequence: `${whenRiders} ${DO_NOT_PACK_YET}`,
               confirmLabel: "Ready for rider pickup",
               cancelLabel: "Not yet",
             }
           : {
               question: `Mark the package ready for ${job.title}?`,
-              consequence:
-                "Riders will be notified to accept this pickup. Keep the package at the counter and check it together when the rider arrives; all six checks must pass before transport.",
+              consequence: `${whenRiders} Keep the package at the counter and check it together when the rider arrives; all six checks must pass before transport.`,
               confirmLabel: "Mark package ready",
               cancelLabel: "Not yet",
             },
@@ -270,6 +284,16 @@ export default function HandoffScreen() {
       saved = true;
       clearDraft(job.id);
       router.replace({ pathname: "/job/[id]", params: { id: job.id } });
+      // Read again rather than trust the screen: hours may have closed since it opened.
+      void refreshDispatch().then((line) => {
+        if (!line) return;
+        useToasts.getState().show({
+          id: `dispatch-closed:${job.id}`,
+          title: step.resultLabel,
+          body: line,
+          orderId: job.id,
+        });
+      });
     } finally {
       // A successful dispatch stays locked until navigation unmounts this form.
       if (!saved) pending.current = false;
@@ -289,13 +313,17 @@ export default function HandoffScreen() {
             : "Rider pickup"
           : packingGate && !photoGate
             ? "Packed"
-            : "Package for pickup"
+            : custody && custody.state !== "in_shop"
+              ? "Pickup handoff"
+              : "Package for pickup"
       }
       subject={job?.title}
       // A stopped pickup is explained once, in its own panel below.
       lede={
         // The instruction about the products is said once, in the custody card.
-        receiptGate
+        waitingForRider && closedLine
+          ? `Dispatch is closed. ${closedLine}`
+          : receiptGate
           ? "Before a rider is called, attach a scan of your own receipt or invoice for this order."
           : newer && !held && !counterIssue
           ? step
@@ -315,8 +343,8 @@ export default function HandoffScreen() {
               ? "Show the finished prints packed and ready. The client and Operations will see this update."
               : counterIssue
                 ? "The package stays at your counter until the rider checks it again."
-                : (custody?.detail ??
-                  "Getting a job ready for the rider who collects it.")
+                : // The custody card below says where the job stands, once.
+                  undefined
       }
       // GRIDGO's own sentence for a refused step, even where a panel below
       // explains the fix: the shop pressed something and is owed the answer.
@@ -407,7 +435,7 @@ export default function HandoffScreen() {
         ) : step && !packingGate ? (
           <>
             <PrimaryButton
-              label={action.busy ? "Notifying riders…" : newer ? "Ready for rider pickup" : "Ready for dispatch"}
+              label={action.busy ? (closedLine ? "Marking ready…" : "Notifying riders…") : newer ? "Ready for rider pickup" : "Ready for dispatch"}
               disabled={busy}
               onPress={() => void markReady()}
             />

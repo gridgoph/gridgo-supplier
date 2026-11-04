@@ -40,6 +40,8 @@ export type Custody = {
 export function custodyForOrder(
   order: Pick<Order, "state" | "riderId" | "pickupChecklist"> &
     Partial<Pick<Order, "handoverFlow" | "shopHandover" | "supplierId">>,
+  /** GRIDGO's dispatch is closed (`lib/dispatchHours.ts`), so no rider has been told yet. */
+  { dispatchClosed = false }: { dispatchClosed?: boolean } = {},
 ): Custody {
   // A failed counter check keeps the package with the shop while the rider waits.
   if (order.state === "rider_assigned" && order.pickupChecklist?.status === "failed_escalated") {
@@ -53,7 +55,7 @@ export function custodyForOrder(
       nextActor: "You",
     };
   }
-  const newer = ridersPack(order) ? riderPacksCustody(order) : null;
+  const newer = ridersPack(order) ? riderPacksCustody(order, dispatchClosed) : null;
   if (newer) return newer;
   switch (order.state) {
     case "ready_for_dispatch":
@@ -62,8 +64,7 @@ export function custodyForOrder(
         label: "Waiting for a rider",
         tone: "info",
         icon: "clock",
-        detail:
-          "Riders have been notified. Keep the package at the counter for the joint checks when a rider accepts and arrives.",
+        detail: `${dispatchClosed ? "" : "Riders have been notified. "}Keep the package at the counter for the joint checks when a rider accepts and arrives.`,
         nextActor: "Rider",
       };
     case "rider_assigned":
@@ -123,6 +124,7 @@ export function custodyForOrder(
 function riderPacksCustody(
   order: Pick<Order, "state" | "riderId" | "pickupChecklist"> &
     Partial<Pick<Order, "handoverFlow" | "shopHandover" | "supplierId">>,
+  dispatchClosed: boolean,
 ): Custody | null {
   const counter = riderPacking(order);
   switch (order.state) {
@@ -132,8 +134,11 @@ function riderPacksCustody(
         label: "Waiting for a rider",
         tone: "info",
         icon: "clock",
-        detail: `Riders have been notified. ${DO_NOT_PACK_YET}`,
-        now: { situation: "Riders have been notified.", instruction: DO_NOT_PACK_YET },
+        detail: dispatchClosed ? DO_NOT_PACK_YET : `Riders have been notified. ${DO_NOT_PACK_YET}`,
+        now: {
+          situation: dispatchClosed ? "Dispatch is closed." : "Riders have been notified.",
+          instruction: DO_NOT_PACK_YET,
+        },
         nextActor: "Rider",
       };
     case "rider_assigned":

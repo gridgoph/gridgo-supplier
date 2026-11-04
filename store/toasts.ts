@@ -3,14 +3,15 @@ import { create } from "zustand";
 /**
  * Transient notices that arrive without being asked for.
  *
- * The only source today is the live alert stream: something happened to a job
- * while the shop was looking at another screen. A toast is not a substitute for
- * the Alerts tab, which is where the record lives — it is the interruption that
- * says go and look.
+ * The main source is the live alert stream: something happened to a job while
+ * the shop was looking at another screen. A toast is not a substitute for the
+ * Alerts tab, which is where the record lives — it is the interruption that says
+ * go and look. The other is marking a job ready after GRIDGO's dispatch has
+ * closed, which the job's own screen goes on saying.
  *
- * Nothing is ever *only* a toast. Every one of these corresponds to a
- * notification the platform is already holding, so a missed or dismissed toast
- * costs nothing. That is what makes it safe to auto-dismiss.
+ * Nothing is ever *only* a toast. Each of these has a home that keeps it (a
+ * notification the platform holds, or that job's screen), so a missed or
+ * dismissed toast costs nothing. That is what makes it safe to auto-dismiss.
  */
 
 export type Toast = {
