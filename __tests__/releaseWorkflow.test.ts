@@ -326,7 +326,7 @@ describe("release push follows both successful publishes", () => {
   });
 
   it("announces a Play version only after its upload to Play succeeds, and never fails the run", () => {
-    const submitted = apkSteps.findIndex(step => step.includes("eas-cli@"));
+    const submitted = apkSteps.findIndex(step => step.includes("PLAY_BUNDLE_PATH="));
     expect(apkSteps[submitted]).toContain("id: play_submit");
     const index = apkSteps.findIndex(step => step.includes("RELEASE_CHANNEL: play"));
     expect(index).toBeGreaterThan(submitted);
@@ -427,14 +427,13 @@ describe("a manual play_bundle run builds a Google Play bundle and publishes not
   });
 });
 
-describe("submit_to_play hands the verified AAB to the selected testing track only", () => {
+describe("submit_to_play uploads the verified AAB to the selected testing track only", () => {
   const eas = JSON.parse(readFileSync(join(__dirname, "..", "eas.json"), "utf8"));
-  const appJson = JSON.parse(readFileSync(join(__dirname, "..", "app.json"), "utf8"));
-  const submitStep = () => apkSteps.find((step) => step.includes("eas-cli@"));
+  const submitStep = () => apkSteps.find((step) => step.includes("PLAY_BUNDLE_PATH="));
 
   const selectStep = apkSteps.find((step) => step.includes("id: play-track")) as string;
 
-  // Exercise the actual shell allowlist without running EAS or touching credentials.
+  // Exercise the actual shell allowlist without calling Google or touching credentials.
   function selectTrack(requested: string): Record<string, string> {
     const directory = mkdtempSync(join(tmpdir(), "gridgo-play-track-"));
     const output = join(directory, "outputs");
@@ -452,21 +451,15 @@ describe("submit_to_play hands the verified AAB to the selected testing track on
     }
   }
 
-  it("offers only internal and closed, defaulting to internal", () => {
+  it("offers only internal and closed, defaulting to closed", () => {
     expect(workflow).toMatch(
-      / {6}play_track:\n[\s\S]*?type: choice\n\s+default: internal\n\s+options:\n\s+- internal\n\s+- closed\n\n/,
+      / {6}play_track:\n[\s\S]*?type: choice\n\s+default: closed\n\s+options:\n\s+- internal\n\s+- closed\n\n/,
     );
-    expect(selectTrack("")).toEqual(selectTrack("internal"));
-    expect(selectTrack("internal")).toEqual({
-      profile: "production", track: "internal", label: "internal testing",
-    });
-    expect(selectTrack("closed")).toEqual({
-      profile: "closed", track: "alpha", label: "closed testing",
-    });
+    expect(selectTrack("")).toEqual(selectTrack("closed"));
+    expect(selectTrack("internal")).toEqual({ track: "internal", label: "internal testing" });
+    expect(selectTrack("closed")).toEqual({ track: "alpha", label: "closed testing" });
     for (const requested of ["", "internal", "closed"]) {
-      const selected = selectTrack(requested);
-      expect(eas.submit[selected.profile].android.track).toBe(selected.track);
-      expect(selected.track).not.toBe("production");
+      expect(selectTrack(requested).track).not.toBe("production");
     }
   });
 
@@ -504,15 +497,14 @@ describe("submit_to_play hands the verified AAB to the selected testing track on
     expect(submitted).toBeGreaterThan(kept);
   });
 
-  it("pins eas-cli and runs it non-interactive against that AAB", () => {
+  it("uploads that AAB straight to Google Play, never through EAS Submit", () => {
+    // Expo's free submit queue held bundles up to an hour; past the job
+    // timeout, a release reached Play without its notes.
     const step = submitStep() as string;
-    expect(step).toMatch(/npx --yes eas-cli@\d+\.\d+\.\d+ submit/);
-    expect(step).toContain("--platform android");
-    expect(step).toContain('--profile "$SUBMIT_PROFILE"');
-    expect(step).toContain("SUBMIT_PROFILE: ${{ steps.play-track.outputs.profile }}");
-    expect(step).toContain('--path "$RUNNER_TEMP/play/$AAB"');
-    expect(step).toContain("--non-interactive");
-    expect(step).toMatch(/EXPO_TOKEN:\s*\$\{\{\s*secrets\.EXPO_TOKEN\s*\}\}/);
+    expect(step).toContain('PLAY_BUNDLE_PATH="$RUNNER_TEMP/play/$AAB"');
+    expect(step).toContain("node scripts/play-release-notes.mjs");
+    expect(step).not.toMatch(/eas-cli|eas submit|EXPO_TOKEN|SUBMIT_PROFILE/);
+    expect(apkSteps.some((s) => /eas-cli|EXPO_TOKEN/.test(s))).toBe(false);
   });
 
   it("keeps the service-account key outside the workspace, private, and never echoed", () => {
@@ -535,11 +527,9 @@ describe("submit_to_play hands the verified AAB to the selected testing track on
     expect(cleanup).toContain("play-service-account.json");
   });
 
-  it("sets the version's What's new on that release after the submit", () => {
+  it("sets the version's What's new on that release in the same upload", () => {
     const step = submitStep() as string;
-    const submit = step.indexOf("eas-cli@");
-    const notes = step.indexOf("node scripts/play-release-notes.mjs");
-    expect(notes).toBeGreaterThan(submit);
+    expect(step.match(/node scripts\/play-release-notes\.mjs/g)).toHaveLength(1);
     expect(step).toContain('PLAY_SERVICE_ACCOUNT_KEY_PATH="$key"');
     expect(step).toContain('PLAY_VERSION_CODE="$CODE"');
     expect(step).toContain('PLAY_VERSION="$VERSION"');
@@ -551,7 +541,7 @@ describe("submit_to_play hands the verified AAB to the selected testing track on
   it("uses the selected testing track in the step name and summaries", () => {
     const step = submitStep() as string;
     const named = apkSteps.find((s) => s.includes("Name the Play bundle"));
-    expect(step).toContain("Submit the Play bundle to ${{ steps.play-track.outputs.label }}");
+    expect(step).toContain("Upload the Play bundle to ${{ steps.play-track.outputs.label }}");
     for (const summary of [step, named]) {
       expect(summary).toContain("TRACK_LABEL: ${{ steps.play-track.outputs.label }}");
       expect(summary).toContain("$TRACK_LABEL");
@@ -561,23 +551,13 @@ describe("submit_to_play hands the verified AAB to the selected testing track on
     expect(step).toContain("Google reviews closed releases");
   });
 
-  it("keeps internal unchanged and adds completed closed testing without production", () => {
-    expect(eas.submit.production.android).toEqual({
-      serviceAccountKeyPath: "$GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_PATH",
-      track: "internal",
-      releaseStatus: "completed",
-    });
-    expect(eas.submit.closed.android).toEqual({
-      ...eas.submit.production.android,
-      track: "alpha",
-    });
-    expect(eas.submit.closed.ios).toBeUndefined();
-    expect(Object.keys(eas.submit).sort()).toEqual(["closed", "production"]);
-    // Android builds stay in this workflow with the upload key, never on EAS.
+  it("never builds Android on EAS", () => {
+    // Android builds stay in this workflow with the upload key.
     expect(eas.build?.production?.android).toBeUndefined();
   });
 
-  it("links this app to its EAS project", () => {
+  it("keeps this app linked to its EAS project for the iOS build", () => {
+    const appJson = JSON.parse(readFileSync(join(__dirname, "..", "app.json"), "utf8"));
     expect(appJson.expo.owner).toBe("felyciaaa");
     expect(appJson.expo.extra.eas.projectId).toBe("ebba1b98-6125-4c84-ac04-3ef268ce9bd2");
   });
