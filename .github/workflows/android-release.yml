@@ -9,10 +9,11 @@ name: Android release APK or Play testing bundle
 # hand. That run never touches the APK path: no APK, no landing-site upload,
 # no GitHub Release, no release push. See README.md "Google Play bundle".
 #
-# submit_to_play, together with play_bundle, also hands that verified AAB to
-# EAS Submit for the selected Play testing track: internal by default, or
-# closed (alpha) when explicitly selected. Builds stay here with the upload
-# key; EAS only uploads. Never the production track, never a promotion.
+# submit_to_play, together with play_bundle, also uploads that verified AAB
+# straight to Google Play's selected testing track with its release notes, in
+# one Play API edit (scripts/play-release-notes.mjs): closed (alpha) by
+# default, or internal when selected. Builds stay here with the upload key.
+# Never the production track, never a promotion.
 
 on:
   push:
@@ -33,15 +34,15 @@ on:
       submit_to_play:
         description: >-
           With play_bundle only: also upload the verified AAB to Google Play's
-          selected testing track with EAS Submit. Ignored without play_bundle.
+          selected testing track, with its release notes. Ignored without play_bundle.
         type: boolean
         default: false
       play_track:
         description: >-
-          Testing track for submit_to_play only: internal or closed (alpha).
+          Testing track for submit_to_play only: closed (alpha) or internal.
           Ignored unless play_bundle and submit_to_play are both enabled.
         type: choice
-        default: internal
+        default: closed
         options:
           - internal
           - closed
@@ -497,7 +498,7 @@ jobs:
           retention-days: 90
 
       # Explicit allowlist: dispatch input can never name a production track.
-      # Resolve once so EAS Submit, release notes and summaries agree.
+      # Resolve once so the upload, its release notes and summaries agree.
       - name: Select the Play testing track
         id: play-track
         if: github.event.inputs.play_bundle == 'true' && github.event.inputs.submit_to_play == 'true'
@@ -506,15 +507,13 @@ jobs:
         run: |
           set -euo pipefail
           case "$REQUESTED_TRACK" in
-            ""|internal)
-              echo "profile=production" >> "$GITHUB_OUTPUT"
-              echo "track=internal" >> "$GITHUB_OUTPUT"
-              echo "label=internal testing" >> "$GITHUB_OUTPUT"
-              ;;
-            closed)
-              echo "profile=closed" >> "$GITHUB_OUTPUT"
+            ""|closed)
               echo "track=alpha" >> "$GITHUB_OUTPUT"
               echo "label=closed testing" >> "$GITHUB_OUTPUT"
+              ;;
+            internal)
+              echo "track=internal" >> "$GITHUB_OUTPUT"
+              echo "label=internal testing" >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "::error::unsupported Play testing track"
@@ -548,7 +547,7 @@ jobs:
             echo "| Updates | self-update prompt and side-load links off (Play build) |"
             echo
             if [ "$SUBMIT" = "true" ]; then
-              echo "EAS Submit uploads it to the $TRACK_LABEL track below."
+              echo "The run uploads it to the $TRACK_LABEL track below."
             else
               echo "Upload it in Play Console under Testing. Nothing was published."
             fi
@@ -565,29 +564,27 @@ jobs:
           retention-days: 30
 
       # Only after the AAB is verified and kept as an artifact, so a failed
-      # submission still leaves the bundle to upload by hand. The track and
-      # release status live in eas.json: internal or alpha, both completed.
-      # Closed releases still require Google review; a draft would need a
-      # manual Play Console step for every submission.
+      # upload still leaves the bundle to upload by hand.
       #
-      # The service-account key is written outside the workspace, mode 600,
-      # and eas.json reads its path from GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_PATH.
+      # Straight to Google, not through EAS Submit: Expo's free submit queue
+      # held bundles 41-61 minutes at US peak hours, and runs that hit the job
+      # timeout left releases on Play without notes. scripts/play-release-notes.mjs
+      # opens one Play API edit, uploads the AAB, makes it the track's completed
+      # release with the version's What's new, commits, and reads the notes
+      # back. The bundle and its notes land together or not at all. Closed
+      # releases still require Google review; a draft would need a manual Play
+      # Console step for every upload.
+      #
+      # The service-account key is written outside the workspace, mode 600.
       # Its content is never echoed; the trap removes it however the step ends,
-      # and the cleanup step below removes it again. eas-cli is pinned, so a
-      # new release cannot change what this step uploads.
-      #
-      # eas submit carries no release notes, so the same key then sets the
-      # version's What's new on that release through Play's edits API and
-      # reads them back (scripts/play-release-notes.mjs). Testers see what
-      # changed; the versionCode is the run number, so each upload is newer.
-      - name: Submit the Play bundle to ${{ steps.play-track.outputs.label }}
+      # and the cleanup step below removes it again. The versionCode is the run
+      # number, so each upload is newer.
+      - name: Upload the Play bundle to ${{ steps.play-track.outputs.label }}
         id: play_submit
         if: github.event.inputs.play_bundle == 'true' && github.event.inputs.submit_to_play == 'true'
         env:
-          SUBMIT_PROFILE: ${{ steps.play-track.outputs.profile }}
           PLAY_TRACK: ${{ steps.play-track.outputs.track }}
           TRACK_LABEL: ${{ steps.play-track.outputs.label }}
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           AAB: ${{ steps.config.outputs.aab }}
           CODE: ${{ steps.config.outputs.code }}
@@ -595,12 +592,8 @@ jobs:
           PACKAGE: ${{ steps.config.outputs.package }}
         run: |
           set -euo pipefail
-          missing=""
-          for name in EXPO_TOKEN GOOGLE_PLAY_SERVICE_ACCOUNT_JSON; do
-            [ -n "${!name:-}" ] || missing="$missing $name"
-          done
-          if [ -n "$missing" ]; then
-            echo "::error::missing repository secret(s):$missing"
+          if [ -z "${GOOGLE_PLAY_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "::error::missing repository secret: GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"
             exit 1
           fi
 
@@ -622,17 +615,10 @@ jobs:
             echo "::error::GOOGLE_PLAY_SERVICE_ACCOUNT_JSON is not a Google service-account key"
             exit 1
           fi
-          export GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_PATH="$key"
-
-          npx --yes eas-cli@24.12.1 submit \
-            --platform android \
-            --profile "$SUBMIT_PROFILE" \
-            --path "$RUNNER_TEMP/play/$AAB" \
-            --non-interactive \
-            --wait
 
           notes="$RUNNER_TEMP/play-release-notes.txt"
           PLAY_SERVICE_ACCOUNT_KEY_PATH="$key" \
+          PLAY_BUNDLE_PATH="$RUNNER_TEMP/play/$AAB" \
           PLAY_PACKAGE="$PACKAGE" \
           PLAY_VERSION_CODE="$CODE" \
           PLAY_VERSION="$VERSION" \
@@ -640,7 +626,7 @@ jobs:
 
           {
             echo
-            echo "Submitted \`$AAB\` (versionCode $CODE) to Google Play's **$TRACK_LABEL** track with EAS Submit."
+            echo "Submitted \`$AAB\` (versionCode $CODE) to Google Play's **$TRACK_LABEL** track through the Google Play Developer API."
             if [ "$PLAY_TRACK" = "alpha" ]; then
               echo "Google reviews closed releases before testers can access them."
             fi
