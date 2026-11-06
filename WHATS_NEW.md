@@ -21,6 +21,12 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.376 (New feature)
+
+- When GRIDGO asks for it, scan or upload your own receipt for an order before calling a rider.
+- Offer a paid sample on a listing, and see "Sample" and "Batch from sample" jobs with the approved sample to match.
+- Mark a job ready after dispatch closes and the app now says when riders can pick it up.
+
 ## 1.0.369 (New feature)
 
 - When GRIDGO asks for it, scan or upload your own receipt for an order before calling a rider.
