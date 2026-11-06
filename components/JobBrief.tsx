@@ -50,6 +50,8 @@ type Props = {
   proofReloadVersion?: number;
   /** Drawn at the foot of the Pickup row: the rider on the way and the chat with them. */
   handoffExtra?: ReactNode;
+  /** GRIDGO's dispatch is closed, so the Pickup row must not say riders were told. */
+  dispatchClosed?: boolean;
   /** Opens the proof screen for one payout part, from the Earnings row. */
   onAddProof?: (code: string) => void;
 };
@@ -78,6 +80,7 @@ export function JobBrief({
   defaultOpen = "make",
   proofReloadVersion = 0,
   handoffExtra = null,
+  dispatchClosed = false,
   onAddProof,
 }: Props) {
   const colors = useThemeColors();
@@ -135,6 +138,7 @@ export function JobBrief({
                   order={order}
                   proofReloadVersion={proofReloadVersion}
                   handoffExtra={handoffExtra}
+                  dispatchClosed={dispatchClosed}
                   onAddProof={onAddProof}
                 />
               </Animated.View>
@@ -152,12 +156,14 @@ function SectionBody({
   order,
   proofReloadVersion,
   handoffExtra,
+  dispatchClosed,
   onAddProof,
 }: {
   id: JobBriefSectionId;
   order: Order;
   proofReloadVersion: number;
   handoffExtra: ReactNode;
+  dispatchClosed: boolean;
   onAddProof?: (code: string) => void;
 }) {
   switch (id) {
@@ -339,7 +345,7 @@ function SectionBody({
         </View>
       );
     case "handoff": {
-      const custody = custodyForOrder(order);
+      const custody = custodyForOrder(order, { dispatchClosed });
       // Once the rider has taken it, the check it passed is the handoff's record.
       const check = counterCheck(order);
       return (

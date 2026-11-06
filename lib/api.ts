@@ -1476,6 +1476,12 @@ export async function getSettings(): Promise<Settings> {
   return result.settings;
 }
 
+/** GRIDGO's live hours as `GET /settings` states them. Read through `lib/dispatchHours.ts`. */
+export async function getOperatingStatus(): Promise<unknown> {
+  const result = await request<{ operatingStatus?: unknown }>("/settings");
+  return result.operatingStatus ?? null;
+}
+
 export async function transitionOrder(
   orderId: string,
   state: string,

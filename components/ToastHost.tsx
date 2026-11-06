@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { motion, spacing } from "@/constants/theme";
-import { useToasts, type Toast } from "@/store/toasts";
+import { useToasts, useViewing, type Toast } from "@/store/toasts";
 import { useThemeColors } from "@/hooks/useTheme";
 
 /** Long enough to read two lines, short enough not to sit on the screen. */
@@ -30,8 +30,8 @@ const DWELL_MS = 6000;
  * label — and it still reads in greyscale.
  *
  * Nothing here is the only copy of anything: every toast corresponds to a
- * notification sitting in the alerts list, which is why it can auto-dismiss
- * without losing information.
+ * notification sitting in the alerts list, or to what the job's own screen
+ * says, which is why it can auto-dismiss without losing information.
  */
 export function ToastHost() {
   const toasts = useToasts((s) => s.toasts);
@@ -66,6 +66,8 @@ function ToastCard({ toast }: { toast: Toast }) {
 
   const open = () => {
     dismiss(toast.id);
+    // Already on this job: opening it again would only stack a second copy.
+    if (toast.orderId && useViewing.getState().orderId === toast.orderId) return;
     if (toast.orderId) {
       router.push({ pathname: "/job/[id]", params: { id: toast.orderId } });
     } else {

@@ -1,20 +1,25 @@
 #!/usr/bin/env node
 /**
- * Release notes for a Play internal testing upload.
+ * Uploads a Play bundle to a testing track with its release notes, in one edit.
  *
- * `eas submit` uploads the bundle but carries no release notes, so testers saw
- * a release with nothing to say what changed. After the submit, the release
- * job runs this to set them on that same release through the Google Play
- * Developer API's edits flow, with the same service account EAS used.
+ * The release job used to hand the bundle to `eas submit`, which queued it on
+ * Expo's shared submit workers for up to an hour and carried no notes, so a
+ * run that timed out left a release on Play with nothing to say what changed.
+ * Now this script talks to the Google Play Developer API's edits flow itself:
+ * it opens an edit, uploads the .aab, sets the track release (completed, that
+ * versionCode, the en-US notes) and commits, then reads the notes back in a
+ * fresh edit. The bundle and its notes land together or not at all.
  *
  *   node scripts/play-release-notes.mjs
  *
  * Reads from the environment:
  *   PLAY_SERVICE_ACCOUNT_KEY_PATH   the service-account JSON (a mode-600 temp file)
  *   PLAY_PACKAGE                    the app's package name
- *   PLAY_VERSION_CODE               the versionCode the submit uploaded
+ *   PLAY_VERSION_CODE               the bundle's versionCode
  *   PLAY_VERSION                    the version name, for picking its What's new
- *   PLAY_TRACK                      optional, default "internal"
+ *   PLAY_BUNDLE_PATH                the .aab to upload; without it, only the notes
+ *                                   are set on a release Play already has
+ *   PLAY_TRACK                      optional, default "alpha" (closed testing)
  *
  * The notes are the app's own What's new for that version, the same lines the
  * update prompt shows (scripts/whats-new.js): newest change first, whole lines
@@ -40,6 +45,8 @@ const MORE = "And more improvements in this version.";
 const FALLBACK = "Fixes and improvements.";
 const SCOPE = "https://www.googleapis.com/auth/androidpublisher";
 const API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications";
+const UPLOAD_API = "https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications";
+export const DEFAULT_TRACK = "alpha";
 
 /** Characters as Play counts them, not UTF-16 units. */
 const length = (text) => [...text].length;
@@ -134,12 +141,22 @@ async function accessToken(key, transport) {
   return token;
 }
 
+/**
+ * One Play API call. A JSON body goes to the API as JSON; `{ upload }` sends
+ * those bytes to the media upload endpoint instead.
+ */
 function playClient(token, transport, packageName) {
-  return async (method, path, body) => {
-    const response = await transport(`${API}/${encodeURIComponent(packageName)}${path}`, {
+  return async (method, path, body, { upload } = {}) => {
+    const url = upload
+      ? `${UPLOAD_API}/${encodeURIComponent(packageName)}${path}${path.includes("?") ? "&" : "?"}uploadType=media`
+      : `${API}/${encodeURIComponent(packageName)}${path}`;
+    const response = await transport(url, {
       method,
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      ...(body ? { body: JSON.stringify(body) } : {}),
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": upload ? "application/octet-stream" : "application/json",
+      },
+      ...(upload ? { body: upload } : body ? { body: JSON.stringify(body) } : {}),
     });
     const text = await response.text();
     if (!response.ok) {
@@ -158,30 +175,86 @@ function playClient(token, transport, packageName) {
   };
 }
 
-/**
- * Sets the notes on the release, commits, and reads them back in a fresh edit.
- * Returns the notes Play now holds for that release.
- */
-export async function setPlayReleaseNotes({ key, packageName, versionCode, track = "internal", text }, transport = fetch) {
-  const play = playClient(await accessToken(key, transport), transport, packageName);
+/** The track update for a new bundle: one completed release of that versionCode, carrying the notes. */
+export function bundleRelease(track, versionCode, text) {
+  return {
+    track,
+    releases: [
+      {
+        versionCodes: [String(versionCode)],
+        status: "completed",
+        releaseNotes: [{ language: NOTES_LANGUAGE, text }],
+      },
+    ],
+  };
+}
 
-  const edit = await play("POST", "/edits");
-  const current = await play("GET", `/edits/${edit.id}/tracks/${track}`);
-  await play("PUT", `/edits/${edit.id}/tracks/${track}`, withReleaseNotes(current, versionCode, text));
+async function commit(play, editId) {
   try {
-    await play("POST", `/edits/${edit.id}:commit`);
+    await play("POST", `/edits/${editId}:commit`);
   } catch (error) {
     // Play asks for this flag on an app whose changes go to review in a batch.
     if (!/changesNotSentForReview/i.test(error.playMessage ?? "")) throw error;
-    await play("POST", `/edits/${edit.id}:commit?changesNotSentForReview=true`);
+    await play("POST", `/edits/${editId}:commit?changesNotSentForReview=true`);
   }
+}
 
+/**
+ * Runs `change` in a new edit and commits it. An edit that fails before its
+ * commit is deleted, so nothing half-done is left open on Play.
+ */
+async function inEdit(play, change) {
+  const edit = await play("POST", "/edits");
+  try {
+    await change(edit.id);
+  } catch (error) {
+    await play("DELETE", `/edits/${edit.id}`).catch(() => {});
+    throw error;
+  }
+  await commit(play, edit.id);
+}
+
+/** The notes Play holds for that release, read in a fresh edit that is then thrown away. */
+async function readBack(play, track, versionCode) {
   const check = await play("POST", "/edits");
   try {
     return notesOnRelease(await play("GET", `/edits/${check.id}/tracks/${track}`), versionCode);
   } finally {
     await play("DELETE", `/edits/${check.id}`).catch(() => {});
   }
+}
+
+/**
+ * Sets the notes on the release, commits, and reads them back in a fresh edit.
+ * Returns the notes Play now holds for that release.
+ */
+export async function setPlayReleaseNotes({ key, packageName, versionCode, track = DEFAULT_TRACK, text }, transport = fetch) {
+  const play = playClient(await accessToken(key, transport), transport, packageName);
+  await inEdit(play, async (editId) => {
+    const current = await play("GET", `/edits/${editId}/tracks/${track}`);
+    await play("PUT", `/edits/${editId}/tracks/${track}`, withReleaseNotes(current, versionCode, text));
+  });
+  return readBack(play, track, versionCode);
+}
+
+/**
+ * Uploads the bundle, makes it the track's completed release with the notes,
+ * and commits, all in one edit; then reads the notes back in a fresh edit.
+ * `bundle` is the .aab's bytes. Returns the notes Play now holds for that release.
+ */
+export async function publishPlayBundle(
+  { key, packageName, versionCode, track = DEFAULT_TRACK, text, bundle },
+  transport = fetch,
+) {
+  const play = playClient(await accessToken(key, transport), transport, packageName);
+  await inEdit(play, async (editId) => {
+    const uploaded = await play("POST", `/edits/${editId}/bundles`, undefined, { upload: bundle });
+    if (String(uploaded.versionCode) !== String(versionCode)) {
+      throw new Error(`Play read versionCode ${uploaded.versionCode} from the bundle, not ${versionCode}`);
+    }
+    await play("PUT", `/edits/${editId}/tracks/${track}`, bundleRelease(track, versionCode, text));
+  });
+  return readBack(play, track, versionCode);
 }
 
 async function main() {
@@ -192,17 +265,18 @@ async function main() {
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const text = releaseNotesText(notesForVersion(root, env.PLAY_VERSION));
   const key = JSON.parse(readFileSync(env.PLAY_SERVICE_ACCOUNT_KEY_PATH, "utf8"));
-  const track = env.PLAY_TRACK || "internal";
+  const track = env.PLAY_TRACK || DEFAULT_TRACK;
+  const release = { key, packageName: env.PLAY_PACKAGE, versionCode: env.PLAY_VERSION_CODE, track, text };
 
-  const stored = await setPlayReleaseNotes({
-    key,
-    packageName: env.PLAY_PACKAGE,
-    versionCode: env.PLAY_VERSION_CODE,
-    track,
-    text,
-  });
+  // About 110 MB: read whole, the way the key and notes are read.
+  const stored = env.PLAY_BUNDLE_PATH
+    ? await publishPlayBundle({ ...release, bundle: readFileSync(env.PLAY_BUNDLE_PATH) })
+    : await setPlayReleaseNotes(release);
   if (stored !== text) {
     throw new Error(`Play does not show the notes on versionCode ${env.PLAY_VERSION_CODE} after the commit`);
+  }
+  if (env.PLAY_BUNDLE_PATH) {
+    console.log(`Uploaded versionCode ${env.PLAY_VERSION_CODE} to the ${track} track as a completed release.`);
   }
   console.log(`Release notes (${NOTES_LANGUAGE}, ${length(text)} characters) are on versionCode ${env.PLAY_VERSION_CODE} in the ${track} track, read back from Play:`);
   console.log(text);

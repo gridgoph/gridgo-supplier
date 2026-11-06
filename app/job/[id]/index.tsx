@@ -8,6 +8,7 @@ import { ClientChatRow } from "@/components/ClientChatRow";
 import { CounterCheckPanel } from "@/components/CounterCheckPanel";
 import { DangerButton } from "@/components/DangerButton";
 import { DeadlineRequestPanel } from "@/components/DeadlineRequestPanel";
+import { DispatchClosedNotice } from "@/components/DispatchClosedNotice";
 import { EmptyState } from "@/components/EmptyState";
 import { ExpressChip } from "@/components/ExpressChip";
 import { SchedulingNotice } from "@/components/SchedulingNotice";
@@ -34,6 +35,7 @@ import { SpecialInstructionsPanel } from "@/components/SpecialInstructionsPanel"
 import { StatusChip } from "@/components/StatusChip";
 import { acceptWindow } from "@/lib/acceptWindow";
 import { formatDeadlineFull, shopDueAt } from "@/lib/dates";
+import { waitsForDispatch } from "@/lib/dispatchHours";
 import { EXPRESS_JOB_NOTE, isExpressOrder } from "@/lib/express";
 import { SAMPLE_JOB_NOTE, sampleTagOf, showsSampleDecision } from "@/lib/sampleFirst";
 import { defaultBriefSection, hasHandoff, workspaceBriefSections } from "@/lib/jobBrief";
@@ -74,6 +76,7 @@ import { callsSupported } from "@/lib/callRuntime";
 import { callHref, latestMissedCall, pickupCallAvailability } from "@/lib/orderCall";
 import { deadlineUrgency } from "@/lib/urgency";
 import { useViewing } from "@/store/toasts";
+import { useDispatchHours } from "@/hooks/useDispatchHours";
 import { useJob } from "@/hooks/useJob";
 import { useOrderCalls } from "@/hooks/useOrderCalls";
 import { useProductionLapses } from "@/hooks/useProductionLapses";
@@ -90,6 +93,9 @@ export default function JobWorkspaceScreen() {
   const colors = useThemeColors();
   const { job, loading, error, reload } = useJob(id);
   const lapses = useProductionLapses();
+  // Riders cannot see a ready job while GRIDGO's dispatch is closed.
+  const dispatch = useDispatchHours(Boolean(job && waitsForDispatch(job)));
+  const refreshDispatch = dispatch.refresh;
   // Calling is open only while the rider is on the way; read the shop's calls only then.
   const callWindowOpen = pickupCallAvailability(job).kind === "open";
   const calls = useOrderCalls(id, callWindowOpen);
@@ -99,9 +105,9 @@ export default function JobWorkspaceScreen() {
   const onAnswerExpired = useCallback(() => setExpiredAt(Date.now()), []);
   const reloadLapses = lapses.reload;
   const { refreshing, onRefresh } = usePullToRefresh(useCallback(async () => {
-    await Promise.all([reload(), reloadLapses()]);
+    await Promise.all([reload(), reloadLapses(), refreshDispatch()]);
     setProofReloadVersion((version) => version + 1);
-  }, [reload, reloadLapses]));
+  }, [reload, reloadLapses, refreshDispatch]));
 
   // Coming back from a flow screen must show the state the flow produced.
   useFocusEffect(
@@ -402,6 +408,10 @@ export default function JobWorkspaceScreen() {
               targets={countTargets(job)}
             />
           </View>
+        ) : dispatch.closedLine ? (
+          <View className="mt-6">
+            <DispatchClosedNotice line={dispatch.closedLine} />
+          </View>
         ) : !primary ? (
           <View className="gg-panel mt-6 gap-1">
             <Text className="text-body font-medium text-text-primary">{waiting.title}</Text>
@@ -487,6 +497,7 @@ export default function JobWorkspaceScreen() {
             defaultOpen={defaultBriefSection(job)}
             proofReloadVersion={proofReloadVersion}
             handoffExtra={handoffExtra}
+            dispatchClosed={Boolean(dispatch.closedLine)}
             onAddProof={(code) =>
               router.push({ pathname: "/job/[id]/fulfilment", params: { id: job.id, milestone: code } })
             }

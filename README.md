@@ -86,7 +86,7 @@ A Google Play build ignores that tap's download and leaves the push in the inbox
 The side-load APK is unchanged: every push to `main` still builds it, puts it on the
 download page, publishes the GitHub Release and broadcasts the release push. The Play
 bundle is an extra build that you start by hand. You upload it to Play Console yourself,
-or let the run upload it to a selected testing track (see below).
+or let the run upload it to closed or internal testing (see below).
 
 1. In GitHub, open **Actions → Android release APK or Play testing bundle → Run workflow**. Choose `main`,
    select **play_bundle**, and run it.
@@ -119,38 +119,39 @@ GitHub restarts the count if the workflow file is renamed or replaced, so keep t
 where it is.
 
 **Upload to a testing track automatically.** Select **submit_to_play** as well as
-**play_bundle** when you run the workflow. **play_track** defaults to **internal**
-(`eas.json`, profile `production`, track `internal`); explicitly choose **closed** to
-use profile `closed`, track `alpha` (Google Play's closed testing track). Both use
-release status `completed`: Google still reviews closed releases before testers can
-access them, while a draft would need a manual Play Console step every time.
+**play_bundle** when you run the workflow, and pick **play_track**: `closed` (the default,
+Play's `alpha` track) or `internal`. The run builds and verifies the bundle as above and
+keeps the artifact. Then `scripts/play-release-notes.mjs` uploads that same `.aab` straight
+to Google Play with the Google Play Developer API, in a single edit: it uploads the bundle,
+makes it the track's release with status `completed` and the version's release notes, and
+commits. The bundle and its notes land together. The run summary names the selected track
+and shows when the bundle was submitted. **play_track** is ignored unless **play_bundle**
+and **submit_to_play** are both enabled; the APK path is unchanged.
 
-The run builds and verifies the bundle as above and keeps the artifact. Then
-[EAS Submit](https://docs.expo.dev/submit/android/) uploads that same `.aab` to the
-selected testing track, and release notes are set on that same track. The run summary
-names the selected track. **play_track** is ignored unless **play_bundle** and
-**submit_to_play** are both enabled; the APK path is unchanged.
-
-- The build still runs in GitHub Actions with the upload key. EAS only uploads the file.
-  No keystore goes to Expo.
+- The build runs in GitHub Actions with the upload key, and the upload goes from the same
+  runner. The Android Play path uses no EAS Submit queue or `EXPO_TOKEN`. The upload key
+  stays on the runner. Expo's free submit queue previously held bundles for up to an hour,
+  long enough for the job timeout to kill runs before their notes were set.
 - The run never uploads to production and never promotes a release. To move a build to
-  another track, promote it by hand in Play Console.
-- The step needs two repository secrets: `EXPO_TOKEN` (an Expo access token for the
-  `felyciaaa` account) and `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` (the Play service account's
-  JSON key, with release permission for testing tracks). The key is written to a mode-600
-  file under `$RUNNER_TEMP`, outside the workspace, for that step only. It is never
-  printed, and it is removed when the step ends.
-- `eas-cli` is pinned in the workflow. The app is linked to its EAS project
-  (`@felyciaaa/gridgo-supplier`) through `owner` and `extra.eas.projectId` in `app.json`.
-- `eas submit` carries no release notes, so the same step then sets them on that release
-  with the Google Play Developer API, using the same service account
-  (`scripts/play-release-notes.mjs`). The notes are the version's What's new (the pending
-  `whats-new/` notes, or the newest release in `WHATS_NEW.md`), newest first, in whole
-  lines within Play's 500-character limit for en-US. The script reads the notes back from
-  Play, and the run summary shows them.
+  another track, promote it by hand in Play Console. Google reviews closed releases before
+  testers can get them.
+- The step needs one repository secret: `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` (the Play
+  service account's JSON key, with release permission for testing tracks). The key is
+  written to a mode-600 file under `$RUNNER_TEMP`, outside the workspace, for that step
+  only. It is never printed, and it is removed when the step ends. Neither the key nor the
+  access token reaches the log.
+- The notes are the version's What's new (the pending `whats-new/` notes, or the newest
+  release in `WHATS_NEW.md`), newest first, in whole lines within Play's 500-character
+  limit for en-US. The script reads the notes back from Play in a fresh edit, and the run
+  summary shows them.
+- Without `PLAY_BUNDLE_PATH`, the same script only sets the notes on a release Play
+  already has, for example one uploaded by hand. It defaults to `alpha`; set `PLAY_TRACK`
+  to `internal` when repairing notes on an internal release.
 - The versionCode is the run number, so every upload is newer than the last one and
   testers get it as an automatic update.
-- If the submission fails, the run fails, but the artifact is still there to upload by hand.
+- If the upload or track update fails, the run fails without committing the edit, and the
+  artifact is still there to upload by hand. A failed commit or notes read-back also fails
+  the run; check Play Console before retrying, since a read-back happens after commit.
 
 ## iPhone build and TestFlight
 
@@ -182,7 +183,7 @@ The workflow needs, once:
 
 | Where | Name | What |
 |---|---|---|
-| GitHub secret | `EXPO_TOKEN` | Already used by the Play upload. |
+| GitHub secret | `EXPO_TOKEN` | An Expo access token for the `felyciaaa` account. |
 | GitHub secret | `ASC_API_KEY_P8` | App Store Connect API key (Users and Access → Integrations → Team Keys, role App Manager): the `.p8` file's text. |
 | GitHub secret | `ASC_KEY_ID` | That key's Key ID. |
 | GitHub secret | `ASC_ISSUER_ID` | The Issuer ID shown above the key list. |
