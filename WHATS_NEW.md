@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.388 (New feature)
+
+- Google Play testers see a daily check-in on Home, with a 7 PM reminder.
+- Give any day its own opening and closing time, such as a half-day Saturday, in Shop hours.
+
 ## 1.0.376 (New feature)
 
 - When GRIDGO asks for it, scan or upload your own receipt for an order before calling a rider.
