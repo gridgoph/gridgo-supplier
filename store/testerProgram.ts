@@ -47,6 +47,8 @@ let sequence = 0;
 let buttonAttempt = 0;
 /** Counts every answer a read has applied, so a pending button answer can tell it is older. */
 let applied = 0;
+/** The read generation an accepted Check in answer moved to; reads older than it are stale. */
+let buttonGeneration = 0;
 
 /** GRIDGO's answer to a check-in from an account that is no longer a tester. */
 function notEnrolled(error: unknown): boolean {
@@ -57,6 +59,18 @@ function notEnrolled(error: unknown): boolean {
 export function testerAppVersion(): string {
   const version = Constants.expoConfig?.version?.trim();
   return version ? `${version} (${Platform.OS})` : Platform.OS;
+}
+
+/**
+ * A read made stale only by an accepted Check in answer (no newer read since)
+ * may still know something newer than that answer, so GRIDGO is asked again
+ * rather than either snapshot trusted. A newer read or another account owns
+ * the answer otherwise.
+ */
+function reconcile(userId: string): void {
+  if (sequence === buttonGeneration && useTesterProgram.getState().owner === userId) {
+    void useTesterProgram.getState().load(userId);
+  }
 }
 
 /**
@@ -86,7 +100,7 @@ export const useTesterProgram = create<TesterProgramStore>()(
         } catch {
           return;
         }
-        if (mine !== sequence) return;
+        if (mine !== sequence) return reconcile(userId);
         applied++;
         set({ program, readAt: Date.now() });
         // Opening the app is the check-in; the button is only the way back
@@ -94,13 +108,13 @@ export const useTesterProgram = create<TesterProgramStore>()(
         if (program.enrolled && !program.checkedInToday && !program.stopped) {
           try {
             const checked = await api.testerCheckIn(testerAppVersion(), "open");
-            if (mine !== sequence) return;
+            if (mine !== sequence) return reconcile(userId);
             program = checked;
             applied++;
             set({ program, readAt: Date.now() });
           } catch (error) {
-            // A newer read or another account owns the answer now.
-            if (mine !== sequence) return;
+            // A newer read, an accepted Check in answer or another account owns the answer now.
+            if (mine !== sequence) return reconcile(userId);
             if (notEnrolled(error)) {
               program = { enrolled: false };
               applied++;
@@ -126,6 +140,12 @@ export const useTesterProgram = create<TesterProgramStore>()(
         const appliedAtTap = applied;
         const stillMine = () => get().owner === owner && attempt === buttonAttempt;
         const overtaken = () => sequence !== readAtTap || applied !== appliedAtTap;
+        // Accepted: any read or automatic check-in still in flight is older
+        // than this answer and must not be drawn or scheduled over it.
+        const accept = () => {
+          buttonGeneration = ++sequence;
+          applied++;
+        };
         set({ checkingIn: true, checkInFailed: false });
         try {
           const program = await api.testerCheckIn(testerAppVersion(), "button");
@@ -135,6 +155,7 @@ export const useTesterProgram = create<TesterProgramStore>()(
             void get().load(owner);
             return;
           }
+          accept();
           set({ program, readAt: Date.now(), checkingIn: false });
           void syncTesterReminders(reminderPlan(program, Date.now()));
         } catch (error) {
@@ -145,6 +166,7 @@ export const useTesterProgram = create<TesterProgramStore>()(
             return;
           }
           if (notEnrolled(error)) {
+            accept();
             set({ program: { enrolled: false }, readAt: Date.now(), checkingIn: false });
             void syncTesterReminders([]);
             return;
