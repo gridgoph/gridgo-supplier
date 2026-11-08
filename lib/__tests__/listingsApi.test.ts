@@ -449,7 +449,7 @@ describe("the production-time question on the wire", () => {
       [
         409,
         "production_day_length_unavailable",
-        "The dates cannot be worked out until every open day has the same hours. Pick one opening and closing time for all your open days.",
+        "The dates cannot be worked out until your usual hours are the same on every open day. Give a shorter day its own hours instead.",
       ],
       [
         409,

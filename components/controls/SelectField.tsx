@@ -12,6 +12,8 @@ type Props = {
   density?: "field" | "chip";
   /** Sits before the value on a chip — sort uses the arrows, not a second chevron. */
   icon?: LucideIcon;
+  /** Shown at reduced emphasis and does not open, e.g. while a save is in flight. */
+  disabled?: boolean;
 };
 
 /**
@@ -29,6 +31,7 @@ export function SelectField({
   onPress,
   density = "field",
   icon: Icon,
+  disabled = false,
 }: Props) {
   const colors = useThemeColors();
   const chip = density === "chip";
@@ -38,13 +41,15 @@ export function SelectField({
       {chip ? null : <Text className="text-overline text-text-muted">{label}</Text>}
       <Pressable
         onPress={onPress}
+        disabled={disabled}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
-        className={
+        accessibilityState={{ disabled }}
+        className={`${
           chip
             ? "gg-touch max-w-full flex-row items-center gap-1.5 rounded-pill border border-outline bg-surface px-3"
             : "gg-field flex-row items-center justify-between px-3"
-        }
+        }${disabled ? " gg-disabled" : ""}`}
         style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
       >
         {Icon ? <Icon size={chip ? 14 : 18} color={colors.textMuted} strokeWidth={2} /> : null}

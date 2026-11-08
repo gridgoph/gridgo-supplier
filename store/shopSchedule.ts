@@ -3,14 +3,19 @@ import { askConfirm } from "@/store/sheets";
 import { useShopHours } from "@/store/shopHours";
 
 /**
- * Save a new base schedule — the week, the closure dates, or both — asking
+ * Save a new base schedule — the week, its days with their own hours, the
+ * closure dates, or any of them — asking
  * first when GRIDGO could not keep today's extension through it. Resolves to
  * a refusal message, or null once saved.
  *
  * Kept apart from `store/shopHours.ts` so the session store, which resets that
  * one on sign-out, does not pull the sheet routes (and the router) in with it.
  */
-export async function saveSchedule(change: { week?: WeekWindow[]; closures?: Closure[] }): Promise<string | null> {
+export async function saveSchedule(change: {
+  week?: WeekWindow[];
+  overrides?: WeekWindow[];
+  closures?: Closure[];
+}): Promise<string | null> {
   const { hours, save } = useShopHours.getState();
   if (!hours) return "Your shop hours are still loading.";
   const { patch, dropsExtension } = schedulePatch(hours, change, new Date());

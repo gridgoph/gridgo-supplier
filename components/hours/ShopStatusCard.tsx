@@ -2,7 +2,7 @@ import { Text, View } from "react-native";
 
 import { ShopDayRuler } from "@/components/ShopDayRuler";
 import { StatusChip, type StatusIconName, type StatusTone } from "@/components/StatusChip";
-import { closureOnDay, manilaClock, shopStatus, type ShopHours, type ShopStatus } from "@/lib/shopHours";
+import { closureOnDay, dayWindow, manilaClock, shopStatus, type ShopHours, type ShopStatus } from "@/lib/shopHours";
 
 const CHIP: Record<ShopStatus["state"], { tone: StatusTone; icon: StatusIconName; label: string }> = {
   open: { tone: "success", icon: "circle-check", label: "Open" },
@@ -18,7 +18,7 @@ export function ShopStatusCard({ hours, now }: { hours: ShopHours; now: Date }) 
   const clock = manilaClock(now);
   // Nothing is drawn open on a closure date or while closed for a while.
   const shut = hours.temporarilyClosed || closureOnDay(hours.closures, clock.dayKey) != null;
-  const today = shut ? null : (hours.week.find((row) => row.weekday === clock.weekday) ?? null);
+  const today = shut ? null : dayWindow(hours, clock.weekday);
   const extension = hours.todayExtension?.day === clock.dayKey ? hours.todayExtension : null;
 
   return (
