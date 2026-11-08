@@ -84,7 +84,7 @@ describe("reminderPlan", () => {
     // The next morning's catch-up at 8 AM Manila, then Day 1 that evening.
     expect(plan[1]).toMatchObject({ at: at("2026-11-08T00:00:00Z"), title: "Missed yesterday" });
     expect(plan[2]).toMatchObject({ at: at("2026-11-08T11:00:00Z"), title: "Day 1 of 14" });
-    // One catch-up only, then an evening a day for the next eight weeks.
+    // One catch-up only, then an evening a day for the next 30 days.
     expect(plan.filter((r) => r.title === "Missed yesterday")).toHaveLength(1);
     expect(plan).toHaveLength(PLAN_DAYS + 1);
     expect(new Set(plan.map((r) => r.id)).size).toBe(plan.length);
@@ -152,6 +152,19 @@ describe("reminderPlan", () => {
     expect(plan.length).toBeLessThanOrEqual(64);
     // Every evening is still 7 PM Manila.
     expect(plan.filter((r) => r.title !== "Missed yesterday").every((r) => new Date(r.at).getUTCHours() === 11)).toBe(true);
+  });
+
+  it("rolls 30 evenings ahead, ending only after 30 days with no open", () => {
+    const plan = reminderPlan(tester({ day: 1, streak: 1, checkedInToday: true }), at("2026-11-07T02:00:00Z"));
+    const evenings = plan.filter((r) => r.title !== "Missed yesterday");
+    expect(evenings).toHaveLength(30);
+    // 8 Nov to 7 Dec, nothing after, and never the evening already checked in (7 Nov).
+    expect(evenings[0].at).toBe(at("2026-11-08T11:00:00Z"));
+    expect(evenings[evenings.length - 1].at).toBe(at("2026-12-07T11:00:00Z"));
+    expect(plan.some((r) => r.at === at("2026-11-07T11:00:00Z"))).toBe(false);
+    // An open re-plans: a later open pushes the end out again.
+    const later = reminderPlan(tester({ day: 1, streak: 0, checkedInToday: false, manilaDate: "2026-12-01" }), at("2026-12-01T02:00:00Z"));
+    expect(Math.max(...later.map((r) => r.at))).toBe(at("2026-12-30T11:00:00Z"));
   });
 
   it("plans nothing for a non-tester, a finished run or a production-approved app", () => {

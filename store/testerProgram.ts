@@ -113,15 +113,30 @@ export const useTesterProgram = create<TesterProgramStore>()(
         // The button's own attempt, apart from the program reads: a refresh
         // landing meanwhile must never strand the button in "Checking in…".
         const attempt = ++buttonAttempt;
+        // The read this tap was made against. A read that starts after it is
+        // newer than anything this call can answer — production approval or
+        // the end of enrolment may be in it — so this answer then yields.
+        const readAtTap = sequence;
         const stillMine = () => get().owner === owner && attempt === buttonAttempt;
+        const overtaken = () => sequence !== readAtTap;
         set({ checkingIn: true, checkInFailed: false });
         try {
           const program = await api.testerCheckIn(testerAppVersion(), "button");
           if (!stillMine()) return;
+          if (overtaken()) {
+            set({ checkingIn: false });
+            void get().load(owner);
+            return;
+          }
           set({ program, readAt: Date.now(), checkingIn: false });
           void syncTesterReminders(reminderPlan(program, Date.now()));
         } catch (error) {
           if (!stillMine()) return;
+          if (overtaken()) {
+            set({ checkingIn: false });
+            void get().load(owner);
+            return;
+          }
           if (notEnrolled(error)) {
             set({ program: { enrolled: false }, readAt: Date.now(), checkingIn: false });
             void syncTesterReminders([]);

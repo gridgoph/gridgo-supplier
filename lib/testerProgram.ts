@@ -36,16 +36,15 @@ const EVENING_UTC_HOUR = 11;
 /** 8 AM in Manila is 00:00 UTC. */
 const MORNING_UTC_HOUR = 0;
 /**
- * How far ahead the evenings are planned: eight weeks, re-planned on every
- * open. A run is unfinished until fourteen straight days, so a tester who
- * stops opening the app must keep hearing at 7 PM — a week-long plan went
- * quiet on day 8 of an absence (gridgo-client#404 review). It is as far as
- * the phone allows: iOS keeps at most 64 pending local notifications per app,
- * and these are this app's only ones (56 evenings + 1 catch-up). Expo has no
- * recurring trigger that both starts on a later date and keeps Manila time
- * when the phone changes time zone, so one-shot instants it is.
+ * How far ahead the evenings are planned: 30 rolling days, re-planned on
+ * every open, so they end only after 30 days with no open at all. One-off
+ * instants rather than a repeating trigger, by firstmate's decision (matching
+ * gridgo-client): each keeps exact "Day N" copy and 7 PM Manila on any phone
+ * clock, and an evening already checked in is never pinged — a repeating
+ * trigger could do none of that. 30 evenings + 1 catch-up also stays under
+ * iOS's 64 pending local notifications per app.
  */
-export const PLAN_DAYS = 56;
+export const PLAN_DAYS = 30;
 
 type Enrolled = Extract<TesterProgramState, { enrolled: true }>;
 
@@ -117,7 +116,7 @@ export type TesterReminder = {
  * 7 PM Manila on the next day that still needs a check-in ("Day N of 14"),
  * then — because a reminder cannot know whether its day was kept — the days
  * after assume it was missed: one catch-up the next morning at 8 AM, and
- * "Day 1" each evening for the next eight weeks. Every open re-plans from the
+ * "Day 1" each evening for the next 30 days. Every open re-plans from the
  * server, so a kept day replaces all of them. Nothing once the program stops.
  */
 export function reminderPlan(state: TesterProgramState | null, now: number): TesterReminder[] {
