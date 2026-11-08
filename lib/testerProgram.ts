@@ -172,10 +172,14 @@ export type HeldFeedback = {
  * Whether a feedback card may be drawn at all. Today must be in (the card
  * takes the check-in card's place), and production approval ends every ask —
  * including one this phone is still holding. A completed run keeps its
- * fourteenth-day ask.
+ * fourteenth-day ask until approval. `productionApproved` is the only signal
+ * for a completed run (`stopped` is true either way); an older GRIDGO without
+ * it reads as not approved.
  */
 export function feedbackAllowed(state: TesterProgramState | null): boolean {
   if (!state?.enrolled) return false;
+  // Approval ends every ask, a completed run's day-14 card included.
+  if (state.productionApproved === true) return false;
   if (state.runComplete) return true;
   return !state.stopped && state.checkedInToday;
 }

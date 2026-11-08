@@ -281,6 +281,34 @@ describe("review of gridgo-client#404", () => {
     expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["production approval", enrolled({ checkedInToday: false, stopped: true })],
+    ["the end of enrolment", { enrolled: false } as TesterProgramState],
+  ])("a read already pending at the tap that lands %s still beats the older button answer", async (_label, newer) => {
+    useTesterProgram.setState({ owner: "u1", program: enrolled() });
+    let resolveRead!: (state: TesterProgramState) => void;
+    let resolveButton!: (state: TesterProgramState) => void;
+    api.getTesterProgram.mockImplementationOnce(() => new Promise((resolve) => { resolveRead = resolve; }));
+    // The foreground refresh starts first; Home still offers Check in.
+    const read = useTesterProgram.getState().load("u1");
+    api.testerCheckIn.mockImplementationOnce(() => new Promise((resolve) => { resolveButton = resolve; }));
+    const button = useTesterProgram.getState().checkIn();
+    // The refresh lands first, carrying the newer state.
+    resolveRead(newer);
+    await read;
+    await syncTesterReminders([]);
+    mockNotifications.scheduleNotificationAsync.mockClear();
+    // The re-read GRIDGO is asked for still says the newer state.
+    api.getTesterProgram.mockResolvedValue(newer);
+    resolveButton(enrolled({ checkedInToday: true, streak: 1 }));
+    await button;
+    await settle();
+    await settle();
+    expect(useTesterProgram.getState().checkingIn).toBe(false);
+    expect(useTesterProgram.getState().program).toEqual(newer);
+    expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
   it("an unenrolled answer to the button hides the card and cancels the reminders", async () => {
     mockNotifications.getAllScheduledNotificationsAsync.mockResolvedValue([{ identifier: "gridgo-tester-evening-2026-11-07" }]);
     api.testerCheckIn.mockRejectedValue(new api.ApiError(404, { error: "not_enrolled" }));

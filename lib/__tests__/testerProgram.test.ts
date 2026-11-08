@@ -185,6 +185,10 @@ describe("feedbackAllowed", () => {
     expect(feedbackAllowed(tester({ stopped: true }))).toBe(false);
     // A finished run keeps its fourteenth-day ask.
     expect(feedbackAllowed(tester({ day: 14, streak: 14, runComplete: true, stopped: true }))).toBe(true);
+    // Approval wins over completion; a GRIDGO without the field reads as not approved.
+    expect(feedbackAllowed(tester({ day: 14, streak: 14, runComplete: true, stopped: true, productionApproved: true }))).toBe(false);
+    expect(feedbackAllowed(tester({ day: 14, streak: 14, runComplete: true, stopped: true, productionApproved: false }))).toBe(true);
+    expect(feedbackAllowed(tester({ stopped: true, productionApproved: true }))).toBe(false);
     expect(feedbackAllowed({ enrolled: false })).toBe(false);
     expect(feedbackAllowed(null)).toBe(false);
   });

@@ -45,6 +45,8 @@ type TesterProgramStore = {
 
 let sequence = 0;
 let buttonAttempt = 0;
+/** Counts every answer a read has applied, so a pending button answer can tell it is older. */
+let applied = 0;
 
 /** GRIDGO's answer to a check-in from an account that is no longer a tester. */
 function notEnrolled(error: unknown): boolean {
@@ -85,6 +87,7 @@ export const useTesterProgram = create<TesterProgramStore>()(
           return;
         }
         if (mine !== sequence) return;
+        applied++;
         set({ program, readAt: Date.now() });
         // Opening the app is the check-in; the button is only the way back
         // when this call could not land.
@@ -93,12 +96,14 @@ export const useTesterProgram = create<TesterProgramStore>()(
             const checked = await api.testerCheckIn(testerAppVersion(), "open");
             if (mine !== sequence) return;
             program = checked;
+            applied++;
             set({ program, readAt: Date.now() });
           } catch (error) {
             // A newer read or another account owns the answer now.
             if (mine !== sequence) return;
             if (notEnrolled(error)) {
               program = { enrolled: false };
+              applied++;
               set({ program, readAt: Date.now() });
             }
             // Otherwise the card offers Check in.
@@ -113,12 +118,14 @@ export const useTesterProgram = create<TesterProgramStore>()(
         // The button's own attempt, apart from the program reads: a refresh
         // landing meanwhile must never strand the button in "Checking in…".
         const attempt = ++buttonAttempt;
-        // The read this tap was made against. A read that starts after it is
-        // newer than anything this call can answer — production approval or
-        // the end of enrolment may be in it — so this answer then yields.
+        // The state this tap was made against. A read that starts after the
+        // tap, or one already pending that lands before this answer, may carry
+        // production approval or the end of enrolment — newer than anything
+        // this call can say — so this answer then yields and GRIDGO is re-read.
         const readAtTap = sequence;
+        const appliedAtTap = applied;
         const stillMine = () => get().owner === owner && attempt === buttonAttempt;
-        const overtaken = () => sequence !== readAtTap;
+        const overtaken = () => sequence !== readAtTap || applied !== appliedAtTap;
         set({ checkingIn: true, checkInFailed: false });
         try {
           const program = await api.testerCheckIn(testerAppVersion(), "button");
@@ -174,6 +181,7 @@ export const useTesterProgram = create<TesterProgramStore>()(
       reset: () => {
         sequence++;
         buttonAttempt++;
+        applied++;
         set({ owner: null, program: null, checkingIn: false, checkInFailed: false });
       },
       forget: () => {

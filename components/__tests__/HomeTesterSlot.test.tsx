@@ -124,3 +124,21 @@ it("keeps the fourteenth-day feedback ask on a completed run", async () => {
   await render(<HomeTesterSlot />);
   expect(screen.getByText("Help us launch")).toBeTruthy();
 });
+
+it("drops a held day-14 feedback card once a completed run is production approved", async () => {
+  signedInWith(enrolled({ day: 14, streak: 14, runComplete: true, stopped: true, productionApproved: true, nudge: null }), {
+    held: { userId: "u1", trigger: "streak_14", shownAt: Date.parse("2026-11-07T11:00:00Z"), closed: false },
+  });
+  await render(<HomeTesterSlot />);
+  expect(screen.queryByText("Help us launch")).toBeNull();
+});
+
+it("keeps a held day-14 card on a completed run that is not approved, or from a GRIDGO without the field", async () => {
+  const held = { userId: "u1", trigger: "streak_14" as const, shownAt: Date.parse("2026-11-07T11:00:00Z"), closed: false };
+  signedInWith(enrolled({ day: 14, streak: 14, runComplete: true, stopped: true, productionApproved: false, nudge: null }), { held });
+  await render(<HomeTesterSlot />);
+  expect(screen.getByText("Help us launch")).toBeTruthy();
+  signedInWith(enrolled({ day: 14, streak: 14, runComplete: true, stopped: true, nudge: null }), { held });
+  await render(<HomeTesterSlot />);
+  expect(screen.getByText("Help us launch")).toBeTruthy();
+});
