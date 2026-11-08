@@ -108,3 +108,19 @@ it("lets the shop close the feedback card", async () => {
   expect(screen.queryByText("Help us launch")).toBeNull();
   expect(screen.getByText("Day 3 of 14")).toBeTruthy();
 });
+
+it("drops a held feedback card once the app is production approved", async () => {
+  signedInWith(enrolled({ stopped: true, nudge: null }), {
+    held: { userId: "u1", trigger: "streak_3", shownAt: Date.parse("2026-11-07T11:00:00Z"), closed: false },
+  });
+  await render(<HomeTesterSlot />);
+  expect(screen.queryByText("Help us launch")).toBeNull();
+  // Approval ends the program: no check-in card either.
+  expect(screen.toJSON()).toBeNull();
+});
+
+it("keeps the fourteenth-day feedback ask on a completed run", async () => {
+  signedInWith(enrolled({ day: 14, streak: 14, runComplete: true, stopped: true, nudge: { trigger: "streak_14" } }));
+  await render(<HomeTesterSlot />);
+  expect(screen.getByText("Help us launch")).toBeTruthy();
+});

@@ -35,8 +35,17 @@ const MANILA_OFFSET_MS = 8 * 3_600_000;
 const EVENING_UTC_HOUR = 11;
 /** 8 AM in Manila is 00:00 UTC. */
 const MORNING_UTC_HOUR = 0;
-/** Reminders are planned a week ahead and re-planned on every open. */
-const PLAN_DAYS = 7;
+/**
+ * How far ahead the evenings are planned: eight weeks, re-planned on every
+ * open. A run is unfinished until fourteen straight days, so a tester who
+ * stops opening the app must keep hearing at 7 PM — a week-long plan went
+ * quiet on day 8 of an absence (gridgo-client#404 review). It is as far as
+ * the phone allows: iOS keeps at most 64 pending local notifications per app,
+ * and these are this app's only ones (56 evenings + 1 catch-up). Expo has no
+ * recurring trigger that both starts on a later date and keeps Manila time
+ * when the phone changes time zone, so one-shot instants it is.
+ */
+export const PLAN_DAYS = 56;
 
 type Enrolled = Extract<TesterProgramState, { enrolled: true }>;
 
@@ -108,7 +117,7 @@ export type TesterReminder = {
  * 7 PM Manila on the next day that still needs a check-in ("Day N of 14"),
  * then — because a reminder cannot know whether its day was kept — the days
  * after assume it was missed: one catch-up the next morning at 8 AM, and
- * "Day 1" each evening for the rest of the week. Every open re-plans from the
+ * "Day 1" each evening for the next eight weeks. Every open re-plans from the
  * server, so a kept day replaces all of them. Nothing once the program stops.
  */
 export function reminderPlan(state: TesterProgramState | null, now: number): TesterReminder[] {
@@ -160,6 +169,18 @@ export type HeldFeedback = {
  * One card per 72 hours on this phone too: a held card, open or closed, is
  * the only one for that long, whatever the server says.
  */
+/**
+ * Whether a feedback card may be drawn at all. Today must be in (the card
+ * takes the check-in card's place), and production approval ends every ask —
+ * including one this phone is still holding. A completed run keeps its
+ * fourteenth-day ask.
+ */
+export function feedbackAllowed(state: TesterProgramState | null): boolean {
+  if (!state?.enrolled) return false;
+  if (state.runComplete) return true;
+  return !state.stopped && state.checkedInToday;
+}
+
 export function feedbackToShow(
   nudge: { trigger: TesterFeedbackTrigger } | null,
   held: HeldFeedback | null,

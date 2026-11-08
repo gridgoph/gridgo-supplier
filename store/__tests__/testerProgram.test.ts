@@ -1,5 +1,5 @@
 import type { TesterProgramState } from "@/lib/api";
-import type { TesterReminder } from "@/lib/testerProgram";
+import { reminderPlan, type TesterReminder } from "@/lib/testerProgram";
 import { syncTesterReminders, useTesterProgram } from "@/store/testerProgram";
 
 jest.mock("@/lib/api", () => {
@@ -38,7 +38,9 @@ const enrolled = (overrides: object = {}): TesterProgramState => ({
   ...overrides,
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  // Let any replacement an earlier test left queued finish before counting calls.
+  await syncTesterReminders([]);
   jest.clearAllMocks();
   useTesterProgram.getState().reset();
   useTesterProgram.setState({ held: null });
@@ -157,4 +159,118 @@ it("cancels this phone's tester reminders on sign-out", async () => {
 
   expect(useTesterProgram.getState().program).toBeNull();
   expect(mockNotifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith("gridgo-tester-evening-2026-11-08");
+});
+
+describe("review of gridgo-client#404", () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  let clock: jest.SpyInstance;
+  beforeEach(() => {
+    clock = jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-11-07T02:00:00Z"));
+  });
+  afterEach(() => clock.mockRestore());
+
+  it("a sign-out wins over a plan still waiting on the native permission read", async () => {
+    let releasePermission!: (value: { granted: boolean }) => void;
+    mockNotifications.getPermissionsAsync.mockImplementationOnce(
+      () => new Promise((resolve) => { releasePermission = resolve; }),
+    );
+    api.getTesterProgram.mockResolvedValue(enrolled({ checkedInToday: true }));
+    await useTesterProgram.getState().load("u1");
+    await settle();
+    useTesterProgram.getState().forget();
+    await settle();
+    releasePermission({ granted: true });
+    await settle();
+    await settle();
+    expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it("an answer that the account is no longer a tester wins over an earlier plan", async () => {
+    let releasePermission!: (value: { granted: boolean }) => void;
+    mockNotifications.getPermissionsAsync.mockImplementationOnce(
+      () => new Promise((resolve) => { releasePermission = resolve; }),
+    );
+    api.getTesterProgram.mockResolvedValueOnce(enrolled({ checkedInToday: true }));
+    await useTesterProgram.getState().load("u1");
+    await settle();
+    api.getTesterProgram.mockResolvedValueOnce({ enrolled: false });
+    await useTesterProgram.getState().load("u1");
+    releasePermission({ granted: true });
+    await settle();
+    await settle();
+    expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it("stops scheduling part-way when a newer plan arrives, and the newer plan clears what was set", async () => {
+    const scheduled: { identifier: string }[] = [];
+    mockNotifications.getAllScheduledNotificationsAsync.mockImplementation(async () => [...scheduled]);
+    mockNotifications.cancelScheduledNotificationAsync.mockImplementation(async (id: string) => {
+      scheduled.splice(scheduled.findIndex((entry) => entry.identifier === id), 1);
+    });
+    let calls = 0;
+    mockNotifications.scheduleNotificationAsync.mockImplementation(async ({ identifier }: { identifier: string }) => {
+      scheduled.push({ identifier });
+      if (++calls === 2) void syncTesterReminders([]);
+    });
+    await syncTesterReminders(reminderPlan(enrolled({ checkedInToday: true }), Date.now()));
+    await syncTesterReminders([]);
+    expect(calls).toBe(2);
+    expect(scheduled).toEqual([]);
+  });
+
+  it("a failed open check-in from a superseded read plans nothing", async () => {
+    let rejectOpen!: (error: Error) => void;
+    api.getTesterProgram.mockResolvedValue(enrolled());
+    api.testerCheckIn.mockImplementationOnce(() => new Promise((_, reject) => { rejectOpen = reject; }));
+    const first = useTesterProgram.getState().load("u1");
+    await settle();
+    useTesterProgram.getState().forget();
+    rejectOpen(new Error("offline"));
+    await first;
+    await settle();
+    expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["fails", () => Promise.reject(new Error("offline"))],
+    ["succeeds", () => Promise.resolve(enrolled({ checkedInToday: true }))],
+  ])("a refresh cannot strand the Check in button when its call %s", async (_label, outcome) => {
+    let settleButton!: () => void;
+    useTesterProgram.setState({ owner: "u1", program: enrolled() });
+    api.testerCheckIn
+      .mockImplementationOnce(() => new Promise((resolve, reject) => {
+        settleButton = () => (outcome() as Promise<TesterProgramState>).then(resolve, reject);
+      }))
+      .mockRejectedValue(new Error("offline"));
+    api.getTesterProgram.mockResolvedValue(enrolled());
+    const button = useTesterProgram.getState().checkIn();
+    expect(useTesterProgram.getState().checkingIn).toBe(true);
+    await useTesterProgram.getState().load("u1");
+    settleButton();
+    await button;
+    expect(useTesterProgram.getState().checkingIn).toBe(false);
+    // And it can be pressed again.
+    api.testerCheckIn.mockResolvedValueOnce(enrolled({ checkedInToday: true }));
+    await useTesterProgram.getState().checkIn();
+    expect(useTesterProgram.getState().program).toMatchObject({ checkedInToday: true });
+  });
+
+  it("an unenrolled answer to the button hides the card and cancels the reminders", async () => {
+    mockNotifications.getAllScheduledNotificationsAsync.mockResolvedValue([{ identifier: "gridgo-tester-evening-2026-11-07" }]);
+    api.testerCheckIn.mockRejectedValue(new api.ApiError(404, { error: "not_enrolled" }));
+    useTesterProgram.setState({ owner: "u1", program: enrolled() });
+    await useTesterProgram.getState().checkIn();
+    await settle();
+    expect(useTesterProgram.getState()).toMatchObject({ program: { enrolled: false }, checkingIn: false, checkInFailed: false });
+    expect(mockNotifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith("gridgo-tester-evening-2026-11-07");
+  });
+
+  it("a production-approved answer cancels the reminders", async () => {
+    mockNotifications.getAllScheduledNotificationsAsync.mockResolvedValue([{ identifier: "gridgo-tester-evening-2026-11-08" }]);
+    api.getTesterProgram.mockResolvedValue(enrolled({ stopped: true }));
+    await useTesterProgram.getState().load("u1");
+    await settle();
+    expect(mockNotifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith("gridgo-tester-evening-2026-11-08");
+    expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
 });

@@ -374,6 +374,14 @@ api.setUnauthorizedHandler(() => {
   });
 });
 
+// Launch reconciliation: a phone that opens signed out, or to an account this
+// app does not serve, keeps no tester reminder from whoever used it before.
+useSession.subscribe((state, previous) => {
+  const kind = state.identity.kind;
+  if (kind === previous.identity.kind || kind === "loading" || kind === "supplier") return;
+  useTesterProgram.getState().forget();
+});
+
 useSession.subscribe((state, previous) => {
   const next = state.user?.id ?? null;
   if (next === (previous.user?.id ?? null)) return;

@@ -3,7 +3,7 @@ import { View } from "react-native";
 
 import { TesterCheckInCard } from "@/components/TesterCheckInCard";
 import { TesterFeedbackCard } from "@/components/TesterFeedbackCard";
-import { feedbackToShow, testerCardView } from "@/lib/testerProgram";
+import { feedbackAllowed, feedbackToShow, testerCardView } from "@/lib/testerProgram";
 import { useSession } from "@/store/session";
 import { useTesterProgram } from "@/store/testerProgram";
 
@@ -26,10 +26,9 @@ export function HomeTesterSlot({ className }: { className?: string }) {
   const readAt = useTesterProgram((s) => s.readAt);
 
   const view = testerCardView(program);
-  const enrolled = program?.enrolled ? program : null;
   const feedback =
-    enrolled && (enrolled.checkedInToday || enrolled.stopped)
-      ? feedbackToShow(enrolled.nudge, held, userId, readAt)
+    program?.enrolled && feedbackAllowed(program)
+      ? feedbackToShow(program.nudge, held, userId, readAt)
       : null;
   const freshTrigger = feedback?.fresh ? feedback.trigger : null;
 

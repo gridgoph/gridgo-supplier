@@ -44,6 +44,12 @@ type TesterProgramStore = {
 };
 
 let sequence = 0;
+let buttonAttempt = 0;
+
+/** GRIDGO's answer to a check-in from an account that is no longer a tester. */
+function notEnrolled(error: unknown): boolean {
+  return error instanceof api.ApiError && error.status === 404;
+}
 
 /** What the check-in records as this build: `1.0.552`, or the platform for a dev build. */
 export function testerAppVersion(): string {
@@ -71,7 +77,7 @@ export const useTesterProgram = create<TesterProgramStore>()(
           return;
         }
         const mine = ++sequence;
-        if (get().owner !== userId) set({ owner: userId, program: null, checkInFailed: false });
+        if (get().owner !== userId) set({ owner: userId, program: null, checkingIn: false, checkInFailed: false });
         let program: api.TesterProgramState;
         try {
           program = await api.getTesterProgram();
@@ -84,26 +90,47 @@ export const useTesterProgram = create<TesterProgramStore>()(
         // when this call could not land.
         if (program.enrolled && !program.checkedInToday && !program.stopped) {
           try {
-            program = await api.testerCheckIn(testerAppVersion(), "open");
+            const checked = await api.testerCheckIn(testerAppVersion(), "open");
             if (mine !== sequence) return;
+            program = checked;
             set({ program, readAt: Date.now() });
-          } catch {
-            // The card offers Check in.
+          } catch (error) {
+            // A newer read or another account owns the answer now.
+            if (mine !== sequence) return;
+            if (notEnrolled(error)) {
+              program = { enrolled: false };
+              set({ program, readAt: Date.now() });
+            }
+            // Otherwise the card offers Check in.
           }
         }
         void syncTesterReminders(reminderPlan(program, Date.now()));
       },
       checkIn: async () => {
         if (get().checkingIn) return;
-        const mine = sequence;
+        const owner = get().owner;
+        if (!owner) return;
+        // The button's own attempt, apart from the program reads: a refresh
+        // landing meanwhile must never strand the button in "Checking in…".
+        const attempt = ++buttonAttempt;
+        const stillMine = () => get().owner === owner && attempt === buttonAttempt;
         set({ checkingIn: true, checkInFailed: false });
         try {
           const program = await api.testerCheckIn(testerAppVersion(), "button");
-          if (mine !== sequence) return;
+          if (!stillMine()) return;
           set({ program, readAt: Date.now(), checkingIn: false });
           void syncTesterReminders(reminderPlan(program, Date.now()));
-        } catch {
-          if (mine === sequence) set({ checkingIn: false, checkInFailed: true });
+        } catch (error) {
+          if (!stillMine()) return;
+          if (notEnrolled(error)) {
+            set({ program: { enrolled: false }, readAt: Date.now(), checkingIn: false });
+            void syncTesterReminders([]);
+            return;
+          }
+          set({ checkingIn: false, checkInFailed: true });
+        } finally {
+          // Success, failure or GRIDGO's 20-second timeout: the button always comes back.
+          if (stillMine() && get().checkingIn) set({ checkingIn: false });
         }
       },
       feedbackShown: (trigger, now = Date.now()) => {
@@ -131,6 +158,7 @@ export const useTesterProgram = create<TesterProgramStore>()(
       },
       reset: () => {
         sequence++;
+        buttonAttempt++;
         set({ owner: null, program: null, checkingIn: false, checkInFailed: false });
       },
       forget: () => {
@@ -146,12 +174,30 @@ export const useTesterProgram = create<TesterProgramStore>()(
   ),
 );
 
+/** Bumped by every replacement, so a superseded one stops scheduling. */
+let reminderGeneration = 0;
+/** Replacements run one at a time: the last one asked for is what the phone keeps. */
+let reminderQueue: Promise<void> = Promise.resolve();
+
 /**
  * Replace this phone's tester reminders with `plan`. Local notifications only
  * — GRIDGO sends no tester push. Never asks for permission: without it,
  * nothing is scheduled. Web and Expo Go have no scheduler, so nothing happens.
+ *
+ * Replacements are serialised and the newest wins. A sign-out (an empty plan)
+ * that arrives while an earlier plan is still waiting on the native module
+ * runs after it and clears whatever it left, and the earlier one stops
+ * scheduling the moment it is superseded.
  */
-export async function syncTesterReminders(plan: TesterReminder[]): Promise<void> {
+export function syncTesterReminders(plan: TesterReminder[]): Promise<void> {
+  const generation = ++reminderGeneration;
+  reminderQueue = reminderQueue.then(() => replaceReminders(plan, generation));
+  return reminderQueue;
+}
+
+async function replaceReminders(plan: TesterReminder[], generation: number): Promise<void> {
+  const current = () => generation === reminderGeneration;
+  if (!current()) return;
   const Notifications = getNotificationsNative();
   if (!Notifications) return;
   try {
@@ -161,10 +207,11 @@ export async function syncTesterReminders(plan: TesterReminder[]): Promise<void>
         .filter((entry) => entry.identifier.startsWith(TESTER_REMINDER_PREFIX))
         .map((entry) => Notifications.cancelScheduledNotificationAsync(entry.identifier)),
     );
-    if (!plan.length) return;
+    if (!plan.length || !current()) return;
     const permission = await Notifications.getPermissionsAsync();
     if (!permission.granted) return;
     for (const reminder of plan) {
+      if (!current()) return;
       await Notifications.scheduleNotificationAsync({
         identifier: reminder.id,
         content: { title: reminder.title, body: reminder.body, data: { type: TESTER_REMINDER_TYPE } },

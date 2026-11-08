@@ -1,7 +1,9 @@
 import type { TesterProgramState } from "@/lib/api";
 import {
   FEEDBACK_COOLDOWN_MS,
+  feedbackAllowed,
   feedbackToShow,
+  PLAN_DAYS,
   manilaDateOf,
   meterCells,
   reminderPlan,
@@ -82,9 +84,9 @@ describe("reminderPlan", () => {
     // The next morning's catch-up at 8 AM Manila, then Day 1 that evening.
     expect(plan[1]).toMatchObject({ at: at("2026-11-08T00:00:00Z"), title: "Missed yesterday" });
     expect(plan[2]).toMatchObject({ at: at("2026-11-08T11:00:00Z"), title: "Day 1 of 14" });
-    // One catch-up only, then an evening a day for the rest of the week.
+    // One catch-up only, then an evening a day for the next eight weeks.
     expect(plan.filter((r) => r.title === "Missed yesterday")).toHaveLength(1);
-    expect(plan).toHaveLength(8);
+    expect(plan).toHaveLength(PLAN_DAYS + 1);
     expect(new Set(plan.map((r) => r.id)).size).toBe(plan.length);
   });
 
@@ -141,6 +143,17 @@ describe("reminderPlan", () => {
     expect(plan[0]).toMatchObject({ title: "Day 10 of 14", at: at("2026-11-08T11:00:00Z") });
   });
 
+  it("keeps reminding past the first week of an absence, within the phone's limit", () => {
+    // Checked in on 7 Nov, then the app is never opened again (review of gridgo-client#404).
+    const plan = reminderPlan(tester({ day: 1, streak: 1, checkedInToday: true }), at("2026-11-07T02:00:00Z"));
+    expect(plan.some((r) => r.at >= at("2026-11-15T00:00:00Z"))).toBe(true);
+    expect(plan.filter((r) => r.at >= at("2026-12-01T00:00:00Z")).every((r) => r.title === "Day 1 of 14")).toBe(true);
+    // iOS keeps at most 64 pending local notifications per app.
+    expect(plan.length).toBeLessThanOrEqual(64);
+    // Every evening is still 7 PM Manila.
+    expect(plan.filter((r) => r.title !== "Missed yesterday").every((r) => new Date(r.at).getUTCHours() === 11)).toBe(true);
+  });
+
   it("plans nothing for a non-tester, a finished run or a production-approved app", () => {
     const now = at("2026-11-07T02:00:00Z");
     expect(reminderPlan({ enrolled: false }, now)).toEqual([]);
@@ -148,6 +161,19 @@ describe("reminderPlan", () => {
     expect(reminderPlan(tester({ stopped: true }), now)).toEqual([]);
     expect(reminderPlan(tester({ day: 14, streak: 14, runComplete: true, stopped: true }), now)).toEqual([]);
     expect(reminderPlan(tester({ day: 14, streak: 14, checkedInToday: true }), now)).toEqual([]);
+  });
+});
+
+describe("feedbackAllowed", () => {
+  it("asks only once today is in, and never after production approval", () => {
+    expect(feedbackAllowed(tester())).toBe(true);
+    expect(feedbackAllowed(tester({ checkedInToday: false }))).toBe(false);
+    // Production approval: stopped without a finished run.
+    expect(feedbackAllowed(tester({ stopped: true }))).toBe(false);
+    // A finished run keeps its fourteenth-day ask.
+    expect(feedbackAllowed(tester({ day: 14, streak: 14, runComplete: true, stopped: true }))).toBe(true);
+    expect(feedbackAllowed({ enrolled: false })).toBe(false);
+    expect(feedbackAllowed(null)).toBe(false);
   });
 });
 
