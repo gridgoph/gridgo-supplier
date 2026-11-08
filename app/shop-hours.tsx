@@ -17,6 +17,7 @@ import {
   closureLabel,
   manilaClock,
   operatingWeekOf,
+  overridesFromDraft,
   validateClosure,
   weekFromDraft,
   withClosure,
@@ -225,7 +226,9 @@ export default function ShopHoursScreen() {
           hours={hours}
           now={now}
           saving={saving}
-          onSave={(draft: WeekDraft) => saveSchedule({ week: weekFromDraft(draft) })}
+          onSave={(draft: WeekDraft) =>
+            saveSchedule({ week: weekFromDraft(draft), overrides: overridesFromDraft(draft) })
+          }
         />
 
         <ClosureDatesCard

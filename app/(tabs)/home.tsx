@@ -3,14 +3,15 @@ import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { usePhotoLinkRefresh } from "@/hooks/usePhotoLinkRefresh";
 import { useUser } from "@clerk/expo";
 import { useTourAutoStart, useTourScreen } from "@/hooks/useTourScreen";
-import { useCallback, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { AppState, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { AlertsBell } from "@/components/AlertsBell";
 import { ChatButton } from "@/components/ChatButton";
 import { EmptyState } from "@/components/EmptyState";
+import { HomeTesterSlot } from "@/components/HomeTesterSlot";
 import { ObligationRow } from "@/components/ObligationRow";
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { SchedulingNotice } from "@/components/SchedulingNotice";
@@ -31,6 +32,7 @@ import { loadBoard } from "@/lib/listingsApi";
 import { isTightBeforeAccepting } from "@/lib/scheduling";
 import { useAlertsStore } from "@/store/alerts";
 import { isMatchable, useSession } from "@/store/session";
+import { useTesterProgram } from "@/store/testerProgram";
 import { loadServiceLines } from "@/hooks/useBoard";
 import { loadReadiness } from "@/hooks/useReadiness";
 import type { Readiness } from "@/lib/readiness";
@@ -127,6 +129,23 @@ export default function HomeScreen() {
       void reload();
     }, [reload]),
   );
+
+  /*
+    A Google Play tester's open is the day's check-in, and so is coming back
+    to the app on a new day. Nothing at all for an account that is not
+    enrolled (`lib/testerProgram.ts`).
+  */
+  useFocusEffect(
+    useCallback(() => {
+      void useTesterProgram.getState().load(useSession.getState().user?.id ?? null);
+    }, []),
+  );
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (next === "active") void useTesterProgram.getState().load(useSession.getState().user?.id ?? null);
+    });
+    return () => subscription.remove();
+  }, []);
 
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const firstLoad = loading && !loaded;
@@ -226,6 +245,7 @@ export default function HomeScreen() {
             <View className="mt-4">
               <ShopSetupGaps readiness={readiness} />
             </View>
+            <HomeTesterSlot className="mt-6" />
             <PushEnableCard spacing="above" />
           </View>
         ) : null}
@@ -248,6 +268,7 @@ export default function HomeScreen() {
               Operations' answer is the notification a waiting shop most wants
               with GRIDGO closed. Draws nothing once the phone allows them.
             */}
+            <HomeTesterSlot className="mt-6" />
             <PushEnableCard spacing="above" />
           </View>
         ) : null}
@@ -379,6 +400,12 @@ export default function HomeScreen() {
                 />
               </View>
             )}
+
+            {/*
+              A Google Play tester's check-in sits under the day's work, never
+              above it: one compact row that moves no job down the screen.
+            */}
+            <HomeTesterSlot className="mt-6" />
 
             {/*
               Under the day's work, above the board: the way back to phone

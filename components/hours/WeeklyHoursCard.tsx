@@ -6,17 +6,21 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { WeekDayPicker } from "@/components/WeekDayPicker";
 import { SelectField } from "@/components/controls/SelectField";
+import { DayHoursRow } from "@/components/hours/DayHoursRow";
 import {
-  dayLengthLabel,
+  WEEKDAYS,
+  changedOwnDay,
+  draftDayHours,
   manilaClock,
-  openDaysLabel,
   timeChoices,
   timeLabel,
   validateWeekDraft,
   weekDraftChanged,
   weekDraftOf,
+  withOwnHours,
   type ShopHours,
   type WeekDraft,
+  type WeekProblem,
 } from "@/lib/shopHours";
 import { askPick } from "@/store/sheets";
 
@@ -29,36 +33,48 @@ type Props = {
 };
 
 /**
- * The days the shop opens and one opening and closing time for all of them.
+ * The days the shop opens, its usual hours, and any day with its own.
  *
- * GRIDGO counts production days on these hours and, for now, needs every open
- * day to be the same length — so there is one pair of times, not one per day.
+ * GRIDGO counts production days on the usual hours, so they are one pair of
+ * times for every open day; a half-day Saturday is that day's "Different
+ * hours" switch, which GRIDGO saves as an override for that weekday only.
  */
 export function WeeklyHoursCard({ hours, now, saving, onSave }: Props) {
-  const saved = weekDraftOf(hours.week);
+  const saved = weekDraftOf(hours.week, hours.overrides);
   // Null follows what GRIDGO holds, so a newer answer replaces an untouched
   // week while an edit in progress is kept.
   const [edited, setEdited] = useState<WeekDraft | null>(null);
   const draft = edited ?? saved.draft;
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<WeekProblem | null>(null);
   const [done, setDone] = useState(false);
-  const changed = weekDraftChanged(hours.week, draft);
+  const changed = weekDraftChanged(hours, draft);
+  const today = manilaClock(now).weekday;
 
-  function edit(patch: Partial<WeekDraft>) {
-    setEdited({ ...draft, ...patch });
+  function edit(next: WeekDraft) {
+    setEdited(next);
     setError(null);
     setDone(false);
   }
 
-  async function pickTime(which: "opensMinute" | "closesMinute") {
+  async function pickTime(which: "opensMinute" | "closesMinute", weekday: number | null) {
+    // A save in flight replaces the draft when it lands, so no edit may start meanwhile.
+    if (saving) return;
+    const day = weekday == null ? null : WEEKDAYS.find((row) => row.weekday === weekday);
+    const current = day ? draftDayHours(draft, day.weekday)[which] : draft[which];
     const value = await askPick({
-      title: which === "opensMinute" ? "Opening time" : "Closing time",
-      body: "The same time on every day you open.",
-      options: timeChoices(draft[which]).map((minute) => ({ value: String(minute), label: timeLabel(minute) })),
-      selected: String(draft[which]),
+      title: day
+        ? `${day.long} ${which === "opensMinute" ? "opens" : "closes"}`
+        : which === "opensMinute"
+          ? "Opening time"
+          : "Closing time",
+      body: day ? `${day.long} only.` : "Every open day without different hours.",
+      options: timeChoices(current).map((minute) => ({ value: String(minute), label: timeLabel(minute) })),
+      selected: String(current),
       cancelLabel: "Keep this time",
     });
-    if (value != null) edit({ [which]: Number(value) });
+    if (value == null) return;
+    if (day) edit(withOwnHours(draft, day.weekday, { ...draftDayHours(draft, day.weekday), [which]: Number(value) }));
+    else edit({ ...draft, [which]: Number(value) });
   }
 
   async function save() {
@@ -68,14 +84,14 @@ export function WeeklyHoursCard({ hours, now, saving, onSave }: Props) {
       return;
     }
     const refused = await onSave(draft);
-    if (refused) setError(refused);
+    if (refused) setError({ weekday: changedOwnDay(hours, draft), message: refused });
     else {
       setEdited(null);
       setDone(true);
     }
   }
 
-  const valid = draft.closesMinute > draft.opensMinute;
+  const openDays = WEEKDAYS.filter((day) => draft.days.includes(day.weekday));
 
   return (
     <View className="gg-card gap-4">
@@ -83,15 +99,13 @@ export function WeeklyHoursCard({ hours, now, saving, onSave }: Props) {
         <Text className="text-h3 text-text-primary" accessibilityRole="header">
           Weekly hours
         </Text>
-        <Text className="text-body text-text-secondary">
-          Tap the days you open. Every open day keeps the same hours.
-        </Text>
+        <Text className="text-body text-text-secondary">Tap the days you open.</Text>
       </View>
 
       <WeekDayPicker
         days={draft.days}
-        onChange={(days) => edit({ days })}
-        today={manilaClock(now).weekday}
+        onChange={(days) => edit({ ...draft, days })}
+        today={today}
         disabled={saving}
       />
 
@@ -100,41 +114,53 @@ export function WeeklyHoursCard({ hours, now, saving, onSave }: Props) {
           <SelectField
             label="Opens"
             valueLabel={timeLabel(draft.opensMinute)}
-            accessibilityLabel={`Opening time, ${timeLabel(draft.opensMinute)}`}
-            onPress={() => void pickTime("opensMinute")}
+            accessibilityLabel={`Usual opening time, ${timeLabel(draft.opensMinute)}`}
+            onPress={() => void pickTime("opensMinute", null)}
+            disabled={saving}
           />
         </View>
         <View className="min-w-36 flex-1">
           <SelectField
             label="Closes"
             valueLabel={timeLabel(draft.closesMinute)}
-            accessibilityLabel={`Closing time, ${timeLabel(draft.closesMinute)}`}
-            onPress={() => void pickTime("closesMinute")}
+            accessibilityLabel={`Usual closing time, ${timeLabel(draft.closesMinute)}`}
+            onPress={() => void pickTime("closesMinute", null)}
+            disabled={saving}
           />
         </View>
       </View>
+      {error && error.weekday == null ? <ErrorNotice message={error.message} /> : null}
 
-      <Text className="text-body text-text-primary">
-        {draft.days.length && valid
-          ? `${openDaysLabel(draft.days)}, ${timeLabel(draft.opensMinute)} to ${timeLabel(draft.closesMinute)} — ${dayLengthLabel(draft.closesMinute - draft.opensMinute)} a day.`
-          : draft.days.length
-            ? "Pick a closing time later than the opening time."
-            : "No open days picked yet."}
-      </Text>
+      {openDays.length ? (
+        <View className="gap-3">
+          <Text className="text-overline text-text-muted">Different hours</Text>
+          {openDays.map((day) => (
+            <DayHoursRow
+              key={day.weekday}
+              long={day.long}
+              short={day.short}
+              isToday={day.weekday === today}
+              hours={draftDayHours(draft, day.weekday)}
+              different={draft.own?.[day.weekday] != null}
+              onToggle={(different) =>
+                edit(withOwnHours(draft, day.weekday, different ? draftDayHours(draft, day.weekday) : null))
+              }
+              onPickTime={(which) => void pickTime(which, day.weekday)}
+              error={error && error.weekday === day.weekday ? error.message : null}
+              disabled={saving}
+            />
+          ))}
+        </View>
+      ) : null}
 
       {saved.uneven ? (
         <View className="gg-panel">
           <Text className="text-caption text-text-secondary">
-            Your saved hours differ from day to day. Saving here gives every open day the hours above.
+            Some days are saved with two opening times. Saving here gives each day one.
           </Text>
         </View>
       ) : null}
 
-      <Text className="text-caption text-text-muted">
-        A shorter day, such as a half-day Saturday, is not available yet.
-      </Text>
-
-      {error ? <ErrorNotice message={error} /> : null}
       {done && !changed ? (
         <Text className="text-caption text-success">
           Weekly hours saved. New jobs are timed on them; jobs you already accepted keep their dates.

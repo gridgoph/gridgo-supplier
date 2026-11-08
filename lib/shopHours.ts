@@ -8,9 +8,11 @@ import { dayKeyDateLabel } from "@/lib/day";
  * these hours, so this is the one place that reads `GET /me/shop-hours` and
  * builds every `PATCH`. Three rules shape the screens:
  *
- * - **Every open day has the same hours.** GRIDGO refuses open days of
- *   different lengths for now (a short Saturday is a later decision), so the
- *   editor is one set of days and one opening and closing time.
+ * - **One usual day, and any day can differ.** GRIDGO needs every base open
+ *   day to be the same length (it divides production days by it), so the base
+ *   week is one opening and closing time. A shorter or longer day — a half-day
+ *   Saturday — is a `weekdayOverrides` entry that replaces that weekday's
+ *   window; `effectiveWeek` is the week GRIDGO actually opens on.
  * - **Saving the week or the closure dates replaces the base schedule**, and
  *   that clears today's extension. A save keeps it by sending it again when
  *   GRIDGO would still accept it, and says so when it cannot.
@@ -40,7 +42,10 @@ export type Extension = { day: string; opensMinute: number; closesMinute: number
 export type ShopHours = {
   /** Shared with `/me/supplier-profile`; a stale one is refused. */
   version: number;
+  /** The base week: every open day, at the usual hours. */
   week: WeekWindow[];
+  /** Days with their own hours, replacing the base window. Only open weekdays, one each. */
+  overrides: WeekWindow[];
   closures: Closure[];
   temporarilyClosed: boolean;
   isOpenNow: boolean;
@@ -111,6 +116,13 @@ export function normalizeShopHours(raw: unknown): ShopHours | null {
   const week = (Array.isArray(schedule.week) ? schedule.week : [])
     .map(windowOf)
     .filter((row): row is WeekWindow => row !== null);
+  const overrides: WeekWindow[] = [];
+  for (const row of (Array.isArray(schedule.weekdayOverrides) ? schedule.weekdayOverrides : []).map(windowOf)) {
+    if (row && week.some((open) => open.weekday === row.weekday) && !overrides.some((o) => o.weekday === row.weekday)) {
+      overrides.push(row);
+    }
+  }
+  overrides.sort((a, b) => a.weekday - b.weekday);
   const closures = (Array.isArray(schedule.closures) ? schedule.closures : [])
     .map(closureOf)
     .filter((row): row is Closure => row !== null)
@@ -118,6 +130,7 @@ export function normalizeShopHours(raw: unknown): ShopHours | null {
   return {
     version: Number.isInteger(hours.version) ? (hours.version as number) : 1,
     week,
+    overrides,
     closures,
     temporarilyClosed: hours.temporarilyClosed === true,
     isOpenNow: hours.isOpenNow === true,
@@ -176,11 +189,39 @@ export function dayLengthLabel(minutes: number): string {
 
 /* ------------------------------------------------------------- weekly hours */
 
+/**
+ * The week GRIDGO opens on: each base day, or its own hours where it has them.
+ * An override for a day the base week does not open is ignored, as GRIDGO does.
+ */
+export function effectiveWeek(week: WeekWindow[], overrides: WeekWindow[]): WeekWindow[] {
+  const replaced = new Set<number>();
+  const rows: WeekWindow[] = [];
+  for (const row of week) {
+    const own = overrides.find((o) => o.weekday === row.weekday);
+    if (!own) rows.push(row);
+    else if (!replaced.has(row.weekday)) {
+      replaced.add(row.weekday);
+      rows.push(own);
+    }
+  }
+  return rows;
+}
+
+/** One weekday's opening hours as GRIDGO counts them, or null when it is shut. */
+export function dayWindow(hours: Pick<ShopHours, "week" | "overrides">, weekday: number): WeekWindow | null {
+  return effectiveWeek(hours.week, hours.overrides).find((row) => row.weekday === weekday) ?? null;
+}
+
+export type DayHours = { opensMinute: number; closesMinute: number };
+
 export type WeekDraft = {
   /** Open weekdays, GRIDGO numbering. */
   days: number[];
+  /** The usual hours, for every open day without its own. */
   opensMinute: number;
   closesMinute: number;
+  /** Open days with different hours, by weekday. */
+  own?: Record<number, DayHours>;
 };
 
 export const DEFAULT_WEEK_DRAFT: WeekDraft = {
@@ -191,10 +232,12 @@ export const DEFAULT_WEEK_DRAFT: WeekDraft = {
 
 /**
  * The editor's starting point: the days GRIDGO has open, at the hours most of
- * them keep. `uneven` says the saved week did not fit one shared time — older
- * hours, or hours set by GRIDGO Team — so the screen can say a save evens it.
+ * them keep, and every day that differs as a day with its own hours. Older
+ * base weeks with uneven days read the same way, so a save keeps each day's
+ * hours and only moves them into the form GRIDGO now asks for. `uneven` is
+ * left for a week the editor cannot draw at all: two windows on one day.
  */
-export function weekDraftOf(week: WeekWindow[]): { draft: WeekDraft; uneven: boolean } {
+export function weekDraftOf(week: WeekWindow[], overrides: WeekWindow[] = []): { draft: WeekDraft; uneven: boolean } {
   if (!week.length) return { draft: DEFAULT_WEEK_DRAFT, uneven: false };
   const counts = new Map<string, { row: WeekWindow; count: number }>();
   for (const row of week) {
@@ -205,28 +248,115 @@ export function weekDraftOf(week: WeekWindow[]): { draft: WeekDraft; uneven: boo
   }
   const common = [...counts.values()].sort((a, b) => b.count - a.count)[0].row;
   const days = [...new Set(week.map((row) => row.weekday))].sort((a, b) => a - b);
-  return {
-    draft: { days, opensMinute: common.opensMinute, closesMinute: common.closesMinute },
-    uneven: counts.size > 1 || days.length !== week.length,
-  };
+  const own: Record<number, DayHours> = {};
+  for (const row of effectiveWeek(week, overrides)) {
+    if (row.opensMinute !== common.opensMinute || row.closesMinute !== common.closesMinute) {
+      own[row.weekday] ??= { opensMinute: row.opensMinute, closesMinute: row.closesMinute };
+    }
+  }
+  const draft: WeekDraft = { days, opensMinute: common.opensMinute, closesMinute: common.closesMinute };
+  if (Object.keys(own).length) draft.own = own;
+  return { draft, uneven: days.length !== week.length };
 }
 
+/** The base week to send: every open day at the usual hours. */
 export function weekFromDraft(draft: WeekDraft): WeekWindow[] {
   return [...draft.days]
     .sort((a, b) => a - b)
     .map((weekday) => ({ weekday, opensMinute: draft.opensMinute, closesMinute: draft.closesMinute }));
 }
 
-export function weekDraftChanged(week: WeekWindow[], draft: WeekDraft): boolean {
-  const saved = weekFromDraft(weekDraftOf(week).draft);
-  const next = weekFromDraft(draft);
-  return weekDraftOf(week).uneven || JSON.stringify(saved) !== JSON.stringify(next);
+/**
+ * `weekdayOverrides` to send: open days whose own hours differ from the usual
+ * ones. A closed day's hours, and a day set back to the usual times, are left
+ * out, so GRIDGO never keeps a stale override for them.
+ */
+export function overridesFromDraft(draft: WeekDraft): WeekWindow[] {
+  return [...draft.days]
+    .sort((a, b) => a - b)
+    .flatMap((weekday) => {
+      const own = draft.own?.[weekday];
+      if (!own || (own.opensMinute === draft.opensMinute && own.closesMinute === draft.closesMinute)) return [];
+      return [{ weekday, opensMinute: own.opensMinute, closesMinute: own.closesMinute }];
+    });
 }
 
-export function validateWeekDraft(draft: WeekDraft): string | null {
-  if (!draft.days.length) return "Pick at least one day your shop opens.";
-  if (draft.closesMinute <= draft.opensMinute) return "Pick a closing time later than the opening time.";
+/** The hours a draft gives one open day. */
+export function draftDayHours(draft: WeekDraft, weekday: number): DayHours {
+  return draft.own?.[weekday] ?? { opensMinute: draft.opensMinute, closesMinute: draft.closesMinute };
+}
+
+/** Give a day its own hours (starting from the usual ones), or put it back on them. */
+export function withOwnHours(draft: WeekDraft, weekday: number, hours: DayHours | null): WeekDraft {
+  const own = { ...draft.own };
+  if (hours) own[weekday] = hours;
+  else delete own[weekday];
+  return { ...draft, own };
+}
+
+export function weekDraftChanged(hours: Pick<ShopHours, "week" | "overrides">, draft: WeekDraft): boolean {
+  const saved = weekDraftOf(hours.week, hours.overrides);
+  const same = (a: WeekDraft, b: WeekDraft) =>
+    JSON.stringify([weekFromDraft(a), overridesFromDraft(a)]) === JSON.stringify([weekFromDraft(b), overridesFromDraft(b)]);
+  // A saved week whose base days differ is also a change: a save evens them.
+  const sorted = [...hours.week].sort((x, y) => x.weekday - y.weekday);
+  const baseEven = JSON.stringify(sorted) === JSON.stringify(weekFromDraft(saved.draft));
+  return saved.uneven || !baseEven || !same(saved.draft, draft);
+}
+
+/** Why a draft cannot be saved, and which day it is about (null: the usual hours). */
+export type WeekProblem = { weekday: number | null; message: string };
+
+export function validateWeekDraft(draft: WeekDraft): WeekProblem | null {
+  if (!draft.days.length) return { weekday: null, message: "Pick at least one day your shop opens." };
+  if (draft.closesMinute <= draft.opensMinute) {
+    return { weekday: null, message: "Pick a closing time later than the opening time." };
+  }
+  for (const day of WEEKDAYS) {
+    const own = draft.days.includes(day.weekday) ? draft.own?.[day.weekday] : undefined;
+    if (own && own.closesMinute <= own.opensMinute) {
+      return { weekday: day.weekday, message: `Pick a ${day.long} closing time later than its opening time.` };
+    }
+  }
   return null;
+}
+
+/**
+ * The one day a refused save was about, so GRIDGO's answer is shown beside it:
+ * when the usual hours and the open days are unchanged and exactly one day's
+ * own hours changed. Null otherwise — the answer then sits by the save.
+ */
+export function changedOwnDay(hours: Pick<ShopHours, "week" | "overrides">, draft: WeekDraft): number | null {
+  const saved = weekDraftOf(hours.week, hours.overrides).draft;
+  if (JSON.stringify(weekFromDraft(saved)) !== JSON.stringify(weekFromDraft(draft))) return null;
+  const before = overridesFromDraft(saved);
+  const after = overridesFromDraft(draft);
+  const changed = draft.days.filter(
+    (weekday) =>
+      JSON.stringify(before.find((row) => row.weekday === weekday)) !==
+      JSON.stringify(after.find((row) => row.weekday === weekday)),
+  );
+  return changed.length === 1 ? changed[0] : null;
+}
+
+/** "8:00 AM–6:00 PM". */
+export function rangeLabel(hours: DayHours): string {
+  return `${timeLabel(hours.opensMinute)}–${timeLabel(hours.closesMinute)}`;
+}
+
+/**
+ * The open week in a line, days with the same hours grouped:
+ * "Mon–Sat, 8:00 AM–6:00 PM" or "Mon–Fri, 8:00 AM–6:00 PM; Sat, 8:00 AM–3:00 PM".
+ */
+export function weekHoursLabel(week: WeekWindow[]): string {
+  const groups = new Map<string, number[]>();
+  for (const day of WEEKDAYS) {
+    const row = week.find((window) => window.weekday === day.weekday);
+    if (!row) continue;
+    const key = rangeLabel(row);
+    groups.set(key, [...(groups.get(key) ?? []), day.weekday]);
+  }
+  return [...groups.entries()].map(([range, days]) => `${openDaysLabel(days)}, ${range}`).join("; ");
 }
 
 /** "Mon–Sat", "Every day", "Mon, Wed, Fri", "Closed every day". */
@@ -341,7 +471,7 @@ export type ShopStatus = {
 };
 
 function todayWindow(hours: ShopHours, clock: ManilaClock): WeekWindow | null {
-  return hours.week.find((row) => row.weekday === clock.weekday) ?? null;
+  return dayWindow(hours, clock.weekday);
 }
 
 /** "today at 8:00 AM", "tomorrow at 8:00 AM", "Mon 19 Oct at 8:00 AM". */
@@ -401,9 +531,7 @@ export function shopHoursSummary(hours: ShopHours, now: Date): string {
   const status = shopStatus(hours, now);
   if (status.state === "temporarily_closed") return "Temporarily closed";
   if (status.state === "unreadable") return "Set your open days and times";
-  const { draft } = weekDraftOf(hours.week);
-  const week = `${openDaysLabel(draft.days)}, ${timeLabel(draft.opensMinute)}–${timeLabel(draft.closesMinute)}`;
-  return `${status.title} · ${week}`;
+  return `${status.title} · ${weekHoursLabel(effectiveWeek(hours.week, hours.overrides))}`;
 }
 
 /* ---------------------------------------------------------- today's extension */
@@ -480,30 +608,35 @@ export const DISPATCH_WAITS_COPY =
 /* ------------------------------------------------------------------- writes */
 
 export type ShopHoursPatch = {
-  schedule?: { utcOffsetMinutes: number; week: WeekWindow[]; closures: Closure[] };
+  schedule?: { utcOffsetMinutes: number; week: WeekWindow[]; closures: Closure[]; weekdayOverrides: WeekWindow[] };
   temporarilyClosed?: boolean;
   extension?: { closesMinute: number } | null;
 };
 
 /**
- * A new base schedule — the week, the closure dates, or both. GRIDGO clears
+ * A new base schedule — the week, its days with their own hours, the closure
+ * dates, or any of them. Days with their own hours are always sent, kept to
+ * the open days, so closing a day also drops its own hours. GRIDGO clears
  * today's extension on any base change, so it is sent again when it would
  * still be accepted. `dropsExtension` tells the caller to say so first.
  */
 export function schedulePatch(
   hours: ShopHours,
-  change: { week?: WeekWindow[]; closures?: Closure[] },
+  change: { week?: WeekWindow[]; overrides?: WeekWindow[]; closures?: Closure[] },
   now: Date,
 ): { patch: ShopHoursPatch; dropsExtension: boolean } {
   const week = change.week ?? hours.week;
+  const weekdayOverrides = (change.overrides ?? hours.overrides).filter((row) =>
+    week.some((open) => open.weekday === row.weekday),
+  );
   const closures = change.closures ?? hours.closures;
   const patch: ShopHoursPatch = {
-    schedule: { utcOffsetMinutes: MANILA_OFFSET_MINUTES, week, closures },
+    schedule: { utcOffsetMinutes: MANILA_OFFSET_MINUTES, week, closures, weekdayOverrides },
   };
   const clock = manilaClock(now);
   const extension = hours.todayExtension?.day === clock.dayKey ? hours.todayExtension : null;
   if (!extension) return { patch, dropsExtension: false };
-  const row = week.find((window) => window.weekday === clock.weekday);
+  const row = dayWindow({ week, overrides: weekdayOverrides }, clock.weekday);
   const keeps =
     !hours.temporarilyClosed &&
     row != null &&

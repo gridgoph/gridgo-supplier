@@ -16,6 +16,7 @@ import { APPLY_CONSENT_REFUSED, isLegalRefusal } from "@/lib/legal";
 import { sessionWaitHold } from "@/lib/sessionWait";
 import { releaseClerkSession } from "@/lib/clerkSignIn";
 import { serializeDeviceMutation, usePush } from "@/store/push";
+import { useTesterProgram } from "@/store/testerProgram";
 
 /** Expected role for this binary — mismatched login is rejected. */
 export const APP_ROLE = "supplier" as const;
@@ -373,6 +374,14 @@ api.setUnauthorizedHandler(() => {
   });
 });
 
+// Launch reconciliation: a phone that opens signed out, or to an account this
+// app does not serve, keeps no tester reminder from whoever used it before.
+useSession.subscribe((state, previous) => {
+  const kind = state.identity.kind;
+  if (kind === previous.identity.kind || kind === "loading" || kind === "supplier") return;
+  useTesterProgram.getState().forget();
+});
+
 useSession.subscribe((state, previous) => {
   const next = state.user?.id ?? null;
   if (next === (previous.user?.id ?? null)) return;
@@ -387,6 +396,10 @@ useSession.subscribe((state, previous) => {
   else useSignInNotice.getState().forgetHeld();
   useShopHours.getState().reset();
   useShopContact.getState().reset();
+  // Tester reminders belong to the shop signed in: signing out cancels them,
+  // and the next account's open plans its own.
+  if (next) useTesterProgram.getState().reset();
+  else useTesterProgram.getState().forget();
   // Phone-only closures carry no account. They leave with the shop that was
   // signed in, and the next shop claims only what is left unclaimed.
   afterShopPlanLoads(() => {
