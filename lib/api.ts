@@ -2832,3 +2832,49 @@ export async function revokeAppleAuthorization(
   );
   return { requestId: result.requestId ?? null, appleRevocation: result.appleRevocation ?? null };
 }
+
+// ---------------------------------------------------------------------------
+// Google Play tester program. Contract: gridgo-api `docs/TESTER_PROGRAM_API.md`.
+// Telemetry only: it never touches a job, a price, a payout or the shop's hours.
+// ---------------------------------------------------------------------------
+
+export type TesterFeedbackTrigger = "streak_3" | "streak_7" | "streak_10" | "streak_14" | "completed_order";
+
+export type TesterProgramState =
+  | { enrolled: false }
+  | {
+      enrolled: true;
+      app: string;
+      /** Today's day in the run once checked in, else the next one to check. */
+      day: number;
+      streak: number;
+      checkedInToday: boolean;
+      runComplete: boolean;
+      /** The run is complete or the app is production approved. */
+      stopped: boolean;
+      /** Today in Manila, `YYYY-MM-DD`, by GRIDGO's clock. */
+      manilaDate: string;
+      nudge: { trigger: TesterFeedbackTrigger } | null;
+    };
+
+export type TesterFeedbackEvent = "shown" | "tapped" | "dismissed";
+
+/** A pure read; it never checks in. `{ enrolled: false }` for everyone else. */
+export async function getTesterProgram(): Promise<TesterProgramState> {
+  return request<TesterProgramState>("/me/tester-program?app=supplier");
+}
+
+/** Idempotent per Manila day. `404 not_enrolled` when the account is not a tester. */
+export async function testerCheckIn(version: string, source: "open" | "button"): Promise<TesterProgramState> {
+  return request<TesterProgramState>("/me/tester-program/check-in", {
+    method: "POST",
+    body: JSON.stringify({ app: "supplier", version, source }),
+  });
+}
+
+export async function reportTesterFeedback(event: TesterFeedbackEvent, trigger: TesterFeedbackTrigger): Promise<void> {
+  await request<{ ok: true }>("/me/tester-program/feedback", {
+    method: "POST",
+    body: JSON.stringify({ app: "supplier", event, trigger }),
+  });
+}

@@ -16,6 +16,7 @@ import { APPLY_CONSENT_REFUSED, isLegalRefusal } from "@/lib/legal";
 import { sessionWaitHold } from "@/lib/sessionWait";
 import { releaseClerkSession } from "@/lib/clerkSignIn";
 import { serializeDeviceMutation, usePush } from "@/store/push";
+import { useTesterProgram } from "@/store/testerProgram";
 
 /** Expected role for this binary — mismatched login is rejected. */
 export const APP_ROLE = "supplier" as const;
@@ -387,6 +388,10 @@ useSession.subscribe((state, previous) => {
   else useSignInNotice.getState().forgetHeld();
   useShopHours.getState().reset();
   useShopContact.getState().reset();
+  // Tester reminders belong to the shop signed in: signing out cancels them,
+  // and the next account's open plans its own.
+  if (next) useTesterProgram.getState().reset();
+  else useTesterProgram.getState().forget();
   // Phone-only closures carry no account. They leave with the shop that was
   // signed in, and the next shop claims only what is left unclaimed.
   afterShopPlanLoads(() => {
