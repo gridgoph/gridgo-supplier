@@ -10,6 +10,7 @@ import * as api from "@/lib/api";
 import { CHAT_LIST_ROUTE } from "@/lib/chatThreads";
 import { getNotificationsNative as notifications } from "@/lib/expoNotifications";
 import { playProductionNudgeSting } from "@/lib/nudgeSound";
+import { TESTER_REMINDER_TYPE } from "@/lib/testerProgram";
 import {
   parsePushData,
   PUSH_FOREGROUND_BEHAVIOR,
@@ -156,7 +157,7 @@ export function usePushNotifications(): void {
       pending.current = null;
       invalidate("*");
       // Job screens sit behind approval; Operations chat does not.
-      const destination = data.type === SUPPORT_MESSAGE_PUSH_TYPE
+      const destination = data.type === SUPPORT_MESSAGE_PUSH_TYPE || data.type === TESTER_REMINDER_TYPE
         ? pushTargetRoute(data, threadId)
         : isMatchable(useSession.getState().user) ? pushTargetRoute(data) : "/alerts";
       router.push(destination as Href);

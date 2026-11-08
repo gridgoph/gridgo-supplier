@@ -54,6 +54,7 @@ import { Platform } from "react-native";
 import { CHAT_LIST_ROUTE, isChatThreadId } from "@/lib/chatThreads";
 import { PERFORMANCE_ALERT, PERFORMANCE_ROUTE } from "@/lib/performance";
 import { SHOP_HOURS_NOTICE, SHOP_HOURS_ROUTE } from "@/lib/shopHours";
+import { TESTER_REMINDER_TYPE } from "@/lib/testerProgram";
 
 /**
  * The Android channel the server names in every message.
@@ -241,6 +242,8 @@ export function supportThreadRoute(threadId: string | null | undefined): string 
  * one it opens the chat history.
  */
 export function pushTargetRoute(data: PushData, threadId: string | null = null): string {
+  // A tester's daily reminder is local, names no job, and Home holds the check-in card.
+  if (data.type === TESTER_REMINDER_TYPE) return "/(tabs)/home";
   if (data.type === SUPPORT_MESSAGE_PUSH_TYPE) return supportThreadRoute(threadId);
   if (data.type === SHOP_HOURS_NOTICE) return SHOP_HOURS_ROUTE;
   // A performance notice or warning opens the shop's Performance at that job's notice.
