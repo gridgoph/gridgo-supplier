@@ -309,6 +309,73 @@ describe("review of gridgo-client#404", () => {
     expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
   });
 
+  // What the accepted Check in answer said, as the button call settles it.
+  const stops: [string, TesterProgramState, () => Promise<TesterProgramState>][] = [
+    [
+      "production approval",
+      enrolled({ checkedInToday: true, stopped: true, productionApproved: true }),
+      () => Promise.resolve(enrolled({ checkedInToday: true, stopped: true, productionApproved: true })),
+    ],
+    [
+      "the end of enrolment",
+      { enrolled: false } as TesterProgramState,
+      () => Promise.reject(new api.ApiError(404, { error: "not_enrolled" })),
+    ],
+  ];
+
+  it.each(stops)("an accepted Check in answer that saw %s survives an older automatic-open answer", async (_label, stopped, buttonAnswer) => {
+    useTesterProgram.setState({ owner: "u1", program: enrolled() });
+    let resolveOpen!: (state: TesterProgramState) => void;
+    api.getTesterProgram.mockResolvedValueOnce(enrolled());
+    api.testerCheckIn.mockImplementationOnce(() => new Promise((resolve) => { resolveOpen = resolve; }));
+    // Home's read lands active; its automatic check-in answer is held.
+    const read = useTesterProgram.getState().load("u1");
+    await settle();
+    // The stop lands before the tap; the button's answer says so.
+    api.testerCheckIn.mockImplementationOnce(buttonAnswer);
+    await useTesterProgram.getState().checkIn();
+    expect(useTesterProgram.getState().program).toEqual(stopped);
+    await syncTesterReminders([]);
+    mockNotifications.scheduleNotificationAsync.mockClear();
+    // GRIDGO, asked again, still says stopped.
+    api.getTesterProgram.mockResolvedValue(stopped);
+    resolveOpen(enrolled({ checkedInToday: true, streak: 4, productionApproved: false }));
+    await read;
+    await settle();
+    await settle();
+    expect(useTesterProgram.getState().program).toEqual(stopped);
+    expect(useTesterProgram.getState().checkingIn).toBe(false);
+    expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+    // The stale answer was reconciled with GRIDGO rather than trusted.
+    expect(api.getTesterProgram).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(stops)("an accepted Check in answer that saw %s survives an older read landing after it", async (_label, stopped, buttonAnswer) => {
+    useTesterProgram.setState({ owner: "u1", program: enrolled() });
+    let resolveRead!: (state: TesterProgramState) => void;
+    api.getTesterProgram.mockImplementationOnce(() => new Promise((resolve) => { resolveRead = resolve; }));
+    // The foreground refresh goes out first and is held.
+    const read = useTesterProgram.getState().load("u1");
+    // The button's answer lands first, carrying the stop.
+    api.testerCheckIn.mockImplementationOnce(buttonAnswer);
+    await useTesterProgram.getState().checkIn();
+    expect(useTesterProgram.getState().program).toEqual(stopped);
+    await syncTesterReminders([]);
+    mockNotifications.scheduleNotificationAsync.mockClear();
+    api.testerCheckIn.mockResolvedValue(enrolled({ checkedInToday: true, streak: 4 }));
+    api.getTesterProgram.mockResolvedValue(stopped);
+    // The older refresh lands last, from before the stop.
+    resolveRead(enrolled());
+    await read;
+    await settle();
+    await settle();
+    expect(useTesterProgram.getState().program).toEqual(stopped);
+    expect(useTesterProgram.getState().checkingIn).toBe(false);
+    expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+    // The stale answer was reconciled with GRIDGO rather than trusted.
+    expect(api.getTesterProgram).toHaveBeenCalledTimes(2);
+  });
+
   it("an unenrolled answer to the button hides the card and cancels the reminders", async () => {
     mockNotifications.getAllScheduledNotificationsAsync.mockResolvedValue([{ identifier: "gridgo-tester-evening-2026-11-07" }]);
     api.testerCheckIn.mockRejectedValue(new api.ApiError(404, { error: "not_enrolled" }));
