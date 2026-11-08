@@ -97,7 +97,7 @@ export function isProductionTimeRefused(error: unknown): boolean {
 const PREVIEW_REFUSED: Record<string, string> = {
   catalog_item_not_found: "This listing is no longer on your board, so there are no dates to show.",
   production_day_length_unavailable:
-    "The dates cannot be worked out until every open day has the same hours. Pick one opening and closing time for all your open days.",
+    "The dates cannot be worked out until your usual hours are the same on every open day. Give a shorter day its own hours instead.",
   shop_never_open:
     "GRIDGO could not fit this work into your open hours in the coming weeks. Check your open days and hours.",
   invalid_schedule: "GRIDGO could not read your shop hours. Set your open days and hours again, then try again.",
@@ -397,9 +397,9 @@ const MESSAGES: Record<string, string> = {
     "GRIDGO could not tell which version of your details this change was made against. Load the latest and make the change again.",
   // The shop's hours (docs/SHOP_HOURS_API.md).
   invalid_shop_hours:
-    "GRIDGO could not use those hours. Keep one opening and closing time on the same day, and closure dates that cover 90 dates or fewer.",
+    "GRIDGO could not use those hours. Each day needs a closing time later than its opening time, and closure dates can cover 90 dates or fewer.",
   production_day_length_unavailable:
-    "Every open day needs the same number of hours for now. Pick one opening and closing time for all your open days.",
+    "Your usual hours must be the same on every open day. Give a shorter or longer day its own hours instead.",
   invalid_shop_extension:
     "GRIDGO could not extend today to that time. Pick a time later than your usual close, before midnight, and at least 30 minutes from now.",
   shop_closed: "Your shop is temporarily closed. Reopen it before extending today's hours.",
