@@ -73,6 +73,7 @@ export function DayHoursRow({ long, short, isToday, hours, different, onToggle, 
               valueLabel={timeLabel(hours.opensMinute)}
               accessibilityLabel={`${long} opening time, ${timeLabel(hours.opensMinute)}`}
               onPress={() => onPickTime("opensMinute")}
+              disabled={disabled}
             />
           </View>
           <View className="min-w-36 flex-1">
@@ -81,6 +82,7 @@ export function DayHoursRow({ long, short, isToday, hours, different, onToggle, 
               valueLabel={timeLabel(hours.closesMinute)}
               accessibilityLabel={`${long} closing time, ${timeLabel(hours.closesMinute)}`}
               onPress={() => onPickTime("closesMinute")}
+              disabled={disabled}
             />
           </View>
         </View>

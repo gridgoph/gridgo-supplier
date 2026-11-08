@@ -57,6 +57,8 @@ export function WeeklyHoursCard({ hours, now, saving, onSave }: Props) {
   }
 
   async function pickTime(which: "opensMinute" | "closesMinute", weekday: number | null) {
+    // A save in flight replaces the draft when it lands, so no edit may start meanwhile.
+    if (saving) return;
     const day = weekday == null ? null : WEEKDAYS.find((row) => row.weekday === weekday);
     const current = day ? draftDayHours(draft, day.weekday)[which] : draft[which];
     const value = await askPick({
@@ -114,6 +116,7 @@ export function WeeklyHoursCard({ hours, now, saving, onSave }: Props) {
             valueLabel={timeLabel(draft.opensMinute)}
             accessibilityLabel={`Usual opening time, ${timeLabel(draft.opensMinute)}`}
             onPress={() => void pickTime("opensMinute", null)}
+            disabled={saving}
           />
         </View>
         <View className="min-w-36 flex-1">
@@ -122,6 +125,7 @@ export function WeeklyHoursCard({ hours, now, saving, onSave }: Props) {
             valueLabel={timeLabel(draft.closesMinute)}
             accessibilityLabel={`Usual closing time, ${timeLabel(draft.closesMinute)}`}
             onPress={() => void pickTime("closesMinute", null)}
+            disabled={saving}
           />
         </View>
       </View>

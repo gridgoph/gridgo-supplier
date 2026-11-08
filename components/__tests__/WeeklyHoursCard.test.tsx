@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 import { WeeklyHoursCard } from "@/components/hours/WeeklyHoursCard";
@@ -82,6 +83,55 @@ describe("WeeklyHoursCard", () => {
     await act(async () => fireEvent.press(screen.getByLabelText("Saturday, different hours")));
     await act(async () => fireEvent.press(screen.getByText("Save weekly hours")));
     expect(payload((onSave.mock.calls[0] as unknown as [WeekDraft])[0]).weekdayOverrides).toEqual([]);
+  });
+
+  it("locks every time field while a save is in flight, so a later edit cannot be lost", async () => {
+    let finish: (refusal: string | null) => void = () => undefined;
+    const onSave = jest.fn((_draft: WeekDraft) => new Promise<string | null>((resolve) => (finish = resolve)));
+    // The screen's store flips `saving` for the life of the request; this does the same.
+    function Harness() {
+      const [saving, setSaving] = useState(false);
+      return (
+        <WeeklyHoursCard
+          hours={hours()}
+          now={NOW}
+          saving={saving}
+          onSave={async (draft) => {
+            setSaving(true);
+            try {
+              return await onSave(draft);
+            } finally {
+              setSaving(false);
+            }
+          }}
+        />
+      );
+    }
+    (askPick as jest.Mock).mockResolvedValueOnce("900");
+    await render(<Harness />);
+    await act(async () => fireEvent.press(screen.getByLabelText("Saturday, different hours")));
+    await act(async () => fireEvent.press(screen.getByLabelText("Saturday closing time, 6:00 PM")));
+    await act(async () => fireEvent.press(screen.getByText("Save weekly hours")));
+    expect(screen.getByText("Saving…")).toBeTruthy();
+
+    for (const label of [
+      "Saturday opening time, 8:00 AM",
+      "Saturday closing time, 3:00 PM",
+      "Usual opening time, 8:00 AM",
+      "Usual closing time, 6:00 PM",
+    ]) {
+      const field = screen.getByLabelText(label);
+      expect(field.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
+      await act(async () => fireEvent.press(field));
+    }
+    expect(askPick).toHaveBeenCalledTimes(1);
+
+    await act(async () => finish(null));
+    await waitFor(() => expect(screen.getByText(/Weekly hours saved/)).toBeTruthy());
+    // Unlocked again once the answer is in.
+    expect(screen.getByLabelText("Usual opening time, 8:00 AM").props.accessibilityState).toEqual(
+      expect.objectContaining({ disabled: false }),
+    );
   });
 
   it("says a day's problem beside that day, before sending", async () => {
