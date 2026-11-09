@@ -26,6 +26,7 @@ import { useJobAction } from "@/hooks/useJobAction";
 import { useNow } from "@/hooks/useNow";
 import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
 import { useShopHours } from "@/store/shopHours";
+import { isShopStaff, useSession } from "@/store/session";
 
 /**
  * Accepting is a commitment, so it is never a row tap — but there is nothing
@@ -56,6 +57,8 @@ export default function AcceptJobScreen() {
   const clearDraft = useJobDrafts((s) => s.clearDraft);
   const shopHours = useShopHours((s) => s.hours);
   const loadShopHours = useShopHours((s) => s.load);
+  // Staff accept for the shop; its price, hours and record are the Owner's.
+  const staff = useSession((s) => isShopStaff(s.user));
   const [showErrors, setShowErrors] = useState(false);
   // Always starts unticked: a box ticked for the shop records nothing it did.
   const [instructionsRead, setInstructionsRead] = useState(false);
@@ -74,8 +77,8 @@ export default function AcceptJobScreen() {
   // A closure on the day the job is due is still worth saying: the shop is
   // about to commit to a date it has marked itself shut for.
   useEffect(() => {
-    void loadShopHours();
-  }, [loadShopHours]);
+    if (!staff) void loadShopHours();
+  }, [loadShopHours, staff]);
   const closure = readyAt && shopHours ? closureOnDay(shopHours.closures, manilaClock(readyAt).dayKey) : null;
   const priceMinor = job?.supplierPriceMinor ?? null;
   // GRIDGO refuses the acceptance until the shop ticks that it read the client's notes.
@@ -118,7 +121,11 @@ export default function AcceptJobScreen() {
       onRetry={() => void reload()}
       title="Accept this job"
       subject={job?.title}
-      lede="The client chose this from your board, at your price, and has already paid. Accepting confirms your shop can run it by the date below."
+      lede={
+        staff
+          ? "The client has paid. Accepting confirms the shop can run it by the date below."
+          : "The client chose this from your board, at your price, and has already paid. Accepting confirms your shop can run it by the date below."
+      }
       actionError={action.error}
       footer={
         <>
@@ -143,7 +150,9 @@ export default function AcceptJobScreen() {
             docket below still say both.
           */}
           <View className="gg-card py-1" testID="accept-commitment">
-            <SpecRow label="You earn" value={priceMinor != null ? api.formatPhp(priceMinor) : "—"} />
+            {staff ? null : (
+              <SpecRow label="You earn" value={priceMinor != null ? api.formatPhp(priceMinor) : "—"} />
+            )}
             <SpecRow label="Ready by" value={formatDeadlineFull(job.readyBy)} muted={!readyAt} />
           </View>
           {answerLine ? (
@@ -193,7 +202,7 @@ export default function AcceptJobScreen() {
                 </Text>
               ) : null}
               <View className="gap-1">
-                {canRequestChange(job) ? (
+                {canRequestChange(job) && !staff ? (
                   <Pressable
                     onPress={() => router.push({ pathname: "/job/[id]/change", params: { id: job.id } })}
                     accessibilityRole="link"
@@ -239,6 +248,8 @@ export default function AcceptJobScreen() {
             Stated, not asked for. The client already paid this, off this
             shop's own board, and a field here could only contradict it.
           */}
+          {staff ? null : (
+          <>
           <View className="gg-card gap-1">
             <Text className="text-overline text-text-muted">YOU ARE PAID</Text>
             <Text className="text-h1 text-text-primary">
@@ -277,6 +288,8 @@ export default function AcceptJobScreen() {
               <Text className="text-button text-brand">How late production is handled</Text>
             </Pressable>
           </View>
+          </>
+          )}
 
           {closure ? (
             <View className="rounded-field border border-warning bg-surface p-3">

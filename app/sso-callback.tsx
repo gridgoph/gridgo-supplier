@@ -2,7 +2,8 @@ import { router } from "expo-router";
 import { useEffect } from "react";
 
 import { SessionWait } from "@/components/SessionWait";
-import { useSession } from "@/store/session";
+import { isShopStaff, useSession } from "@/store/session";
+import { isJoiningTeam } from "@/store/teamJoin";
 
 /**
  * Native Google return. Stay here until GRIDGO has adopted the shop —
@@ -18,7 +19,20 @@ export default function SsoCallbackScreen() {
 
   useEffect(() => {
     if (user) {
-      router.replace("/(tabs)/home");
+      router.replace(isShopStaff(user) ? "/(tabs)/jobs" : "/(tabs)/home");
+      return;
+    }
+    if (identity.kind === "team_pending") {
+      router.replace("/team-waiting");
+      return;
+    }
+    // Joining a shop's team: claim next, whatever the login already was.
+    if (
+      isJoiningTeam() &&
+      (identity.kind === "unassigned" || identity.kind === "mismatch" || identity.kind === "error")
+    ) {
+      useSession.getState().clearSessionWait();
+      router.replace("/join-team");
       return;
     }
     if (identity.kind === "mismatch" || identity.kind === "error") {

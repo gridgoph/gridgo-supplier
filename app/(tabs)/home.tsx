@@ -67,6 +67,8 @@ export default function HomeScreen() {
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // People who joined the team and wait on the Owner's answer.
+  const [joining, setJoining] = useState<string[]>([]);
   const waitingOnOps = !isMatchable(user);
 
   /**
@@ -93,8 +95,17 @@ export default function HomeScreen() {
   }, []);
 
   const beginRead = useReadVersion();
+  const loadJoining = useCallback(async (current: () => boolean) => {
+    try {
+      const { members } = await api.getShopTeam();
+      if (current()) setJoining(members.filter((m) => m.status === "pending").map((m) => m.name));
+    } catch {
+      // A quiet extra: the Team screen still lists them.
+    }
+  }, []);
   const reload = useCallback(async () => {
     const current = beginRead();
+    void loadJoining(current);
     if (waitingOnOps) {
       await Promise.all([refresh(), loadBoardQuietly(current)]);
       return;
@@ -116,7 +127,7 @@ export default function HomeScreen() {
     } finally {
       if (current()) setLoading(false);
     }
-  }, [beginRead, loadBoardQuietly, refresh, refreshAlerts, waitingOnOps]);
+  }, [beginRead, loadBoardQuietly, loadJoining, refresh, refreshAlerts, waitingOnOps]);
 
   useLiveRefresh(["jobs", "orders", "payouts", "identity", "approvals", "catalog", "services", "availability"], reload);
   // The board strip's photo links expire in five minutes; a resume re-reads
@@ -223,6 +234,24 @@ export default function HomeScreen() {
           with one tap; it draws nothing once seen on this phone.
         */}
         <LegalNoticeCard className="mb-4" />
+
+        {joining.length ? (
+          <Pressable
+            onPress={() => router.push("/team")}
+            accessibilityRole="button"
+            accessibilityLabel={`${joinLine(joining)}. Open your team.`}
+            className="gg-card mb-4 flex-row items-center gap-3"
+            style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+          >
+            <View className="min-w-0 flex-1 gap-1">
+              <StatusChip tone="warning" icon="clock" label="Waiting" />
+              <Text className="text-body font-medium text-text-primary" numberOfLines={2}>
+                {joinLine(joining)}
+              </Text>
+            </View>
+            <ChevronRight size={20} color={colors.textMuted} aria-hidden />
+          </Pressable>
+        ) : null}
 
         {/*
           Shaped to the screen that replaces it — the figure, the card with its
@@ -576,4 +605,10 @@ function SampleStrip({ listings }: { listings: Listing[] }) {
       </Text>
     </Pressable>
   );
+}
+
+/** "Sam wants to join your team", or "Sam and 2 more want to join". */
+function joinLine(names: string[]): string {
+  if (names.length === 1) return `${names[0]} wants to join your team`;
+  return `${names[0]} and ${names.length - 1} more want to join your team`;
 }

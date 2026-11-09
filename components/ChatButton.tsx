@@ -3,12 +3,16 @@ import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 
 import { useThemeColors } from "@/hooks/useTheme";
+import { isShopStaff, useSession } from "@/store/session";
 import { useSupportChatStore } from "@/store/supportChat";
 
 export function ChatButton() {
   const colors = useThemeColors();
   const unread = useSupportChatStore((s) => s.unreadCount);
   const showBadge = unread > 0;
+  // Operations chat is the Owner's; GRIDGO refuses it to Staff.
+  const staff = useSession((s) => isShopStaff(s.user));
+  if (staff) return null;
 
   return (
     <Pressable

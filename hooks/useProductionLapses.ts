@@ -32,7 +32,7 @@ export async function loadProductionLapses(): Promise<LapsesRead> {
  * deduction both arrive as order invalidations. A failed read keeps the last
  * answer rather than blanking it.
  */
-export function useProductionLapses(): {
+export function useProductionLapses(enabled = true): {
   read: LapsesRead | null;
   lapses: ProductionLapse[] | null;
   reload: () => Promise<void>;
@@ -41,11 +41,13 @@ export function useProductionLapses(): {
   const beginRead = useReadVersion();
 
   const reload = useCallback(async () => {
+    // The shop's record is the Owner's; GRIDGO refuses it to Staff.
+    if (!enabled) return;
     const current = beginRead();
     const next = await loadProductionLapses();
     if (!current()) return;
     setRead((previous) => (next.status === "failed" && previous?.status === "loaded" ? previous : next));
-  }, [beginRead]);
+  }, [beginRead, enabled]);
 
   useLiveRefresh(["orders", "jobs", "payouts"], reload);
   useFocusEffect(

@@ -4,6 +4,7 @@ import { Stack } from "expo-router";
 import { radius } from "@/constants/theme";
 import { nestedStackScreenOptions } from "@/lib/navigationOptions";
 import { useThemeName } from "@/hooks/useTheme";
+import { isShopOwner, useSession } from "@/store/session";
 
 /**
  * The job workspace and the flow screens it opens.
@@ -21,17 +22,24 @@ import { useThemeName } from "@/hooks/useTheme";
 export default function JobLayout() {
   const scheme = useThemeName();
   const { top } = useSafeAreaInsets();
+  const owner = useSession((s) => isShopOwner(s.user));
 
   return (
     <Stack screenOptions={nestedStackScreenOptions(scheme, top)}>
       <Stack.Screen name="index" options={{ title: "Job" }} />
       <Stack.Screen name="accept" options={{ title: "Accept job" }} />
       <Stack.Screen name="decline" options={{ title: "Decline job" }} />
-      <Stack.Screen name="cancel" options={{ title: "Cancel job" }} />
-      <Stack.Screen name="reschedule" options={{ title: "New deadline" }} />
-      <Stack.Screen name="change" options={{ title: "Request a change" }} />
-      <Stack.Screen name="colour" options={{ title: "Colour correction" }} />
-      <Stack.Screen name="fulfilment" options={{ title: "Proof of fulfilment" }} />
+      {/*
+        Cancelling, renegotiating and the payout evidence are the Owner's:
+        GRIDGO refuses them to Staff, so the screens are not mounted for them.
+      */}
+      <Stack.Protected guard={owner}>
+        <Stack.Screen name="cancel" options={{ title: "Cancel job" }} />
+        <Stack.Screen name="reschedule" options={{ title: "New deadline" }} />
+        <Stack.Screen name="change" options={{ title: "Request a change" }} />
+        <Stack.Screen name="colour" options={{ title: "Colour correction" }} />
+        <Stack.Screen name="fulfilment" options={{ title: "Proof of fulfilment" }} />
+      </Stack.Protected>
       <Stack.Screen name="progress-photo" options={{ title: "Production photo" }} />
       <Stack.Screen name="finished" options={{ title: "Finished products" }} />
       <Stack.Screen

@@ -20,7 +20,8 @@ type Props = {
   /** Where the finished photos stand with GRIDGO, on the newer handover. */
   stage?: FinishedStage | null;
   /** Opens a problem report on this job: the way out of a claim only Operations can clear. */
-  onMessageOperations: () => void;
+  /** Absent for Staff: Operations chat is the Owner's. */
+  onMessageOperations?: () => void;
 };
 
 /**
@@ -249,12 +250,13 @@ function BlockerRow({
 }: {
   item: Requirement;
   colors: Colors;
-  onMessageOperations: () => void;
+  /** Absent for Staff: Operations chat is the Owner's. */
+  onMessageOperations?: () => void;
 }) {
   const operations = item.kind === "claim" || item.kind === "other";
   return (
     <Row state={operations ? "blocked" : "needed"} title={requirementTitle(item.kind)} detail={item.message} colors={colors}>
-      {operations ? (
+      {operations && onMessageOperations ? (
         <View className="pt-2">
           <SecondaryButton label="Message Operations" onPress={onMessageOperations} />
         </View>

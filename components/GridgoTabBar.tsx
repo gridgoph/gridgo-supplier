@@ -174,7 +174,12 @@ export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
         className="w-full flex-row items-end"
         style={{ paddingLeft: insets.left, paddingRight: insets.right }}
       >
-        {state.routes.map((route, index) => {
+        {/*
+          Drawn in the bar's own order, not the navigator's: Staff tabs are
+          declared first so the Owner's can sit behind a guard, and an Owner
+          must still read Home, Jobs, Schedule, Catalogues, Account.
+        */}
+        {orderedRoutes(state.routes).map(({ route, index }) => {
           const tab = TABS.find((entry) => entry.name === route.name);
           if (!tab) return null;
 
@@ -216,6 +221,17 @@ export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
       </View>
     </View>
   );
+}
+
+/** The navigator's routes in `TABS` order, each with its index in the navigator. */
+export function orderedRoutes<R extends { name: string }>(routes: readonly R[]): { route: R; index: number }[] {
+  const rank = (name: string) => {
+    const at = TABS.findIndex((tab) => tab.name === name);
+    return at === -1 ? TABS.length : at;
+  };
+  return routes
+    .map((route, index) => ({ route, index }))
+    .sort((a, b) => rank(a.route.name) - rank(b.route.name));
 }
 
 type TabItemProps = {

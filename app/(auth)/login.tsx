@@ -42,6 +42,7 @@ import { appleSignInOutcome, isAppleCancel, type AppleFlowResult } from "@/lib/a
 import { completeGoogleSso } from "@/lib/googleSso";
 import { SESSION_ENDED_MESSAGE, useSession } from "@/store/session";
 import { useSignInNotice } from "@/store/signInNotice";
+import { isJoiningTeam } from "@/store/teamJoin";
 
 type HealthState = "checking" | "reachable" | "unreachable";
 
@@ -116,6 +117,14 @@ export default function LoginScreen() {
     if (next.kind === "apply") {
       prepareApplyDraft(clerkUser?.primaryEmailAddress?.emailAddress);
     }
+    if (next.kind === "join" || next.kind === "team_removed") {
+      useSession.getState().clearSessionWait();
+    }
+    if (next.kind === "join") {
+      // Back to the join screen that sent the person here, not a second copy.
+      router.dismissTo("/join-team");
+      return;
+    }
     router.replace(hrefAfterClerkAuth(next));
   }
 
@@ -145,7 +154,8 @@ export default function LoginScreen() {
           // Clerk still wants a code — only a shop may be mailed one.
         }
       }
-      if (door === "wrong_app") {
+      // Someone joining a shop's team may sign in with a client or rider login.
+      if (door === "wrong_app" && !isJoiningTeam()) {
         await refuseNonSupplier();
         return "blocked";
       }

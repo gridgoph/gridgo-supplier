@@ -1,12 +1,14 @@
 import type { User } from "@/lib/api";
 import type { LegalGateStatus } from "@/lib/legal";
-import { isSignedIn, signedOutWithNotice, type IdentityState } from "@/store/session";
+import { isShopStaff, isSignedIn, signedOutWithNotice, type IdentityState } from "@/store/session";
 
 export type LaunchHref =
   | "/access"
   | "/(auth)/welcome"
   | "/(auth)/login"
   | "/legal/review"
+  | "/team-waiting"
+  | "/(tabs)/jobs"
   | "/(tabs)/home";
 
 /**
@@ -30,10 +32,12 @@ export function launchHref(
   legal: LegalGateStatus = "clear",
 ): LaunchHref {
   if (identity.kind === "mismatch" || identity.kind === "error") return "/access";
+  if (identity.kind === "team_pending") return "/team-waiting";
   if (signedOutWithNotice(identity)) return "/(auth)/login";
   if (!isSignedIn(user)) return "/(auth)/welcome";
   if (legal === "blocked") return "/legal/review";
-  return "/(tabs)/home";
+  // Staff work orders; Home is the Owner's money and board.
+  return isShopStaff(user) ? "/(tabs)/jobs" : "/(tabs)/home";
 }
 
 /**
@@ -47,7 +51,7 @@ export function launchHref(
  */
 export function authDoorOpen(identity: IdentityState, user: User | null): boolean {
   if (isSignedIn(user)) return false;
-  return identity.kind !== "mismatch" && identity.kind !== "error";
+  return identity.kind !== "mismatch" && identity.kind !== "error" && identity.kind !== "team_pending";
 }
 
 /**

@@ -2,7 +2,7 @@ import { useAuth, useClerk, useUser } from "@clerk/expo";
 import { useEffect, useRef, type ReactNode } from "react";
 
 import * as api from "@/lib/api";
-import { isUnmappedIdentity, supplierProjectionErrorMessage } from "@/lib/apiErrors";
+import { apiErrorCode, isUnmappedIdentity, supplierProjectionErrorMessage } from "@/lib/apiErrors";
 import { awaitClerkSessionToken, clerkAccessFor, clerkSessionToken } from "@/lib/clerk";
 import {
   ACCESS_WITHDRAWN_MESSAGE,
@@ -120,6 +120,10 @@ export function ClerkSessionBridge({ children }: Props) {
         }
         if (error instanceof api.ApiError && error.status === 401) {
           current.endClerkSession();
+          return;
+        }
+        if (apiErrorCode(error) === "shop_access_removed") {
+          current.teamAccessRemoved();
           return;
         }
         if (error instanceof api.ApiError && error.status === 403) {

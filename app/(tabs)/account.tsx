@@ -12,13 +12,14 @@ import { ShopPortrait } from "@/components/ShopPortrait";
 import { StatusChip } from "@/components/StatusChip";
 import * as api from "@/lib/api";
 import { clerkDisplayName } from "@/lib/clerk";
+import { pendingCount } from "@/lib/shopTeam";
 import { performanceHref } from "@/lib/performance";
 import { standingLine } from "@/lib/reviews";
 import { shopHoursSummary } from "@/lib/shopHours";
 import { WHATS_NEW_HISTORY_COPY } from "@/lib/whatsNewHistory";
 import { useThemeColors } from "@/hooks/useTheme";
 import { askConfirm } from "@/store/sheets";
-import { isMatchable, useSession } from "@/store/session";
+import { isMatchable, isShopStaff, useSession } from "@/store/session";
 import { useShopContact } from "@/store/shopContact";
 import { useShopHours } from "@/store/shopHours";
 import { useTour } from "@/store/tour";
@@ -39,6 +40,77 @@ import { useTour } from "@/store/tour";
  * means finding a password on a Saturday.
  */
 export default function AccountScreen() {
+  const staff = useSession((s) => isShopStaff(s.user));
+  return staff ? <StaffAccount /> : <OwnerAccount />;
+}
+
+/**
+ * A Staff member's account: who they are, whose shop, and the way out.
+ * Everything else on the Owner's account is the Owner's to change.
+ */
+function StaffAccount() {
+  const user = useSession((s) => s.user);
+  const logout = useSession((s) => s.logout);
+  const { user: clerkUser } = useUser();
+  const personName = clerkDisplayName(clerkUser) || user?.name || "—";
+
+  async function signOut() {
+    const confirmed = await askConfirm({
+      question: "Sign out of GRIDGO on this phone?",
+      consequence: "New order alerts stop reaching this phone until you sign in again.",
+      confirmLabel: "Sign out",
+      cancelLabel: "Stay signed in",
+      destructive: true,
+    });
+    if (confirmed) void logout();
+  }
+
+  return (
+    <View className="gg-screen">
+      <ScrollView className="flex-1" contentContainerClassName="gg-page pb-10" showsVerticalScrollIndicator={false}>
+        <ScreenHeader title="Account" right={<AlertsBell />} />
+        <View className="gg-card gap-3">
+          <View className="flex-row items-center gap-3">
+            <ShopPortrait imageUrl={clerkUser?.imageUrl} shopName={personName} size={56} />
+            <View className="min-w-0 flex-1 gap-0.5">
+              <Text className="text-h3 text-text-primary" numberOfLines={2}>
+                {personName}
+              </Text>
+              <Text className="text-body text-text-secondary" numberOfLines={1}>
+                {user?.supplierName || "Your shop"}
+              </Text>
+              <Text className="text-caption text-text-muted" numberOfLines={1}>
+                {clerkUser?.primaryEmailAddress?.emailAddress || user?.email || ""}
+              </Text>
+            </View>
+          </View>
+          <View className="flex-row">
+            <StatusChip tone="neutral" icon="wrench" label="Staff" />
+          </View>
+        </View>
+
+        <View className="mt-6 gap-2">
+          <DestinationRow
+            title={WHATS_NEW_HISTORY_COPY.accountRow}
+            detail={WHATS_NEW_HISTORY_COPY.accountCaption}
+            onPress={() => router.push("/whats-new" as Href)}
+          />
+          <DestinationRow
+            title="Settings"
+            detail="Theme and the connection this app is using"
+            onPress={() => router.push("/settings" as Href)}
+          />
+        </View>
+
+        <View className="mt-8">
+          <SecondaryButton label="Sign out" onPress={() => void signOut()} />
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function OwnerAccount() {
   const user = useSession((s) => s.user);
   const logout = useSession((s) => s.logout);
   const refresh = useSession((s) => s.refresh);
@@ -91,6 +163,27 @@ export default function AccountScreen() {
         cancelled = true;
       };
     }, [approved]),
+  );
+
+  // Who is on the team, and whether anyone waits on the Owner's answer.
+  const [team, setTeam] = useState<{ size: number; waiting: number } | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      api
+        .getShopTeam()
+        .then(({ members }) => {
+          if (cancelled) return;
+          setTeam({
+            size: members.filter((m) => m.status === "active").length,
+            waiting: pendingCount(members),
+          });
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }, []),
   );
 
   // Open now or not, on the row that changes it. A failed read keeps the plain description.
@@ -200,6 +293,18 @@ export default function AccountScreen() {
             — sits under it, because those are two different questions and a
             shop that confuses them prices the wrong thing.
           */}
+          <DestinationRow
+            title="Team"
+            detail={
+              team?.waiting
+                ? `${team.waiting} waiting for you`
+                : team && team.size > 1
+                  ? `${team.size} people`
+                  : "Add staff to take orders with you"
+            }
+            badge={team?.waiting ? team.waiting : undefined}
+            onPress={() => router.push("/team" as Href)}
+          />
           <DestinationRow
             title="Your board"
             detail="What clients see: listings, prices, samples"
@@ -342,10 +447,13 @@ export default function AccountScreen() {
 function DestinationRow({
   title,
   detail,
+  badge,
   onPress,
 }: {
   title: string;
   detail: string;
+  /** A count that waits on the shop, drawn beside the chevron. */
+  badge?: number;
   onPress: () => void;
 }) {
   const colors = useThemeColors();
@@ -364,6 +472,11 @@ function DestinationRow({
           {detail}
         </Text>
       </View>
+      {badge ? (
+        <View className="min-h-6 min-w-6 items-center justify-center rounded-pill bg-accent px-1.5">
+          <Text className="text-caption font-medium text-accent-on">{badge}</Text>
+        </View>
+      ) : null}
       <ChevronRight size={20} color={colors.textMuted} aria-hidden />
     </Pressable>
   );

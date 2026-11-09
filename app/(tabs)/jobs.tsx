@@ -29,6 +29,7 @@ import {
 import { needsSupplierAction } from "@/lib/jobState";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
+import { isShopStaff, useSession } from "@/store/session";
 
 /**
  * Every job GRIDGO has matched to this shop.
@@ -38,6 +39,7 @@ import { useThemeColors } from "@/hooks/useTheme";
  */
 export default function JobsScreen() {
   const colors = useThemeColors();
+  const staff = useSession((s) => isShopStaff(s.user));
   const [jobs, setJobs] = useState<api.Order[]>([]);
   const [query, setQuery] = useState<JobBoardQuery>(DEFAULT_JOB_BOARD_QUERY);
   const [loaded, setLoaded] = useState(false);
@@ -140,7 +142,11 @@ export default function JobsScreen() {
             </View>
           ) : null}
 
-          {loaded && !error && !jobs.length ? (
+          {loaded && !error && !jobs.length && staff ? (
+            <EmptyState title="No orders yet" body="New orders land here. Your phone alerts you." />
+          ) : null}
+
+          {loaded && !error && !jobs.length && !staff ? (
             <EmptyState
               title="No assignments yet"
               body="When GRIDGO matches a job to your shop, it lands here for accept or decline. Make sure the services you offer are up to date so the right work reaches you."
