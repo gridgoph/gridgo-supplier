@@ -31,6 +31,7 @@ import { ClerkSessionBridge } from "@/components/ClerkSessionBridge";
 import { colors, type ThemeName } from "@/constants/theme";
 import { useAlertStream } from "@/hooks/useAlertStream";
 import { useAppUpdateCheck } from "@/hooks/useAppUpdateCheck";
+import { usePlayUpdateCheck } from "@/hooks/usePlayUpdateCheck";
 import { useSupportChatUnread } from "@/hooks/useSupportChatUnread";
 import { useAppFonts } from "@/hooks/useAppFonts";
 import { useIncomingCallScreen } from "@/hooks/useIncomingCallScreen";
@@ -97,6 +98,7 @@ export default function RootLayout() {
   // once, so the flag is the whole gate — no route, no back-stack entry, and
   // nothing about where the launch lands is decided here.
   const [introPlaying, setIntroPlaying] = useState(true);
+  usePlayUpdateCheck(!introPlaying && fontsReady);
 
   if (bounceToIsolatedDevWebHost(GRIDGO_DEV_WEB_HOST)) {
     return null;
