@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn() },
@@ -44,11 +44,13 @@ jest.mock("@/hooks/useBoard", () => ({
 
 import HomeScreen from "@/app/(tabs)/home";
 import { router } from "expo-router";
-import { listJobs, type Order, type User } from "@/lib/api";
+import { listJobs, listNotifications, getSupplierReadiness, type Order, type User } from "@/lib/api";
 import type { Listing } from "@/lib/listings";
 import { loadBoard } from "@/lib/listingsApi";
 import { TIGHT_DEADLINE_LABEL } from "@/lib/scheduling";
 import { useSession } from "@/store/session";
+import { loadServiceLines } from "@/hooks/useBoard";
+import { useAlertsStore } from "@/store/alerts";
 import { usePush } from "@/store/push";
 
 const pendingShop: User = {
@@ -329,6 +331,113 @@ describe("a Tight offer on Home", () => {
     expect(screen.getByText("Accept job")).toBeTruthy();
     expect(screen.queryByText(TIGHT_DEADLINE_LABEL)).toBeNull();
     expect(screen.queryByTestId("scheduling-notice")).toBeNull();
+    await view.unmount();
+  });
+});
+
+
+describe("Home renders the floor independently of optional reads", () => {
+  const offer = {
+    id: "fast-job", title: "Fast job", state: "supplier_assigned", timeline: [],
+    clientId: "client_1", supplierId: "shop", riderId: null, productId: "product_1",
+    quantity: 1, size: "3x5", material: "Vinyl", deadline: null,
+    address: "Davao City", zone: "Davao", totalMinor: 100000, deliveryFeeMinor: 0,
+    paymentMethod: null, paymentStatus: "paid", promisedDate: null, artworkName: null,
+    createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-01T00:00:00Z",
+    payoutMilestones: [], supplierPriceMinor: 100000,
+  } satisfies Order;
+  const optionalReads = [
+    ["board", loadBoard],
+    ["service lines", loadServiceLines],
+    ["readiness", getSupplierReadiness],
+    ["alerts", listNotifications],
+  ] as const;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.clearAllMocks();
+    signIn(approvedShop);
+    (listJobs as jest.Mock).mockImplementation(() => new Promise((resolve) => {
+      setTimeout(() => resolve([offer]), 20);
+    }));
+    (loadBoard as jest.Mock).mockResolvedValue({ status: "ok", value: { listings: [], total: 0, nextCursor: null } });
+    (loadServiceLines as jest.Mock).mockResolvedValue([]);
+    (getSupplierReadiness as jest.Mock).mockResolvedValue({ operational: { ready: true, missing: [], listings: [] } });
+    (listNotifications as jest.Mock).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    useSession.setState({ user: null, identity: { kind: "signed_out" }, authSource: "none" });
+    useAlertsStore.setState({ unreadCount: 0, inbox: [] });
+  });
+
+  async function jobsArrive() {
+    await act(async () => { await jest.advanceTimersByTimeAsync(20); });
+    expect(screen.queryByLabelText("Loading your floor")).toBeNull();
+    expect(screen.getByText("Fast job")).toBeTruthy();
+    expect(screen.getByText("Accept job")).toBeTruthy();
+    expect(screen.getByText("Earned so far")).toBeTruthy();
+    expect(screen.queryByText("Your floor is not reachable")).toBeNull();
+  }
+
+  it("keeps the all-fast result", async () => {
+    const view = await render(<HomeScreen />);
+    await jobsArrive();
+    expect(screen.getByText("Put something on the board")).toBeTruthy();
+    await view.unmount();
+  });
+
+  it.each(optionalReads)("shows jobs at 20 ms while %s takes 800 ms", async (_name, read) => {
+    const result = await (read as jest.Mock)();
+    (read as jest.Mock).mockImplementation(() => new Promise((resolve) => {
+      setTimeout(() => resolve(result), 800);
+    }));
+    const view = await render(<HomeScreen />);
+    await jobsArrive();
+    await act(async () => { await jest.advanceTimersByTimeAsync(780); });
+    expect(screen.getByText("Fast job")).toBeTruthy();
+    expect(screen.getByText("Put something on the board")).toBeTruthy();
+    await view.unmount();
+  });
+
+  it("ignores an older optional result after a newer retry", async () => {
+    (listJobs as jest.Mock).mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      setTimeout(() => reject(new Error("Jobs unavailable")), 20);
+    }));
+    (loadBoard as jest.Mock).mockImplementationOnce(() => new Promise((resolve) => {
+      setTimeout(() => resolve({ status: "ok", value: { listings: [], total: 0, nextCursor: null } }), 800);
+    })).mockResolvedValue({ status: "not_open_yet" });
+    const view = await render(<HomeScreen />);
+    await act(async () => { await jest.advanceTimersByTimeAsync(20); });
+    await fireEvent.press(screen.getByText("Try again"));
+    await jobsArrive();
+    await act(async () => { await jest.advanceTimersByTimeAsync(780); });
+    expect(screen.getByText("Fast job")).toBeTruthy();
+    expect(screen.queryByText("Put something on the board")).toBeNull();
+    await view.unmount();
+  });
+
+  it("still shows a primary jobs failure without waiting for diagnostics", async () => {
+    (listJobs as jest.Mock).mockImplementation(() => new Promise((_resolve, reject) => {
+      setTimeout(() => reject(new Error("Jobs unavailable")), 20);
+    }));
+    (loadBoard as jest.Mock).mockImplementation(() => new Promise((resolve) => {
+      setTimeout(() => resolve({ status: "not_open_yet" }), 800);
+    }));
+    const view = await render(<HomeScreen />);
+    await act(async () => { await jest.advanceTimersByTimeAsync(20); });
+    expect(screen.getByText("Your floor is not reachable")).toBeTruthy();
+    expect(screen.queryByLabelText("Loading your floor")).toBeNull();
+    await act(async () => { await jest.advanceTimersByTimeAsync(780); });
+    await view.unmount();
+  });
+
+  it.each(optionalReads)("keeps successful jobs when %s fails", async (_name, read) => {
+    (read as jest.Mock).mockRejectedValue(new Error("Optional read unavailable"));
+    const view = await render(<HomeScreen />);
+    await jobsArrive();
+    expect(screen.queryByText(/Last refresh did not reach GRIDGO/)).toBeNull();
     await view.unmount();
   });
 });
