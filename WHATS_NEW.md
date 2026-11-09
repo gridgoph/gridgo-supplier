@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.393 (Improvement)
+
+- Google Play installs can now offer an update in the app, with a restart when you are ready.
+
 ## 1.0.388 (New feature)
 
 - Google Play testers see a daily check-in on Home, with a 7 PM reminder.
