@@ -46,7 +46,7 @@ import { bounceToIsolatedDevWebHost, GRIDGO_DEV_WEB_HOST } from "@/lib/devWebHos
 import { useAppUpdate } from "@/store/appUpdate";
 import { legalGateFor, useLegalConsent } from "@/store/legalConsent";
 import { usePushPrompt } from "@/store/pushPrompt";
-import { isMatchable, isSignedIn, useSession } from "@/store/session";
+import { isMatchable, isShopOwner, isSignedIn, useSession } from "@/store/session";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -194,17 +194,24 @@ function RootStack({ introDone }: { introDone: boolean }) {
   const legalBlocked = signedIn && legal === "blocked";
   // The ordinary signed-in app: open unless terms are waiting.
   const floorOpen = signedIn && !legalBlocked;
+  // A shop's Staff member works orders and nothing else (gridgo-api
+  // docs/SHOP_TEAM_API.md). Every Owner-only screen sits behind `owner`, so a
+  // typed address reaches nothing GRIDGO would refuse them anyway.
+  const owner = signedIn && isShopOwner(user);
+  // Joined a team; the Owner has not answered yet.
+  const teamPending = identity.kind === "team_pending";
 
   // Live alerts for as long as there is a session to receive them.
   useAlertStream(signedIn);
-  useSupportChatUnread(signedIn);
+  // Operations chat is the Owner's; GRIDGO refuses it to Staff.
+  useSupportChatUnread(owner);
   // The third delivery leg: the same alerts, on the phone, with GRIDGO closed.
   // Mounted here so registration, token rotation and a tapped alert are wired
   // once. It never raises the permission dialog — only a tap on
   // `PushEnableCard` or on the explainer below does that.
   usePushNotifications();
   // A rider's call opens the call screen over whatever is on screen.
-  useIncomingCallScreen(matchable && !legalBlocked);
+  useIncomingCallScreen(matchable && !legalBlocked && owner);
   // Both sheets wait for the opening and for the session to settle, because
   // the stack below is re-keyed when a restored session arrives and would take
   // a sheet pushed earlier with it. And one sheet at a time: the notifications
@@ -245,12 +252,31 @@ function RootStack({ introDone }: { introDone: boolean }) {
         options={{ title: "Legal", headerBackButtonDisplayMode: "minimal" }}
       />
 
+      {/*
+        Joining a shop's team. Public, because the person joining may have no
+        GRIDGO account yet, a different app's account, or have just been
+        removed from another shop — the screen reads which and says so.
+      */}
+      <Stack.Screen
+        name="join-team"
+        options={{ title: "Join a team", headerBackButtonDisplayMode: "minimal" }}
+      />
+      <Stack.Screen
+        name="scan-team"
+        options={{ title: "Scan", headerShown: false, presentation: "fullScreenModal" }}
+      />
+
+      <Stack.Protected guard={teamPending}>
+        <Stack.Screen name="team-waiting" options={{ headerShown: false, title: "Waiting" }} />
+      </Stack.Protected>
+
       <Stack.Protected guard={signedOut}>
         <Stack.Screen name="(auth)/welcome" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)/login" options={{ title: "Sign in" }} />
         <Stack.Screen name="(auth)/accept-invitation" options={{ title: "Invitation" }} />
         <Stack.Screen name="(auth)/recover-password" options={{ title: "Recover password" }} />
         <Stack.Screen name="(auth)/signup" options={{ headerShown: false, title: "Sign up" }} />
+        <Stack.Screen name="(auth)/join-account" options={{ title: "Your login" }} />
       </Stack.Protected>
 
       <Stack.Protected guard={accessBlocked}>
@@ -274,7 +300,7 @@ function RootStack({ introDone }: { introDone: boolean }) {
         to: reading the documents, asking about its own data and deleting the
         account must never wait behind a checkbox.
       */}
-      <Stack.Protected guard={signedIn}>
+      <Stack.Protected guard={owner}>
         <Stack.Screen
           name="legal/index"
           options={{ title: "Legal & Privacy", headerBackButtonDisplayMode: "minimal" }}
@@ -347,6 +373,50 @@ function RootStack({ introDone }: { introDone: boolean }) {
             title: "What's new",
             headerBackButtonDisplayMode: "minimal",
           }}
+        />
+        {/*
+          Sheets the app asks for and waits on. Both are routes so the platform
+          owns the presentation — see `sheetScreenOptions`. They sit with the
+          signed-in guard rather than the matchable one because a waiting shop
+          confirms moving its pin the same way an accredited one does.
+        */}
+        <Stack.Screen name="confirm" options={sheetScreenOptions(scheme)} />
+        <Stack.Screen name="pick-date" options={sheetScreenOptions(scheme)} />
+        <Stack.Screen name="pick" options={sheetScreenOptions(scheme)} />
+        {/*
+          The notifications explainer opens by itself over Home — see
+          `hooks/usePushPromptCheck`. Signed-in, because what it promises is a
+          shop's own jobs.
+        */}
+        <Stack.Screen name="push-prompt" options={sheetScreenOptions(scheme)} />
+      </Stack.Protected>
+
+      <Stack.Protected guard={matchable && !legalBlocked}>
+        {/*
+          Pushed screens sit above the tab shell and must share the same guard —
+          a tabs-only guard would leave job/payout/design-system reachable after
+          sign-out. On iOS the native stack labels the back control with the
+          previous screen's title; with no title the route group falls through
+          as "(tabs)". These screens are reachable from more than one tab, so no
+          single origin label is honest — use a bare chevron. The native back
+          control keeps its accessible name for VoiceOver.
+        */}
+        {/* The job stack draws its own headers for the workspace and its flows. */}
+        <Stack.Screen name="job/[id]" options={{ headerShown: false }} />
+      </Stack.Protected>
+
+      {/*
+        The Owner's floor: the shop's money, prices, hours, profile, support
+        chat and team. Staff never reach these, by tap or by address.
+      */}
+      <Stack.Protected guard={floorOpen && owner}>
+        <Stack.Screen
+          name="team"
+          options={{ title: "Team", headerBackButtonDisplayMode: "minimal" }}
+        />
+        <Stack.Screen
+          name="team-invite"
+          options={{ title: "Add staff", headerBackButtonDisplayMode: "minimal" }}
         />
         <Stack.Screen
           name="chat/index"
@@ -473,35 +543,9 @@ function RootStack({ introDone }: { introDone: boolean }) {
           is waiting for. The stack draws its own headers.
         */}
         <Stack.Screen name="shop" options={{ headerShown: false, title: "Listings" }} />
-        {/*
-          Sheets the app asks for and waits on. Both are routes so the platform
-          owns the presentation — see `sheetScreenOptions`. They sit with the
-          signed-in guard rather than the matchable one because a waiting shop
-          confirms moving its pin the same way an accredited one does.
-        */}
-        <Stack.Screen name="confirm" options={sheetScreenOptions(scheme)} />
-        <Stack.Screen name="pick-date" options={sheetScreenOptions(scheme)} />
-        <Stack.Screen name="pick" options={sheetScreenOptions(scheme)} />
-        {/*
-          The notifications explainer opens by itself over Home — see
-          `hooks/usePushPromptCheck`. Signed-in, because what it promises is a
-          shop's own jobs.
-        */}
-        <Stack.Screen name="push-prompt" options={sheetScreenOptions(scheme)} />
       </Stack.Protected>
 
-      <Stack.Protected guard={matchable && !legalBlocked}>
-        {/*
-          Pushed screens sit above the tab shell and must share the same guard —
-          a tabs-only guard would leave job/payout/design-system reachable after
-          sign-out. On iOS the native stack labels the back control with the
-          previous screen's title; with no title the route group falls through
-          as "(tabs)". These screens are reachable from more than one tab, so no
-          single origin label is honest — use a bare chevron. The native back
-          control keeps its accessible name for VoiceOver.
-        */}
-        {/* The job stack draws its own headers for the workspace and its flows. */}
-        <Stack.Screen name="job/[id]" options={{ headerShown: false }} />
+      <Stack.Protected guard={matchable && !legalBlocked && owner}>
         {/*
           A call with the rider takes the whole screen, over whatever was open,
           and owns its way out: the red button. Swiping it away would leave a

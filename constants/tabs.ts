@@ -22,3 +22,10 @@ export const TABS: readonly TabDefinition[] = [
   { name: "catalogues", label: "Catalogues" },
   { name: "account", label: "Account" },
 ];
+
+/**
+ * The tabs a shop's Staff member sees: the work and their own account.
+ * Home (the shop's money), Schedule (the shop's hours) and Catalogues (prices
+ * and products) are the Owner's — GRIDGO refuses their routes to Staff.
+ */
+export const STAFF_TABS: readonly TabName[] = ["jobs", "account"];

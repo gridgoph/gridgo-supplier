@@ -72,6 +72,8 @@ export function useAlertStream(enabled = true): void {
           if (connected) invalidate("*");
         },
         onResumeUnavailable: () => { if (current()) invalidate("*"); },
+        // Removed from the shop's team: drop the shop now, not on the next tap.
+        onAccessRevoked: () => { if (current()) useSession.getState().teamAccessRemoved(); },
         onInvalidate: (event) => {
           if (!current()) return;
           if (event.resource === "calls" && event.id) useCall.getState().callsChanged(event.id);

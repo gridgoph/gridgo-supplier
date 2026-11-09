@@ -369,6 +369,6 @@ function SectionBody({
       );
     }
     case "history":
-      return <JobTimeline timeline={order.timeline} flow={handoverFlowOf(order)} />;
+      return <JobTimeline timeline={order.timeline} actions={order.actions} flow={handoverFlowOf(order)} />;
   }
 }

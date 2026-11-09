@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import type { Order } from "@/lib/api";
 import type { HandoverFlow } from "@/lib/shopHandover";
 import { formatTimelineAt } from "@/lib/dates";
+import { actorForEntry, actorLabel, readOrderActions, type OrderAction } from "@/lib/shopTeam";
 import {
   presentTimelineActor,
   presentTimelineNote,
@@ -11,6 +12,8 @@ import {
 
 type Props = {
   timeline: Order["timeline"];
+  /** The order's action history, which names the person behind older entries. */
+  actions?: Order["actions"];
   /** The job's handover, which renames the states packing moved out of. */
   flow?: HandoverFlow;
 };
@@ -20,7 +23,8 @@ type Props = {
  * Ordering carries real meaning — newest last so the current state sits at
  * the bottom where the eye rests after reading the story.
  */
-export function JobTimeline({ timeline, flow = "legacy" }: Props) {
+export function JobTimeline({ timeline, actions, flow = "legacy" }: Props) {
+  const history = readOrderActions(actions);
   if (!timeline.length) {
     return (
       <Text className="text-body text-text-muted">No timeline events yet for this job.</Text>
@@ -48,8 +52,7 @@ export function JobTimeline({ timeline, flow = "legacy" }: Props) {
                 {presentTimelineState(entry.state, flow)}
               </Text>
               <Text className="mt-0.5 text-caption text-text-muted">
-                {/* GRIDGO no longer says who moved a shop's job; an unnamed row is not GRIDGO's. */}
-                {entry.by ? `${formatTimelineAt(entry.at)} · ${presentTimelineActor(entry.by)}` : formatTimelineAt(entry.at)}
+                {timelineByline(entry, history)}
               </Text>
               {entry.note ? (
                 <Text className="mt-1 text-body text-text-secondary">
@@ -62,4 +65,14 @@ export function JobTimeline({ timeline, flow = "legacy" }: Props) {
       })}
     </View>
   );
+}
+
+/**
+ * When, and who: the person GRIDGO recorded (with their role on the shop's
+ * team), else the older platform tag. An unnamed row says only the time.
+ */
+export function timelineByline(entry: Order["timeline"][number], history: OrderAction[]): string {
+  const at = formatTimelineAt(entry.at);
+  const who = actorLabel(actorForEntry(entry, history)) ?? (entry.by ? presentTimelineActor(entry.by) : null);
+  return who ? `${at} · ${who}` : at;
 }

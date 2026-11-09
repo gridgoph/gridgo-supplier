@@ -11,7 +11,7 @@ import { create } from "zustand";
 
 import type { User } from "@/lib/api";
 import * as api from "@/lib/api";
-import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import { apiErrorCode, humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { APPLY_CONSENT_REFUSED, isLegalRefusal } from "@/lib/legal";
 import { sessionWaitHold } from "@/lib/sessionWait";
 import { releaseClerkSession } from "@/lib/clerkSignIn";
@@ -25,14 +25,22 @@ export type AuthSource = "none" | "legacy" | "clerk";
 
 export const SESSION_ENDED_MESSAGE = "Your session ended. Sign in again to keep working.";
 export const ACCESS_WITHDRAWN_MESSAGE = "Supplier access was withdrawn from this account. Contact Operations for help.";
+export const TEAM_REMOVED_MESSAGE = "The owner removed you from the shop's team.";
 
 export type IdentityState =
   | { kind: "loading" }
   | { kind: "signed_out"; reason?: "session_ended" | "refused" }
   | { kind: "supplier" }
   | { kind: "unassigned"; email?: string | null }
+  /** Joined a shop's team; the Owner has not approved yet. No shop routes are open. */
+  | { kind: "team_pending"; shopName: string }
   | { kind: "mismatch"; destination: string; email?: string | null }
-  | { kind: "error"; reason?: "access_withdrawn"; message: string; email?: string | null };
+  | {
+      kind: "error";
+      reason?: "access_withdrawn" | "team_removed";
+      message: string;
+      email?: string | null;
+    };
 
 let refreshVersion = 0;
 
@@ -78,6 +86,20 @@ export function isSignedIn(user: User | null | undefined): boolean {
  * not a legacy shop that should be let through — it is an account the platform
  * has not accredited.
  */
+/**
+ * A teammate the Owner limited to receiving and processing orders
+ * (gridgo-api `docs/SHOP_TEAM_API.md`). GRIDGO refuses every Owner-only route
+ * to them; the app hides those routes so a Staff member never meets a refusal.
+ */
+export function isShopStaff(user: User | null | undefined): boolean {
+  return user?.shopRole === "staff";
+}
+
+/** Full access: the shop's own account, or a teammate made Owner. */
+export function isShopOwner(user: User | null | undefined): boolean {
+  return user != null && user.shopRole !== "staff";
+}
+
 export function isMatchable(user: User | null | undefined): boolean {
   return user?.verificationStatus === "approved";
 }
@@ -120,6 +142,13 @@ type SessionState = {
   enrollSupplier: (input: api.SupplierEnrollment, idempotencyKey: string) => Promise<boolean>;
   /** Re-read the account, so an approval that lands is picked up on return. */
   refresh: () => Promise<void>;
+  /**
+   * Ask GRIDGO again where this person stands on a shop's team — after a
+   * claim, while waiting for the Owner, and when a request was refused for it.
+   */
+  recheckTeam: () => Promise<void>;
+  /** GRIDGO refused a request: the Owner removed this person. */
+  teamAccessRemoved: () => void;
   logout: () => Promise<void>;
   clearError: () => void;
   beginSessionWait: (tone: "in" | "out") => void;
@@ -187,6 +216,17 @@ export const useSession = create<SessionState>((set, get) => ({
           : null,
     })),
   adoptClerkUser: (user) => {
+    if (user.role === APP_ROLE && user.shopStatus === "pending") {
+      set({
+        user: null,
+        loading: false,
+        error: null,
+        authSource: "clerk",
+        identity: { kind: "team_pending", shopName: user.supplierName || "the shop" },
+        sessionWait: null,
+      });
+      return false;
+    }
     if (user.role !== APP_ROLE) {
       set({
         user: null,
@@ -237,6 +277,10 @@ export const useSession = create<SessionState>((set, get) => ({
       else set({ user });
     } catch (error) {
       if (!current()) return;
+      if (apiErrorCode(error) === "shop_access_removed" || apiErrorCode(error) === "shop_approval_pending") {
+        // The transport's shop-access handler has already moved the session.
+        return;
+      }
       if (error instanceof api.ApiError && error.status === 403) {
         get().setClerkIdentity({ kind: "error", reason: "access_withdrawn", message: ACCESS_WITHDRAWN_MESSAGE });
       }
@@ -244,6 +288,34 @@ export const useSession = create<SessionState>((set, get) => ({
       // anything else leaves the account as last known rather than signing a
       // shop out because one request did not land.
     }
+  },
+  recheckTeam: async () => {
+    if (get().authSource !== "clerk") return;
+    try {
+      const user = await api.me({ ignoreUnauthorized: true });
+      const now = get();
+      if (now.user && now.user.id === user.id && user.shopStatus !== "pending") {
+        set({ user });
+        return;
+      }
+      get().adoptClerkUser(user);
+    } catch (error) {
+      const code = apiErrorCode(error);
+      if (code === "shop_access_removed") get().teamAccessRemoved();
+      // Anything else leaves the screen as it is; the next check tries again.
+    }
+  },
+  teamAccessRemoved: () => {
+    const { identity } = get();
+    if (identity.kind === "error" && identity.reason === "team_removed") return;
+    set({
+      user: null,
+      loading: false,
+      error: null,
+      authSource: "clerk",
+      identity: { kind: "error", reason: "team_removed", message: TEAM_REMOVED_MESSAGE },
+      sessionWait: null,
+    });
   },
   enrollSupplier: async (input, idempotencyKey) => {
     set({ loading: true, error: null });
@@ -372,6 +444,19 @@ api.setUnauthorizedHandler(() => {
     authSource: "none",
     identity: { kind: "signed_out" },
   });
+});
+
+/**
+ * GRIDGO refused a request because this person's place on a shop's team
+ * changed. Removal drops the shop's screens and cached orders at once (the
+ * user-id subscriber below clears what belongs to the shop); a pending answer
+ * re-reads where the person stands.
+ */
+api.setShopAccessHandler((code) => {
+  const state = useSession.getState();
+  if (state.authSource !== "clerk") return;
+  if (code === "shop_access_removed") state.teamAccessRemoved();
+  else void state.recheckTeam();
 });
 
 // Launch reconciliation: a phone that opens signed out, or to an account this

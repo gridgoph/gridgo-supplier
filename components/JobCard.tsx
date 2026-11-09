@@ -18,6 +18,7 @@ import { isTightBeforeAccepting, sameDayReadyLine, TIGHT_DEADLINE_LABEL } from "
 import { orderSpecSummary } from "@/lib/productionSpecs";
 import { shopRelease } from "@/lib/shopRecovery";
 import { useNow } from "@/hooks/useNow";
+import { isShopStaff, useSession } from "@/store/session";
 
 type Props = {
   job: Order;
@@ -42,6 +43,8 @@ type Props = {
  */
 export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
   const status = presentJobStatus(job);
+  // Staff work the order; what the shop earns on it is the Owner's.
+  const staff = useSession((s) => isShopStaff(s.user));
   // Keep the answer clock separate from the production date.
   const ticking = acceptWindow(job).kind !== "none";
   const now = useNow(ticking ? 30_000 : null);
@@ -112,7 +115,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
         ) : null}
         {showSpec ? (
           <Text className="text-caption text-text-muted" numberOfLines={2}>
-            {spec} · {price}
+            {staff ? spec : `${spec} · ${price}`}
           </Text>
         ) : null}
       </View>

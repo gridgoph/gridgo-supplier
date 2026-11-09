@@ -8,6 +8,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SessionWait } from "@/components/SessionWait";
 import { useSession } from "@/store/session";
+import { useTeamJoin } from "@/store/teamJoin";
 
 /** Source pixels of `welcome.webp` — width / height. */
 const ART_RATIO = 1100 / 1055;
@@ -70,6 +71,16 @@ export default function WelcomeScreen() {
           className="gg-touch items-center justify-center"
         >
           <Text className="text-button text-brand">Have an invitation? Open it</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            useTeamJoin.getState().startJoining();
+            router.push("/join-team");
+          }}
+          accessibilityRole="link"
+          className="gg-touch items-center justify-center"
+        >
+          <Text className="text-button text-text-secondary">{"Join a shop's team"}</Text>
         </Pressable>
       </View>
     </View>
