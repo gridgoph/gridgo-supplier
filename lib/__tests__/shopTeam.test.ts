@@ -93,17 +93,48 @@ describe("who did it", () => {
     expect(actorLabel(null)).toBeNull();
   });
 
-  it("uses the entry's own actor, else the action recorded at the same moment", () => {
+  it("uses the entry's own actor, else an action by the same recorded person at the same moment", () => {
     const actions = readOrderActions([
-      { id: "a1", at: "2026-11-08T08:00:00.000Z", action: "order.transition", actor: { name: "Sam", role: "staff" } },
+      { id: "a1", at: "2026-11-08T08:00:00.000Z", action: "order.transition", actor: { userId: "user_sam", name: "Sam", role: "staff" } },
       "not an action",
     ]);
-    expect(actorForEntry({ at: "2026-11-08T08:00:00.400Z" }, actions)).toEqual({ name: "Sam", role: "staff" });
-    expect(actorForEntry({ at: "2026-11-08T09:00:00.000Z" }, actions)).toBeNull();
+    expect(actorForEntry({ at: "2026-11-08T08:00:00.400Z", by: "user_sam" }, actions)).toEqual({
+      userId: "user_sam",
+      name: "Sam",
+      role: "staff",
+    });
+    expect(actorForEntry({ at: "2026-11-08T09:00:00.000Z", by: "user_sam" }, actions)).toBeNull();
     expect(actorForEntry({ at: "x", actor: { name: "Ana", role: "owner" } }, actions)).toEqual({
       name: "Ana",
       role: "owner",
     });
+  });
+
+  it("never names a person from the time alone", () => {
+    const at = "2026-11-08T08:00:00.000Z";
+    const actions = readOrderActions([
+      { id: "a1", at, action: "order.updated", actor: { userId: "owner", name: "Alex", role: "owner" } },
+    ]);
+    // The Owner's quote and GRIDGO's checkout notice share one instant.
+    expect(actorForEntry({ at, by: "system" }, actions)).toEqual({ role: "system" });
+    expect(actorLabel(actorForEntry({ at, by: "system" }, actions))).toBe("GRIDGO");
+    // An entry with no recorded author, or another author, borrows nobody.
+    expect(actorForEntry({ at }, actions)).toBeNull();
+    expect(actorForEntry({ at, by: "user_client" }, actions)).toBeNull();
+    expect(actorForEntry({ at, by: "owner" }, actions)).toEqual({ userId: "owner", name: "Alex", role: "owner" });
+  });
+
+  it("picks only the recorded author when several people acted within the second", () => {
+    const actions = readOrderActions([
+      { id: "a1", at: "2026-11-08T08:00:00.100Z", action: "order.transition", actor: { userId: "owner", name: "Alex", role: "owner" } },
+      { id: "a2", at: "2026-11-08T08:00:00.300Z", action: "order.transition", actor: { userId: "user_sam", name: "Sam", role: "staff" } },
+      { id: "a3", at: "2026-11-08T08:00:00.500Z", action: "order.transition", actor: { userId: "user_ops", name: "Op", role: "ops_admin" } },
+    ]);
+    const at = "2026-11-08T08:00:00.200Z";
+    expect(actorForEntry({ at, by: "owner" }, actions)?.name).toBe("Alex");
+    expect(actorForEntry({ at, by: "user_sam" }, actions)?.name).toBe("Sam");
+    expect(actorForEntry({ at, by: "someone_else" }, actions)).toBeNull();
+    expect(actorForEntry({ at }, actions)).toBeNull();
   });
 });
 

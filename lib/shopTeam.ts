@@ -157,23 +157,28 @@ export function actorLabel(actor: ActionActor | null | undefined): string | null
 }
 
 /**
- * The action that matches a timeline entry, for an entry older than the actor
- * GRIDGO now writes on it. Same moment (to the second) and the latest such
- * action wins; nothing is guessed when no action lines up.
+ * Who did a timeline entry. An entry's own actor is authoritative, and a
+ * `by: "system"` step is always GRIDGO. An older entry is enriched from the
+ * order's actions only when one recorded at the same moment (to the second)
+ * names the same person as the entry's `by` — time alone never names anyone,
+ * because GRIDGO writes a system notice at the same instant as a person's
+ * step. No match, or more than one person, leaves the older label in place.
  */
 export function actorForEntry(
-  entry: { at: string; actor?: ActionActor | null },
+  entry: { at: string; by?: unknown; actor?: ActionActor | null },
   actions: OrderAction[] | null | undefined,
 ): ActionActor | null {
   if (entry.actor) return entry.actor;
+  if (entry.by === "system") return { role: "system" };
+  const by = typeof entry.by === "string" ? entry.by.trim() : "";
   const at = Date.parse(entry.at);
-  if (!Number.isFinite(at) || !actions?.length) return null;
-  let found: OrderAction | null = null;
-  for (const action of actions) {
+  if (!by || !Number.isFinite(at) || !actions?.length) return null;
+  const matches = actions.filter((action) => {
     const when = Date.parse(action.at);
-    if (Number.isFinite(when) && Math.abs(when - at) < 1000 && action.actor) found = action;
-  }
-  return found?.actor ?? null;
+    return Number.isFinite(when) && Math.abs(when - at) < 1000 && action.actor?.userId === by;
+  });
+  const roles = new Set(matches.map((action) => action.actor?.role ?? ""));
+  return matches.length && roles.size === 1 ? (matches[matches.length - 1].actor ?? null) : null;
 }
 
 /** Defensive read of an order's `actions` (absent on an older API). */

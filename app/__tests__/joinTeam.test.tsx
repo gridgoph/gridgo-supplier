@@ -144,13 +144,15 @@ describe("who did it", () => {
       <JobTimeline
         timeline={[
           { at: "2026-11-08T08:00:00.000Z", state: "payment_authorized", note: "", actor: { userId: "u", name: "Sam Santos", role: "staff" } },
-          { at: "2026-11-08T09:00:00.000Z", state: "in_production", note: "" },
+          { at: "2026-11-08T09:00:00.000Z", state: "in_production", note: "", by: "user_ana" },
+          { at: "2026-11-08T09:00:00.000Z", state: "awaiting_checkout", note: "", by: "system" },
         ]}
-        actions={[{ id: "a2", at: "2026-11-08T09:00:00.000Z", action: "order.transition", actor: { name: "Ana Cruz", role: "owner" } }]}
+        actions={[{ id: "a2", at: "2026-11-08T09:00:00.000Z", action: "order.transition", actor: { userId: "user_ana", name: "Ana Cruz", role: "owner" } }]}
       />,
     );
     expect(screen.getByText(/· Sam Santos \(Staff\)$/)).toBeTruthy();
-    expect(screen.getByText(/· Ana Cruz \(Owner\)$/)).toBeTruthy();
+    expect(screen.getAllByText(/· Ana Cruz \(Owner\)$/)).toHaveLength(1);
+    expect(screen.getByText(/· GRIDGO$/)).toBeTruthy();
   });
 });
 
