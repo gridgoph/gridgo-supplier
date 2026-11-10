@@ -218,11 +218,37 @@ describe("Play opt-in card", () => {
     expect(screen.toJSON()).toBeNull();
   });
 
-  it("gives way to an enrolled tester's check-in", async () => {
+  it("asks an enrolled APK tester first, in the check-in card's place", async () => {
     offered("android");
     signedInWith(enrolled());
     await render(<HomeTesterSlot />);
+    expect(screen.getByText("Become a tester")).toBeTruthy();
+    expect(screen.queryByText("Day 3 of 14")).toBeNull();
+  });
+
+  it("asks before a due feedback card, which is not reported shown meanwhile", async () => {
+    offered("android");
+    signedInWith(enrolled({ nudge: { trigger: "streak_3" } }));
+    (api.reportTesterFeedback as jest.Mock).mockClear();
+    await render(<HomeTesterSlot />);
+    expect(screen.getByText("Become a tester")).toBeTruthy();
+    expect(screen.queryByText("Leave feedback on Google Play")).toBeNull();
+    expect(api.reportTesterFeedback).not.toHaveBeenCalled();
+  });
+
+  it("hands back to the check-in once the ask is closed", async () => {
+    offered("android");
+    signedInWith(enrolled());
+    await render(<HomeTesterSlot />);
+    await fireEvent.press(screen.getByRole("button", { name: "Not now" }));
     expect(screen.getByText("Day 3 of 14")).toBeTruthy();
+  });
+
+  it("hands over to the check-in once the Play build has opted in", async () => {
+    offered("android", { show: false, optedIn: true, step: "opted_in" });
+    signedInWith(enrolled({ day: 1, streak: 1 }));
+    await render(<HomeTesterSlot />);
+    expect(screen.getByText("Day 1 of 14")).toBeTruthy();
     expect(screen.queryByText("Become a tester")).toBeNull();
   });
 });

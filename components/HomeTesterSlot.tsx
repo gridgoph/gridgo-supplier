@@ -15,9 +15,9 @@ import { useTesterProgram } from "@/store/testerProgram";
 /**
  * The Google Play tester's one line on Home: the check-in card, or — once
  * today is in and GRIDGO has a feedback ask due — the feedback card in its
- * place, so Home never grows by two cards. For a shop not yet a tester, the
- * same line asks it to become one on Play, when GRIDGO says to ask
- * (`lib/playOptIn.ts`). Nothing for anyone else.
+ * place, so Home never grows by two cards. While GRIDGO says to ask an APK
+ * shop to become a Play tester (`lib/playOptIn.ts`), that ask takes the line
+ * first, enrolled or not. Nothing for anyone else.
  *
  * `className` spaces the line from its neighbours. It sits on a wrapper that
  * exists only when a card is drawn, so a shop that is not a tester gets no
@@ -35,9 +35,16 @@ export function HomeTesterSlot({ className }: { className?: string }) {
   const optIn = usePlayOptIn((s) => (optInOwner === userId ? s.state : null));
   const optInClosed = usePlayOptIn((s) => s.closed);
 
-  const view = testerCardView(program);
+  /*
+    An eligible Play ask comes first, even for an account already enrolled
+    in the check-ins: enrolment by Operations is not a Play opt-in, and an
+    APK tester still has to move to Play to count. Once the Play build
+    reports in (or the ask is closed), the check-in and feedback cards return.
+  */
+  const askOptIn = !optInClosed && optInCardVisible(optIn, playOptInInstall());
+  const view = askOptIn ? null : testerCardView(program);
   const feedback =
-    program?.enrolled && feedbackAllowed(program)
+    !askOptIn && program?.enrolled && feedbackAllowed(program)
       ? feedbackToShow(program.nudge, held, userId, readAt)
       : null;
   const freshTrigger = feedback?.fresh ? feedback.trigger : null;
@@ -48,7 +55,15 @@ export function HomeTesterSlot({ className }: { className?: string }) {
   }, [freshTrigger]);
 
   let card: ReactNode = null;
-  if (feedback) {
+  if (askOptIn) {
+    card = (
+      <PlayOptInCard
+        onShown={() => usePlayOptIn.getState().shown()}
+        onOpen={() => router.push(`${PLAY_OPTIN_ROUTE}?from=card`)}
+        onDismiss={() => usePlayOptIn.getState().dismiss()}
+      />
+    );
+  } else if (feedback) {
     card = (
       <TesterFeedbackCard
         onOpen={() => void useTesterProgram.getState().feedbackTapped()}
@@ -62,14 +77,6 @@ export function HomeTesterSlot({ className }: { className?: string }) {
         busy={busy}
         failed={failed}
         onCheckIn={() => void useTesterProgram.getState().checkIn()}
-      />
-    );
-  } else if (!optInClosed && optInCardVisible(optIn, playOptInInstall())) {
-    card = (
-      <PlayOptInCard
-        onShown={() => usePlayOptIn.getState().shown()}
-        onOpen={() => router.push(`${PLAY_OPTIN_ROUTE}?from=card`)}
-        onDismiss={() => usePlayOptIn.getState().dismiss()}
       />
     );
   }
