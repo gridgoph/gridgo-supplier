@@ -21,8 +21,11 @@ export function OrderActionList({ rows }: { rows: OrderActionRow[] }) {
       <Text className="text-body font-medium text-text-primary" accessibilityRole="header">
         Who did what
       </Text>
-      {shown.map((row) => (
-        <View key={row.id} className="gap-0.5 border-b border-outline-subtle py-2">
+      {shown.map((row, index) => (
+        <View
+          key={row.id}
+          className={index < shown.length - 1 ? "gap-0.5 border-b border-outline-subtle py-2" : "gap-0.5 py-2"}
+        >
           <Text className="text-body text-text-secondary">
             {row.who ? (
               <>
