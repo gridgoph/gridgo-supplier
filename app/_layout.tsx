@@ -444,6 +444,17 @@ function RootStack({ introDone }: { introDone: boolean }) {
           }}
         />
         {/*
+          Becoming a Google Play tester, from the Home card or the
+          `play_optin` push (`lib/playOptIn.ts`). The Owner's, like Home.
+        */}
+        <Stack.Screen
+          name="play-optin"
+          options={{
+            title: "Become a tester",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
           The shop's pin is reachable from both signed-in states on purpose: a
           shop waiting on accreditation is exactly the shop most likely to have
           put its pin on the wrong corner, and making it wait for approval to

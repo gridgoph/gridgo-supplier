@@ -115,6 +115,10 @@ describe("parsePushData", () => {
 });
 
 describe("pushTargetRoute", () => {
+  it("opens the Play tester steps for the play_optin push", () => {
+    expect(pushTargetRoute(parsePushData({ type: "play_optin", notificationId: "n1" }))).toBe("/play-optin?from=push");
+  });
+
   it("opens the workspace of the job an alert is about", () => {
     // Every one of the four interrupting events is acted on there: Accept and
     // Decline, the yellow proof step, the pickup handoff, and the issue that

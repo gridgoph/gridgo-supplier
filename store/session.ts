@@ -16,6 +16,7 @@ import { APPLY_CONSENT_REFUSED, isLegalRefusal } from "@/lib/legal";
 import { sessionWaitHold } from "@/lib/sessionWait";
 import { releaseClerkSession } from "@/lib/clerkSignIn";
 import { serializeDeviceMutation, usePush } from "@/store/push";
+import { usePlayOptIn } from "@/store/playOptIn";
 import { useTesterProgram } from "@/store/testerProgram";
 
 /** Expected role for this binary — mismatched login is rejected. */
@@ -485,6 +486,8 @@ useSession.subscribe((state, previous) => {
   // and the next account's open plans its own.
   if (next) useTesterProgram.getState().reset();
   else useTesterProgram.getState().forget();
+  // The Play opt-in answer is one account's; the next is asked afresh.
+  usePlayOptIn.getState().reset();
   // Phone-only closures carry no account. They leave with the shop that was
   // signed in, and the next shop claims only what is left unclaimed.
   afterShopPlanLoads(() => {

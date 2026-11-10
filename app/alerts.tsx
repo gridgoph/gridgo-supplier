@@ -24,6 +24,7 @@ import { CLIENT_CHAT_NOTICE, clientChatHref } from "@/lib/clientChat";
 import { jobScreenHref } from "@/lib/productionNudge";
 import { isLapseAlert } from "@/lib/productionLapse";
 import { isPerformanceAlert, performanceHref } from "@/lib/performance";
+import { PLAY_OPTIN_PUSH_TYPE, PLAY_OPTIN_ROUTE } from "@/lib/playOptIn";
 import { SUPPORT_MESSAGE_PUSH_TYPE } from "@/lib/push";
 import { installChannel } from "@/lib/buildDistribution";
 import { openRelease, releaseNoticeOpen } from "@/lib/releasePush";
@@ -31,6 +32,7 @@ import { isRefundAlert } from "@/lib/refund";
 import { isSampleAlert } from "@/lib/sampleFirst";
 import { SHOP_HOURS_NOTICE, SHOP_HOURS_ROUTE } from "@/lib/shopHours";
 import { isAlertUnread, useAlertsStore, visibleAlerts } from "@/store/alerts";
+import { isShopStaff, useSession } from "@/store/session";
 import { askConfirm } from "@/store/sheets";
 import { useViewing } from "@/store/toasts";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -66,6 +68,8 @@ import { useThemeColors } from "@/hooks/useTheme";
 export default function NotificationsScreen() {
   const colors = useThemeColors();
   const navigation = useNavigation();
+  // The Play tester steps are the Owner's, like Home.
+  const staff = useSession((s) => isShopStaff(s.user));
   const dismissed = useAlertsStore((s) => s.dismissed);
   const deleted = useAlertsStore((s) => s.deleted);
   const localOnly = useAlertsStore((s) => s.localOnly);
@@ -286,6 +290,8 @@ export default function NotificationsScreen() {
               ? () => router.push(clientChatHref(alert.orderId as string))
               : alert.type === SHOP_HOURS_NOTICE
               ? () => router.push(SHOP_HOURS_ROUTE)
+              : alert.type === PLAY_OPTIN_PUSH_TYPE && !staff
+              ? () => router.push(`${PLAY_OPTIN_ROUTE}?from=alert`)
               : isPerformanceAlert(alert.type)
               ? () => router.push(performanceHref(alert.orderId))
               : alert.type === SUPPORT_MESSAGE_PUSH_TYPE
