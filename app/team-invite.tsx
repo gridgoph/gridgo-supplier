@@ -106,8 +106,16 @@ export default function TeamInviteScreen() {
   /** Swap the shown code only once GRIDGO has revoked the old one and issued this. */
   async function newCode(invite: CreatedInvite) {
     const confirmed = await askConfirm({
-      question: kind === "qr" ? "Make a new QR code?" : "Make a new link?",
-      consequence: "The current code stops working right away. Anyone who has it will need the new one.",
+      question:
+        kind === "qr"
+          ? "Make a new QR code?"
+          : kind === "link"
+            ? "Make a new link?"
+            : `Make a new invite for ${invite.invite.identity ?? "this person"}?`,
+      consequence:
+        kind === "qr" || kind === "link"
+          ? "The current code stops working right away. Anyone who has it will need the new one."
+          : "The current invite stops working right away. It goes to the same person; share the new link with them.",
       confirmLabel: "New code",
       cancelLabel: "Keep this one",
     });
@@ -185,18 +193,16 @@ export default function TeamInviteScreen() {
               />
               <StatusChip tone="neutral" icon="circle-check" label="Works once" />
             </View>
-            {kind === "qr" || kind === "link" ? (
-              <Pressable
-                onPress={() => void newCode(current)}
-                disabled={replacing}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: replacing, busy: replacing }}
-                className="gg-touch flex-row items-center justify-center gap-1.5 px-2"
-              >
-                <RefreshCw size={16} color={colors.textPrimary} aria-hidden />
-                <Text className="text-button text-text-primary">{replacing ? "Making new code…" : "New code"}</Text>
-              </Pressable>
-            ) : null}
+            <Pressable
+              onPress={() => void newCode(current)}
+              disabled={replacing}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: replacing, busy: replacing }}
+              className="gg-touch flex-row items-center justify-center gap-1.5 px-2"
+            >
+              <RefreshCw size={16} color={colors.textPrimary} aria-hidden />
+              <Text className="text-button text-text-primary">{replacing ? "Making new code…" : "New code"}</Text>
+            </Pressable>
           </View>
           <View className="w-full flex-row items-center gap-2 rounded-field border border-outline bg-surface px-4 py-2">
             <Text className="min-w-0 flex-1 text-caption text-text-muted" numberOfLines={1} selectable>

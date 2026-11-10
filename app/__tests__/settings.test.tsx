@@ -88,4 +88,17 @@ describe("Settings screen", () => {
     expect(screen.queryByText("CONNECTION")).toBeNull();
     expect(screen.queryByText("GRIDGO address")).toBeNull();
   });
+
+  it("opens Team for an Owner", async () => {
+    view = await render(<SettingsScreen />);
+    await fireEvent.press(screen.getByLabelText("Team"));
+    expect(router.push).toHaveBeenCalledWith("/team");
+  });
+
+  it("never shows Team to Staff", async () => {
+    const owner = useSession.getState().user!;
+    useSession.setState({ user: { ...owner, shopRole: "staff", verificationStatus: "approved" } });
+    view = await render(<SettingsScreen />);
+    expect(screen.queryByLabelText("Team")).toBeNull();
+  });
 });

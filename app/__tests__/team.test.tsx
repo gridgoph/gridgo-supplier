@@ -249,4 +249,35 @@ describe("adding staff", () => {
     expect(setStringAsync).toHaveBeenCalledWith(link);
     expect(screen.getByText(/Messenger did not open. Link copied/)).toBeTruthy();
   });
+
+  it.each([
+    ["email", "Email", "Their email", "joy@example.com", "joy@example.com"],
+    ["phone", "Phone", "Their mobile number", "0917 123 4567", "+639171234567"],
+  ])("makes a new code for an %s invite, to the same person", async (kind, tab, field, typed, identity) => {
+    (api.createShopInvite as jest.Mock).mockResolvedValue(made(kind, identity));
+    (api.replaceShopInvite as jest.Mock).mockResolvedValue({
+      ...made(kind, identity),
+      invite: { ...made(kind, identity).invite, id: "shi_next" },
+      token: "freshFRESHfresh_freshFRESHfresh_freshFRESH2",
+    });
+    await render(<TeamInviteScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByRole("radio", { name: tab }));
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByLabelText(field), typed);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText("Invite"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText("New code"));
+    });
+    expect(askConfirm).toHaveBeenLastCalledWith(
+      expect.objectContaining({ question: `Make a new invite for ${identity}?` }),
+    );
+    expect(api.replaceShopInvite).toHaveBeenCalledWith("shi_new");
+    expect(screen.getByText(joinTeamLink("freshFRESHfresh_freshFRESHfresh_freshFRESH2"))).toBeTruthy();
+    expect(screen.getByText(identity)).toBeTruthy();
+  });
 });
