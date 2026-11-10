@@ -7,6 +7,7 @@ import { approvalRowSummary, approvalSummaryOf } from "@/lib/approvalProof";
 import { linkOnlySummary, orderDesignLinks } from "@/lib/designLink";
 import { earningsSplit, milestoneViews, nextShopProof, payoutPlanCopy } from "@/lib/milestones";
 import { orderArtwork } from "@/lib/orderArtwork";
+import { readOrderActions } from "@/lib/shopTeam";
 import { hasSpecialInstructions } from "@/lib/orderChanges";
 import { pickupChatOf } from "@/lib/pickupChat";
 import { progressPhotoSummary, showsProgressPhotos } from "@/lib/productionPhoto";
@@ -88,6 +89,7 @@ type BriefOrder = Pick<
   | "deliveryDistanceMeters"
   | "supplierPriceMinor"
   | "timeline"
+  | "actions"
   | "pickupChecklist"
   | "pickupCountItems"
   | "productionProgress"
@@ -252,8 +254,11 @@ export function hasHandoff(order: BriefOrder): boolean {
 
 export function historySummary(order: BriefOrder): { summary: string; empty: boolean } {
   const count = order.timeline?.length ?? 0;
-  if (!count) return { summary: "Nothing recorded yet", empty: true };
-  return { summary: plural(count, "update", "updates"), empty: false };
+  const actions = readOrderActions(order.actions).length;
+  if (!count && !actions) return { summary: "Nothing recorded yet", empty: true };
+  if (!actions) return { summary: plural(count, "update", "updates"), empty: false };
+  if (!count) return { summary: plural(actions, "action", "actions"), empty: false };
+  return { summary: `${plural(count, "update", "updates")}, ${plural(actions, "action", "actions")}`, empty: false };
 }
 
 /** The docket, in the order a shop reads it: what, with what, how it should look, where and when, for how much. */

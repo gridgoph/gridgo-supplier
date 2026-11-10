@@ -18,6 +18,8 @@ import { releaseClerkSession } from "@/lib/clerkSignIn";
 import { serializeDeviceMutation, usePush } from "@/store/push";
 import { usePlayOptIn } from "@/store/playOptIn";
 import { useTesterProgram } from "@/store/testerProgram";
+import { isJoiningTeam } from "@/store/teamJoin";
+import { useJobDrafts } from "@/store/jobDrafts";
 
 /** Expected role for this binary — mismatched login is rejected. */
 export const APP_ROLE = "supplier" as const;
@@ -27,10 +29,16 @@ export type AuthSource = "none" | "legacy" | "clerk";
 export const SESSION_ENDED_MESSAGE = "Your session ended. Sign in again to keep working.";
 export const ACCESS_WITHDRAWN_MESSAGE = "Supplier access was withdrawn from this account. Contact Operations for help.";
 export const TEAM_REMOVED_MESSAGE = "The owner removed you from the shop's team.";
+export const TEAM_REMOVED_TITLE = "You are off the team";
+export const TEAM_REMOVED_DETAIL = "The owner removed you from the shop, so you were signed out. Ask them for a new invite to join again.";
 
 export type IdentityState =
   | { kind: "loading" }
-  | { kind: "signed_out"; reason?: "session_ended" | "refused" }
+  /**
+   * `team_removed`: the Owner removed this person while they were signed in.
+   * The Clerk session was ended with it; Sign in says why.
+   */
+  | { kind: "signed_out"; reason?: "session_ended" | "refused" | "team_removed" }
   | { kind: "supplier" }
   | { kind: "unassigned"; email?: string | null }
   /** Joined a shop's team; the Owner has not approved yet. No shop routes are open. */
@@ -67,7 +75,9 @@ export function setClerkSignOutHandler(
 export function signedOutWithNotice(identity: IdentityState): boolean {
   return (
     identity.kind === "signed_out" &&
-    (identity.reason === "session_ended" || identity.reason === "refused")
+    (identity.reason === "session_ended" ||
+      identity.reason === "refused" ||
+      identity.reason === "team_removed")
   );
 }
 
@@ -136,7 +146,7 @@ type SessionState = {
   endClerkSession: () => void;
   /** Sign in refused an account that is not a shop. Call before Clerk signs out. */
   refuseSignIn: () => void;
-  /** A new sign-in attempt starts; the last refusal no longer applies. */
+  /** A new sign-in attempt starts; the last refusal or removal notice no longer applies. */
   clearSignInRefusal: () => void;
   login: (email: string, password: string) => Promise<void>;
   /** Public apply via Clerk enroll. Lands pending; Operations still has to approve matching. */
@@ -148,7 +158,13 @@ type SessionState = {
    * claim, while waiting for the Owner, and when a request was refused for it.
    */
   recheckTeam: () => Promise<void>;
-  /** GRIDGO refused a request: the Owner removed this person. */
+  /**
+   * GRIDGO refused a request, or the live stream said so: the Owner removed
+   * this person. Ends this app's Clerk session (only this one — the person's
+   * Clerk account and other apps are untouched) and drops every private copy
+   * of the shop. Someone on their way into a team keeps the session, because
+   * claiming a new invite needs it.
+   */
   teamAccessRemoved: () => void;
   logout: () => Promise<void>;
   clearError: () => void;
@@ -198,7 +214,7 @@ export const useSession = create<SessionState>((set, get) => ({
   },
   clearSignInRefusal: () => {
     const { identity } = get();
-    if (identity.kind === "signed_out" && identity.reason === "refused") {
+    if (identity.kind === "signed_out" && (identity.reason === "refused" || identity.reason === "team_removed")) {
       set({ identity: { kind: "signed_out" } });
     }
   },
@@ -307,16 +323,37 @@ export const useSession = create<SessionState>((set, get) => ({
     }
   },
   teamAccessRemoved: () => {
-    const { identity } = get();
-    if (identity.kind === "error" && identity.reason === "team_removed") return;
+    const { identity, authSource } = get();
+    if (isJoiningTeam()) {
+      if (identity.kind === "error" && identity.reason === "team_removed") return;
+      set({
+        user: null,
+        loading: false,
+        error: null,
+        authSource: "clerk",
+        identity: { kind: "error", reason: "team_removed", message: TEAM_REMOVED_MESSAGE },
+        sessionWait: null,
+      });
+      return;
+    }
+    if (identity.kind === "signed_out" && identity.reason === "team_removed") return;
+    api.setTokenProvider(null);
+    api.setToken(null);
+    // Clearing `user` is what drops the shop's cached jobs, alerts, toasts and
+    // hours (the user-id subscriber below). Sign in then explains the removal.
     set({
       user: null,
       loading: false,
       error: null,
-      authSource: "clerk",
-      identity: { kind: "error", reason: "team_removed", message: TEAM_REMOVED_MESSAGE },
+      authSource: "none",
+      identity: { kind: "signed_out", reason: "team_removed" },
       sessionWait: null,
     });
+    // Typed notes and promise times on the shop's jobs stay with the shop.
+    useJobDrafts.getState().clearAll();
+    // The phone goes back on the unclaimed list: no more of this shop's offers.
+    void usePush.getState().release();
+    if (authSource === "clerk" && clerkSignOutHandler) void releaseClerkSession(clerkSignOutHandler);
   },
   enrollSupplier: async (input, idempotencyKey) => {
     set({ loading: true, error: null });

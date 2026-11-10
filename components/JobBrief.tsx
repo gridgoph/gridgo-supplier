@@ -13,6 +13,7 @@ import { ItemNote } from "@/components/ItemNote";
 import { PrintLayoutSpec } from "@/components/PrintLayoutSpec";
 import { JobTimeline } from "@/components/JobTimeline";
 import { MilestoneList } from "@/components/MilestoneList";
+import { OrderActionList } from "@/components/OrderActionList";
 import { ProgressPhotoStrip } from "@/components/ProgressPhotoStrip";
 import { SettlementPayoutList } from "@/components/SettlementPayoutList";
 import { SpecRow } from "@/components/SpecRow";
@@ -22,6 +23,8 @@ import { useThemeColors } from "@/hooks/useTheme";
 import { formatPhp, type Order } from "@/lib/api";
 import { formatDeadlineFull, formatTimelineAt } from "@/lib/dates";
 import { custodyForOrder } from "@/lib/handoff";
+import { presentTimelineState } from "@/lib/jobState";
+import { orderActionRows } from "@/lib/shopTeam";
 import { handoverFlowOf } from "@/lib/shopHandover";
 import { earningsSplit, milestoneViews, payoutPlanCopy, settlementPayoutViews } from "@/lib/milestones";
 import { unreleasedMinor } from "@/lib/payout";
@@ -368,7 +371,17 @@ function SectionBody({
         </View>
       );
     }
-    case "history":
-      return <JobTimeline timeline={order.timeline} actions={order.actions} flow={handoverFlowOf(order)} />;
+    case "history": {
+      const flow = handoverFlowOf(order);
+      const actionRows = orderActionRows(order.actions, order.timeline, (state) => presentTimelineState(state, flow));
+      return (
+        <View className="gap-4">
+          {order.timeline.length || !actionRows.length ? (
+            <JobTimeline timeline={order.timeline} actions={order.actions} flow={flow} />
+          ) : null}
+          <OrderActionList rows={actionRows} />
+        </View>
+      );
+    }
   }
 }

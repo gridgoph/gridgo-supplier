@@ -85,6 +85,11 @@ export function openAlertStream(handlers: AlertStreamHandlers): AlertStreamHandl
           void Promise.resolve(handlers.onResumeUnavailable?.()).catch(() => {}).finally(() => {
             if (!closed && ticket === sequence) retry();
           });
+        } else if (xhr.status === 403 && refusedAsRemoved(xhr.responseText)) {
+          // The stream closed without its event (or it was missed while the
+          // phone slept); the reconnect is what learns of the removal.
+          handlers.onAccessRevoked?.();
+          retry();
         } else retry(); // Includes 401: next connect obtains a fresh Clerk JWT.
         return;
       }
@@ -118,4 +123,13 @@ export function openAlertStream(handlers: AlertStreamHandlers): AlertStreamHandl
     close: () => { closed = true; ++sequence; abort(); },
     wake: () => { if (!closed) { attempt = 0; void connect(); } },
   };
+}
+
+function refusedAsRemoved(body: string | null | undefined): boolean {
+  try {
+    const parsed: unknown = JSON.parse(body ?? "");
+    return typeof parsed === "object" && parsed != null && (parsed as { error?: unknown }).error === "shop_access_removed";
+  } catch {
+    return false;
+  }
 }

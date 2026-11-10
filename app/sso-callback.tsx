@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { useEffect } from "react";
 
 import { SessionWait } from "@/components/SessionWait";
-import { isShopStaff, useSession } from "@/store/session";
+import { isShopStaff, signedOutWithNotice, useSession } from "@/store/session";
 import { isJoiningTeam } from "@/store/teamJoin";
 
 /**
@@ -20,6 +20,12 @@ export default function SsoCallbackScreen() {
   useEffect(() => {
     if (user) {
       router.replace(isShopStaff(user) ? "/(tabs)/jobs" : "/(tabs)/home");
+      return;
+    }
+    // Removed from a shop's team: the session was ended; Sign in says why.
+    if (signedOutWithNotice(identity)) {
+      useSession.getState().clearSessionWait();
+      router.replace("/(auth)/login");
       return;
     }
     if (identity.kind === "team_pending") {

@@ -37,6 +37,8 @@ type JobDraftsState = {
   setNote: (jobId: string, note: string) => void;
   /** Called once a job leaves the step the draft belonged to. */
   clearDraft: (jobId: string) => void;
+  /** Every draft goes: the person is no longer on the shop's team. */
+  clearAll: () => void;
   /** Set when persisted drafts land, so a form never flashes empty first. */
   markHydrated: () => void;
 };
@@ -71,6 +73,7 @@ export const useJobDrafts = create<JobDraftsState>()(
           delete next[jobId];
           return { drafts: next };
         }),
+      clearAll: () => set({ drafts: {} }),
       markHydrated: () => set({ hydrated: true }),
     }),
     {
