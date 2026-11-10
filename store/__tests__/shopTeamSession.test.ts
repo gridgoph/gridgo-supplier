@@ -145,6 +145,19 @@ describe("removal and approval refusals", () => {
     setClerkSignOutHandler(null);
   });
 
+  it("signs a working teammate out even if an old join tap left the intent set", async () => {
+    const signOut = jest.fn(async () => {});
+    setClerkSignOutHandler(signOut);
+    jest.spyOn(global, "fetch").mockResolvedValue(response(200, staffBootstrap));
+    useSession.getState().adoptClerkUser(await api.me());
+    useTeamJoin.getState().startJoining();
+    useSession.getState().teamAccessRemoved();
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(useSession.getState().identity).toEqual({ kind: "signed_out", reason: "team_removed" });
+    useTeamJoin.getState().clear();
+    setClerkSignOutHandler(null);
+  });
+
   it("lets a new sign-in attempt clear the removal notice", () => {
     useSession.setState({ authSource: "none", identity: { kind: "signed_out", reason: "team_removed" } });
     useSession.getState().clearSignInRefusal();

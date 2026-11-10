@@ -1463,6 +1463,19 @@ export async function createShopInvite(
   return { invite: result.invite, token: result.token };
 }
 
+/**
+ * New code: GRIDGO revokes this open invite and issues its replacement in one
+ * step (same kind and recipient, a fresh 48 hours). The old link and QR stop
+ * working the moment this succeeds; nothing changes if it fails.
+ */
+export async function replaceShopInvite(inviteId: string): Promise<CreatedInvite> {
+  const result = await request<{ invite: TeamInvite; token: string }>(
+    `/me/shop-team/invites/${encodeURIComponent(inviteId)}/replace`,
+    { method: "POST", body: "{}" },
+  );
+  return { invite: result.invite, token: result.token };
+}
+
 export async function revokeShopInvite(inviteId: string): Promise<void> {
   await request(`/me/shop-team/invites/${encodeURIComponent(inviteId)}`, { method: "DELETE" });
 }

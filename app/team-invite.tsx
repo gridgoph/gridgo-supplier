@@ -1,6 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import { router } from "expo-router";
-import { Check, Copy, Link2, Mail, Phone, QrCode, type LucideIcon } from "lucide-react-native";
+import { Check, Copy, Link2, Mail, Phone, QrCode, RefreshCw, type LucideIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, Share, Text, View } from "react-native";
 
@@ -15,7 +15,8 @@ import { TextField } from "@/components/controls/TextField";
 import { TeamQr } from "@/components/team/TeamQr";
 import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";
-import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
+import { humanizeApiError, offlineMessage, replaceInviteErrorMessage } from "@/lib/apiErrors";
+import { openInMessenger } from "@/lib/messengerShare";
 import {
   inviteTimeLeft,
   joinTeamLink,
@@ -23,6 +24,7 @@ import {
   type CreatedInvite,
   type InviteKind,
 } from "@/lib/shopTeam";
+import { askConfirm } from "@/store/sheets";
 
 const METHODS = [
   { value: "qr", label: "QR" },
@@ -64,6 +66,9 @@ export default function TeamInviteScreen() {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [replacing, setReplacing] = useState(false);
+  /** Said under the issued code: why New code failed, or that Messenger was not there. */
+  const [issuedNote, setIssuedNote] = useState<{ tone: "error" | "info"; text: string } | null>(null);
 
   const current = created[kind];
   const link = current ? joinTeamLink(current.token) : null;
@@ -81,6 +86,35 @@ export default function TeamInviteScreen() {
     await Clipboard.setStringAsync(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function sendInMessenger(url: string) {
+    setIssuedNote(null);
+    if (await openInMessenger(url)) return;
+    await copy(url);
+    setIssuedNote({ tone: "info", text: "Messenger did not open. Link copied — paste it in any chat." });
+  }
+
+  /** Swap the shown code only once GRIDGO has revoked the old one and issued this. */
+  async function newCode(invite: CreatedInvite) {
+    const confirmed = await askConfirm({
+      question: kind === "qr" ? "Make a new QR code?" : "Make a new link?",
+      consequence: "The current code stops working right away. Anyone who has it will need the new one.",
+      confirmLabel: "New code",
+      cancelLabel: "Keep this one",
+    });
+    if (!confirmed) return;
+    setIssuedNote(null);
+    setReplacing(true);
+    try {
+      const next = await api.replaceShopInvite(invite.invite.id);
+      setCreated((all) => ({ ...all, [kind]: next }));
+      setCopied(false);
+    } catch (e) {
+      setIssuedNote({ tone: "error", text: replaceInviteErrorMessage(e) });
+    } finally {
+      setReplacing(false);
+    }
   }
 
   async function create() {
@@ -114,6 +148,7 @@ export default function TeamInviteScreen() {
         onChange={(next) => {
           setKind(next);
           setProblem(null);
+          setIssuedNote(null);
           setIdentity("");
         }}
         accessibilityLabel="How to invite"
@@ -142,6 +177,18 @@ export default function TeamInviteScreen() {
               />
               <StatusChip tone="neutral" icon="circle-check" label="Works once" />
             </View>
+            {kind === "qr" || kind === "link" ? (
+              <Pressable
+                onPress={() => void newCode(current)}
+                disabled={replacing}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: replacing, busy: replacing }}
+                className="gg-touch flex-row items-center justify-center gap-1.5 px-2"
+              >
+                <RefreshCw size={16} color={colors.textPrimary} aria-hidden />
+                <Text className="text-button text-text-primary">{replacing ? "Making new code…" : "New code"}</Text>
+              </Pressable>
+            ) : null}
           </View>
           <View className="w-full flex-row items-center gap-2 rounded-field border border-outline bg-surface px-4 py-2">
             <Text className="min-w-0 flex-1 text-caption text-text-muted" numberOfLines={1} selectable>
@@ -160,7 +207,19 @@ export default function TeamInviteScreen() {
               )}
             </Pressable>
           </View>
+          {issuedNote ? (
+            issuedNote.tone === "error" ? (
+              <View className="w-full">
+                <ErrorNotice message={issuedNote.text} />
+              </View>
+            ) : (
+              <Text className="text-center text-body text-text-secondary" accessibilityRole="alert">
+                {issuedNote.text}
+              </Text>
+            )
+          ) : null}
           <View className="w-full gap-3">
+            <SecondaryButton label="Send in Messenger" onPress={() => void sendInMessenger(link)} />
             <SecondaryButton label={kind === "link" ? "Share again" : "Share link"} onPress={() => void share(link)} />
             <SecondaryButton label="Done" onPress={() => router.back()} />
           </View>

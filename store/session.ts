@@ -323,8 +323,12 @@ export const useSession = create<SessionState>((set, get) => ({
     }
   },
   teamAccessRemoved: () => {
-    const { identity, authSource } = get();
-    if (isJoiningTeam()) {
+    const { identity, authSource, user } = get();
+    // Only someone not in a shop yet — signing in to claim a new invite — keeps
+    // the session. A teammate who was working always goes, whatever join
+    // intent an earlier tap left behind.
+    if (isJoiningTeam() && !user && identity.kind !== "supplier") {
+      useJobDrafts.getState().clearAll();
       if (identity.kind === "error" && identity.reason === "team_removed") return;
       set({
         user: null,
