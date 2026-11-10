@@ -211,20 +211,21 @@ it("never commits the iPhone Firebase file", () => {
   expect(ignored).toContain("GoogleService-Info.plist");
 });
 
-it("announces the TestFlight version only after the upload succeeds, and never fails the run", () => {
-  const announce = step("Announce the TestFlight release");
-  expect(step("Upload to TestFlight")).toMatch(/id: testflight\n/);
-  expect(announce).toMatch(/if: steps\.testflight\.outcome == 'success' && steps\.build\.outputs\.announce_version != ''\n/);
-  expect(announce).not.toMatch(/always\(\)|failure\(\)|!cancelled\(\)/);
-  expect(announce).toContain("continue-on-error: true");
-  expect(announce).toContain("RELEASE_CHANNEL: ios");
-  expect(announce).toContain("RELEASE_APP: supplier");
-  expect(announce).toContain("RELEASE_VERSION: ${{ steps.build.outputs.announce_version }}");
-  expect(announce).toContain("secrets.RELEASE_ANNOUNCE_TOKEN");
-  expect(announce).toContain("node scripts/announce-release.mjs");
-  expect(workflow.indexOf("- name: Upload to TestFlight")).toBeLessThan(
-    workflow.indexOf("- name: Announce the TestFlight release"),
-  );
-  // Every iPhone build shares app.json's version; the build number tells them apart.
+it("persists TestFlight metadata before upload and never announces immediately", () => {
+  const queue = step("Queue the TestFlight release notice");
+  expect(queue).toContain("github.ref == 'refs/heads/main'");
+  expect(queue).toContain("inputs.submit_to_testflight");
+  expect(queue).toContain("RELEASE_BUILD_NUMBER: ${{ steps.build.outputs.build_number }}");
+  expect(queue).toContain("RELEASE_STORE_VERSION: ${{ steps.build.outputs.version }}");
+  expect(queue).toContain("node scripts/queue-store-release.mjs");
+  expect(queue).not.toContain("RELEASE_ANNOUNCE_TOKEN");
+  expect(workflow.indexOf("- name: Queue the TestFlight release notice")).toBeLessThan(workflow.indexOf("- name: Upload to TestFlight"));
+  expect(step("Save the pending TestFlight notice")).toContain("steps.queue_ios.outcome == 'success'");
+  expect(step("Save the pending TestFlight notice")).toContain("retention-days: 7");
+  expect(queue).not.toContain("continue-on-error");
+  expect(step("Save the pending TestFlight notice")).not.toContain("continue-on-error");
+  expect(workflow.indexOf("- name: Save the pending TestFlight notice")).toBeLessThan(workflow.indexOf("- name: Upload to TestFlight"));
+  expect(step("Upload to TestFlight")).toContain("steps.save_ios_notice.outcome == 'success'");
+  expect(workflow).not.toContain("scripts/announce-release.mjs");
   expect(step("Read the build")).toContain("announce_version=");
 });
