@@ -15,7 +15,7 @@ export type AfterClerkAuth =
   | { kind: "join" }
   /** On a team, waiting for the Owner's approval. */
   | { kind: "team_waiting" }
-  /** The Owner removed this person; say so rather than refuse the sign-in. */
+  /** The Owner removed this person; the session was ended and Sign in says why. */
   | { kind: "team_removed" }
   | { kind: "blocked"; message: string };
 
@@ -160,6 +160,7 @@ export function hrefAfterClerkAuth(
   | "/(tabs)/home"
   | "/(tabs)/jobs"
   | "/access"
+  | "/(auth)/login"
   | "/join-team"
   | "/team-waiting"
   | ReturnType<typeof applyRoute> {
@@ -168,7 +169,7 @@ export function hrefAfterClerkAuth(
   }
   if (result.kind === "join") return "/join-team";
   if (result.kind === "team_waiting") return "/team-waiting";
-  if (result.kind === "team_removed") return "/access";
+  if (result.kind === "team_removed") return "/(auth)/login";
   if (result.kind === "apply") {
     return applyRoute(useSignupDraft.getState().draft, { clerkSession: true });
   }

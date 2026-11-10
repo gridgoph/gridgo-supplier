@@ -539,6 +539,24 @@ export function stepRefusal(error: unknown): { message: string; missing: Require
   return { message, missing: readRequirements(body.missing) };
 }
 
+/**
+ * Why New code did not go through, said to the Owner. The claimant-facing
+ * sentences ("Ask the owner…") would be addressed to the wrong person here.
+ */
+export function replaceInviteErrorMessage(error: unknown): string {
+  switch (apiErrorCode(error)) {
+    case "shop_invite_used":
+      return "Someone already joined with this code. Check Team to approve them.";
+    case "shop_invite_revoked":
+    case "shop_invite_not_found":
+      return "This code was already cancelled. Make a new invite.";
+    case "shop_invite_expired":
+      return "This code expired. Make a new invite.";
+    default:
+      return humanizeApiError(error, offlineMessage("make a new code"));
+  }
+}
+
 export function humanizeApiError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
     const body = error.body;

@@ -6,6 +6,7 @@ import { apiErrorCode, isUnmappedIdentity, supplierProjectionErrorMessage } from
 import { awaitClerkSessionToken, clerkAccessFor, clerkSessionToken } from "@/lib/clerk";
 import {
   ACCESS_WITHDRAWN_MESSAGE,
+  restoreTeamRemovedNotice,
   setClerkSignOutHandler,
   signedOutWithNotice,
   useSession,
@@ -20,10 +21,27 @@ type Props = { children: ReactNode };
  * and remains the authority for the supplier projection and protected operations.
  */
 export function ClerkSessionBridge({ children }: Props) {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded, isSignedIn, getToken, sessionId } = useAuth();
   const { user } = useUser();
   const { signOut } = useClerk();
   const sessionEnded = useSession((state) => signedOutWithNotice(state.identity));
+  const teamRemoved = useSession(
+    (state) => state.identity.kind === "signed_out" && state.identity.reason === "team_removed",
+  );
+  // The Clerk session the removal ended (null when the notice came back after a
+  // restart). While Clerk is still letting go of that one, the notice stays; a
+  // different session is somebody signing in again, and the notice gives way.
+  const removedFrom = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!teamRemoved) {
+      removedFrom.current = undefined;
+      return;
+    }
+    if (removedFrom.current === undefined) removedFrom.current = sessionId ?? null;
+    else if (isSignedIn && sessionId && sessionId !== removedFrom.current) {
+      useSession.getState().clearSignInRefusal();
+    }
+  }, [teamRemoved, isSignedIn, sessionId]);
   const getTokenRef = useRef(getToken);
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -59,6 +77,7 @@ export function ClerkSessionBridge({ children }: Props) {
 
     if (!isSignedIn) {
       session.clearClerkIdentity();
+      restoreTeamRemovedNotice();
       return () => {
         cancelled = true;
       };

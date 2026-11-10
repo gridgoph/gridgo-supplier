@@ -16,9 +16,10 @@ jest.mock("@/lib/api", () => ({
   revokeShopInvite: jest.fn(async () => undefined),
   updateShopMember: jest.fn(async () => ({})),
   removeShopMember: jest.fn(async () => undefined),
+  replaceShopInvite: jest.fn(),
 }));
 
-import { Share } from "react-native";
+import { Linking, Share } from "react-native";
 import TeamScreen from "@/app/team";
 import TeamInviteScreen from "@/app/team-invite";
 import * as api from "@/lib/api";
@@ -178,5 +179,105 @@ describe("adding staff", () => {
     });
     expect(api.createShopInvite).toHaveBeenCalledWith("phone", "+639171234567");
     expect(screen.getByText("+639171234567")).toBeTruthy();
+  });
+
+  it("swaps the shown QR for a new code only after GRIDGO replaced it", async () => {
+    const oldLink = joinTeamLink("tokenTOKENtoken_tokenTOKENtoken_tokenTOKEN1");
+    const newToken = "freshFRESHfresh_freshFRESHfresh_freshFRESH2";
+    (api.createShopInvite as jest.Mock).mockResolvedValue(made("qr"));
+    (api.replaceShopInvite as jest.Mock)
+      .mockRejectedValueOnce(new api.ApiError(409, { error: "shop_invite_used" }))
+      .mockResolvedValueOnce({ ...made("qr"), invite: { ...made("qr").invite, id: "shi_next" }, token: newToken });
+    await render(<TeamInviteScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByText("Show QR code"));
+    });
+
+    // A refusal keeps the code on screen and says why, to the Owner.
+    await act(async () => {
+      fireEvent.press(screen.getByText("New code"));
+    });
+    expect(askConfirm).toHaveBeenCalledWith(expect.objectContaining({ question: "Make a new QR code?" }));
+    expect(api.replaceShopInvite).toHaveBeenCalledWith("shi_new");
+    expect(screen.getByText(oldLink)).toBeTruthy();
+    expect(screen.getByText(/Someone already joined with this code/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(screen.getByText("New code"));
+    });
+    expect(screen.queryByText(oldLink)).toBeNull();
+    expect(screen.getByText(joinTeamLink(newToken))).toBeTruthy();
+    expect(screen.queryByText(/Someone already joined/)).toBeNull();
+  });
+
+  it("keeps the code when the Owner backs out of New code", async () => {
+    (api.createShopInvite as jest.Mock).mockResolvedValue(made("link"));
+    (askConfirm as jest.Mock).mockResolvedValueOnce(false);
+    jest.spyOn(Share, "share").mockResolvedValue({ action: "dismissedAction" });
+    await render(<TeamInviteScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByRole("radio", { name: "Link" }));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText("Share link"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText("New code"));
+    });
+    expect(askConfirm).toHaveBeenLastCalledWith(expect.objectContaining({ question: "Make a new link?" }));
+    expect(api.replaceShopInvite).not.toHaveBeenCalled();
+  });
+
+  it("sends the link in Messenger, and copies it when Messenger does not open", async () => {
+    const link = joinTeamLink("tokenTOKENtoken_tokenTOKENtoken_tokenTOKEN1");
+    (api.createShopInvite as jest.Mock).mockResolvedValue(made("qr"));
+    const open = jest.spyOn(Linking, "openURL").mockResolvedValueOnce(true).mockRejectedValueOnce(new Error("no app"));
+    const { setStringAsync } = jest.requireMock("expo-clipboard") as { setStringAsync: jest.Mock };
+    await render(<TeamInviteScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByText("Show QR code"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText("Send in Messenger"));
+    });
+    expect(open).toHaveBeenCalledWith(`fb-messenger://share/?link=${encodeURIComponent(link)}`);
+    expect(screen.queryByText(/Messenger did not open/)).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByText("Send in Messenger"));
+    });
+    expect(setStringAsync).toHaveBeenCalledWith(link);
+    expect(screen.getByText(/Messenger did not open. Link copied/)).toBeTruthy();
+  });
+
+  it.each([
+    ["email", "Email", "Their email", "joy@example.com", "joy@example.com"],
+    ["phone", "Phone", "Their mobile number", "0917 123 4567", "+639171234567"],
+  ])("makes a new code for an %s invite, to the same person", async (kind, tab, field, typed, identity) => {
+    (api.createShopInvite as jest.Mock).mockResolvedValue(made(kind, identity));
+    (api.replaceShopInvite as jest.Mock).mockResolvedValue({
+      ...made(kind, identity),
+      invite: { ...made(kind, identity).invite, id: "shi_next" },
+      token: "freshFRESHfresh_freshFRESHfresh_freshFRESH2",
+    });
+    await render(<TeamInviteScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByRole("radio", { name: tab }));
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByLabelText(field), typed);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText("Invite"));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText("New code"));
+    });
+    expect(askConfirm).toHaveBeenLastCalledWith(
+      expect.objectContaining({ question: `Make a new invite for ${identity}?` }),
+    );
+    expect(api.replaceShopInvite).toHaveBeenCalledWith("shi_new");
+    expect(screen.getByText(joinTeamLink("freshFRESHfresh_freshFRESHfresh_freshFRESH2"))).toBeTruthy();
+    expect(screen.getByText(identity)).toBeTruthy();
   });
 });

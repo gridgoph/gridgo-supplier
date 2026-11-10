@@ -181,6 +181,114 @@ export function actorForEntry(
   return matches.length && roles.size === 1 ? (matches[matches.length - 1].actor ?? null) : null;
 }
 
+/**
+ * What a recorded action did, in the shop's words. The same vocabulary as the
+ * website's "Who did what", spoken about a job. An unknown code reads as an
+ * update — never raw — so a new kind of action GRIDGO starts recording still
+ * shows up, just plainly.
+ */
+const ACTION_LABEL: Record<string, string> = {
+  "order.created": "Placed the order",
+  "order.transition": "Moved the job on",
+  "order.updated": "Updated the job",
+  "order.special_instructions_acknowledged": "Read the special instructions",
+  "order.arrived_packed": "Marked it packed",
+  "order.rider_packing_photo": "Added a packing photo",
+  "order.rider_assigned": "Assigned a rider",
+  "order.file_check": "Checked the files",
+  "order.production_override": "Moved it to ready",
+  "order.supplier_assigned": "Assigned your shop",
+  "order.supplier_changed": "Changed the shop",
+  "order.artwork_download": "Downloaded the artwork",
+  "order.artwork_download_all": "Downloaded all artwork",
+  "order.qa_tick": "Ticked a quality check",
+  "order.qa_request_file": "Asked for a new file",
+  "order.confirm_delivery": "Confirmed delivery",
+  "order.rated": "Rated the job",
+  "order.physical_invoice_requested": "Asked for a paper invoice",
+  "order.physical_invoice_promised": "Promised the paper invoice",
+  "order.delivery_pin_requested": "Asked for the delivery PIN",
+  "order.approval_recorded": "Recorded an approval",
+  "order.transition_refused": "Tried a step that was refused",
+  "dispatch.milestone": "Updated the delivery",
+  "file.saved": "Added a file",
+  "client_shop_chat.message_sent": "Messaged the client",
+  "pickup_chat.message_sent": "Messaged the rider",
+  "pickup_checklist.inspected": "Checked the order at the counter",
+  "pickup_checklist.handoff_signed": "Signed the handover",
+  "pickup_checklist.escalate": "Raised a pickup problem",
+  "pickup_escalation.resolve": "Resolved a pickup problem",
+  "handover.escalated": "Raised a handover problem",
+  "claim.raise": "Opened a claim",
+  "claim.hold": "Held payouts for a claim",
+  "claim.release": "Released a claim hold",
+  "order.remove": "Removed the order",
+};
+
+export function actionLabel(action: unknown): string {
+  const code = typeof action === "string" ? action : "";
+  if (ACTION_LABEL[code]) return ACTION_LABEL[code];
+  if (code.startsWith("order.change")) return "Handled a change request";
+  if (code.startsWith("order.reschedule")) return "Handled a deadline request";
+  if (code.startsWith("order.shop_")) return "Changed the shop's part";
+  if (code.startsWith("order.delivery_pin")) return "Handled the delivery PIN";
+  if (code.startsWith("payment.")) return "Updated the payment";
+  if (code.startsWith("refund.")) return "Updated a refund";
+  if (code.startsWith("file.")) return "Updated a file";
+  return "Updated the job";
+}
+
+export type OrderActionRow = {
+  id: string;
+  /** "Messaged the client", or "Moved it to Packaging" when the step is known. */
+  what: string;
+  /** "Ana (Staff)"; null when GRIDGO recorded nobody, which names nobody. */
+  who: string | null;
+  at: string;
+};
+
+/**
+ * Every recorded action on a job, newest first — the chat message and the
+ * photo as well as the steps. A step names the state it reached when a
+ * timeline entry from the same person at the same second says which.
+ */
+export function orderActionRows(
+  actions: unknown,
+  timeline: readonly { at: string; state: string; by?: unknown; actor?: ActionActor | null }[] = [],
+  stateLabel: (state: string) => string = (state) => state,
+): OrderActionRow[] {
+  return readOrderActions(actions)
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      const diff = (Date.parse(b.row.at) || 0) - (Date.parse(a.row.at) || 0);
+      return diff || b.index - a.index;
+    })
+    .map(({ row, index }) => {
+      let what = actionLabel(row.action);
+      if (row.action === "order.transition") {
+        const reached = stepReached(row, timeline);
+        if (reached) what = `Moved it to ${stateLabel(reached)}`;
+      }
+      return { id: typeof row.id === "string" && row.id ? row.id : `${row.at}-${index}`, what, who: actorLabel(row.actor), at: row.at };
+    });
+}
+
+function stepReached(
+  row: OrderAction,
+  timeline: readonly { at: string; state: string; by?: unknown; actor?: ActionActor | null }[],
+): string | null {
+  const at = Date.parse(row.at);
+  const userId = row.actor?.userId;
+  if (!Number.isFinite(at) || !userId) return null;
+  const matches = timeline.filter((entry) => {
+    const when = Date.parse(entry.at);
+    const who = entry.actor?.userId ?? (typeof entry.by === "string" ? entry.by : null);
+    return Number.isFinite(when) && Math.abs(when - at) < 1000 && who === userId;
+  });
+  const states = new Set(matches.map((entry) => entry.state));
+  return states.size === 1 ? matches[0].state : null;
+}
+
 /** Defensive read of an order's `actions` (absent on an older API). */
 export function readOrderActions(value: unknown): OrderAction[] {
   if (!Array.isArray(value)) return [];

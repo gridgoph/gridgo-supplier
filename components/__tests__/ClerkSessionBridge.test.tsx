@@ -9,6 +9,7 @@ import { setClerkSignOutHandler, useSession } from "@/store/session";
 
 let mockRole = "supplier";
 let mockIsSignedIn = true;
+let mockSessionId: string | null = "sess_current";
 let mockClerkUser: {
   primaryEmailAddress?: { emailAddress: string };
   publicMetadata?: Record<string, unknown>;
@@ -23,6 +24,7 @@ jest.mock("@clerk/expo", () => ({
   useAuth: () => ({
     isLoaded: true,
     isSignedIn: mockIsSignedIn,
+    sessionId: mockIsSignedIn ? mockSessionId : null,
     getToken: mockGetToken,
   }),
   useClerk: () => ({ signOut: mockSignOut }),
@@ -37,6 +39,7 @@ describe("ClerkSessionBridge supplier projection", () => {
   beforeEach(() => {
     mockRole = "supplier";
     mockIsSignedIn = true;
+    mockSessionId = "sess_current";
     mockClerkUser = {
       primaryEmailAddress: { emailAddress: "shop@example.com" },
       publicMetadata: { gridgoRole: "supplier" },
@@ -230,4 +233,32 @@ it("probes supplier membership when Clerk's primary role is client",async()=>{
   await waitFor(()=>expect(useSession.getState().user?.id).toBe("dual"));
   expect(mockSignOut).not.toHaveBeenCalled();
   await view.unmount();jest.restoreAllMocks();api.setTokenProvider(null);
+
+});
+
+it("keeps the off-team notice while Clerk lets go, and gives way to a new sign-in", async () => {
+  mockIsSignedIn = true;
+  mockSessionId = "sess_current";
+  api.setTokenProvider(null);
+  const me = jest.spyOn(api, "me").mockRejectedValue(new api.ApiError(403, { error: "shop_access_removed" }));
+  // Removed while signed in on sess_current: Clerk still reports it.
+  useSession.setState({ authSource: "none", identity: { kind: "signed_out", reason: "team_removed" } });
+  const view = await render(
+    <ClerkSessionBridge>
+      <Text>Supplier shell</Text>
+    </ClerkSessionBridge>,
+  );
+  expect(me).not.toHaveBeenCalled();
+  expect(useSession.getState().identity).toEqual({ kind: "signed_out", reason: "team_removed" });
+
+  // The same person signs in again: a different Clerk session.
+  mockSessionId = "sess_new";
+  await act(async () => {
+    view.rerender(
+      <ClerkSessionBridge>
+        <Text>Supplier shell</Text>
+      </ClerkSessionBridge>,
+    );
+  });
+  await waitFor(() => expect(me).toHaveBeenCalled());
 });

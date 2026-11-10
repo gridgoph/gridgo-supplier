@@ -1,6 +1,17 @@
 import * as api from "@/lib/api";
 import { authDoorOpen, launchHref } from "@/lib/launch";
-import { isShopOwner, isShopStaff, TEAM_REMOVED_MESSAGE, useSession } from "@/store/session";
+import { useJobDrafts } from "@/store/jobDrafts";
+import {
+  isShopOwner,
+  isShopStaff,
+  restoreTeamRemovedNotice,
+  setClerkSignOutHandler,
+  signedOutWithNotice,
+  TEAM_REMOVED_MESSAGE,
+  useSession,
+} from "@/store/session";
+import { useTeamJoin } from "@/store/teamJoin";
+import { useTeamRemovedNotice } from "@/store/teamRemovedNotice";
 
 function response(status: number, body: unknown): Response {
   return { ok: status >= 200 && status < 300, status, text: async () => JSON.stringify(body) } as Response;
@@ -98,8 +109,74 @@ describe("removal and approval refusals", () => {
 
     const state = useSession.getState();
     expect(state.user).toBeNull();
-    expect(state.identity).toEqual({ kind: "error", reason: "team_removed", message: TEAM_REMOVED_MESSAGE });
-    expect(launchHref(state.identity, state.user)).toBe("/access");
+    expect(state.identity).toEqual({ kind: "signed_out", reason: "team_removed" });
+    expect(state.authSource).toBe("none");
+    expect(launchHref(state.identity, state.user)).toBe("/(auth)/login");
+  });
+
+  it("ends this app's Clerk session once, and keeps the explanation while Clerk lets go", async () => {
+    const signOut = jest.fn(async () => {});
+    setClerkSignOutHandler(signOut);
+    useJobDrafts.getState().setNote("order_1", "Customer wants matte");
+    jest.spyOn(global, "fetch").mockResolvedValue(response(200, staffBootstrap));
+    useSession.getState().adoptClerkUser(await api.me());
+
+    useSession.getState().teamAccessRemoved();
+    // The stream event and a refused request can both arrive.
+    useSession.getState().teamAccessRemoved();
+    // Clerk reporting signed-out must not wipe the sentence.
+    useSession.getState().clearClerkIdentity();
+
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(useSession.getState().identity).toEqual({ kind: "signed_out", reason: "team_removed" });
+    expect(useJobDrafts.getState().drafts).toEqual({});
+    expect(useTeamRemovedNotice.getState().pending).toBe(true);
+    expect(signedOutWithNotice(useSession.getState().identity)).toBe(true);
+    // Never more than this app's own session: no user, ban or other-session call.
+    expect(signOut).toHaveBeenCalledWith();
+    setClerkSignOutHandler(null);
+  });
+
+  it("keeps the session of someone joining with a new invite, so they can claim it", async () => {
+    const signOut = jest.fn(async () => {});
+    setClerkSignOutHandler(signOut);
+    useTeamJoin.getState().startJoining();
+    useSession.getState().teamAccessRemoved();
+    expect(signOut).not.toHaveBeenCalled();
+    expect(useSession.getState().identity).toEqual({ kind: "error", reason: "team_removed", message: TEAM_REMOVED_MESSAGE });
+    useTeamJoin.getState().clear();
+    setClerkSignOutHandler(null);
+  });
+
+  it("signs a working teammate out even if an old join tap left the intent set", async () => {
+    const signOut = jest.fn(async () => {});
+    setClerkSignOutHandler(signOut);
+    jest.spyOn(global, "fetch").mockResolvedValue(response(200, staffBootstrap));
+    useSession.getState().adoptClerkUser(await api.me());
+    useTeamJoin.getState().startJoining();
+    useSession.getState().teamAccessRemoved();
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(useSession.getState().identity).toEqual({ kind: "signed_out", reason: "team_removed" });
+    useTeamJoin.getState().clear();
+    setClerkSignOutHandler(null);
+  });
+
+  it("says it again on the next launch when the sign-out restarted the app", async () => {
+    useTeamRemovedNotice.getState().mark();
+    useSession.setState({ user: null, authSource: "none", identity: { kind: "signed_out" } });
+    restoreTeamRemovedNotice();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(useSession.getState().identity).toEqual({ kind: "signed_out", reason: "team_removed" });
+
+    jest.spyOn(global, "fetch").mockResolvedValue(response(200, ownerResponse));
+    useSession.getState().adoptClerkUser(await api.me());
+    expect(useTeamRemovedNotice.getState().pending).toBe(false);
+  });
+
+  it("lets a new sign-in attempt clear the removal notice", () => {
+    useSession.setState({ authSource: "none", identity: { kind: "signed_out", reason: "team_removed" } });
+    useSession.getState().clearSignInRefusal();
+    expect(useSession.getState().identity).toEqual({ kind: "signed_out" });
   });
 
   it("re-reads standing when a request says approval is pending", async () => {
