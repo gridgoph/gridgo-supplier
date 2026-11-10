@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.405 (New feature)
+
+- Owners can add staff by QR, link, email or phone. Staff take and run orders without seeing prices or earnings.
+- Home shows your jobs sooner, even when board details or alerts take longer to load.
+
 ## 1.0.393 (Improvement)
 
 - Google Play installs can now offer an update in the app, with a restart when you are ready.
