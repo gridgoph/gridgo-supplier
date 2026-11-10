@@ -4,12 +4,14 @@ import { useJobDrafts } from "@/store/jobDrafts";
 import {
   isShopOwner,
   isShopStaff,
+  restoreTeamRemovedNotice,
   setClerkSignOutHandler,
   signedOutWithNotice,
   TEAM_REMOVED_MESSAGE,
   useSession,
 } from "@/store/session";
 import { useTeamJoin } from "@/store/teamJoin";
+import { useTeamRemovedNotice } from "@/store/teamRemovedNotice";
 
 function response(status: number, body: unknown): Response {
   return { ok: status >= 200 && status < 300, status, text: async () => JSON.stringify(body) } as Response;
@@ -128,6 +130,7 @@ describe("removal and approval refusals", () => {
     expect(signOut).toHaveBeenCalledTimes(1);
     expect(useSession.getState().identity).toEqual({ kind: "signed_out", reason: "team_removed" });
     expect(useJobDrafts.getState().drafts).toEqual({});
+    expect(useTeamRemovedNotice.getState().pending).toBe(true);
     expect(signedOutWithNotice(useSession.getState().identity)).toBe(true);
     // Never more than this app's own session: no user, ban or other-session call.
     expect(signOut).toHaveBeenCalledWith();
@@ -156,6 +159,18 @@ describe("removal and approval refusals", () => {
     expect(useSession.getState().identity).toEqual({ kind: "signed_out", reason: "team_removed" });
     useTeamJoin.getState().clear();
     setClerkSignOutHandler(null);
+  });
+
+  it("says it again on the next launch when the sign-out restarted the app", async () => {
+    useTeamRemovedNotice.getState().mark();
+    useSession.setState({ user: null, authSource: "none", identity: { kind: "signed_out" } });
+    restoreTeamRemovedNotice();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(useSession.getState().identity).toEqual({ kind: "signed_out", reason: "team_removed" });
+
+    jest.spyOn(global, "fetch").mockResolvedValue(response(200, ownerResponse));
+    useSession.getState().adoptClerkUser(await api.me());
+    expect(useTeamRemovedNotice.getState().pending).toBe(false);
   });
 
   it("lets a new sign-in attempt clear the removal notice", () => {

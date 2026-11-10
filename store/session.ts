@@ -20,6 +20,7 @@ import { usePlayOptIn } from "@/store/playOptIn";
 import { useTesterProgram } from "@/store/testerProgram";
 import { isJoiningTeam } from "@/store/teamJoin";
 import { useJobDrafts } from "@/store/jobDrafts";
+import { useTeamRemovedNotice } from "@/store/teamRemovedNotice";
 
 /** Expected role for this binary — mismatched login is rejected. */
 export const APP_ROLE = "supplier" as const;
@@ -214,6 +215,7 @@ export const useSession = create<SessionState>((set, get) => ({
   },
   clearSignInRefusal: () => {
     const { identity } = get();
+    useTeamRemovedNotice.getState().clear();
     if (identity.kind === "signed_out" && (identity.reason === "refused" || identity.reason === "team_removed")) {
       set({ identity: { kind: "signed_out" } });
     }
@@ -353,6 +355,7 @@ export const useSession = create<SessionState>((set, get) => ({
       identity: { kind: "signed_out", reason: "team_removed" },
       sessionWait: null,
     });
+    useTeamRemovedNotice.getState().mark();
     // Typed notes and promise times on the shop's jobs stay with the shop.
     useJobDrafts.getState().clearAll();
     // The phone goes back on the unclaimed list: no more of this shop's offers.
@@ -535,4 +538,26 @@ useSession.subscribe((state, previous) => {
     if (previous.user) useShopPlan.getState().clearBlackouts();
     if (next) useShopPlan.getState().claimBlackouts(next);
   });
+});
+
+/**
+ * A removal that ended the session before Sign in could say so (the web
+ * reloads on Clerk sign-out; a phone may be closed) is said on the next launch.
+ * The Clerk bridge calls this once Clerk reports nobody signed in; any account
+ * settling here drops it.
+ */
+export function restoreTeamRemovedNotice(): void {
+  const apply = () => {
+    if (!useTeamRemovedNotice.getState().pending) return;
+    const { identity, user, authSource } = useSession.getState();
+    if (user || authSource !== "none" || identity.kind !== "signed_out" || identity.reason) return;
+    useSession.setState({ identity: { kind: "signed_out", reason: "team_removed" } });
+  };
+  if (useTeamRemovedNotice.persist.hasHydrated()) apply();
+  else useTeamRemovedNotice.persist.onFinishHydration(apply);
+}
+
+useSession.subscribe((state) => {
+  const kind = state.identity.kind;
+  if (kind !== "signed_out" && kind !== "loading") useTeamRemovedNotice.getState().clear();
 });

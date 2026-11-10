@@ -6,6 +6,7 @@ import { apiErrorCode, isUnmappedIdentity, supplierProjectionErrorMessage } from
 import { awaitClerkSessionToken, clerkAccessFor, clerkSessionToken } from "@/lib/clerk";
 import {
   ACCESS_WITHDRAWN_MESSAGE,
+  restoreTeamRemovedNotice,
   setClerkSignOutHandler,
   signedOutWithNotice,
   useSession,
@@ -59,6 +60,7 @@ export function ClerkSessionBridge({ children }: Props) {
 
     if (!isSignedIn) {
       session.clearClerkIdentity();
+      restoreTeamRemovedNotice();
       return () => {
         cancelled = true;
       };
