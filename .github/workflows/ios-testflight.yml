@@ -226,11 +226,38 @@ jobs:
             ].join("\n"));
           NODE
 
+      # Make the pending record durable BEFORE upload. Failure stops the
+      # upload; a healthy rerun can retry without losing an uploaded notice.
+      # The checker ignores records until the source run succeeds and Apple
+      # confirms this exact build is available to its assigned testers.
+      - name: Queue the TestFlight release notice
+        id: queue_ios
+        if: github.ref == 'refs/heads/main' && inputs.submit_to_testflight
+        env:
+          RELEASE_APP: supplier
+          RELEASE_CHANNEL: ios
+          RELEASE_VERSION: ${{ steps.build.outputs.announce_version }}
+          RELEASE_BUILD_NUMBER: ${{ steps.build.outputs.build_number }}
+          RELEASE_STORE_VERSION: ${{ steps.build.outputs.version }}
+          ASC_APP_ID: ${{ vars.ASC_APP_ID }}
+        run: node scripts/queue-store-release.mjs "$RUNNER_TEMP/pending-release/release.json"
+
+      - name: Save the pending TestFlight notice
+        id: save_ios_notice
+        if: steps.queue_ios.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pending-store-release-ios
+          path: ${{ runner.temp }}/pending-release/release.json
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
+
       # Apple's own uploader on this Mac: nothing in the upload depends on
       # the Expo plan or waits in an Expo queue.
       - name: Upload to TestFlight
         id: testflight
-        if: inputs.submit_to_testflight
+        if: inputs.submit_to_testflight && (github.ref != 'refs/heads/main' || steps.save_ios_notice.outcome == 'success')
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -248,20 +275,6 @@ jobs:
             echo
             echo "Uploaded to App Store Connect. It appears in TestFlight once Apple has processed it (usually 5 to 30 minutes)."
           } >> "$GITHUB_STEP_SUMMARY"
-
-      # TestFlight testers hear of this version only once it is uploaded; the
-      # APK notice never reaches an iPhone (gridgo-api
-      # docs/RELEASE_ANNOUNCEMENTS_API.md). Advisory: the upload has already
-      # succeeded, so a failed announcement never fails the run.
-      - name: Announce the TestFlight release
-        if: steps.testflight.outcome == 'success' && steps.build.outputs.announce_version != ''
-        continue-on-error: true
-        env:
-          RELEASE_ANNOUNCE_TOKEN: ${{ secrets.RELEASE_ANNOUNCE_TOKEN }}
-          RELEASE_APP: supplier
-          RELEASE_CHANNEL: ios
-          RELEASE_VERSION: ${{ steps.build.outputs.announce_version }}
-        run: node scripts/announce-release.mjs
 
       - name: Remove the credentials and the IPA
         if: always()

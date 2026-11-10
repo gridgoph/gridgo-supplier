@@ -32,27 +32,34 @@ test('HTTP failures and network errors become warnings without leaking errors or
 test('an idempotent retry is success', async () => {
   assert.equal((await announceRelease(env, async () => ({ ok: true, status: 200 }))).level, 'notice');
 });
-test('the APK release keeps its body; Play and TestFlight name their channel', async () => {
-  const bodies = [];
-  const transport = async (_url, options) => { bodies.push(JSON.parse(options.body)); return { ok: true, status: 201 }; };
-  await announceRelease(env, transport);
-  await announceRelease({ ...env, RELEASE_CHANNEL: 'apk' }, transport);
-  await announceRelease({ ...env, RELEASE_CHANNEL: 'play' }, transport);
-  await announceRelease({ ...env, RELEASE_CHANNEL: 'ios' }, transport);
-  assert.deepEqual(bodies, [
-    { app: 'client', version: '1.0.123' },
-    { app: 'client', version: '1.0.123', channel: 'apk' },
-    { app: 'client', version: '1.0.123', channel: 'play' },
-    { app: 'client', version: '1.0.123', channel: 'ios' },
-  ]);
+test('a store channel is sent as channel; the APK notice keeps its old body', async () => {
+  for (const [channel, expected] of [['play', 'play'], ['ios', 'ios'], ['apk', undefined], ['', undefined]]) {
+    const result = await announceRelease({ ...env, RELEASE_CHANNEL: channel }, async (_url, options) => {
+      const body = JSON.parse(options.body);
+      assert.equal(body.channel, expected);
+      if (!expected) assert.deepEqual(body, { app: 'client', version: '1.0.123' });
+      return { ok: true, status: 201 };
+    }, { availabilityConfirmed: true });
+    assert.equal(result.level, 'notice');
+  }
 });
-test('a store failure names that store, not the APK', async () => {
-  const result = await announceRelease({ ...env, RELEASE_CHANNEL: 'ios' }, async () => ({ ok: false, status: 502 }));
+test('a store channel failure names the store, not the APK', async () => {
+  const result = await announceRelease({ ...env, RELEASE_CHANNEL: 'play' }, async () => ({ ok: false, status: 500 }), { availabilityConfirmed: true });
   assert.equal(result.level, 'warning');
-  assert.match(result.message, /TestFlight upload is already published/);
+  assert.match(result.message, /Google Play/);
+  assert.ok(!/APK/.test(result.message));
 });
 test('an unknown channel is refused without a request', async () => {
-  const result = await announceRelease({ ...env, RELEASE_CHANNEL: 'web' }, () => { throw new Error('must not call'); });
+  const result = await announceRelease({ ...env, RELEASE_CHANNEL: 'huawei' }, () => { throw new Error('must not call'); });
   assert.equal(result.level, 'warning');
   assert.match(result.message, /RELEASE_CHANNEL/);
+});
+
+test('direct store announcement calls cannot bypass the availability gate', async () => {
+  for (const channel of ['play', 'ios']) {
+    const result = await announceRelease({ ...env, RELEASE_CHANNEL: channel }, () => { throw new Error('must not call'); });
+    assert.equal(result.level, 'notice');
+    assert.equal(result.accepted, undefined);
+    assert.match(result.message, /availability has not been confirmed/);
+  }
 });
