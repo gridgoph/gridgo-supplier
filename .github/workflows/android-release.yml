@@ -47,11 +47,13 @@ on:
           - internal
           - closed
 
-# A release build takes ~20 minutes; never run two for the same ref.
-# A Play bundle run gets its own group, so it never cancels a main release.
+# APK builds keep their per-ref cancellation. Play uploads and the availability
+# checker share one lock across all refs: Google invalidates an existing edit
+# when the same service account opens another one. Never interrupt a Play edit.
 concurrency:
-  group: android-apk-${{ github.ref }}${{ github.event.inputs.play_bundle == 'true' && '-play' || '' }}
-  cancel-in-progress: true
+  group: ${{ github.event.inputs.play_bundle == 'true' && 'play-store-access' || format('android-apk-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.event.inputs.play_bundle != 'true' }}
+  queue: ${{ github.event.inputs.play_bundle == 'true' && 'max' || 'single' }}
 
 permissions:
   contents: read
@@ -73,6 +75,9 @@ jobs:
 
       - name: Check release announcement delivery
         run: node --test scripts/announce-release.test.mjs
+
+      - name: Check store availability gates and scheduled delivery
+        run: node --test scripts/store-availability.test.mjs scripts/check-store-releases.test.mjs
 
       - name: Check the Play release notes
         run: node --test scripts/play-release-notes.test.mjs
@@ -563,6 +568,33 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # Persist the pending notice BEFORE upload. A failed metadata/artifact
+      # save must stop the store upload so the notice cannot be lost. The
+      # checker still requires a successful run and exact-build availability.
+      # Internal-only builds and branch uploads keep their no-notice path.
+      - name: Queue the Play release notice
+        id: queue_play
+        if: github.ref == 'refs/heads/main' && github.event.inputs.play_bundle == 'true' && github.event.inputs.submit_to_play == 'true' && steps.play-track.outputs.track == 'alpha'
+        env:
+          RELEASE_APP: supplier
+          RELEASE_CHANNEL: play
+          RELEASE_VERSION: ${{ steps.config.outputs.version }}
+          RELEASE_BUILD_NUMBER: ${{ steps.config.outputs.code }}
+          PLAY_PACKAGE: ${{ steps.config.outputs.package }}
+          PLAY_TRACK: ${{ steps.play-track.outputs.track }}
+        run: node scripts/queue-store-release.mjs "$RUNNER_TEMP/pending-release/release.json"
+
+      - name: Save the pending Play notice
+        id: save_play_notice
+        if: steps.queue_play.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pending-store-release-play
+          path: ${{ runner.temp }}/pending-release/release.json
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
+
       # Only after the AAB is verified and kept as an artifact, so a failed
       # upload still leaves the bundle to upload by hand.
       #
@@ -581,7 +613,7 @@ jobs:
       # number, so each upload is newer.
       - name: Upload the Play bundle to ${{ steps.play-track.outputs.label }}
         id: play_submit
-        if: github.event.inputs.play_bundle == 'true' && github.event.inputs.submit_to_play == 'true'
+        if: github.event.inputs.play_bundle == 'true' && github.event.inputs.submit_to_play == 'true' && (github.ref != 'refs/heads/main' || steps.play-track.outputs.track != 'alpha' || steps.save_play_notice.outcome == 'success')
         env:
           PLAY_TRACK: ${{ steps.play-track.outputs.track }}
           TRACK_LABEL: ${{ steps.play-track.outputs.label }}
@@ -635,20 +667,6 @@ jobs:
             cat "$notes"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-
-      # Play testers hear of this version only now that Play has it; the APK
-      # notice above never reaches a Play install (gridgo-api
-      # docs/RELEASE_ANNOUNCEMENTS_API.md). Advisory: the upload has already
-      # succeeded, so a failed announcement never fails the run.
-      - name: Announce the Play release
-        if: steps.play_submit.outcome == 'success'
-        continue-on-error: true
-        env:
-          RELEASE_ANNOUNCE_TOKEN: ${{ secrets.RELEASE_ANNOUNCE_TOKEN }}
-          RELEASE_APP: supplier
-          RELEASE_CHANNEL: play
-          RELEASE_VERSION: ${{ steps.config.outputs.version }}
-        run: node scripts/announce-release.mjs
 
       # The notes this release carried now belong to its version: they move
       # under "## <version> (<label>)" in WHATS_NEW.md and leave whats-new/, so

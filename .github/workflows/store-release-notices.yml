@@ -1,0 +1,54 @@
+name: Announce available store releases
+
+# Runs only after this workflow reaches the default branch (main). GitHub can
+# delay schedules: late is safe. Pending upload artifacts expire after 7 days.
+on:
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Check availability without sending notifications
+        type: boolean
+        default: true
+
+concurrency:
+  group: store-release-notices
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write # read pending artifacts; delete only after API accepts notice
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    # Same lock as EVERY Play upload, including uploads from other branches.
+    # Opening a read edit must not invalidate an in-flight upload's edit.
+    concurrency:
+      group: play-store-access
+      cancel-in-progress: false
+      queue: max
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Never execute code from a pending artifact or the upload run's branch.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check availability and announce
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_ANNOUNCE_TOKEN: ${{ secrets.RELEASE_ANNOUNCE_TOKEN }}
+          RELEASE_APP: supplier
+          PLAY_PACKAGE: ph.gridgo.supplier
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          ASC_APP_ID: ${{ vars.ASC_APP_ID }}
+          ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          CHECK_MODE: ${{ github.event_name == 'schedule' && '--send' || inputs.dry_run && '--dry-run' || '--send' }}
+        run: node scripts/check-store-releases.mjs "$CHECK_MODE"
