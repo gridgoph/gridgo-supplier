@@ -91,8 +91,16 @@ export default function TeamInviteScreen() {
   async function sendInMessenger(url: string) {
     setIssuedNote(null);
     if (await openInMessenger(url)) return;
-    await copy(url);
-    setIssuedNote({ tone: "info", text: "Messenger did not open. Link copied — paste it in any chat." });
+    const copiedLink = await copy(url).then(
+      () => true,
+      () => false,
+    );
+    setIssuedNote({
+      tone: "info",
+      text: copiedLink
+        ? "Messenger did not open. Link copied — paste it in any chat."
+        : "Messenger did not open. Copy the link above and paste it in any chat.",
+    });
   }
 
   /** Swap the shown code only once GRIDGO has revoked the old one and issued this. */
