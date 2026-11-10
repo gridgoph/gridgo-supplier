@@ -152,19 +152,19 @@ export default function PlayOptInScreen() {
 
   const action =
     step === "gmail"
-      ? { label: busy ? "Confirming…" : "Confirm Gmail", onPress: () => void confirm() }
+      ? { label: busy ? "Confirming…" : "Confirm", onPress: () => void confirm() }
       : step === "group"
         ? { label: "Join group", onPress: () => void run(() => usePlayOptIn.getState().openGroup()) }
         : step === "optin"
-          ? { label: "Open Play testing", onPress: () => void run(() => usePlayOptIn.getState().openOptIn()) }
-          : { label: "Open Play Store", onPress: () => void usePlayOptIn.getState().openPlayStore() };
+          ? { label: "Become a tester", onPress: () => void run(() => usePlayOptIn.getState().openOptIn()) }
+          : { label: "Install from Play", onPress: () => void usePlayOptIn.getState().openPlayStore() };
 
   // Each step's way back, for a page closed too early.
   const again =
     step === "optin" && state.groupMode === "link"
       ? { label: "Open the group again", onPress: () => void run(() => usePlayOptIn.getState().openGroup()) }
       : step === "install"
-        ? { label: "Open Play testing again", onPress: () => void run(() => usePlayOptIn.getState().openOptIn()) }
+        ? { label: "Open the tester page again", onPress: () => void run(() => usePlayOptIn.getState().openOptIn()) }
         : null;
 
   const hint =
@@ -181,8 +181,7 @@ export default function PlayOptInScreen() {
       loading={false}
       error={null}
       onRetry={() => void load()}
-      title="Become a tester"
-      lede="Help us launch GRIDGO on Play."
+      title="Help us launch GRIDGO on Play"
       actionError={actionError}
       footer={
         <>
@@ -193,7 +192,8 @@ export default function PlayOptInScreen() {
     >
       <PlayOptInTrack
         steps={steps}
-        details={confirmed ? { gmail: confirmedGmail } : {}}
+        // Opening a link is all this phone knows; it never claims the shop joined.
+        details={confirmed ? { gmail: confirmedGmail, group: "Opened", optin: "Opened" } : {}}
         backTo={
           confirmed
             ? {

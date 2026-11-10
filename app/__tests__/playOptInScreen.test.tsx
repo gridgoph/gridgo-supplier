@@ -61,12 +61,12 @@ it("reports the tap on entry, then asks a custom address to be named a Google ac
   await waitFor(() => expect(events()).toEqual(["tapped"]));
 
   await fireEvent.changeText(screen.getByLabelText("Gmail on Google Play"), "owner@printshop.ph");
-  await fireEvent.press(screen.getByRole("button", { name: "Confirm Gmail" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Confirm" }));
   expect(api.confirmPlayOptInGmail).not.toHaveBeenCalled();
   expect(screen.getByText("Play admits Google accounts only.")).toBeTruthy();
 
   await fireEvent.press(screen.getByRole("checkbox", { name: "This is my Google account" }));
-  await fireEvent.press(screen.getByRole("button", { name: "Confirm Gmail" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Confirm" }));
   expect(api.confirmPlayOptInGmail).toHaveBeenCalledWith(install, "owner@printshop.ph", true);
   expect(await screen.findByRole("button", { name: "Join group" })).toBeTruthy();
 });
@@ -75,7 +75,7 @@ it("refuses a malformed address before sending", async () => {
   (api.getPlayOptIn as jest.Mock).mockResolvedValue(optIn());
   await render(<PlayOptInScreen />);
   await fireEvent.changeText(await screen.findByLabelText("Gmail on Google Play"), "shop@");
-  await fireEvent.press(screen.getByRole("button", { name: "Confirm Gmail" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Confirm" }));
   expect(screen.getByText("That does not look like an email address.")).toBeTruthy();
   expect(api.confirmPlayOptInGmail).not.toHaveBeenCalled();
 });
@@ -84,17 +84,17 @@ it("link mode: prefilled Gmail, join the group, open Play testing, then install 
   (api.getPlayOptIn as jest.Mock).mockResolvedValue(optIn({ gmailSuggestion: "shop@gmail.com" }));
   (api.confirmPlayOptInGmail as jest.Mock).mockResolvedValue(optIn({ step: "join_group", gmailSuggestion: "shop@gmail.com" }));
   await render(<PlayOptInScreen />);
-  await fireEvent.press(await screen.findByRole("button", { name: "Confirm Gmail" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Confirm" }));
   expect(api.confirmPlayOptInGmail).toHaveBeenCalledWith(install, "shop@gmail.com", false);
 
   expect(screen.getByTestId("optin-step-group-current")).toBeTruthy();
   await fireEvent.press(screen.getByRole("button", { name: "Join group" }));
   expect(Linking.openURL).toHaveBeenLastCalledWith("https://groups.google.com/g/example-testers");
 
-  await fireEvent.press(await screen.findByRole("button", { name: "Open Play testing" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Become a tester" }));
   expect(Linking.openURL).toHaveBeenLastCalledWith("https://play.google.com/apps/testing/ph.gridgo.supplier");
 
-  await fireEvent.press(await screen.findByRole("button", { name: "Open Play Store" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Install from Play" }));
   expect(Linking.openURL).toHaveBeenLastCalledWith("https://play.google.com/store/apps/details?id=ph.gridgo.supplier");
   expect(events()).toEqual(["tapped", "group_opened", "optin_opened"]);
 });
@@ -105,8 +105,8 @@ it("automatic mode: no group step, straight to Play testing", async () => {
     optIn({ groupMode: "automatic", groupJoinUrl: null, step: "open_optin", gmailSuggestion: "shop@gmail.com" }),
   );
   await render(<PlayOptInScreen />);
-  await fireEvent.press(await screen.findByRole("button", { name: "Confirm Gmail" }));
-  expect(await screen.findByRole("button", { name: "Open Play testing" })).toBeTruthy();
+  await fireEvent.press(await screen.findByRole("button", { name: "Confirm" }));
+  expect(await screen.findByRole("button", { name: "Become a tester" })).toBeTruthy();
   expect(screen.queryByText("Join the tester group")).toBeNull();
 });
 
@@ -115,9 +115,9 @@ it("says a Google failure in words and keeps the Gmail step", async () => {
   const { ApiError } = jest.requireActual("@/lib/api");
   (api.confirmPlayOptInGmail as jest.Mock).mockRejectedValue(new ApiError(503, { error: "google_group_unavailable" }));
   await render(<PlayOptInScreen />);
-  await fireEvent.press(await screen.findByRole("button", { name: "Confirm Gmail" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Confirm" }));
   expect(await screen.findByText("Google did not answer. Try again in a moment.")).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Confirm Gmail" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Confirm" })).toBeTruthy();
 });
 
 it("thanks a shop already opted in, and reports no tap", async () => {
