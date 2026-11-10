@@ -1,8 +1,9 @@
 import { Tabs } from "expo-router";
 
 import { GridgoTabBar } from "@/components/GridgoTabBar";
-import { TABS } from "@/constants/tabs";
+import { STAFF_TABS, TABS } from "@/constants/tabs";
 import { useThemeColors } from "@/hooks/useTheme";
+import { isShopOwner, useSession } from "@/store/session";
 
 /**
  * The supplier tab shell.
@@ -17,9 +18,11 @@ import { useThemeColors } from "@/hooks/useTheme";
  */
 export default function TabsLayout() {
   const colors = useThemeColors();
+  const owner = useSession((s) => isShopOwner(s.user));
 
   return (
     <Tabs
+      initialRouteName={owner ? "home" : "jobs"}
       tabBar={(props) => <GridgoTabBar {...props} />}
       screenOptions={{
         headerShown: false,
@@ -30,9 +33,18 @@ export default function TabsLayout() {
         freezeOnBlur: false,
       }}
     >
-      {TABS.map((tab) => (
+      {TABS.filter((tab) => STAFF_TABS.includes(tab.name)).map((tab) => (
         <Tabs.Screen key={tab.name} name={tab.name} options={{ title: tab.label }} />
       ))}
+      {/*
+        A Staff member's tabs are the work and their own account. The rest are
+        guarded out, not just hidden, so a typed address cannot reach them.
+      */}
+      <Tabs.Protected guard={owner}>
+        {TABS.filter((tab) => !STAFF_TABS.includes(tab.name)).map((tab) => (
+          <Tabs.Screen key={tab.name} name={tab.name} options={{ title: tab.label }} />
+        ))}
+      </Tabs.Protected>
     </Tabs>
   );
 }

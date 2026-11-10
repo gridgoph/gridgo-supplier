@@ -19,6 +19,16 @@ import {
 import { parseRiderApproach, type RiderApproach } from "@/lib/riderApproach";
 import { pushTokenProvider, type DevicePlatform, type PushTokenProvider } from "@/lib/push";
 import { installChannel } from "@/lib/buildDistribution";
+import type {
+  ActionActor,
+  CreatedInvite,
+  InviteKind,
+  ShopMemberStatus,
+  ShopRole,
+  ShopSummary,
+  TeamInvite,
+  TeamMember,
+} from "@/lib/shopTeam";
 
 export { ApiError } from "@/lib/apiErrors";
 
@@ -68,6 +78,15 @@ export type User = {
   /** Operations' own words on the decision. Safe to show. */
   verificationNote?: string | null;
   verifiedAt?: string | null;
+  /**
+   * The person's place on the shop's team (gridgo-api `docs/SHOP_TEAM_API.md`).
+   * Absent for a shop's original account, which is its Owner. Read through
+   * `isShopStaff` / `isShopOwner` in `store/session.ts`.
+   */
+  shopRole?: ShopRole;
+  shopStatus?: ShopMemberStatus;
+  /** The business's id when the signed-in person is not the shop's own account. */
+  shopId?: string;
 };
 
 /**
@@ -508,7 +527,11 @@ export type Order = {
     note: string;
     /** Present on evidence entries. */
     fileId?: string;
+    /** Who did it, as GRIDGO recorded at the time. Absent on older entries. */
+    actor?: ActionActor | null;
   }[];
+  /** Every recorded action on the order, with its actor. Read via `lib/shopTeam.ts`. */
+  actions?: unknown;
 };
 
 /**
@@ -982,6 +1005,25 @@ function refreshAuthToken(generation: number): Promise<string | null> {
 /** Fired when an authenticated request gets HTTP 401 (token gone or invalid). */
 export type UnauthorizedHandler = () => void;
 
+/**
+ * Fired when GRIDGO refuses a request because the person's shop membership
+ * changed: the Owner removed them (`shop_access_removed`) or has not approved
+ * them yet (`shop_approval_pending`). The session store owns what follows.
+ */
+export type ShopAccessHandler = (code: "shop_access_removed" | "shop_approval_pending") => void;
+
+let shopAccessHandler: ShopAccessHandler | null = null;
+
+export function setShopAccessHandler(handler: ShopAccessHandler | null): void {
+  shopAccessHandler = handler;
+}
+
+function shopAccessCode(status: number, data: unknown): "shop_access_removed" | "shop_approval_pending" | null {
+  if (status !== 403 || !data || typeof data !== "object") return null;
+  const code = (data as { error?: unknown }).error;
+  return code === "shop_access_removed" || code === "shop_approval_pending" ? code : null;
+}
+
 let unauthorizedHandler: UnauthorizedHandler | null = null;
 
 /**
@@ -1071,6 +1113,8 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
       setToken(null);
       unauthorizedHandler?.();
     }
+    const shopCode = token ? shopAccessCode(res.status, data) : null;
+    if (shopCode) shopAccessHandler?.(shopCode);
     throw new ApiError(res.status, data);
   }
   return data as T;
@@ -1345,11 +1389,28 @@ export async function unregisterDevice(token: string): Promise<void> {
 export async function me(options: { ignoreUnauthorized?: boolean } = {}): Promise<User> {
   const result = await request<{
     user: User;
+    shop?: unknown;
     memberships?: { role?: string }[];
     approvalCases?: { kind?: string; status?: string }[];
   }>("/auth/me", {
     ignoreUnauthorized: options.ignoreUnauthorized,
   });
+  const shop = readShopSummary(result.shop);
+  // A teammate's bootstrap (gridgo-api docs/SHOP_TEAM_API.md): `user` is the
+  // person and `shop` the business. It carries no approval case — GRIDGO only
+  // lets an active teammate in to a shop it serves, so active reads approved.
+  if (shop && result.user?.id !== shop.id) {
+    return {
+      ...result.user,
+      email: result.user.email ?? "",
+      role: "supplier",
+      supplierName: shop.name,
+      shopId: shop.id,
+      shopRole: shop.role,
+      shopStatus: shop.status,
+      verificationStatus: shop.status === "active" ? "approved" : "pending",
+    };
+  }
   const memberships = Array.isArray(result.memberships) ? result.memberships : [];
   if (!memberships.some((membership) => membership.role === "supplier")) {
     return result.user;
@@ -1365,6 +1426,88 @@ export async function me(options: { ignoreUnauthorized?: boolean } = {}): Promis
     role: "supplier",
     ...(verificationStatus ? { verificationStatus } : {}),
   };
+}
+
+/* --------------------------------------------------------------------------
+   Shop team (gridgo-api docs/SHOP_TEAM_API.md)
+   -------------------------------------------------------------------------- */
+
+function readShopSummary(value: unknown): ShopSummary | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Partial<ShopSummary>;
+  if (typeof row.id !== "string") return null;
+  const role: ShopRole = row.role === "owner" ? "owner" : "staff";
+  const status: ShopMemberStatus =
+    row.status === "active" || row.status === "removed" ? row.status : "pending";
+  return { id: row.id, name: typeof row.name === "string" && row.name ? row.name : "Print shop", role, status };
+}
+
+/** The Owner's team and its invites. Owner only. */
+export async function getShopTeam(): Promise<{ members: TeamMember[]; invites: TeamInvite[] }> {
+  const result = await request<{ members?: TeamMember[]; invites?: TeamInvite[] }>("/me/shop-team");
+  return {
+    members: Array.isArray(result.members) ? result.members : [],
+    invites: Array.isArray(result.invites) ? result.invites : [],
+  };
+}
+
+/** A single-use, 48-hour invite. The token comes back once, only here. */
+export async function createShopInvite(
+  kind: InviteKind,
+  identity?: string,
+): Promise<CreatedInvite> {
+  const result = await request<{ invite: TeamInvite; token: string }>("/me/shop-team/invites", {
+    method: "POST",
+    body: JSON.stringify(identity ? { kind, identity } : { kind }),
+  });
+  return { invite: result.invite, token: result.token };
+}
+
+export async function revokeShopInvite(inviteId: string): Promise<void> {
+  await request(`/me/shop-team/invites/${encodeURIComponent(inviteId)}`, { method: "DELETE" });
+}
+
+/** Approve a pending person, or change an active member's role. */
+export async function updateShopMember(
+  userId: string,
+  change: { status: "active" } | { role: ShopRole },
+): Promise<TeamMember> {
+  const result = await request<{ member: TeamMember }>(
+    `/me/shop-team/members/${encodeURIComponent(userId)}`,
+    { method: "PATCH", body: JSON.stringify(change) },
+  );
+  return result.member;
+}
+
+/** Decline a pending person or remove a member. Their next request is refused. */
+export async function removeShopMember(userId: string): Promise<void> {
+  await request(`/me/shop-team/members/${encodeURIComponent(userId)}`, { method: "DELETE" });
+}
+
+/**
+ * Email/phone invites waiting for the signed-in person's verified Clerk
+ * identity. Works before GRIDGO knows the person, so a 401 here is not a
+ * dead session.
+ */
+export async function discoverShopInvites(): Promise<TeamInvite[]> {
+  const result = await request<{ invites?: TeamInvite[] }>("/auth/shop-invites", {
+    method: "POST",
+    body: "{}",
+    ignoreUnauthorized: true,
+  });
+  return Array.isArray(result.invites) ? result.invites : [];
+}
+
+/** Claim an invite by its link token or a discovered invite's id. The person is then pending. */
+export async function claimShopInvite(
+  claim: { token: string } | { inviteId: string },
+): Promise<ShopSummary | null> {
+  const result = await request<{ shop?: unknown }>("/auth/shop-invites/claim", {
+    method: "POST",
+    body: JSON.stringify(claim),
+    ignoreUnauthorized: true,
+  });
+  return readShopSummary(result.shop);
 }
 
 export async function listOrders(): Promise<Order[]> {

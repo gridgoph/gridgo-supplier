@@ -170,3 +170,14 @@ it("tags a sample and a batch from a sample, in words a screen reader hears too"
   expect(screen.queryByTestId("sample-tag-sample")).toBeNull();
   expect(screen.queryByTestId("sample-tag-batch_from_sample")).toBeNull();
 });
+
+it("keeps the shop's price off a Staff member's card", async () => {
+  const { useSession } = jest.requireActual("@/store/session") as typeof import("@/store/session");
+  useSession.setState({
+    user: { id: "user_456", email: "", name: "Sam", role: "supplier", shopRole: "staff", shopStatus: "active" },
+  });
+  await render(<JobCard job={job} />);
+  expect(screen.queryByText(/₱|Price not recorded/)).toBeNull();
+  expect(screen.getByText(/A5/)).toBeTruthy();
+  useSession.setState({ user: null });
+});

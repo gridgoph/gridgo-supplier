@@ -280,6 +280,27 @@ const MESSAGES: Record<string, string> = {
   reschedule_operations_required:
     "Operations is deciding the next step on this job. Wait for them to contact you.",
 
+  // Shop team (gridgo-api docs/SHOP_TEAM_API.md).
+  shop_owner_required: "Only the shop owner can do this.",
+  shop_approval_pending: "The owner has not approved you yet.",
+  shop_access_removed: "The owner removed you from this shop.",
+  shop_membership_required: "You are not on this shop's team.",
+  shop_unavailable: "This shop is not open on GRIDGO right now.",
+  shop_selection_required: "You are on more than one shop's team. Ask Operations to help you pick one.",
+  shop_invite_identity_mismatch:
+    "This invite is for a different email or phone. Sign in with the one the owner used.",
+  shop_invite_not_found: "This invite was not found. Ask the owner for a new one.",
+  shop_invite_used: "This invite was already used. Ask the owner for a new one.",
+  shop_invite_revoked: "The owner cancelled this invite. Ask for a new one.",
+  shop_invite_expired: "This invite expired. Ask the owner for a new one.",
+  shop_member_exists: "You are already on this shop's team.",
+  shop_member_not_found: "That person is no longer on the team. Pull down to refresh.",
+  shop_invite_required: "This person was removed. Send them a new invite.",
+  shop_approval_required: "Approve this person first.",
+  last_shop_owner: "Your shop needs at least one owner. Make someone else owner first.",
+  invalid_invite_identity: "Check the email or phone number. A phone looks like +639171234567.",
+  invalid_shop_invite_claim: "That link is not a GRIDGO team invite. Ask the owner to share it again.",
+
   // Opening an account.
   email_already_registered:
     "That email already has a GRIDGO account. Sign in with it instead, or use a different address.",

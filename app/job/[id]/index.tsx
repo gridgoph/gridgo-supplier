@@ -82,6 +82,7 @@ import { useOrderCalls } from "@/hooks/useOrderCalls";
 import { useProductionLapses } from "@/hooks/useProductionLapses";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
+import { isShopStaff, useSession } from "@/store/session";
 
 /**
  * The job workspace: what was agreed, where the job stands, what happened, and
@@ -92,13 +93,15 @@ export default function JobWorkspaceScreen() {
   const navigation = useNavigation();
   const colors = useThemeColors();
   const { job, loading, error, reload } = useJob(id);
-  const lapses = useProductionLapses();
+  // Staff work the order; its money, record, calls and Operations chat are the Owner's.
+  const staff = useSession((s) => isShopStaff(s.user));
+  const lapses = useProductionLapses(!staff);
   // Riders cannot see a ready job while GRIDGO's dispatch is closed.
   const dispatch = useDispatchHours(Boolean(job && waitsForDispatch(job)));
   const refreshDispatch = dispatch.refresh;
   // Calling is open only while the rider is on the way; read the shop's calls only then.
   const callWindowOpen = pickupCallAvailability(job).kind === "open";
-  const calls = useOrderCalls(id, callWindowOpen);
+  const calls = useOrderCalls(id, callWindowOpen && !staff);
   const [proofReloadVersion, setProofReloadVersion] = useState(0);
   // Bumped when the hour to answer runs out on screen, so the steps go with it.
   const [, setExpiredAt] = useState(0);
@@ -175,7 +178,8 @@ export default function JobWorkspaceScreen() {
   const sampleTag = sampleTagOf(job);
   // The shop's own date only; a job without one is undated here, never dated by the client.
   const dueAt = shopDueAt(job);
-  const actions = actionsForJob(job);
+  // Proof of Fulfilment releases the Owner's money; Staff are not asked for it.
+  const actions = actionsForJob(job).filter((a) => !(staff && a.kind === "add_proof"));
   const primary = actions.find((a) => a.primary) ?? null;
   const secondary = actions.filter((a) => !a.primary);
   // A job the shop let go keeps its state while the client chooses; it is not the shop's any more.
@@ -222,7 +226,7 @@ export default function JobWorkspaceScreen() {
     the pickup until they collect it (`lib/orderCall.ts`). A stopped or
     released job has nobody coming, so nothing is offered.
   */
-  const callable = callWindowOpen && !release && refundStanding(job) === "none";
+  const callable = callWindowOpen && !release && refundStanding(job) === "none" && !staff;
   const callRider = () =>
     router.push(callHref({ orderId: job.id, mode: "start", name: pickupChat?.riderFirstName ?? null }));
   const callRow = callable ? (
@@ -381,7 +385,7 @@ export default function JobWorkspaceScreen() {
         */}
         {counterIssue ? (
           <View className="mt-6">
-            <CounterCheckPanel check={counterIssue} onMessageOperations={messageOperations} />
+            <CounterCheckPanel check={counterIssue} onMessageOperations={staff ? undefined : messageOperations} />
           </View>
         ) : refund ? (
           <View className="mt-6">
@@ -397,7 +401,11 @@ export default function JobWorkspaceScreen() {
           </View>
         ) : packaging && (!packaging.allowed || flow === "rider_packs") ? (
           <View className="mt-6">
-            <PackagingChecklist check={packaging} stage={finished} onMessageOperations={messageOperations} />
+            <PackagingChecklist
+              check={packaging}
+              stage={finished}
+              onMessageOperations={staff ? undefined : messageOperations}
+            />
           </View>
         ) : counter ? (
           <View className="mt-6">
@@ -425,7 +433,7 @@ export default function JobWorkspaceScreen() {
               notes={notes}
               readAt={instructionsReadAt(job)}
               offer={job.state === "supplier_assigned"}
-              onRequestChange={canChange ? requestChange : undefined}
+              onRequestChange={canChange && !staff ? requestChange : undefined}
             />
           </View>
         ) : null}
@@ -493,8 +501,8 @@ export default function JobWorkspaceScreen() {
           <JobBrief
             key={job.state}
             order={job}
-            sections={workspaceBriefSections(job)}
-            defaultOpen={defaultBriefSection(job)}
+            sections={workspaceBriefSections(job).filter((section) => !(staff && section === "earnings"))}
+            defaultOpen={staff && defaultBriefSection(job) === "earnings" ? "make" : defaultBriefSection(job)}
             proofReloadVersion={proofReloadVersion}
             handoffExtra={handoffExtra}
             dispatchClosed={Boolean(dispatch.closedLine)}
@@ -535,7 +543,7 @@ export default function JobWorkspaceScreen() {
           Last, and charcoal: the way out when the job itself is what is wrong.
           The report carries this job's reference, so Operations starts from it.
         */}
-        {counterIssue || release ? null : (
+        {counterIssue || release || staff ? null : (
           <View className="mt-8 gap-3">
             {canAskForTime || canCancel || (canChange && !showNotes) || colourLines.length ? (
               <Text className="text-overline text-text-muted">RUNNING INTO TROUBLE?</Text>

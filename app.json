@@ -54,6 +54,13 @@
           ]
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "GRIDGO uses the camera to scan a shop's team QR code.",
+          "recordAudioAndroid": false
+        }
+      ],
       "expo-image",
       "expo-status-bar",
       "expo-web-browser",

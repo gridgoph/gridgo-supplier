@@ -8,6 +8,8 @@ export type AlertStreamHandlers = {
   onStatus?: (live: boolean) => void;
   getResumeFrom?: () => string | null;
   onResumeUnavailable?: () => void | Promise<void>;
+  /** The Owner removed this person from the shop (`event: access_revoked`). */
+  onAccessRevoked?: () => void;
 };
 export type AlertStreamHandle = { close: () => void; wake: () => void };
 export function readNotificationEvent(event: SseEvent): api.Notification | null {
@@ -98,7 +100,9 @@ export function openAlertStream(handlers: AlertStreamHandlers): AlertStreamHandl
           if (event.id) cursor = event.id;
           const notification = readNotificationEvent(event);
           if (notification) handlers.onNotification(notification);
-          else if (event.event === "invalidate") {
+          else if (event.event === "access_revoked") {
+            handlers.onAccessRevoked?.();
+          } else if (event.event === "invalidate") {
             const invalidation = readInvalidation(event.data);
             if (invalidation) handlers.onInvalidate?.(invalidation);
           }

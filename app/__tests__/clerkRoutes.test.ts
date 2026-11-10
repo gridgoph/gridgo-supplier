@@ -141,7 +141,7 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(launch).not.toContain("/accreditation");
     expect(launch).not.toMatch(/if \(identity\.kind === "loading"\) return null/);
     expect(layout).toContain("authDoorOpen");
-    expect(layout).toMatch(/guard=\{signedIn\}[\s\S]*name="\(tabs\)"/);
+    expect(layout).toMatch(/guard=\{floorOpen\}>[\s\S]*?name="\(tabs\)"/);
     expect(home).toContain("Operations is reviewing your shop");
     expect(home).toContain("The floor stays empty until they approve.");
     expect(home).not.toContain("nothing needs you");

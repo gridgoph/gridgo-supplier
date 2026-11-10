@@ -3,7 +3,7 @@ import { AppState } from "react-native";
 
 import { accountHold } from "@/lib/accountHold";
 import { useLegalConsent } from "@/store/legalConsent";
-import { useSession } from "@/store/session";
+import { isShopStaff, useSession } from "@/store/session";
 
 /**
  * Asks GRIDGO whether this shop has terms to agree to, on every sign-in and
@@ -18,6 +18,9 @@ import { useSession } from "@/store/session";
 export function useLegalGate(): void {
   const userId = useSession((state) => state.user?.id ?? null);
   const held = useSession((state) => accountHold(state.user) != null);
+  // The shop's agreements are the Owner's to accept; GRIDGO refuses this read
+  // to Staff, so a Staff member's floor never waits on it.
+  const staff = useSession((state) => isShopStaff(state.user));
 
   useEffect(() => {
     if (!userId) {
@@ -25,10 +28,14 @@ export function useLegalGate(): void {
       return;
     }
     if (held) return;
+    if (staff) {
+      useLegalConsent.setState({ userId, status: "clear", pending: [], notices: [] });
+      return;
+    }
     void useLegalConsent.getState().load(userId);
     const subscription = AppState.addEventListener("change", (next) => {
       if (next === "active") void useLegalConsent.getState().load(userId);
     });
     return () => subscription.remove();
-  }, [userId, held]);
+  }, [userId, held, staff]);
 }

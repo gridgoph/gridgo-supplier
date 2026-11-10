@@ -39,6 +39,8 @@ import type { Readiness } from "@/lib/readiness";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
 
+type QuietRead = { loading: boolean; error: string | null };
+
 /**
  * The floor at a glance.
  *
@@ -64,9 +66,15 @@ export default function HomeScreen() {
   const [readiness, setReadiness] = useState<Readiness | null>(null);
   // False while GRIDGO has no board routes: nothing to nag a shop about.
   const [boardOpen, setBoardOpen] = useState(false);
+  // Optional failures stay with their own read, never the floor's error.
+  // They remain quiet: the board is absent and the bell keeps its last count.
+  const [boardRead, setBoardRead] = useState<QuietRead>({ loading: false, error: null });
+  const [alertsRead, setAlertsRead] = useState<QuietRead>({ loading: false, error: null });
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // People who joined the team and wait on the Owner's answer.
+  const [joining, setJoining] = useState<string[]>([]);
   const waitingOnOps = !isMatchable(user);
 
   /**
@@ -78,34 +86,66 @@ export default function HomeScreen() {
    * error on a screen about work.
    */
   const loadBoardQuietly = useCallback(async (current: () => boolean) => {
-    const [board, lines, verdict] = await Promise.all([
-      loadBoard(),
-      loadServiceLines(),
-      loadReadiness(),
-    ]);
-    if (!current()) return;
-    setServices(lines);
-    setListings(board.status === "ok" ? board.value.listings : []);
-    setBoardTotal(board.status === "ok" ? board.value.total : undefined);
-    setBoardOpen(board.status === "ok");
-    // Keep the last verdict through a failed read rather than blanking it.
-    if (verdict) setReadiness(verdict);
+    setBoardRead({ loading: true, error: null });
+    try {
+      const [board, lines, verdict] = await Promise.all([
+        loadBoard(),
+        loadServiceLines(),
+        loadReadiness(),
+      ]);
+      if (!current()) return;
+      setServices(lines);
+      setListings(board.status === "ok" ? board.value.listings : []);
+      setBoardTotal(board.status === "ok" ? board.value.total : undefined);
+      setBoardOpen(board.status === "ok");
+      setBoardRead({ loading: false, error: board.status === "failed" ? board.message : null });
+      // Keep the last verdict through a failed read rather than blanking it.
+      if (verdict) setReadiness(verdict);
+    } catch (e) {
+      if (!current()) return;
+      setBoardOpen(false);
+      setBoardRead({
+        loading: false,
+        error: humanizeApiError(e, offlineMessage("load your board")),
+      });
+    }
   }, []);
 
+  const loadAlertsQuietly = useCallback(async (current: () => boolean) => {
+    setAlertsRead({ loading: true, error: null });
+    try {
+      await refreshAlerts();
+      if (current()) setAlertsRead({ loading: false, error: null });
+    } catch (e) {
+      if (!current()) return;
+      setAlertsRead({
+        loading: false,
+        error: humanizeApiError(e, offlineMessage("load your alerts")),
+      });
+    }
+  }, [refreshAlerts]);
+
   const beginRead = useReadVersion();
+  const loadJoining = useCallback(async (current: () => boolean) => {
+    try {
+      const { members } = await api.getShopTeam();
+      if (current()) setJoining(members.filter((m) => m.status === "pending").map((m) => m.name));
+    } catch {
+      // A quiet extra: the Team screen still lists them.
+    }
+  }, []);
   const reload = useCallback(async () => {
     const current = beginRead();
+    void loadJoining(current);
+    const boardTask = loadBoardQuietly(current);
     if (waitingOnOps) {
-      await Promise.all([refresh(), loadBoardQuietly(current)]);
+      await Promise.all([refresh(), boardTask]);
       return;
     }
+    const alertsTask = loadAlertsQuietly(current);
     setLoading(true);
     try {
-      const [list] = await Promise.all([
-        api.listJobs(),
-        refreshAlerts().catch(() => []),
-        loadBoardQuietly(current),
-      ]);
+      const list = await api.listJobs();
       if (!current()) return;
       setJobs(list);
       setError(null);
@@ -115,8 +155,11 @@ export default function HomeScreen() {
       setError(humanizeApiError(e, offlineMessage("load your floor")));
     } finally {
       if (current()) setLoading(false);
+      // Publish the floor first, but keep reload pending for refresh/SSE
+      // serialization until the optional work has also settled.
+      await Promise.all([boardTask, alertsTask]);
     }
-  }, [beginRead, loadBoardQuietly, refresh, refreshAlerts, waitingOnOps]);
+  }, [beginRead, loadBoardQuietly, loadAlertsQuietly, loadJoining, refresh, waitingOnOps]);
 
   useLiveRefresh(["jobs", "orders", "payouts", "identity", "approvals", "catalog", "services", "availability"], reload);
   // The board strip's photo links expire in five minutes; a resume re-reads
@@ -210,7 +253,7 @@ export default function HomeScreen() {
           eyebrow={greeting(clerkDisplayName(clerkUser) || user?.name)}
           title={user?.supplierName || "Your shop"}
           right={
-            <View className="flex-row items-center">
+            <View className="flex-row items-center" accessibilityState={{ busy: alertsRead.loading }}>
               <ChatButton />
               <AlertsBell />
             </View>
@@ -223,6 +266,24 @@ export default function HomeScreen() {
           with one tap; it draws nothing once seen on this phone.
         */}
         <LegalNoticeCard className="mb-4" />
+
+        {joining.length ? (
+          <Pressable
+            onPress={() => router.push("/team")}
+            accessibilityRole="button"
+            accessibilityLabel={`${joinLine(joining)}. Open your team.`}
+            className="gg-card mb-4 flex-row items-center gap-3"
+            style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+          >
+            <View className="min-w-0 flex-1 gap-1">
+              <StatusChip tone="warning" icon="clock" label="Waiting" />
+              <Text className="text-body font-medium text-text-primary" numberOfLines={2}>
+                {joinLine(joining)}
+              </Text>
+            </View>
+            <ChevronRight size={20} color={colors.textMuted} aria-hidden />
+          </Pressable>
+        ) : null}
 
         {/*
           Shaped to the screen that replaces it — the figure, the card with its
@@ -422,7 +483,7 @@ export default function HomeScreen() {
               left out until the shop can be matched.
             */}
             {board && !(notReady && board.kind !== "ready") ? (
-              <View className="mt-8 gap-2">
+              <View className="mt-8 gap-2" accessibilityState={{ busy: boardRead.loading }}>
                 <Text className="text-overline text-text-muted">YOUR BOARD</Text>
                 {readiness?.ready ? <ShopReadyLine readiness={readiness} /> : null}
                 {board.kind === "ready" ? (
@@ -576,4 +637,10 @@ function SampleStrip({ listings }: { listings: Listing[] }) {
       </Text>
     </Pressable>
   );
+}
+
+/** "Sam wants to join your team", or "Sam and 2 more want to join". */
+function joinLine(names: string[]): string {
+  if (names.length === 1) return `${names[0]} wants to join your team`;
+  return `${names[0]} and ${names.length - 1} more want to join your team`;
 }

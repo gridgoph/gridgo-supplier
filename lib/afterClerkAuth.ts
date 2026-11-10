@@ -1,15 +1,22 @@
 import * as api from "@/lib/api";
-import { humanizeApiError, isNonSupplierIdentity, isUnmappedIdentity } from "@/lib/apiErrors";
+import { apiErrorCode, humanizeApiError, isNonSupplierIdentity, isUnmappedIdentity } from "@/lib/apiErrors";
 import { awaitClerkSessionToken, clerkSessionToken, type ClerkAccess, type ClerkGetToken } from "@/lib/clerk";
 import { debugAuth } from "@/lib/debugAuth";
 import { applyRoute } from "@/lib/onboardingSteps";
-import { APP_ROLE, useSession } from "@/store/session";
+import { APP_ROLE, isShopStaff, useSession } from "@/store/session";
+import { isJoiningTeam, useTeamJoin } from "@/store/teamJoin";
 import { useSignupDraft } from "@/store/signupDraft";
 
 export type AfterClerkAuth =
   | { kind: "home" }
   | { kind: "apply" }
   | { kind: "access" }
+  /** Joining a shop's team: claim an invite next. */
+  | { kind: "join" }
+  /** On a team, waiting for the Owner's approval. */
+  | { kind: "team_waiting" }
+  /** The Owner removed this person; say so rather than refuse the sign-in. */
+  | { kind: "team_removed" }
   | { kind: "blocked"; message: string };
 
 export type SupplierDoor = "supplier" | "apply" | "wrong_app" | "unknown";
@@ -99,11 +106,27 @@ export async function enterAfterClerkSession(
     const user = await api.me({ ignoreUnauthorized: true });
     debugAuth("after-clerk-me", { status: 200, role: user.role });
     if (user.role !== APP_ROLE) {
+      // A client or rider may still join a shop's team with the same login.
+      if (isJoiningTeam()) return { kind: "join" };
       return { kind: "blocked", message: emailUnavailableMessage };
     }
-    if (useSession.getState().adoptClerkUser(user)) return { kind: "home" };
+    if (useSession.getState().adoptClerkUser(user)) {
+      return isJoiningTeam() && useTeamJoin.getState().token ? { kind: "join" } : { kind: "home" };
+    }
+    if (useSession.getState().identity.kind === "team_pending") return { kind: "team_waiting" };
     return { kind: "access" };
   } catch (error) {
+    if (apiErrorCode(error) === "shop_access_removed") {
+      useSession.getState().teamAccessRemoved();
+      return isJoiningTeam() ? { kind: "join" } : { kind: "team_removed" };
+    }
+    if (isUnmappedIdentity(error) && isJoiningTeam()) {
+      const current = useSession.getState().identity;
+      const email = "email" in current ? current.email : undefined;
+      useSession.getState().setClerkIdentity({ kind: "unassigned", email });
+      return { kind: "join" };
+    }
+    if (isNonSupplierIdentity(error) && isJoiningTeam()) return { kind: "join" };
     if (isUnmappedIdentity(error)) {
       debugAuth("after-clerk-me", { status: 401, next: "apply" });
       const current = useSession.getState().identity;
@@ -133,8 +156,19 @@ export function prepareApplyDraft(email?: string | null) {
 
 export function hrefAfterClerkAuth(
   result: Exclude<AfterClerkAuth, { kind: "blocked" }>,
-): "/(tabs)/home" | "/access" | ReturnType<typeof applyRoute> {
-  if (result.kind === "home") return "/(tabs)/home";
+):
+  | "/(tabs)/home"
+  | "/(tabs)/jobs"
+  | "/access"
+  | "/join-team"
+  | "/team-waiting"
+  | ReturnType<typeof applyRoute> {
+  if (result.kind === "home") {
+    return isShopStaff(useSession.getState().user) ? "/(tabs)/jobs" : "/(tabs)/home";
+  }
+  if (result.kind === "join") return "/join-team";
+  if (result.kind === "team_waiting") return "/team-waiting";
+  if (result.kind === "team_removed") return "/access";
   if (result.kind === "apply") {
     return applyRoute(useSignupDraft.getState().draft, { clerkSession: true });
   }
