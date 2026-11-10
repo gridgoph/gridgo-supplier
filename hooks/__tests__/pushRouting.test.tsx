@@ -141,3 +141,26 @@ it("opens TestFlight from a TestFlight notice on an iPhone, and ignores the APK 
   await view.unmount();
   open.mockRestore();
 });
+
+describe("play_optin", () => {
+  const optInTap = { notification: { request: { identifier: "push_optin", content: { data: { notificationId: "p", type: "play_optin" } } } } };
+  beforeEach(() => {
+    mockLast.mockResolvedValue(optInTap);
+    (api.listNotifications as jest.Mock).mockResolvedValue([{ id: "p", userId: "owner", title: "Help us launch", type: "play_optin", orderId: null }]);
+  });
+
+  it("opens the tester steps for an Owner, approved or still waiting", async () => {
+    mockReady = true;
+    await renderHook(() => usePushNotifications());
+    await act(async () => { jest.advanceTimersByTime(100); });
+    expect(mockPush).toHaveBeenCalledWith("/play-optin?from=push");
+  });
+
+  it("sends a Staff login to Alerts, since the steps are the Owner's", async () => {
+    mockReady = true;
+    useSession.setState({ user: { ...user, shopRole: "staff" } as never });
+    await renderHook(() => usePushNotifications());
+    await act(async () => { jest.advanceTimersByTime(100); });
+    expect(mockPush).toHaveBeenCalledWith("/alerts");
+  });
+});

@@ -1,15 +1,21 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
+import { Platform } from "react-native";
 
 import { HomeTesterSlot } from "@/components/HomeTesterSlot";
 import type { TesterProgramState } from "@/lib/api";
 import { useSession } from "@/store/session";
+import { usePlayOptIn } from "@/store/playOptIn";
 import { useTesterProgram } from "@/store/testerProgram";
 
 /** Home's tester line: nothing for a non-tester, Day N and the streak for a tester. */
 
 jest.mock("@/lib/api", () => {
   const actual = jest.requireActual("@/lib/api");
-  return { ...actual, reportTesterFeedback: jest.fn(() => Promise.resolve()) };
+  return {
+    ...actual,
+    reportTesterFeedback: jest.fn(() => Promise.resolve()),
+    reportPlayOptInEvent: jest.fn(() => Promise.resolve()),
+  };
 });
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -33,7 +39,13 @@ function signedInWith(program: TesterProgramState | null, extra: object = {}) {
   useTesterProgram.setState({ owner: "u1", program, readAt: Date.parse("2026-11-07T12:00:00Z"), held: null, ...extra });
 }
 
+const mockPush = jest.fn();
+jest.mock("expo-router", () => ({ router: { push: (...args: unknown[]) => mockPush(...args) } }));
+
 afterEach(() => {
+  usePlayOptIn.getState().reset();
+  Object.defineProperty(Platform, "OS", { value: "ios", configurable: true });
+  delete process.env.EXPO_PUBLIC_APP_DISTRIBUTION;
   useTesterProgram.setState({ owner: null, program: null, held: null, checkingIn: false, checkInFailed: false });
 });
 
@@ -141,4 +153,76 @@ it("keeps a held day-14 card on a completed run that is not approved, or from a 
   signedInWith(enrolled({ day: 14, streak: 14, runComplete: true, stopped: true, nudge: null }), { held });
   await render(<HomeTesterSlot />);
   expect(screen.getByText("Help us launch")).toBeTruthy();
+});
+
+describe("Play opt-in card", () => {
+  const optIn = (overrides: object = {}) => ({
+    app: "supplier",
+    show: true,
+    step: "confirm_gmail" as const,
+    gmailSuggestion: "shop@gmail.com",
+    groupMode: "link" as const,
+    campaignEnabled: true,
+    optInUrl: "https://play.google.com/apps/testing/ph.gridgo.supplier",
+    groupJoinUrl: "https://groups.google.com/g/example-testers",
+    target: 12,
+    optedIn: false,
+    dismissCount: 0,
+    playStoreUrl: "https://play.google.com/store/apps/details?id=ph.gridgo.supplier",
+    ...overrides,
+  });
+
+  function offered(os: string, overrides: object = {}) {
+    Object.defineProperty(Platform, "OS", { value: os, configurable: true });
+    signedInWith({ enrolled: false });
+    usePlayOptIn.setState({ owner: "u1", state: optIn(overrides), closed: false, shownSent: false });
+  }
+
+  it("asks an Android APK shop and reports it shown once drawn", async () => {
+    offered("android");
+    await render(<HomeTesterSlot />);
+    expect(screen.getByText("Help us launch GRIDGO on Play")).toBeTruthy();
+    expect(screen.getByText("Become a tester")).toBeTruthy();
+    expect(api.reportPlayOptInEvent).toHaveBeenCalledWith({ platform: "android", channel: "sideload" }, "shown");
+    fireEvent.press(screen.getByRole("button", { name: "Help us launch GRIDGO on Play, become a tester." }));
+    expect(mockPush).toHaveBeenCalledWith("/play-optin?from=card");
+  });
+
+  it("draws nothing on iOS, even when GRIDGO says show", async () => {
+    offered("ios");
+    await render(<HomeTesterSlot />);
+    expect(screen.toJSON()).toBeNull();
+  });
+
+  it("draws nothing on the Play build", async () => {
+    process.env.EXPO_PUBLIC_APP_DISTRIBUTION = "play";
+    offered("android");
+    await render(<HomeTesterSlot />);
+    expect(screen.toJSON()).toBeNull();
+  });
+
+  it("draws nothing once GRIDGO stops showing it or after three closes", async () => {
+    offered("android", { show: false });
+    await render(<HomeTesterSlot />);
+    expect(screen.toJSON()).toBeNull();
+    offered("android", { dismissCount: 3 });
+    await render(<HomeTesterSlot />);
+    expect(screen.toJSON()).toBeNull();
+  });
+
+  it("closes with the cross and reports the close once", async () => {
+    offered("android", { dismissCount: 2 });
+    await render(<HomeTesterSlot />);
+    await fireEvent.press(screen.getByRole("button", { name: "Not now" }));
+    expect(api.reportPlayOptInEvent).toHaveBeenCalledWith({ platform: "android", channel: "sideload" }, "dismissed");
+    expect(screen.toJSON()).toBeNull();
+  });
+
+  it("gives way to an enrolled tester's check-in", async () => {
+    offered("android");
+    signedInWith(enrolled());
+    await render(<HomeTesterSlot />);
+    expect(screen.getByText("Day 3 of 14")).toBeTruthy();
+    expect(screen.queryByText("Become a tester")).toBeNull();
+  });
 });

@@ -313,6 +313,13 @@ const MESSAGES: Record<string, string> = {
   invalid_password: `Choose a password of at least ${MIN_PASSWORD_LENGTH} characters, then try again.`,
   invalid_email: "Enter a working email address — GRIDGO sends your job alerts to it.",
   invalid_phone: "Enter a mobile number GRIDGO and the rider can reach you on.",
+  // Play tester opt-in (gridgo-api `docs/PLAY_OPTIN_API.md`).
+  invalid_gmail: "Enter the Gmail you use on Google Play.",
+  google_group_unavailable: "Google did not answer. Try again in a moment.",
+  group_not_configured: "The tester list is not open yet. Try again later.",
+  campaign_not_available: "Testing on Google Play is closed for now.",
+  gmail_not_confirmed: "Confirm your Gmail first.",
+  group_step_required: "Join the tester group first.",
   invalid_shop_location:
     "GRIDGO needs your shop's location to work out delivery. Fill in the address and try again.",
   not_found:
