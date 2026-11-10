@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.417 (Fix)
+
+- Update notifications now wait until the new version is available on Google Play or TestFlight.
+
 ## 1.0.412 (New feature)
 
 - Android shops can join the Google Play test from a Home card in a few taps.
