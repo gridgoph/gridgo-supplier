@@ -40,9 +40,9 @@ import {
 import { SessionWait } from "@/components/SessionWait";
 import { appleSignInOutcome, isAppleCancel, type AppleFlowResult } from "@/lib/appleSignIn";
 import { completeGoogleSso } from "@/lib/googleSso";
-import { SESSION_ENDED_MESSAGE, useSession } from "@/store/session";
+import { SESSION_ENDED_MESSAGE, TEAM_REMOVED_DETAIL, TEAM_REMOVED_TITLE, useSession } from "@/store/session";
 import { useSignInNotice } from "@/store/signInNotice";
-import { isJoiningTeam } from "@/store/teamJoin";
+import { isJoiningTeam, useTeamJoin } from "@/store/teamJoin";
 
 type HealthState = "checking" | "reachable" | "unreachable";
 
@@ -120,6 +120,9 @@ export default function LoginScreen() {
     if (next.kind === "join" || next.kind === "team_removed") {
       useSession.getState().clearSessionWait();
     }
+    // Removed from the team: the session is already ended and this screen
+    // says why.
+    if (next.kind === "team_removed") return;
     if (next.kind === "join") {
       // Back to the join screen that sent the person here, not a second copy.
       router.dismissTo("/join-team");
@@ -337,6 +340,22 @@ export default function LoginScreen() {
             <View className="mt-8 gap-1">
               <Text className="text-h1 text-text-primary">Welcome Back.</Text>
               <Text className="text-body-lg text-text-secondary">Let’s sign in</Text>
+              {identity.kind === "signed_out" && identity.reason === "team_removed" ? (
+                <View className="gg-panel mt-4 gap-1" accessibilityRole="alert">
+                  <Text className="text-button text-text-primary">{TEAM_REMOVED_TITLE}</Text>
+                  <Text className="text-body text-text-secondary">{TEAM_REMOVED_DETAIL}</Text>
+                  <Pressable
+                    onPress={() => {
+                      useTeamJoin.getState().startJoining();
+                      router.push("/join-team");
+                    }}
+                    accessibilityRole="link"
+                    className="gg-touch justify-center self-start"
+                  >
+                    <Text className="text-button text-brand">Have a new invite? Join</Text>
+                  </Pressable>
+                </View>
+              ) : null}
               {identity.kind === "signed_out" && identity.reason === "session_ended" ? (
                 <Text className="text-body text-text-secondary" accessibilityRole="alert">{SESSION_ENDED_MESSAGE}</Text>
               ) : null}

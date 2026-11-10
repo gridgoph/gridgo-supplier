@@ -32,6 +32,7 @@ import { loadBoard } from "@/lib/listingsApi";
 import { isTightBeforeAccepting } from "@/lib/scheduling";
 import { useAlertsStore } from "@/store/alerts";
 import { isMatchable, useSession } from "@/store/session";
+import { usePlayOptIn } from "@/store/playOptIn";
 import { useTesterProgram } from "@/store/testerProgram";
 import { loadServiceLines } from "@/hooks/useBoard";
 import { loadReadiness } from "@/hooks/useReadiness";
@@ -176,16 +177,26 @@ export default function HomeScreen() {
   /*
     A Google Play tester's open is the day's check-in, and so is coming back
     to the app on a new day. Nothing at all for an account that is not
-    enrolled (`lib/testerProgram.ts`).
+    enrolled (`lib/testerProgram.ts`). The Play opt-in read beside it is
+    also this install's report to GRIDGO: a Play build that reads it is
+    counted as a tester, and an APK shop GRIDGO wants asked gets the card
+    (`lib/playOptIn.ts`).
   */
   useFocusEffect(
     useCallback(() => {
-      void useTesterProgram.getState().load(useSession.getState().user?.id ?? null);
+      const userId = useSession.getState().user?.id ?? null;
+      // The opt-in read first: a Play build's report is what enrols it, so
+      // the tester read after it sees today's run.
+      void usePlayOptIn.getState().load(userId).finally(() => useTesterProgram.getState().load(userId));
     }, []),
   );
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (next) => {
-      if (next === "active") void useTesterProgram.getState().load(useSession.getState().user?.id ?? null);
+      if (next !== "active") return;
+      const userId = useSession.getState().user?.id ?? null;
+      // The opt-in read first: a Play build's report is what enrols it, so
+      // the tester read after it sees today's run.
+      void usePlayOptIn.getState().load(userId).finally(() => useTesterProgram.getState().load(userId));
     });
     return () => subscription.remove();
   }, []);

@@ -313,6 +313,13 @@ const MESSAGES: Record<string, string> = {
   invalid_password: `Choose a password of at least ${MIN_PASSWORD_LENGTH} characters, then try again.`,
   invalid_email: "Enter a working email address — GRIDGO sends your job alerts to it.",
   invalid_phone: "Enter a mobile number GRIDGO and the rider can reach you on.",
+  // Play tester opt-in (gridgo-api `docs/PLAY_OPTIN_API.md`).
+  invalid_gmail: "Enter the Gmail you use on Google Play.",
+  google_group_unavailable: "Google did not answer. Try again in a moment.",
+  group_not_configured: "The tester list is not open yet. Try again later.",
+  campaign_not_available: "Testing on Google Play is closed for now.",
+  gmail_not_confirmed: "Confirm your Gmail first.",
+  group_step_required: "Join the tester group first.",
   invalid_shop_location:
     "GRIDGO needs your shop's location to work out delivery. Fill in the address and try again.",
   not_found:
@@ -530,6 +537,24 @@ export function stepRefusal(error: unknown): { message: string; missing: Require
   const message = plainSentence(body.message) ?? MESSAGES[apiErrorCode(error)];
   if (!message) return null;
   return { message, missing: readRequirements(body.missing) };
+}
+
+/**
+ * Why New code did not go through, said to the Owner. The claimant-facing
+ * sentences ("Ask the owner…") would be addressed to the wrong person here.
+ */
+export function replaceInviteErrorMessage(error: unknown): string {
+  switch (apiErrorCode(error)) {
+    case "shop_invite_used":
+      return "Someone already joined with this code. Check Team to approve them.";
+    case "shop_invite_revoked":
+    case "shop_invite_not_found":
+      return "This code was already cancelled. Make a new invite.";
+    case "shop_invite_expired":
+      return "This code expired. Make a new invite.";
+    default:
+      return humanizeApiError(error, offlineMessage("make a new code"));
+  }
 }
 
 export function humanizeApiError(error: unknown, fallback: string): string {

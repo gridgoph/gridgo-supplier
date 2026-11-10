@@ -25,3 +25,15 @@ it("does not open a socket when a closed identity's token eventually arrives",as
   const stream=openAlertStream({onNotification:jest.fn()});stream.close();finish("old");await tick();
   expect(frames).toHaveLength(0);
 });
+it("reports a removal when the reconnect is refused for it, and only then",async()=>{
+  api.setTokenProvider(async()=>"token");
+  const onAccessRevoked=jest.fn();
+  const stream=openAlertStream({onNotification:jest.fn(),onAccessRevoked});
+  await tick();
+  frames[0].readyState=4;frames[0].status=403;frames[0].responseText=JSON.stringify({error:"shop_owner_required"});frames[0].onreadystatechange?.();
+  expect(onAccessRevoked).not.toHaveBeenCalled();
+  jest.advanceTimersByTime(2000);await tick();
+  frames[1].readyState=4;frames[1].status=403;frames[1].responseText=JSON.stringify({error:"shop_access_removed"});frames[1].onreadystatechange?.();
+  expect(onAccessRevoked).toHaveBeenCalledTimes(1);
+  stream.close();
+});

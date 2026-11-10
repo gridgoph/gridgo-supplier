@@ -4,7 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import { GridgoLogo } from "@/components/GridgoLogo";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
-import { useSession } from "@/store/session";
+import { TEAM_REMOVED_TITLE, useSession } from "@/store/session";
 import { useTeamJoin } from "@/store/teamJoin";
 
 export default function AccessScreen() {
@@ -13,7 +13,7 @@ export default function AccessScreen() {
   const removed = identity.kind === "error" && identity.reason === "team_removed";
 
   const title = removed
-    ? "You are off the team"
+    ? TEAM_REMOVED_TITLE
     : identity.kind === "mismatch"
       ? "This account belongs to a different GRIDGO app"
       : identity.kind === "error" && identity.reason === "access_withdrawn"

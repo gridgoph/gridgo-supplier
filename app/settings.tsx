@@ -7,7 +7,7 @@ import {
   useThemePreference,
   type ThemePreference,
 } from "@/hooks/useTheme";
-import { isMatchable, useSession } from "@/store/session";
+import { isMatchable, isShopOwner, useSession } from "@/store/session";
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "system", label: "System" },
@@ -25,6 +25,8 @@ export default function SettingsScreen() {
   const preference = useThemePreference();
   const user = useSession((s) => s.user);
   const waitingOnOps = !isMatchable(user);
+  // Team is the Owner's; Staff never see the way in.
+  const owner = isShopOwner(user);
 
   return (
     <View className="gg-screen">
@@ -51,26 +53,45 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {waitingOnOps ? (
+        {owner || waitingOnOps ? (
           <View className="mt-8 gap-3">
             <Text className="text-overline text-text-muted">YOUR SHOP</Text>
-            <Pressable
-              onPress={() => router.push("/accreditation")}
-              accessibilityRole="button"
-              accessibilityLabel="Accreditation"
-              className="gg-card flex-row items-center justify-between"
-              style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
-            >
-              <View className="min-w-0 flex-1 gap-1 py-1">
-                <Text className="text-body font-medium text-text-primary">Accreditation</Text>
-                <Text className="text-caption text-text-muted">
-                  Papers and the wait — what Operations still needs from you
+            {owner ? (
+              <Pressable
+                onPress={() => router.push("/team")}
+                accessibilityRole="button"
+                accessibilityLabel="Team"
+                className="gg-card flex-row items-center justify-between"
+                style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+              >
+                <View className="min-w-0 flex-1 gap-1 py-1">
+                  <Text className="text-body font-medium text-text-primary">Team</Text>
+                  <Text className="text-caption text-text-muted">Add staff, approve and remove them</Text>
+                </View>
+                <Text className="pl-3 text-body text-text-muted" aria-hidden>
+                  ›
                 </Text>
-              </View>
-              <Text className="pl-3 text-body text-text-muted" aria-hidden>
-                ›
-              </Text>
-            </Pressable>
+              </Pressable>
+            ) : null}
+            {waitingOnOps ? (
+              <Pressable
+                onPress={() => router.push("/accreditation")}
+                accessibilityRole="button"
+                accessibilityLabel="Accreditation"
+                className="gg-card flex-row items-center justify-between"
+                style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+              >
+                <View className="min-w-0 flex-1 gap-1 py-1">
+                  <Text className="text-body font-medium text-text-primary">Accreditation</Text>
+                  <Text className="text-caption text-text-muted">
+                    Papers and the wait — what Operations still needs from you
+                  </Text>
+                </View>
+                <Text className="pl-3 text-body text-text-muted" aria-hidden>
+                  ›
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
 

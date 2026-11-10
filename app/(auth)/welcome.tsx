@@ -31,6 +31,11 @@ export default function WelcomeScreen() {
   if (identity.kind === "mismatch" || identity.kind === "error") {
     return <Redirect href="/access" />;
   }
+  // Removed from a shop's team, and the app restarted on the way out: Sign in
+  // is where that is said.
+  if (identity.kind === "signed_out" && identity.reason === "team_removed") {
+    return <Redirect href="/(auth)/login" />;
+  }
   if (sessionWait) return <SessionWait tone={sessionWait} role="supplier" />;
 
   return (

@@ -1463,6 +1463,19 @@ export async function createShopInvite(
   return { invite: result.invite, token: result.token };
 }
 
+/**
+ * New code: GRIDGO revokes this open invite and issues its replacement in one
+ * step (same kind and recipient, a fresh 48 hours). The old link and QR stop
+ * working the moment this succeeds; nothing changes if it fails.
+ */
+export async function replaceShopInvite(inviteId: string): Promise<CreatedInvite> {
+  const result = await request<{ invite: TeamInvite; token: string }>(
+    `/me/shop-team/invites/${encodeURIComponent(inviteId)}/replace`,
+    { method: "POST", body: "{}" },
+  );
+  return { invite: result.invite, token: result.token };
+}
+
 export async function revokeShopInvite(inviteId: string): Promise<void> {
   await request(`/me/shop-team/invites/${encodeURIComponent(inviteId)}`, { method: "DELETE" });
 }
@@ -3025,5 +3038,66 @@ export async function reportTesterFeedback(event: TesterFeedbackEvent, trigger: 
   await request<{ ok: true }>("/me/tester-program/feedback", {
     method: "POST",
     body: JSON.stringify({ app: "supplier", event, trigger }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Google Play closed-test opt-in. Contract: gridgo-api `docs/PLAY_OPTIN_API.md`.
+// Telemetry and a Gmail confirmation only: it never touches a job, a price, a
+// payout or the shop's hours. `lib/playOptIn.ts` owns what the shop sees.
+// ---------------------------------------------------------------------------
+
+export type PlayOptInStep = "confirm_gmail" | "join_group" | "open_optin" | "install_from_play" | "opted_in";
+export type PlayOptInPlatform = "android" | "ios" | "web";
+export type PlayOptInChannel = "play" | "sideload";
+export type PlayOptInEvent = "shown" | "tapped" | "dismissed" | "group_opened" | "optin_opened";
+
+export type PlayOptInState = {
+  app: string;
+  show: boolean;
+  step: PlayOptInStep;
+  gmailSuggestion: string | null;
+  /** `automatic`: GRIDGO adds the Gmail to the tester group. `link`: the shop joins it. */
+  groupMode: "automatic" | "link";
+  campaignEnabled: boolean;
+  optInUrl: string;
+  groupJoinUrl: string | null;
+  target: number;
+  optedIn: boolean;
+  dismissCount: number;
+  playStoreUrl: string;
+};
+
+/** Where and how this install runs; sent on every opt-in call. */
+export type PlayOptInInstall = { platform: PlayOptInPlatform; channel: PlayOptInChannel };
+
+/** Also GRIDGO's install report: an Android `play` read marks the account opted in. */
+export async function getPlayOptIn(install: PlayOptInInstall): Promise<PlayOptInState> {
+  const query = `app=supplier&platform=${install.platform}&channel=${install.channel}`;
+  return request<PlayOptInState>(`/me/play-optin?${query}`);
+}
+
+/** `googleAccount` is the shop's own word that a non-Gmail address is a Google account. */
+export async function confirmPlayOptInGmail(
+  install: PlayOptInInstall,
+  email: string,
+  googleAccount: boolean,
+): Promise<PlayOptInState> {
+  return request<PlayOptInState>("/me/play-optin/confirm-gmail", {
+    method: "POST",
+    body: JSON.stringify({
+      app: "supplier",
+      ...install,
+      email,
+      ...(googleAccount ? { googleAccount: true } : {}),
+    }),
+  });
+}
+
+/** `dismissed` counts once per call: never retry it. */
+export async function reportPlayOptInEvent(install: PlayOptInInstall, type: PlayOptInEvent): Promise<void> {
+  await request<{ ok: true }>("/me/play-optin/event", {
+    method: "POST",
+    body: JSON.stringify({ app: "supplier", ...install, type }),
   });
 }

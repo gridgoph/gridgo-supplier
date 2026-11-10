@@ -10,6 +10,7 @@ import * as api from "@/lib/api";
 import { CHAT_LIST_ROUTE } from "@/lib/chatThreads";
 import { getNotificationsNative as notifications } from "@/lib/expoNotifications";
 import { playProductionNudgeSting } from "@/lib/nudgeSound";
+import { PLAY_OPTIN_PUSH_TYPE } from "@/lib/playOptIn";
 import { TESTER_REMINDER_TYPE } from "@/lib/testerProgram";
 import {
   parsePushData,
@@ -23,7 +24,7 @@ import { useCall } from "@/store/call";
 import { CALL_INCOMING_NOTICE } from "@/lib/orderCall";
 import { shouldToast, useViewing } from "@/store/toasts";
 import { subscribePushTokenRotation, usePush } from "@/store/push";
-import { isMatchable, isSignedIn, useSession } from "@/store/session";
+import { isMatchable, isShopStaff, isSignedIn, useSession } from "@/store/session";
 
 /**
  * Push, wired to the app: registration, token rotation, and opening the right
@@ -156,8 +157,12 @@ export function usePushNotifications(): void {
       if (generation !== liveGeneration() || pending.current !== target || !ready.current) return;
       pending.current = null;
       invalidate("*");
-      // Job screens sit behind approval; Operations chat does not.
-      const destination = data.type === SUPPORT_MESSAGE_PUSH_TYPE || data.type === TESTER_REMINDER_TYPE
+      // Job screens sit behind approval; Operations chat and the tester asks do not.
+      const notGated = data.type === SUPPORT_MESSAGE_PUSH_TYPE || data.type === TESTER_REMINDER_TYPE || data.type === PLAY_OPTIN_PUSH_TYPE;
+      const staff = isShopStaff(useSession.getState().user);
+      const destination = data.type === PLAY_OPTIN_PUSH_TYPE && staff
+        ? "/alerts"
+        : notGated
         ? pushTargetRoute(data, threadId)
         : isMatchable(useSession.getState().user) ? pushTargetRoute(data) : "/alerts";
       router.push(destination as Href);
