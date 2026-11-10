@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.412 (New feature)
+
+- Android shops can join the Google Play test from a Home card in a few taps.
+- Staff removed from a team are signed out at once. Jobs show who did what. Owners can make a new invite code.
+
 ## 1.0.405 (New feature)
 
 - Owners can add staff by QR, link, email or phone. Staff take and run orders without seeing prices or earnings.
