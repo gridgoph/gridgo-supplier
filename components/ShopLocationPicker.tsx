@@ -1,6 +1,15 @@
-import { AlertTriangle, Hand, MapPin, Search, X } from "lucide-react-native";
+import { AlertTriangle, Hand, LocateFixed, MapPin, Search, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
+import {
+  ActivityIndicator,
+  Linking,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 import { MapFrame, type MapFrameHandle } from "@/components/MapFrame";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -14,6 +23,12 @@ import {
   type GeocodePlace,
   type PinPrecision,
 } from "@/lib/geocode";
+import {
+  canUseDeviceLocation,
+  LOCATION_OUTSIDE_DAVAO,
+  requestCurrentLocation,
+  type LocationRemedy,
+} from "@/lib/deviceLocation";
 import { WHY_WE_ASK } from "@/lib/legal";
 import { buildShopMapHtml, PIN_ZOOM, type ShopMapEvent } from "@/lib/mapHtml";
 import {
@@ -81,6 +96,12 @@ export function ShopLocationPicker({
   const [outside, setOutside] = useState(false);
   // Set by a search result, and forgotten the moment the shop moves the pin.
   const [chosen, setChosen] = useState<{ precision: PinPrecision; name: string } | null>(null);
+  // Use my location: waiting on the phone, the error radius of the fix it
+  // placed (forgotten once the shop moves the pin), and why it could not.
+  const [locating, setLocating] = useState(false);
+  const [accuracyMeters, setAccuracyMeters] = useState<number | null>(null);
+  const [locateError, setLocateError] = useState<{ message: string; remedy: LocationRemedy } | null>(null);
+  const showLocate = useMemo(() => canUseDeviceLocation(), []);
 
   // Address lookups and searches each take a ticket from their own counter.
   // An answer for an older ticket is dropped — it named a point the shop has
@@ -89,6 +110,9 @@ export function ShopLocationPicker({
   // leave "Reading this place…" and a locked address field for good.
   const pinTicket = useRef(0);
   const searchTicket = useRef(0);
+  // A third, for Use my location: a pin the shop places while the phone is
+  // still looking wins, and the late fix is dropped rather than jumping it.
+  const locateTicket = useRef(0);
   const take = (counter: { current: number }) => {
     counter.current += 1;
     const mine = counter.current;
@@ -110,7 +134,7 @@ export function ShopLocationPicker({
   );
 
   const push = useCallback(
-    (next: ShopPin | null, recentreZoom: number | null) => {
+    (next: ShopPin | null, recentreZoom: number | null, accuracy: number | null) => {
       frame.current?.post(
         JSON.stringify({
           theme,
@@ -118,6 +142,7 @@ export function ShopLocationPicker({
           label: next?.label ?? "",
           recentre: recentreZoom != null,
           zoom: recentreZoom ?? undefined,
+          accuracyMeters: next ? accuracy : null,
         }),
       );
     },
@@ -126,25 +151,15 @@ export function ShopLocationPicker({
 
   // A pin the shop moved, a label it corrected, or a theme change: all of them
   // are the same push. Recentring is not — the map only jumps when a search
-  // result put the pin somewhere the shop cannot see.
+  // result or the phone's fix put the pin somewhere the shop cannot see.
   useEffect(() => {
-    push(pin, null);
-  }, [pin, push]);
+    push(pin, null, accuracyMeters);
+  }, [pin, push, accuracyMeters]);
 
-  const onEvent = useCallback(
-    (event: ShopMapEvent) => {
-      if (event.type !== "pin") return;
+  /** Read the address at a point the shop did not type, and judge the town. */
+  const readPlace = useCallback(
+    (lat: number, lng: number) => {
       const isCurrent = take(pinTicket);
-      // A search still out is for somewhere the shop has stopped looking.
-      take(searchTicket);
-      const { lat, lng } = event;
-      setChosen(null);
-      setLookup(null);
-      setSearching(false);
-      setResults(null);
-      // The old label described the old point, so it goes with it. The panel
-      // says the address is being looked up rather than showing a stale one.
-      onChange({ lat, lng, label: "" });
       const far = isFarFromDavao({ lat, lng, label: "" });
       setOutside(far);
       if (far) {
@@ -166,6 +181,71 @@ export function ShopLocationPicker({
     },
     [onChange],
   );
+
+  /** Something else placed the pin: a fix still on its way is for nobody. */
+  const dropLocate = useCallback(() => {
+    take(locateTicket);
+    setLocating(false);
+    setLocateError(null);
+  }, []);
+
+  const onEvent = useCallback(
+    (event: ShopMapEvent) => {
+      if (event.type !== "pin") return;
+      // A search still out is for somewhere the shop has stopped looking.
+      take(searchTicket);
+      dropLocate();
+      const { lat, lng } = event;
+      setChosen(null);
+      setLookup(null);
+      setSearching(false);
+      setResults(null);
+      // Placed by hand: the phone's error circle no longer describes it.
+      setAccuracyMeters(null);
+      // The old label described the old point, so it goes with it. The panel
+      // says the address is being looked up rather than showing a stale one.
+      onChange({ lat, lng, label: "" });
+      readPlace(lat, lng);
+    },
+    [onChange, readPlace, dropLocate],
+  );
+
+  /**
+   * Use my location. Asks for the permission on this tap and never before,
+   * takes a satellite fix where the phone can get one, and puts the pin there
+   * with its error circle — still draggable, because a shop standing at its
+   * counter is metres from its door, and a rough fix is further.
+   */
+  const locate = useCallback(async () => {
+    const isCurrent = take(locateTicket);
+    setLocating(true);
+    setLocateError(null);
+    const result = await requestCurrentLocation();
+    if (!isCurrent()) return;
+    setLocating(false);
+    if (result.status !== "ok") {
+      setLocateError({ message: result.message, remedy: result.remedy });
+      return;
+    }
+    const { lat, lng } = result.point;
+    if (isFarFromDavao({ lat, lng, label: "" })) {
+      // Not a pin: the phone is somewhere GRIDGO does not send riders, and a
+      // pin there is one the shop would only have to drag back across town.
+      setLocateError({ message: LOCATION_OUTSIDE_DAVAO, remedy: "none" });
+      return;
+    }
+    take(searchTicket);
+    setSearching(false);
+    setResults(null);
+    setChosen(null);
+    setLookup(null);
+    const accuracy = result.accuracyMeters ?? null;
+    setAccuracyMeters(accuracy);
+    const next: ShopPin = { lat, lng, label: "" };
+    onChange(next);
+    push(next, PIN_ZOOM, accuracy);
+    readPlace(lat, lng);
+  }, [onChange, push, readPlace]);
 
   /**
    * Search runs on submit and never on a keystroke. OpenStreetMap's geocoder
@@ -198,6 +278,8 @@ export function ShopLocationPicker({
     (place: GeocodePlace) => {
       // The chosen place replaces any address still being read for a dropped pin.
       take(pinTicket);
+      dropLocate();
+      setAccuracyMeters(null);
       const next: ShopPin = { lat: place.lat, lng: place.lng, label: place.address };
       setResults(null);
       setQuery("");
@@ -208,19 +290,21 @@ export function ShopLocationPicker({
       onChange(next);
       // The one place the map is allowed to move itself: the shop asked for
       // somewhere it is not currently looking.
-      push(next, RESULT_ZOOM[place.precision]);
+      push(next, RESULT_ZOOM[place.precision], null);
     },
-    [onChange, push],
+    [onChange, push, dropLocate],
   );
 
   const placed = isPlaced(pin);
   const isOutside = placed && (outside || isFarFromDavao(pin));
-  const blocker = placed ? pinBlocker({ outside: isOutside, reading }) : null;
+  const blocker = placed || locating ? pinBlocker({ outside: isOutside, reading, locating }) : null;
   useEffect(() => {
     onBlockerChange?.(blocker);
   }, [blocker, onBlockerChange]);
   const status = pinStatus({
     placed,
+    locating,
+    accuracyMeters,
     reading,
     outside: isOutside,
     lookup,
@@ -240,7 +324,7 @@ export function ShopLocationPicker({
         <MapFrame
           ref={frame}
           html={initialHtml}
-          onReady={() => push(pin, pin ? PIN_ZOOM : null)}
+          onReady={() => push(pin, pin ? PIN_ZOOM : null, accuracyMeters)}
           onEvent={onEvent}
           accessibilityLabel="Map of Davao City. Tap to place your shop, or drag the pin."
         />
@@ -373,10 +457,30 @@ export function ShopLocationPicker({
             ) : null}
           </View>
         </View>
+
+        {showLocate && !results ? (
+          <LocateButton locating={locating} onPress={() => void locate()} />
+        ) : null}
       </View>
 
       {/* What the pin currently is, stated plainly under the map. */}
       <View className="gg-page pt-3">
+        {locateError ? (
+          <View className="pb-3">
+            <ErrorNotice
+              message={locateError.message}
+              onRetry={
+                locateError.remedy === "retry"
+                  ? () => void locate()
+                  : locateError.remedy === "settings"
+                    ? () => void Linking.openSettings().catch(() => undefined)
+                    : undefined
+              }
+              retryLabel={locateError.remedy === "settings" ? "Open settings" : "Try again"}
+            />
+          </View>
+        ) : null}
+
         {searchError ? (
           <View className="pb-3">
             <ErrorNotice
@@ -419,6 +523,42 @@ export function ShopLocationPicker({
           <WhyWeAsk>{WHY_WE_ASK.shopPin}</WhyWeAsk>
         </View>
       </View>
+    </View>
+  );
+}
+
+/**
+ * Use my location, on the map it moves, under the search field. A pill with
+ * its words always showing — an icon alone was a guess on the client's map.
+ * Charcoal on surface: the screen's one yellow action is Save.
+ */
+function LocateButton({ locating, onPress }: { locating: boolean; onPress: () => void }) {
+  const colors = useThemeColors();
+  return (
+    <View pointerEvents="box-none" className="absolute left-3 top-18">
+      <Pressable
+        onPress={onPress}
+        disabled={locating}
+        accessibilityRole="button"
+        accessibilityLabel="Use my location"
+        accessibilityHint="Puts your shop pin where this phone is"
+        accessibilityState={{ disabled: locating, busy: locating }}
+        className="min-h-11 flex-row items-center gap-2 overflow-hidden rounded-pill border border-outline bg-surface-high px-4 shadow-sheet"
+      >
+        {({ pressed }) => (
+          <>
+            {locating ? (
+              <ActivityIndicator size="small" color={colors.textPrimary} />
+            ) : (
+              <LocateFixed size={18} color={colors.textPrimary} strokeWidth={2} />
+            )}
+            <Text className="text-body font-medium text-text-primary">
+              {locating ? "Finding you…" : "Use my location"}
+            </Text>
+            {pressed && !locating ? <View pointerEvents="none" className="gg-pressed absolute inset-0" /> : null}
+          </>
+        )}
+      </Pressable>
     </View>
   );
 }

@@ -1,4 +1,5 @@
 import type { ShopLocation } from "@/lib/api";
+import { roughFixMeters } from "@/lib/deviceLocation";
 import { pointInDavao, type PinPrecision } from "@/lib/geocode";
 
 /**
@@ -15,6 +16,7 @@ export type ShopPin = ShopLocation;
 
 export const PIN_OUTSIDE_PROBLEM = "Your pin is outside Davao City. Move it onto your shop.";
 export const PIN_READING_PROBLEM = "Wait a moment while the address at your pin loads.";
+export const PIN_LOCATING_PROBLEM = "Wait a moment while your phone finds where you are.";
 
 export function isCoordinate(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -95,6 +97,15 @@ export const DRAG_TO_DOOR = "Drag the pin onto your shop's door.";
 export const NO_STREET_TITLE = "No street name on the map here";
 export const UNREAD_TITLE = "Could not read this address";
 export const TYPE_IT_BELOW = "Type it below so the rider can find you.";
+export const FINDING_YOU = "Finding you…";
+export const FINDING_YOU_DETAIL = "Stand at your shop. Outdoors or near a window is quicker.";
+export const PHONE_PLACED_TITLE = "Placed where your phone is";
+export const PHONE_PLACED_DETAIL = "If you are not at your shop now, drag the pin onto its door.";
+
+/** "Your phone placed this within about 85 m" — how rough a GPS fix is, in words. */
+export function roughFixTitle(meters: number): string {
+  return `Your phone placed this within about ${meters} m`;
+}
 
 export type PinTone = "busy" | "warning" | "hint";
 
@@ -102,6 +113,13 @@ export type PinStatus = { tone: PinTone; title: string; detail?: string };
 
 export type PinStatusInput = {
   placed: boolean;
+  /** Use my location is waiting on the phone. Said before anything else. */
+  locating?: boolean;
+  /**
+   * The phone's error radius for a pin Use my location set; null once the
+   * shop moves it by hand or picks a search result.
+   */
+  accuracyMeters?: number | null;
   /** The address lookup for a pin the shop moved is still out. */
   reading: boolean;
   outside: boolean;
@@ -114,10 +132,18 @@ export type PinStatusInput = {
 };
 
 export function pinStatus(input: PinStatusInput): PinStatus | null {
+  if (input.locating) return { tone: "busy", title: FINDING_YOU, detail: FINDING_YOU_DETAIL };
   // Before a pin, the map's own hint says what to do; saying it twice is noise.
   if (!input.placed) return null;
   if (input.outside) return { tone: "warning", title: OUTSIDE_TITLE, detail: OUTSIDE_DETAIL };
   if (input.reading) return { tone: "busy", title: READING_PLACE };
+  if (typeof input.accuracyMeters === "number" && input.accuracyMeters > 0) {
+    // Same threshold as the client: above 30 m a fix is a neighbourhood.
+    const rough = roughFixMeters(input.accuracyMeters);
+    return rough != null
+      ? { tone: "hint", title: roughFixTitle(rough), detail: DRAG_TO_DOOR }
+      : { tone: "hint", title: PHONE_PLACED_TITLE, detail: PHONE_PLACED_DETAIL };
+  }
   if (input.precision === "area") {
     return {
       tone: "hint",
@@ -143,7 +169,8 @@ export function pinStatus(input: PinStatusInput): PinStatus | null {
  * lookup placed in another town (Samal sits inside the search box, so the box
  * alone cannot say), or a move whose lookup has not answered yet.
  */
-export function pinBlocker(input: { outside: boolean; reading: boolean }): string | null {
+export function pinBlocker(input: { outside: boolean; reading: boolean; locating?: boolean }): string | null {
+  if (input.locating) return PIN_LOCATING_PROBLEM;
   if (input.outside) return PIN_OUTSIDE_PROBLEM;
   if (input.reading) return PIN_READING_PROBLEM;
   return null;

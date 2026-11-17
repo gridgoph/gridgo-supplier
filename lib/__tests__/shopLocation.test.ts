@@ -9,6 +9,7 @@ import {
   pinStatus,
   PIN_OUTSIDE_PROBLEM,
   PIN_READING_PROBLEM,
+  PIN_LOCATING_PROBLEM,
   type PinStatusInput,
   withLabel,
 } from "@/lib/shopLocation";
@@ -118,6 +119,46 @@ describe("the line above the address", () => {
       const status = pinStatus(input);
       expect(`${status?.title} ${status?.detail ?? ""}`).not.toMatch(/_|\d{3}/);
     }
+  });
+});
+
+describe("a pin Use my location placed", () => {
+  const SET: PinStatusInput = {
+    placed: true,
+    reading: false,
+    outside: false,
+    lookup: null,
+    precision: null,
+    placeName: "",
+  };
+
+  it("says the phone is looking, even before there is a pin", () => {
+    expect(pinStatus({ ...SET, placed: false, locating: true })).toMatchObject({ tone: "busy", title: "Finding you…" });
+    expect(pinStatus({ ...SET, locating: true, outside: true })?.title).toBe("Finding you…");
+  });
+
+  it("says how rough a wide fix is and asks for a drag onto the door", () => {
+    expect(pinStatus({ ...SET, accuracyMeters: 85 })).toEqual({
+      tone: "hint",
+      title: "Your phone placed this within about 85 m",
+      detail: "Drag the pin onto your shop's door.",
+    });
+  });
+
+  it("confirms a close fix, and reminds a shop not standing in it to drag", () => {
+    expect(pinStatus({ ...SET, accuracyMeters: 12 })).toMatchObject({
+      title: "Placed where your phone is",
+      detail: "If you are not at your shop now, drag the pin onto its door.",
+    });
+  });
+
+  it("still warns first outside Davao City, and while the address is read", () => {
+    expect(pinStatus({ ...SET, accuracyMeters: 85, outside: true })?.title).toBe("Outside Davao City");
+    expect(pinStatus({ ...SET, accuracyMeters: 85, reading: true })?.title).toBe("Reading this place…");
+  });
+
+  it("will not let the pin be used while the phone is still looking", () => {
+    expect(pinBlocker({ outside: false, reading: false, locating: true })).toBe(PIN_LOCATING_PROBLEM);
   });
 });
 
