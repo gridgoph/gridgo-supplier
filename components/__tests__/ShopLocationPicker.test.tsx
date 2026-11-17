@@ -1,9 +1,12 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { useState } from "react";
 import { Keyboard, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
 
 import ShopLocationStep from "@/app/(auth)/signup/location";
 import { ShopLocationPicker } from "@/components/ShopLocationPicker";
+import * as geocode from "@/lib/geocode";
+import type { ShopPin } from "@/lib/shopLocation";
 import { useSignupDraft, EMPTY_SIGNUP_DRAFT } from "@/store/signupDraft";
 
 const mockScrollTo = jest.fn();
@@ -42,7 +45,8 @@ jest.mock("react-native-webview", () => {
 jest.mock("expo-router", () => ({ router: { push: jest.fn() } }));
 jest.mock("@/lib/geocode", () => ({
   ...jest.requireActual("@/lib/geocode"),
-  reverseLabel: jest.fn(async () => ({ ok: true, value: "Davao City" })),
+  reverseAddress: jest.fn(async () => ({ ok: true, value: { address: "Davao City", inDavao: true } })),
+  searchPlaces: jest.fn(async () => ({ ok: true, value: [] })),
 }));
 
 beforeEach(() => {
@@ -129,4 +133,71 @@ it("keeps the selected coordinates and corrected address when Use this pin conti
   await fireEvent.press(screen.getByText("Use this pin"));
   expect(useSignupDraft.getState().draft.pin).toEqual({ ...pin, label: "Door beside the corner" });
   expect(router.push).toHaveBeenCalledWith("/(auth)/signup/services");
+});
+
+/** The picker is controlled; this holds the pin the way a screen does. */
+function Harness({ onChange }: { onChange?: (pin: ShopPin) => void }) {
+  const [pin, setPin] = useState<ShopPin | null>(null);
+  return (
+    <ShopLocationPicker
+      pin={pin}
+      onChange={(next) => {
+        onChange?.(next);
+        setPin(next);
+      }}
+    />
+  );
+}
+
+describe("moving the pin", () => {
+  const MAP = "Map of Davao City. Tap to place your shop, or drag the pin.";
+  const moveTo = (lat: number, lng: number) =>
+    fireEvent(screen.getByLabelText(MAP), "message", {
+      nativeEvent: { data: JSON.stringify({ type: "pin", lat, lng }) },
+    });
+
+  /**
+   * A slow answer for where the pin was must not land after the answer for
+   * where it is now: applying it moved the shop's pin back.
+   */
+  it("keeps the newest pin when an older address lookup answers last", async () => {
+    let answerFirst: (value: unknown) => void = () => undefined;
+    jest
+      .mocked(geocode.reverseAddress)
+      .mockImplementationOnce(() => new Promise((resolve) => (answerFirst = resolve)) as never)
+      .mockResolvedValueOnce({ ok: true, value: { address: "Second Street, Ecoland", inDavao: true } });
+    const onChange = jest.fn();
+    await render(<ShopLocationPicker pin={null} onChange={onChange} />);
+
+    await moveTo(7.06, 125.6);
+    await moveTo(7.07, 125.61);
+    await act(async () => answerFirst({ ok: true, value: { address: "First Street", inDavao: true } }));
+
+    expect(onChange).toHaveBeenLastCalledWith({ lat: 7.07, lng: 125.61, label: "Second Street, Ecoland" });
+    expect(onChange).not.toHaveBeenCalledWith(expect.objectContaining({ label: "First Street" }));
+  });
+
+  it("warns, and spends no lookup, on a pin outside Davao City", async () => {
+    await render(<Harness />);
+    await moveTo(7.5286, 125.7228);
+    expect(geocode.reverseAddress).not.toHaveBeenCalled();
+    expect(screen.getByText("Outside Davao City")).toBeTruthy();
+  });
+
+  it("asks for a drag onto the door after a barangay result", async () => {
+    jest.mocked(geocode.searchPlaces).mockResolvedValueOnce({
+      ok: true,
+      value: [{ id: "1", lat: 7.05, lng: 125.55, label: "Talomo Proper", detail: "Davao City", address: "", precision: "area" }],
+    });
+    const onChange = jest.fn();
+    await render(<Harness onChange={onChange} />);
+    const search = screen.getByLabelText("Search for your shop's address");
+    await fireEvent.changeText(search, "Brgy. Talomo");
+    await fireEvent(search, "submitEditing");
+    await fireEvent.press(await screen.findByText("Talomo Proper"));
+
+    expect(onChange).toHaveBeenLastCalledWith({ lat: 7.05, lng: 125.55, label: "" });
+    expect(screen.getByText("This is the middle of Talomo Proper")).toBeTruthy();
+    expect(screen.getByText("Drag the pin onto your shop's door.")).toBeTruthy();
+  });
 });

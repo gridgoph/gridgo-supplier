@@ -1,4 +1,5 @@
 import type { ShopLocation } from "@/lib/api";
+import { pointInDavao, type PinPrecision } from "@/lib/geocode";
 
 /**
  * The one point on the map this app cares about: where the shop prints from.
@@ -11,9 +12,6 @@ import type { ShopLocation } from "@/lib/api";
  */
 
 export type ShopPin = ShopLocation;
-
-/** Davao City, generously bounded. Outside this, the pin is worth questioning. */
-const DAVAO_BOUNDS = { minLat: 6.85, maxLat: 7.55, minLng: 125.15, maxLng: 125.85 };
 
 export function isCoordinate(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -30,12 +28,9 @@ export function isPlaced(pin: ShopPin | null | undefined): pin is ShopPin {
 /** True when the pin is somewhere GRIDGO does not operate. A warning, not a block. */
 export function isFarFromDavao(pin: ShopPin | null | undefined): boolean {
   if (!isPlaced(pin)) return false;
-  return (
-    pin.lat < DAVAO_BOUNDS.minLat ||
-    pin.lat > DAVAO_BOUNDS.maxLat ||
-    pin.lng < DAVAO_BOUNDS.minLng ||
-    pin.lng > DAVAO_BOUNDS.maxLng
-  );
+  // The same box search is bounded to: a pin search could never have
+  // offered is not one to save without a second look.
+  return !pointInDavao(pin.lat, pin.lng);
 }
 
 /** Six decimals is about 10 cm — enough to prove two pins are not the same one. */
@@ -73,4 +68,60 @@ export function isSamePin(a: ShopPin | null, b: ShopPin | null): boolean {
     Math.abs(a.lng - b.lng) < 1e-6 &&
     a.label.trim() === b.label.trim()
   );
+}
+
+/* --------------------------------------------------------------------------
+   The line above the address field
+
+   What the shop needs to know about the pin before it trusts it, and nothing
+   when there is nothing to say. Pure, so every state is tested without a map.
+   -------------------------------------------------------------------------- */
+
+export const READING_PLACE = "Reading this place…";
+export const OUTSIDE_TITLE = "Outside Davao City";
+export const OUTSIDE_DETAIL = "GRIDGO only sends riders inside Davao City. Move the pin onto your shop.";
+export const DRAG_TO_DOOR = "Drag the pin onto your shop's door.";
+export const NO_STREET_TITLE = "No street name on the map here";
+export const UNREAD_TITLE = "Could not read this address";
+export const TYPE_IT_BELOW = "Type it below so the rider can find you.";
+
+export type PinTone = "busy" | "warning" | "hint";
+
+export type PinStatus = { tone: PinTone; title: string; detail?: string };
+
+export type PinStatusInput = {
+  placed: boolean;
+  /** The address lookup for a pin the shop moved is still out. */
+  reading: boolean;
+  outside: boolean;
+  /** How the last lookup for a moved pin ended, when it named nothing. */
+  lookup: "no_street" | "failed" | null;
+  /** From a search result; null once the shop places the pin by hand. */
+  precision: PinPrecision | null;
+  /** The searched place's name, for "the middle of Talomo". */
+  placeName: string;
+};
+
+export function pinStatus(input: PinStatusInput): PinStatus | null {
+  // Before a pin, the map's own hint says what to do; saying it twice is noise.
+  if (!input.placed) return null;
+  if (input.outside) return { tone: "warning", title: OUTSIDE_TITLE, detail: OUTSIDE_DETAIL };
+  if (input.reading) return { tone: "busy", title: READING_PLACE };
+  if (input.precision === "area") {
+    return {
+      tone: "hint",
+      title: input.placeName ? `This is the middle of ${input.placeName}` : "This is the middle of the area",
+      detail: DRAG_TO_DOOR,
+    };
+  }
+  if (input.precision === "street") {
+    return {
+      tone: "hint",
+      title: input.placeName ? `Somewhere on ${input.placeName}` : "Somewhere on this road",
+      detail: DRAG_TO_DOOR,
+    };
+  }
+  if (input.lookup === "no_street") return { tone: "hint", title: NO_STREET_TITLE, detail: TYPE_IT_BELOW };
+  if (input.lookup === "failed") return { tone: "hint", title: UNREAD_TITLE, detail: TYPE_IT_BELOW };
+  return null;
 }
