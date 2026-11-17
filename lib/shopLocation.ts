@@ -13,6 +13,9 @@ import { pointInDavao, type PinPrecision } from "@/lib/geocode";
 
 export type ShopPin = ShopLocation;
 
+export const PIN_OUTSIDE_PROBLEM = "Your pin is outside Davao City. Move it onto your shop.";
+export const PIN_READING_PROBLEM = "Wait a moment while the address at your pin loads.";
+
 export function isCoordinate(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -26,9 +29,10 @@ export function isPlaced(pin: ShopPin | null | undefined): pin is ShopPin {
 }
 
 /**
- * True when the pin is outside the box GRIDGO searches. The picker also asks
- * the address lookup, which catches a town inside the box (Samal), and the
- * screens refuse to save either.
+ * True when the pin is outside Davao City as far as the phone can tell
+ * without a network: outside the box GRIDGO searches, or on Samal or Talikud.
+ * The picker also keeps the address lookup's verdict per pin, and the screens
+ * refuse to save either.
  */
 export function isFarFromDavao(pin: ShopPin | null | undefined): boolean {
   if (!isPlaced(pin)) return false;
@@ -50,6 +54,9 @@ export function pinProblem(
   if (!isPlaced(pin)) {
     return "Place your shop on the map. Search for your street, or tap where your shop stands.";
   }
+  // Checked here, without a network, so a typed address cannot carry a pin
+  // on Samal past a failed lookup — on a moved, saved or restored pin alike.
+  if (isFarFromDavao(pin)) return PIN_OUTSIDE_PROBLEM;
   if (!label.trim()) {
     return "Give the pin an address a rider would recognise at the door.";
   }
@@ -130,8 +137,6 @@ export function pinStatus(input: PinStatusInput): PinStatus | null {
   return null;
 }
 
-export const PIN_OUTSIDE_PROBLEM = "Your pin is outside Davao City. Move it onto your shop.";
-export const PIN_READING_PROBLEM = "Wait a moment while the address at your pin loads.";
 
 /**
  * What stops the pin being used, beyond `pinProblem`: a point the address

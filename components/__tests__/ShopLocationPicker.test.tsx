@@ -51,6 +51,9 @@ jest.mock("@/lib/geocode", () => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // A queued answer a test never spent must not leak into the next one.
+  jest.mocked(geocode.reverseAddress).mockReset();
+  jest.mocked(geocode.reverseAddress).mockResolvedValue({ ok: true, value: { address: "Davao City", inDavao: true } });
   jest.mocked(useWindowDimensions).mockReturnValue({ width: 412, height: 915, scale: 3.5, fontScale: 1 });
   useSignupDraft.setState({ draft: { ...EMPTY_SIGNUP_DRAFT }, hydrated: true });
 });
@@ -251,15 +254,19 @@ describe("moving the pin", () => {
     expect(screen.queryByText("Reading this place…")).toBeNull();
   });
 
-  /** C2: Samal sits inside the search box; only the lookup can say it is not Davao City. */
+  /**
+   * C2: the box is coarse at its edges. A point inside it, off Samal, that the
+   * address lookup files under another town is refused on that answer.
+   */
   it("blocks a pin the address lookup puts in another town, inside the box", async () => {
     jest.mocked(geocode.reverseAddress).mockResolvedValueOnce({
       ok: true,
-      value: { address: "Babak Road", inDavao: false },
+      value: { address: "National Highway", inDavao: false },
     });
     const onBlockerChange = jest.fn();
     await render(<Harness onBlockerChange={onBlockerChange} />);
-    await moveTo(7.08, 125.68);
+    await moveTo(7.55, 125.68);
+    expect(geocode.reverseAddress).toHaveBeenCalled();
     expect(screen.getByText("Outside Davao City")).toBeTruthy();
     expect(onBlockerChange).toHaveBeenLastCalledWith(PIN_OUTSIDE_PROBLEM);
   });
@@ -311,4 +318,28 @@ it("will not continue from a pin outside Davao City", async () => {
   await fireEvent.press(screen.getByText("Use this pin"));
   expect(router.push).not.toHaveBeenCalled();
   expect(screen.getByText(PIN_OUTSIDE_PROBLEM)).toBeTruthy();
+});
+
+/** Codex review of #256, S1, on Apply: Samal + failed lookup + a typed address. */
+it("will not continue from Samal when the address lookup fails", async () => {
+  jest.mocked(geocode.reverseAddress).mockResolvedValueOnce({ ok: false, reason: "offline" });
+  await render(<ShopLocationStep />);
+  await fireEvent(screen.getByLabelText("Map of Davao City. Tap to place your shop, or drag the pin."), "message", {
+    nativeEvent: { data: JSON.stringify({ type: "pin", lat: 7.082, lng: 125.682 }) },
+  });
+  await fireEvent.changeText(screen.getByLabelText("Address at this pin"), "Babak Road, near the port");
+  await fireEvent.press(screen.getByText("Use this pin"));
+  expect(router.push).not.toHaveBeenCalled();
+  expect(screen.getByText(PIN_OUTSIDE_PROBLEM)).toBeTruthy();
+});
+
+/** A draft restored with a pin on Samal is refused before anything is asked. */
+it("will not continue from a restored draft pin on Samal", async () => {
+  useSignupDraft.setState({
+    draft: { ...EMPTY_SIGNUP_DRAFT, pin: { lat: 7.082, lng: 125.682, label: "Babak Road" } },
+  });
+  await render(<ShopLocationStep />);
+  expect(screen.getByText("Outside Davao City")).toBeTruthy();
+  await fireEvent.press(screen.getByText("Use this pin"));
+  expect(router.push).not.toHaveBeenCalled();
 });

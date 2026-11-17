@@ -12,6 +12,7 @@ import {
   isDavaoCityHit,
   isSearchable,
   MIN_REQUEST_INTERVAL_MS,
+  pointInDavao,
   normalizeQuery,
   precisionOf,
   resetRateLimiterForTests,
@@ -180,6 +181,19 @@ describe("inside Davao City, and nowhere else", () => {
   it("keeps Marilog, which the old box cut off", () => {
     const marilog = hit({ name: "Marilog Proper", lat: "7.45", lon: "125.27", category: "place", type: "village", address: { village: "Marilog Proper", ...CITY } });
     expect(toPlaces([marilog])).toHaveLength(1);
+  });
+
+  /** Samal and Talikud sit inside the box; the outline answers without a network. */
+  it("refuses Samal and Talikud offline, and keeps Davao's shore", () => {
+    expect(pointInDavao(7.080003671460744, 125.68001031875612)).toBe(false); // Babak
+    expect(pointInDavao(7.082, 125.682)).toBe(false);
+    expect(pointInDavao(7.14, 125.7)).toBe(false); // Peñaplata
+    expect(pointInDavao(6.98, 125.64)).toBe(false); // Talikud
+    expect(pointInDavao(7.125, 125.664)).toBe(true); // Sasa wharf tip
+    expect(pointInDavao(7.155, 125.665)).toBe(true); // Panacan
+    expect(pointInDavao(7.075, 125.625)).toBe(true); // Sta. Ana wharf
+    expect(pointInDavao(7.045, 125.585)).toBe(true); // Matina Aplaya
+    expect(pointInDavao(7.45, 125.27)).toBe(true); // Marilog
   });
 
   it("trusts the box when OSM names no city at all", () => {

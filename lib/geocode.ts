@@ -97,9 +97,50 @@ export const SEARCH_RESULT_LIMIT = 5;
  */
 export const DAVAO_BOX = { west: 125.21, south: 6.95, east: 125.71, north: 7.61 } as const;
 
+/**
+ * Samal and Talikud, as `[lng, lat]`: OSM's boundary of the Island Garden
+ * City of Samal, simplified by Nominatim to about 200 m (Nov 2026). The same
+ * outline the client app uses (gridgo-client#432).
+ *
+ * The city box above is a rectangle, and the islands sit inside it across a
+ * strait about a kilometre wide, so a pin tapped on Babak passed the box. The
+ * outline answers without a network, so the guard holds when the address
+ * lookup cannot. Its western edge runs mid-channel: the Sasa wharf tip,
+ * Panacan and every Davao shore point checked fall outside it.
+ */
+const SAMAL_OUTLINE: readonly (readonly [number, number])[] = [
+  [125.5765, 6.9562], [125.5829, 6.8212], [125.6072, 6.7981], [125.6323, 6.7825],
+  [125.6921, 6.7645], [125.7248, 6.7636], [125.758, 6.7579], [125.7822, 6.7587],
+  [125.8121, 6.7658], [125.8362, 6.7771], [125.8607, 6.7954], [125.8793, 6.8169],
+  [125.8844, 6.8245], [125.8838, 6.9193], [125.8827, 6.9619], [125.8765, 6.9908],
+  [125.8304, 7.1666], [125.8141, 7.2061], [125.7855, 7.256], [125.6972, 7.2289],
+  [125.6793, 7.2156], [125.6725, 7.1945], [125.6711, 7.129], [125.6577, 7.1053],
+  [125.6492, 7.0646], [125.6496, 7.0513], [125.6619, 7.0329], [125.6622, 7.023],
+  [125.6561, 7.0137], [125.6227, 6.9872],
+];
+
+function insideOutline(lat: number, lng: number, ring: readonly (readonly [number, number])[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Inside the city box and not on Samal or Talikud. Still coarse at the box's
+ * edges, where the address lookup's own answer (`isDavaoCityHit`) is kept
+ * per pin by the picker.
+ */
 export function pointInDavao(lat: number, lng: number): boolean {
   return (
-    lat >= DAVAO_BOX.south && lat <= DAVAO_BOX.north && lng >= DAVAO_BOX.west && lng <= DAVAO_BOX.east
+    lat >= DAVAO_BOX.south &&
+    lat <= DAVAO_BOX.north &&
+    lng >= DAVAO_BOX.west &&
+    lng <= DAVAO_BOX.east &&
+    !insideOutline(lat, lng, SAMAL_OUTLINE)
   );
 }
 

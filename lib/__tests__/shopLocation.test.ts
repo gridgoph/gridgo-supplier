@@ -137,3 +137,11 @@ describe("what stops the pin being used", () => {
     expect(pinBlocker({ outside: false, reading: false })).toBeNull();
   });
 });
+
+describe("a pin on Samal", () => {
+  /** No network needed: a typed address cannot carry a Samal pin past a failed lookup. */
+  it("is a problem whatever the address says", () => {
+    expect(pinProblem({ lat: 7.082, lng: 125.682, label: "Babak Road" }, "Babak Road")).toBe(PIN_OUTSIDE_PROBLEM);
+    expect(pinProblem({ lat: 7.125, lng: 125.664, label: "Sasa wharf" }, "Sasa wharf")).toBeNull();
+  });
+});
