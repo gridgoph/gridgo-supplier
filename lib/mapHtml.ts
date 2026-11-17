@@ -27,10 +27,15 @@ export type ShopMapModel = {
   theme: MapTheme;
   /** Null before a shop has placed anything; the map then sits over Davao. */
   pin: LatLng | null;
-  /** What the pin currently reads as. Drawn under the marker. */
+  /** What the pin currently reads as. Its tooltip; the screen states it in full. */
   label: string;
   /** Recentre and zoom to the pin. Set when a search result moves it. */
   recentre: boolean;
+  /**
+   * How close to come in when recentring. A door wants `PIN_ZOOM`; the middle
+   * of a barangay is shown wider, so the shop can see where to drag from.
+   */
+  zoom?: number;
 };
 
 /** What the document sends back. Anything else is ignored by the host. */
@@ -42,6 +47,16 @@ const LIGHT_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 /** Davao City centre — where a shop that has placed nothing starts looking. */
 export const DAVAO_CENTRE: LatLng = { lat: 7.0731, lng: 125.6128 };
+
+/** Close enough to see which building the pin's tip is on, and its gate. */
+export const PIN_ZOOM = 18;
+
+/**
+ * Below this, a tap lands somewhere in a block rather than on a door, so the
+ * map comes in to `PIN_ZOOM` on the new pin for the shop to drag it the rest
+ * of the way.
+ */
+export const CLOSE_ENOUGH_ZOOM = 17;
 
 export function parseShopMapEvent(raw: string): ShopMapEvent | null {
   try {
@@ -95,6 +110,11 @@ export function buildShopMapHtml(model: ShopMapModel): string {
       background: rgba(20,20,20,0.9) !important;
       color: #f0f0f0 !important;
     }
+    /* Leaflet's zoom buttons are white plates; at night they glared. */
+    body.night .leaflet-bar a, body.night .leaflet-bar a:hover {
+      background: #141414; color: #f0f0f0; border-bottom-color: #2e2e2e;
+    }
+    body.night .leaflet-bar { border-color: #2e2e2e; }
     /* Leaflet's default div-icon is a white plate. The shop pin is a teardrop
        — same head + tip the rider Maps tab draws — so the two apps read as
        one city. */
@@ -122,17 +142,24 @@ export function buildShopMapHtml(model: ShopMapModel): string {
     .pin-shop.is-selected .pin-head {
       box-shadow: 0 0 0 3px #ffffff, 0 1px 3px rgba(0,0,0,0.35);
     }
-    .pin-label {
-      margin-top: 2px; padding: 1px 4px;
-      font: 600 9px/1.2 system-ui, sans-serif;
-      background: rgba(255,255,255,0.92); color: #1a1a1a;
-      border-radius: 3px; white-space: nowrap;
-      max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+    /* The point itself, so the shop can see exactly what the tip is on. */
+    .pin-shop .pin-dot {
+      width: 8px; height: 8px; border-radius: 999px; background: #1a1a1a;
     }
-    body.night .pin-label { background: rgba(20,20,20,0.92); color: #f0f0f0; }
+    /*
+      Picked up: the head lifts off the point so the finger can see the tip and
+      the street under it. Put down, it settles back onto the point.
+    */
+    .pin-head, .pin-tip { transition: transform 160ms ease-out, opacity 160ms ease-out; }
+    .is-lifted .pin-head { transform: translateY(-14px); }
+    .is-lifted .pin-tip { transform: translateY(-7px) rotate(45deg) scale(0.7); opacity: 0.6; }
+    @media (prefers-reduced-motion: reduce) {
+      .pin-head, .pin-tip { transition: none; }
+    }
+    /* Clear of the zoom buttons on the right, which it used to run under. */
     .hint {
-      position: absolute; bottom: 28px; left: 8px; right: 8px; z-index: 1000;
-      padding: 6px 10px; border-radius: 8px; text-align: center;
+      position: absolute; bottom: 28px; left: 8px; right: 56px; z-index: 1000;
+      padding: 8px 12px; border-radius: 12px; text-align: center;
       font: 600 12px/1.3 system-ui, sans-serif;
       background: rgba(255,255,255,0.95); color: #1a1a1a;
       border: 1px solid #dcdcdc;
@@ -144,13 +171,15 @@ export function buildShopMapHtml(model: ShopMapModel): string {
   </style>
 </head>
 <body>
-  <div id="hint" class="hint">Tap the map to place your shop, or drag the pin</div>
+  <div id="hint" class="hint">Tap your shop on the map</div>
   <div id="map"></div>
   <script>
     var MODEL = ${safe};
     var map = null;
     var tileLayer = null;
+    var tileTheme = null;
     var marker = null;
+    var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
     function send(payload) {
       var text = JSON.stringify(payload);
@@ -169,34 +198,41 @@ export function buildShopMapHtml(model: ShopMapModel): string {
         .replace(/"/g, '&quot;');
     }
 
-    function pinIcon(label) {
-      var text = String(label || '').replace(/^\s+/, '');
-      var letter = text ? escapeHtml(text.charAt(0).toUpperCase()) : '';
-      var labelHtml = text
-        ? '<div class="pin-label">' + escapeHtml(text) + '</div>'
-        : '';
+    // No caption on the tiles: the address is stated in full under the map,
+    // and a caption here covered the very street the shop was aiming for.
+    function pinIcon() {
       return L.divIcon({
         className: '',
         html: '<div class="pin pin-shop is-selected">'
-          + '<div class="pin-head">' + letter + '</div>'
+          + '<div class="pin-head"><div class="pin-dot"></div></div>'
           + '<div class="pin-tip"></div>'
-          + labelHtml
           + '</div>',
-        // Wide enough for the caption; the tip still sits on the point.
-        iconSize: [168, 72],
-        iconAnchor: [84, 40]
+        iconSize: [40, 48],
+        // The tip sits on the point.
+        iconAnchor: [20, 40]
       });
+    }
+
+    function lookAt(lat, lng, zoom) {
+      map.setView([lat, lng], zoom, { animate: !reduceMotion });
     }
 
     function place(lat, lng, announce) {
       if (!marker) {
         marker = L.marker([lat, lng], {
           draggable: true,
-          icon: pinIcon(MODEL.label),
+          autoPan: true,
+          icon: pinIcon(),
           keyboard: false,
-          title: 'Your shop'
+          title: MODEL.label || 'Your shop'
         }).addTo(map);
+        marker.on('dragstart', function () {
+          var el = marker.getElement();
+          if (el) el.classList.add('is-lifted');
+        });
         marker.on('dragend', function () {
+          var el = marker.getElement();
+          if (el) el.classList.remove('is-lifted');
           var p = marker.getLatLng();
           send({ type: 'pin', lat: p.lat, lng: p.lng });
         });
@@ -215,13 +251,20 @@ export function buildShopMapHtml(model: ShopMapModel): string {
       if (!map) {
         map = L.map('map', { zoomControl: false, attributionControl: true });
         L.control.zoom({ position: 'bottomright' }).addTo(map);
-        map.setView([${DAVAO_CENTRE.lat}, ${DAVAO_CENTRE.lng}], 12);
+        map.setView([${DAVAO_CENTRE.lat}, ${DAVAO_CENTRE.lng}], 13);
         map.on('click', function (e) {
           place(e.latlng.lat, e.latlng.lng, true);
+          // A tap from across the city lands on a block, not a door: come in
+          // on it so the last few metres are a drag, not a guess.
+          if (map.getZoom() < ${CLOSE_ENOUGH_ZOOM}) lookAt(e.latlng.lat, e.latlng.lng, ${PIN_ZOOM});
         });
       }
 
+      // Tiles are swapped only when the theme changes; every pin move used to
+      // reload them under the shop's thumb.
+      if (tileTheme !== m.theme) {
       if (tileLayer) map.removeLayer(tileLayer);
+      tileTheme = m.theme;
       tileLayer = L.tileLayer(
         night ? ${JSON.stringify(cartoDarkTileUrl())} : ${JSON.stringify(LIGHT_TILES)},
         {
@@ -231,11 +274,12 @@ export function buildShopMapHtml(model: ShopMapModel): string {
             : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }
       ).addTo(map);
+      }
 
       if (m.pin) {
         place(m.pin.lat, m.pin.lng, false);
-        if (marker) marker.setIcon(pinIcon(m.label));
-        if (m.recentre) map.setView([m.pin.lat, m.pin.lng], 16);
+        if (marker && marker.getElement()) marker.getElement().title = m.label || 'Your shop';
+        if (m.recentre) lookAt(m.pin.lat, m.pin.lng, m.zoom || ${PIN_ZOOM});
       }
     }
 
@@ -246,6 +290,8 @@ export function buildShopMapHtml(model: ShopMapModel): string {
       try { applyModel(JSON.parse(e.data)); } catch (err) {}
     });
     window.addEventListener('message', function (e) {
+      // In a browser frame, only the page that drew this map may redraw it.
+      if (window.parent !== window && e.source !== window.parent) return;
       try { applyModel(JSON.parse(e.data)); } catch (err) {}
     });
   </script>

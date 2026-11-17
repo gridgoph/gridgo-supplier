@@ -1,4 +1,4 @@
-import { buildShopMapHtml, DAVAO_CENTRE, parseShopMapEvent } from "@/lib/mapHtml";
+import { buildShopMapHtml, CLOSE_ENOUGH_ZOOM, DAVAO_CENTRE, parseShopMapEvent, PIN_ZOOM } from "@/lib/mapHtml";
 
 const MODEL = {
   theme: "light" as const,
@@ -51,8 +51,41 @@ describe("the map document", () => {
     expect(html).toContain("pin-tip");
     expect(html).toContain("is-selected");
     expect(html).not.toContain("shop-pin-mark");
-    expect(html).toContain("charAt(0).toUpperCase()");
-    expect(html).toContain("C.M. Recto St");
+  });
+
+  /**
+   * The address is stated in full under the map. A caption on the tiles
+   * covered the street the shop was aiming at, and the head's letter was the
+   * first character of whatever the address read ("1" for a road code).
+   */
+  it("puts no caption or letter on the pin", () => {
+    const html = buildShopMapHtml(MODEL);
+    expect(html).not.toContain("pin-label");
+    expect(html).not.toContain("charAt(0)");
+  });
+
+  it("lifts the pin off its point while it is dragged, unless motion is reduced", () => {
+    const html = buildShopMapHtml(MODEL);
+    expect(html).toContain("draggable: true");
+    expect(html).toContain("classList.add('is-lifted')");
+    expect(html).toContain("prefers-reduced-motion");
+  });
+
+  /** Close enough to see which building the tip is on. */
+  it("comes in close on a pin, and on a tap made from across the city", () => {
+    expect(PIN_ZOOM).toBe(18);
+    const html = buildShopMapHtml(MODEL);
+    expect(html).toContain(`map.getZoom() < ${CLOSE_ENOUGH_ZOOM}`);
+    expect(html).toContain(`m.zoom || ${PIN_ZOOM}`);
+  });
+
+  it("swaps tiles only when the theme changes, not on every pin move", () => {
+    expect(buildShopMapHtml(MODEL)).toContain("if (tileTheme !== m.theme)");
+  });
+
+  /** In a browser frame, any other page could otherwise move the pin. */
+  it("takes models only from the page that drew it", () => {
+    expect(buildShopMapHtml(MODEL)).toContain("e.source !== window.parent");
   });
 });
 

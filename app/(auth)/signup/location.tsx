@@ -23,6 +23,8 @@ export default function ShopLocationStep() {
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const pickerTop = useRef(0);
   const [searchFocused, setSearchFocused] = useState(false);
+  // Outside Davao City by the address lookup, or a move still being read.
+  const [blocker, setBlocker] = useState<string | null>(null);
 
   useEffect(() => {
     if (!searchFocused) return;
@@ -36,9 +38,10 @@ export default function ShopLocationStep() {
 
   const step = stepAt("location");
   const problems = locationStepProblems(draft);
+  const problem = blocker ?? problems.pin;
 
   function next() {
-    if (hasProblems(problems)) {
+    if (blocker || hasProblems(problems)) {
       setShowProblem(true);
       return;
     }
@@ -54,8 +57,8 @@ export default function ShopLocationStep() {
       scrollRef={scrollRef}
       footer={
         <>
-          {showProblem && problems.pin ? (
-            <Text className="text-caption text-error">{problems.pin}</Text>
+          {showProblem && problem ? (
+            <Text className="text-caption text-error">{problem}</Text>
           ) : null}
           <PrimaryButton label="Use this pin" onPress={next} />
         </>
@@ -72,6 +75,7 @@ export default function ShopLocationStep() {
           onChange={(pin) => patch({ pin })}
           searchPlaceholder="Search address"
           onSearchFocusChange={setSearchFocused}
+          onBlockerChange={setBlocker}
         />
       </View>
     </OnboardingStep>
