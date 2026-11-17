@@ -365,15 +365,17 @@ function metresBetween(a: GeocodePlace, b: GeocodePlace): number {
 
 /**
  * One row per place. OSM splits a road into many ways, so "Quimpo Blvd" came
- * back as five identical rows; a road keeps one row per barangay, and a named
- * place one row per spot.
+ * back as five identical rows; a road keeps one row per barangay. A named
+ * place is a twin only within 80 m — two branches of one chain on the same
+ * long road share a name and a barangay, and are still two places.
  */
 export function distinctPlaces(places: GeocodePlace[]): GeocodePlace[] {
   const kept: GeocodePlace[] = [];
   for (const next of places) {
     const twin = kept.some((seen) => {
       if (seen.label.toLowerCase() !== next.label.toLowerCase()) return false;
-      if (seen.detail.toLowerCase() === next.detail.toLowerCase()) return true;
+      const sameRoad = seen.precision === "street" && next.precision === "street";
+      if (sameRoad && seen.detail.toLowerCase() === next.detail.toLowerCase()) return true;
       return metresBetween(seen, next) < 80;
     });
     if (!twin) kept.push(next);

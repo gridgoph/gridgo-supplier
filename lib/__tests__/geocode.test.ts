@@ -139,6 +139,15 @@ describe("reading an answer", () => {
     expect(places[0].precision).toBe("street");
   });
 
+  /** Same chain, same long road and barangay, 2.2 km apart: two places. */
+  it("keeps two branches of one name on the same road when they are far apart", () => {
+    const branch = (id: number, lat: string) =>
+      hit({ place_id: id, lat, lon: "125.62", name: "7-Eleven", category: "shop", type: "convenience", address: { shop: "7-Eleven", road: "J. P. Laurel Avenue", quarter: "Buhangin", ...CITY } });
+    expect(toPlaces([branch(1, "7.11"), branch(2, "7.13")])).toHaveLength(2);
+    // The same branch filed twice, a few metres apart, is still one row.
+    expect(toPlaces([branch(1, "7.11"), branch(2, "7.1101")])).toHaveLength(1);
+  });
+
   it("shows no more than five rows", () => {
     const many = Array.from({ length: 8 }, (_, i) =>
       hit({ place_id: i, name: `Shop ${i}`, address: { road: "Recto", ...CITY } }),

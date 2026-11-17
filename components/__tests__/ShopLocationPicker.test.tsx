@@ -6,7 +6,7 @@ import { router } from "expo-router";
 import ShopLocationStep from "@/app/(auth)/signup/location";
 import { ShopLocationPicker } from "@/components/ShopLocationPicker";
 import * as geocode from "@/lib/geocode";
-import type { ShopPin } from "@/lib/shopLocation";
+import { PIN_OUTSIDE_PROBLEM, PIN_READING_PROBLEM, type ShopPin } from "@/lib/shopLocation";
 import { useSignupDraft, EMPTY_SIGNUP_DRAFT } from "@/store/signupDraft";
 
 const mockScrollTo = jest.fn();
@@ -136,7 +136,13 @@ it("keeps the selected coordinates and corrected address when Use this pin conti
 });
 
 /** The picker is controlled; this holds the pin the way a screen does. */
-function Harness({ onChange }: { onChange?: (pin: ShopPin) => void }) {
+function Harness({
+  onChange,
+  onBlockerChange,
+}: {
+  onChange?: (pin: ShopPin) => void;
+  onBlockerChange?: (problem: string | null) => void;
+}) {
   const [pin, setPin] = useState<ShopPin | null>(null);
   return (
     <ShopLocationPicker
@@ -145,6 +151,7 @@ function Harness({ onChange }: { onChange?: (pin: ShopPin) => void }) {
         onChange?.(next);
         setPin(next);
       }}
+      onBlockerChange={onBlockerChange}
     />
   );
 }
@@ -200,4 +207,108 @@ describe("moving the pin", () => {
     expect(screen.getByText("This is the middle of Talomo Proper")).toBeTruthy();
     expect(screen.getByText("Drag the pin onto your shop's door.")).toBeTruthy();
   });
+
+  /** C1: a search after a pin move must not orphan that move's address lookup. */
+  it("still names a dropped pin when a search starts before its lookup answers", async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    jest.mocked(geocode.reverseAddress).mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve)) as never,
+    );
+    const onChange = jest.fn();
+    await render(<Harness onChange={onChange} />);
+    await moveTo(7.06, 125.6);
+    expect(screen.getByText("Reading this place…")).toBeTruthy();
+
+    const search = screen.getByLabelText("Search for your shop's address");
+    await fireEvent.changeText(search, "Recto");
+    await fireEvent(search, "submitEditing");
+    await act(async () => answer({ ok: true, value: { address: "Recto Street, Barangay 4-A", inDavao: true } }));
+
+    expect(screen.queryByText("Reading this place…")).toBeNull();
+    expect(onChange).toHaveBeenLastCalledWith({ lat: 7.06, lng: 125.6, label: "Recto Street, Barangay 4-A" });
+    expect(screen.getByLabelText("Address at this pin").props.editable).toBe(true);
+  });
+
+  it("keeps a chosen result when an older pin's lookup answers afterwards", async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    jest.mocked(geocode.reverseAddress).mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve)) as never,
+    );
+    jest.mocked(geocode.searchPlaces).mockResolvedValueOnce({
+      ok: true,
+      value: [{ id: "1", lat: 7.07, lng: 125.61, label: "Recto Street", detail: "Barangay 4-A", address: "Recto Street, Barangay 4-A", precision: "exact" }],
+    });
+    const onChange = jest.fn();
+    await render(<Harness onChange={onChange} />);
+    await moveTo(7.06, 125.6);
+    const search = screen.getByLabelText("Search for your shop's address");
+    await fireEvent.changeText(search, "Recto");
+    await fireEvent(search, "submitEditing");
+    await fireEvent.press(await screen.findByText("Recto Street"));
+    await act(async () => answer({ ok: true, value: { address: "Old Street", inDavao: true } }));
+
+    expect(onChange).toHaveBeenLastCalledWith({ lat: 7.07, lng: 125.61, label: "Recto Street, Barangay 4-A" });
+    expect(screen.queryByText("Reading this place…")).toBeNull();
+  });
+
+  /** C2: Samal sits inside the search box; only the lookup can say it is not Davao City. */
+  it("blocks a pin the address lookup puts in another town, inside the box", async () => {
+    jest.mocked(geocode.reverseAddress).mockResolvedValueOnce({
+      ok: true,
+      value: { address: "Babak Road", inDavao: false },
+    });
+    const onBlockerChange = jest.fn();
+    await render(<Harness onBlockerChange={onBlockerChange} />);
+    await moveTo(7.08, 125.68);
+    expect(screen.getByText("Outside Davao City")).toBeTruthy();
+    expect(onBlockerChange).toHaveBeenLastCalledWith(PIN_OUTSIDE_PROBLEM);
+  });
+
+  it("blocks the pin while a move is still being read, and frees it once named", async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    jest.mocked(geocode.reverseAddress).mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve)) as never,
+    );
+    const onBlockerChange = jest.fn();
+    await render(<Harness onBlockerChange={onBlockerChange} />);
+    await moveTo(7.06, 125.6);
+    expect(onBlockerChange).toHaveBeenLastCalledWith(PIN_READING_PROBLEM);
+    await act(async () => answer({ ok: true, value: { address: "Recto Street", inDavao: true } }));
+    expect(onBlockerChange).toHaveBeenLastCalledWith(null);
+  });
+});
+
+/** C4: a lookup that failed can be sent again without changing the words. */
+it("searches the same words again from Search again, and from the keyboard", async () => {
+  jest
+    .mocked(geocode.searchPlaces)
+    .mockResolvedValueOnce({ ok: false, reason: "offline" })
+    .mockResolvedValueOnce({ ok: false, reason: "offline" })
+    .mockResolvedValueOnce({ ok: true, value: [] });
+  await render(<ShopLocationPicker pin={null} onChange={jest.fn()} />);
+  const search = screen.getByLabelText("Search for your shop's address");
+  await fireEvent.changeText(search, "SM Lanang");
+  await fireEvent(search, "submitEditing");
+  await fireEvent.press(await screen.findByText("Search again"));
+  await fireEvent(search, "submitEditing");
+
+  expect(geocode.searchPlaces).toHaveBeenCalledTimes(3);
+  for (const call of jest.mocked(geocode.searchPlaces).mock.calls) expect(call[0]).toBe("SM Lanang");
+  expect(await screen.findByText("No place in Davao City matched that")).toBeTruthy();
+  expect(screen.queryByText("Search again")).toBeNull();
+});
+
+/** C2 on the screen: Use this pin does not move on from a pin outside the city. */
+it("will not continue from a pin outside Davao City", async () => {
+  jest.mocked(geocode.reverseAddress).mockResolvedValueOnce({
+    ok: true,
+    value: { address: "Babak Road", inDavao: false },
+  });
+  await render(<ShopLocationStep />);
+  await fireEvent(screen.getByLabelText("Map of Davao City. Tap to place your shop, or drag the pin."), "message", {
+    nativeEvent: { data: JSON.stringify({ type: "pin", lat: 7.08, lng: 125.68 }) },
+  });
+  await fireEvent.press(screen.getByText("Use this pin"));
+  expect(router.push).not.toHaveBeenCalled();
+  expect(screen.getByText(PIN_OUTSIDE_PROBLEM)).toBeTruthy();
 });

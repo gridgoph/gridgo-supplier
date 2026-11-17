@@ -25,7 +25,11 @@ export function isPlaced(pin: ShopPin | null | undefined): pin is ShopPin {
   return Math.abs(pin.lat) <= 90 && Math.abs(pin.lng) <= 180;
 }
 
-/** True when the pin is somewhere GRIDGO does not operate. A warning, not a block. */
+/**
+ * True when the pin is outside the box GRIDGO searches. The picker also asks
+ * the address lookup, which catches a town inside the box (Samal), and the
+ * screens refuse to save either.
+ */
 export function isFarFromDavao(pin: ShopPin | null | undefined): boolean {
   if (!isPlaced(pin)) return false;
   // The same box search is bounded to: a pin search could never have
@@ -123,5 +127,19 @@ export function pinStatus(input: PinStatusInput): PinStatus | null {
   }
   if (input.lookup === "no_street") return { tone: "hint", title: NO_STREET_TITLE, detail: TYPE_IT_BELOW };
   if (input.lookup === "failed") return { tone: "hint", title: UNREAD_TITLE, detail: TYPE_IT_BELOW };
+  return null;
+}
+
+export const PIN_OUTSIDE_PROBLEM = "Your pin is outside Davao City. Move it onto your shop.";
+export const PIN_READING_PROBLEM = "Wait a moment while the address at your pin loads.";
+
+/**
+ * What stops the pin being used, beyond `pinProblem`: a point the address
+ * lookup placed in another town (Samal sits inside the search box, so the box
+ * alone cannot say), or a move whose lookup has not answered yet.
+ */
+export function pinBlocker(input: { outside: boolean; reading: boolean }): string | null {
+  if (input.outside) return PIN_OUTSIDE_PROBLEM;
+  if (input.reading) return PIN_READING_PROBLEM;
   return null;
 }

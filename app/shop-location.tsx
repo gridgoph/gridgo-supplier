@@ -37,6 +37,8 @@ export default function ShopLocationScreen() {
   const [pin, setPin] = useState<ShopPin | null>(saved);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Outside Davao City by the address lookup, or a move still being read.
+  const [blocker, setBlocker] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +57,7 @@ export default function ShopLocationScreen() {
     };
   }, [initialPin]);
 
-  const problem = pinProblem(pin, pin?.label ?? "");
+  const problem = blocker ?? pinProblem(pin, pin?.label ?? "");
   const unchanged = isSamePin(saved, pin);
 
   async function save() {
@@ -84,7 +86,7 @@ export default function ShopLocationScreen() {
   return (
     <View className="gg-screen">
       <FormScrollView bottomOffset={footerHeight + spacing.md}>
-        <ShopLocationPicker pin={pin} onChange={setPin} />
+        <ShopLocationPicker pin={pin} onChange={setPin} onBlockerChange={setBlocker} />
       </FormScrollView>
 
       <KeyboardStickyView>

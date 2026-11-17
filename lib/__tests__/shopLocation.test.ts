@@ -4,8 +4,11 @@ import {
   isPlaced,
   isSamePin,
   PIN_CONSEQUENCE,
+  pinBlocker,
   pinProblem,
   pinStatus,
+  PIN_OUTSIDE_PROBLEM,
+  PIN_READING_PROBLEM,
   type PinStatusInput,
   withLabel,
 } from "@/lib/shopLocation";
@@ -124,5 +127,13 @@ describe("outside Davao City", () => {
     expect(isFarFromDavao({ lat: 7.45, lng: 125.27, label: "Marilog" })).toBe(false);
     // Talomo, Santo Tomas, Davao del Norte.
     expect(isFarFromDavao({ lat: 7.5286, lng: 125.7228, label: "Talomo" })).toBe(true);
+  });
+});
+
+describe("what stops the pin being used", () => {
+  it("refuses a pin outside Davao City, and a move still being read", () => {
+    expect(pinBlocker({ outside: true, reading: true })).toBe(PIN_OUTSIDE_PROBLEM);
+    expect(pinBlocker({ outside: false, reading: true })).toBe(PIN_READING_PROBLEM);
+    expect(pinBlocker({ outside: false, reading: false })).toBeNull();
   });
 });

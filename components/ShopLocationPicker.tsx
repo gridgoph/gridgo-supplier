@@ -20,6 +20,7 @@ import {
   isFarFromDavao,
   isPlaced,
   PIN_CONSEQUENCE,
+  pinBlocker,
   pinStatus,
   type PinStatus,
   type ShopPin,
@@ -32,6 +33,12 @@ type Props = {
   onChange: (pin: ShopPin) => void;
   onSearchFocusChange?: (focused: boolean) => void;
   searchPlaceholder?: string;
+  /**
+   * Why the pin cannot be used yet, or null. The screen refuses to save on it:
+   * only the picker knows the address lookup put the point in another town,
+   * or that a move is still being read.
+   */
+  onBlockerChange?: (problem: string | null) => void;
 };
 
 /** How close the map comes in on a search result, by how exactly it pins. */
@@ -55,6 +62,7 @@ export function ShopLocationPicker({
   onChange,
   onSearchFocusChange,
   searchPlaceholder = "Street, barangay or landmark",
+  onBlockerChange,
 }: Props) {
   const { height } = useWindowDimensions();
   const mapHeight = Math.max(280, Math.min(480, height * 0.45));
@@ -66,20 +74,25 @@ export function ShopLocationPicker({
   const [results, setResults] = useState<GeocodePlace[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  // The lookup failed (not the words): the same words can simply be sent again.
+  const [canRetry, setCanRetry] = useState(false);
   const [reading, setReading] = useState(false);
   const [lookup, setLookup] = useState<"no_street" | "failed" | null>(null);
   const [outside, setOutside] = useState(false);
   // Set by a search result, and forgotten the moment the shop moves the pin.
   const [chosen, setChosen] = useState<{ precision: PinPrecision; name: string } | null>(null);
 
-  // Every search and every pin move takes a ticket. An answer that comes back
-  // for an older ticket is dropped — it named a point the shop has left, and
-  // applying it moved the pin back.
-  const ticket = useRef(0);
-  const take = () => {
-    ticket.current += 1;
-    const mine = ticket.current;
-    return () => ticket.current === mine;
+  // Address lookups and searches each take a ticket from their own counter.
+  // An answer for an older ticket is dropped — it named a point the shop has
+  // left, and applying it moved the pin back. Two counters, because a search
+  // started after a pin move must not orphan that move's lookup: it would
+  // leave "Reading this place…" and a locked address field for good.
+  const pinTicket = useRef(0);
+  const searchTicket = useRef(0);
+  const take = (counter: { current: number }) => {
+    counter.current += 1;
+    const mine = counter.current;
+    return () => counter.current === mine;
   };
 
   // The document is built once. Everything after the first paint is pushed in
@@ -121,11 +134,12 @@ export function ShopLocationPicker({
   const onEvent = useCallback(
     (event: ShopMapEvent) => {
       if (event.type !== "pin") return;
-      const isCurrent = take();
+      const isCurrent = take(pinTicket);
+      // A search still out is for somewhere the shop has stopped looking.
+      take(searchTicket);
       const { lat, lng } = event;
       setChosen(null);
       setLookup(null);
-      // A search still out is for somewhere the shop has stopped looking.
       setSearching(false);
       setResults(null);
       // The old label described the old point, so it goes with it. The panel
@@ -161,17 +175,20 @@ export function ShopLocationPicker({
   const runSearch = useCallback(async () => {
     if (!isSearchable(query)) {
       setSearchError("Type at least three letters of the street or landmark, then search.");
+      setCanRetry(false);
       return;
     }
-    const isCurrent = take();
+    const isCurrent = take(searchTicket);
     setSearching(true);
     setSearchError(null);
+    setCanRetry(false);
     const result = await searchPlaces(query, { isCurrent });
     if (!isCurrent()) return;
     setSearching(false);
     if (!result.ok) {
       setResults(null);
       setSearchError(geocodeFailureMessage(result.reason));
+      setCanRetry(true);
       return;
     }
     setResults(result.value);
@@ -179,7 +196,8 @@ export function ShopLocationPicker({
 
   const choose = useCallback(
     (place: GeocodePlace) => {
-      take();
+      // The chosen place replaces any address still being read for a dropped pin.
+      take(pinTicket);
       const next: ShopPin = { lat: place.lat, lng: place.lng, label: place.address };
       setResults(null);
       setQuery("");
@@ -196,10 +214,15 @@ export function ShopLocationPicker({
   );
 
   const placed = isPlaced(pin);
+  const isOutside = placed && (outside || isFarFromDavao(pin));
+  const blocker = placed ? pinBlocker({ outside: isOutside, reading }) : null;
+  useEffect(() => {
+    onBlockerChange?.(blocker);
+  }, [blocker, onBlockerChange]);
   const status = pinStatus({
     placed,
     reading,
-    outside: outside || isFarFromDavao(pin),
+    outside: isOutside,
     lookup,
     precision: chosen?.precision ?? null,
     placeName: chosen?.name ?? "",
@@ -356,7 +379,11 @@ export function ShopLocationPicker({
       <View className="gg-page pt-3">
         {searchError ? (
           <View className="pb-3">
-            <ErrorNotice message={searchError} />
+            <ErrorNotice
+              message={searchError}
+              onRetry={canRetry ? () => void runSearch() : undefined}
+              retryLabel="Search again"
+            />
           </View>
         ) : null}
 
