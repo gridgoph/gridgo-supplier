@@ -155,6 +155,7 @@ describe("a pin Use my location placed", () => {
   it("still warns first outside Davao City, and while the address is read", () => {
     expect(pinStatus({ ...SET, accuracyMeters: 85, outside: true })?.title).toBe("Outside Davao City");
     expect(pinStatus({ ...SET, accuracyMeters: 85, reading: true })?.title).toBe("Reading this place…");
+    expect(pinStatus({ ...SET, accuracyMeters: 85, lookup: "failed" })?.title).toBe("Could not read this address");
   });
 
   it("will not let the pin be used while the phone is still looking", () => {

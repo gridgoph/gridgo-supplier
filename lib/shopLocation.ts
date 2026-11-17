@@ -137,13 +137,6 @@ export function pinStatus(input: PinStatusInput): PinStatus | null {
   if (!input.placed) return null;
   if (input.outside) return { tone: "warning", title: OUTSIDE_TITLE, detail: OUTSIDE_DETAIL };
   if (input.reading) return { tone: "busy", title: READING_PLACE };
-  if (typeof input.accuracyMeters === "number" && input.accuracyMeters > 0) {
-    // Same threshold as the client: above 30 m a fix is a neighbourhood.
-    const rough = roughFixMeters(input.accuracyMeters);
-    return rough != null
-      ? { tone: "hint", title: roughFixTitle(rough), detail: DRAG_TO_DOOR }
-      : { tone: "hint", title: PHONE_PLACED_TITLE, detail: PHONE_PLACED_DETAIL };
-  }
   if (input.precision === "area") {
     return {
       tone: "hint",
@@ -160,6 +153,15 @@ export function pinStatus(input: PinStatusInput): PinStatus | null {
   }
   if (input.lookup === "no_street") return { tone: "hint", title: NO_STREET_TITLE, detail: TYPE_IT_BELOW };
   if (input.lookup === "failed") return { tone: "hint", title: UNREAD_TITLE, detail: TYPE_IT_BELOW };
+  // After the lookup states: an address to type is the shop's next step;
+  // the circle on the map still says how rough the fix is.
+  if (typeof input.accuracyMeters === "number" && input.accuracyMeters > 0) {
+    // Same threshold as the client: above 30 m a fix is a neighbourhood.
+    const rough = roughFixMeters(input.accuracyMeters);
+    return rough != null
+      ? { tone: "hint", title: roughFixTitle(rough), detail: DRAG_TO_DOOR }
+      : { tone: "hint", title: PHONE_PLACED_TITLE, detail: PHONE_PLACED_DETAIL };
+  }
   return null;
 }
 
