@@ -36,11 +36,20 @@ export type ShopMapModel = {
    * of a barangay is shown wider, so the shop can see where to drag from.
    */
   zoom?: number;
+  /**
+   * The phone's own error radius, in metres, for a pin Use my location set.
+   * Drawn as a faint circle so a rough fix reads as "somewhere in here", not
+   * as the shop's door. Null for a searched or hand-placed pin; the document
+   * also drops it the moment the shop taps or drags.
+   */
+  accuracyMeters?: number | null;
 };
 
 /** What the document sends back. Anything else is ignored by the host. */
 export type ShopMapEvent =
   | { type: "ready" }
+  /** A finger (or mouse) has picked the pin up. Sent before any move ends. */
+  | { type: "grab" }
   | { type: "pin"; lat: number; lng: number };
 
 const LIGHT_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -58,12 +67,20 @@ export const PIN_ZOOM = 18;
  */
 export const CLOSE_ENOUGH_ZOOM = 17;
 
+/** Above this radius the map shows the whole circle rather than the door. */
+export const WIDE_FIX_METERS = 40;
+
+/** Accuracy circle colours: the `info` token, light and dark. */
+const ACCURACY_LIGHT = "#1565C0";
+const ACCURACY_DARK = "#42A5F5";
+
 export function parseShopMapEvent(raw: string): ShopMapEvent | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || !parsed) return null;
     const value = parsed as Record<string, unknown>;
     if (value.type === "ready") return { type: "ready" };
+    if (value.type === "grab") return { type: "grab" };
     if (value.type === "pin" && typeof value.lat === "number" && typeof value.lng === "number") {
       return { type: "pin", lat: value.lat, lng: value.lng };
     }
@@ -179,6 +196,10 @@ export function buildShopMapHtml(model: ShopMapModel): string {
     var tileLayer = null;
     var tileTheme = null;
     var marker = null;
+    var accuracyLayer = null;
+    // True while the shop holds the pin. A model pushed meanwhile (a late
+    // phone fix, say) must not move the pin out from under the finger.
+    var dragging = false;
     var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
     function send(payload) {
@@ -217,6 +238,25 @@ export function buildShopMapHtml(model: ShopMapModel): string {
       map.setView([lat, lng], zoom, { animate: !reduceMotion });
     }
 
+    function clearAccuracy() {
+      if (accuracyLayer) { map.removeLayer(accuracyLayer); accuracyLayer = null; }
+      MODEL.accuracyMeters = null;
+    }
+
+    // The phone's error circle round a Use-my-location pin. Not interactive:
+    // a tap inside it is still a tap on the map.
+    function drawAccuracy(m) {
+      if (accuracyLayer) { map.removeLayer(accuracyLayer); accuracyLayer = null; }
+      if (!m.pin || !(m.accuracyMeters > 0)) return;
+      var tint = m.theme === 'dark' ? '${ACCURACY_DARK}' : '${ACCURACY_LIGHT}';
+      accuracyLayer = L.circle([m.pin.lat, m.pin.lng], {
+        radius: m.accuracyMeters,
+        color: tint, weight: 1, opacity: 0.6,
+        fillColor: tint, fillOpacity: 0.12,
+        interactive: false
+      }).addTo(map);
+    }
+
     function place(lat, lng, announce) {
       if (!marker) {
         marker = L.marker([lat, lng], {
@@ -229,10 +269,17 @@ export function buildShopMapHtml(model: ShopMapModel): string {
         marker.on('dragstart', function () {
           var el = marker.getElement();
           if (el) el.classList.add('is-lifted');
+          dragging = true;
+          // Picked up by hand: the phone's circle no longer describes it,
+          // and a fix still on its way is for nobody. Said now, not at the
+          // drop, so the host can drop that fix before it lands.
+          clearAccuracy();
+          send({ type: 'grab' });
         });
         marker.on('dragend', function () {
           var el = marker.getElement();
           if (el) el.classList.remove('is-lifted');
+          dragging = false;
           var p = marker.getLatLng();
           send({ type: 'pin', lat: p.lat, lng: p.lng });
         });
@@ -253,6 +300,7 @@ export function buildShopMapHtml(model: ShopMapModel): string {
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         map.setView([${DAVAO_CENTRE.lat}, ${DAVAO_CENTRE.lng}], 13);
         map.on('click', function (e) {
+          clearAccuracy();
           place(e.latlng.lat, e.latlng.lng, true);
           // A tap from across the city lands on a block, not a door: come in
           // on it so the last few metres are a drag, not a guess.
@@ -276,10 +324,24 @@ export function buildShopMapHtml(model: ShopMapModel): string {
       ).addTo(map);
       }
 
+      // Mid-drag the hand owns the pin: theme and tiles may change, the pin,
+      // its circle and the view may not.
+      if (dragging) return;
+      drawAccuracy(m);
       if (m.pin) {
         place(m.pin.lat, m.pin.lng, false);
         if (marker && marker.getElement()) marker.getElement().title = m.label || 'Your shop';
-        if (m.recentre) lookAt(m.pin.lat, m.pin.lng, m.zoom || ${PIN_ZOOM});
+        if (m.recentre) {
+          if (accuracyLayer && m.accuracyMeters > ${WIDE_FIX_METERS}) {
+            // A rough fix shows its whole circle, so the shop sees how far
+            // off it may be. From the point itself: a circle's own getBounds
+            // needs a map that already has a view.
+            var reach = L.latLng(m.pin.lat, m.pin.lng).toBounds(m.accuracyMeters * 2);
+            map.fitBounds(reach, { padding: [24, 24], maxZoom: ${PIN_ZOOM}, animate: !reduceMotion });
+          } else {
+            lookAt(m.pin.lat, m.pin.lng, m.zoom || ${PIN_ZOOM});
+          }
+        }
       }
     }
 
