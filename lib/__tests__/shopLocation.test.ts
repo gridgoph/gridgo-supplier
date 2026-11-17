@@ -10,6 +10,8 @@ import {
   PIN_OUTSIDE_PROBLEM,
   PIN_READING_PROBLEM,
   PIN_LOCATING_PROBLEM,
+  nudgePin,
+  NUDGE_METERS,
   type PinStatusInput,
   withLabel,
 } from "@/lib/shopLocation";
@@ -185,5 +187,30 @@ describe("a pin on Samal", () => {
   it("is a problem whatever the address says", () => {
     expect(pinProblem({ lat: 7.082, lng: 125.682, label: "Babak Road" }, "Babak Road")).toBe(PIN_OUTSIDE_PROBLEM);
     expect(pinProblem({ lat: 7.125, lng: 125.664, label: "Sasa wharf" }, "Sasa wharf")).toBeNull();
+  });
+});
+
+describe("nudging the pin", () => {
+  const at = { lat: 7.0731, lng: 125.6128 };
+  const meters = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+    const dy = (b.lat - a.lat) * 111320;
+    const dx = (b.lng - a.lng) * 111320 * Math.cos((a.lat * Math.PI) / 180);
+    return Math.hypot(dx, dy);
+  };
+
+  it("moves about three metres per press, in the direction named", () => {
+    expect(nudgePin(at, "north").lat).toBeGreaterThan(at.lat);
+    expect(nudgePin(at, "south").lat).toBeLessThan(at.lat);
+    expect(nudgePin(at, "east").lng).toBeGreaterThan(at.lng);
+    expect(nudgePin(at, "west").lng).toBeLessThan(at.lng);
+    for (const direction of ["north", "south", "east", "west"] as const) {
+      expect(meters(at, nudgePin(at, direction))).toBeCloseTo(NUDGE_METERS, 1);
+    }
+  });
+
+  it("comes back to the same point after opposite presses", () => {
+    const back = nudgePin(nudgePin(at, "east"), "west");
+    expect(back.lat).toBeCloseTo(at.lat, 9);
+    expect(back.lng).toBeCloseTo(at.lng, 9);
   });
 });

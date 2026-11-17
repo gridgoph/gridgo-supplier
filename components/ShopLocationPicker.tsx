@@ -1,4 +1,16 @@
-import { AlertTriangle, Hand, LocateFixed, MapPin, Search, X } from "lucide-react-native";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Hand,
+  LocateFixed,
+  MapPin,
+  Search,
+  X,
+  type LucideIcon,
+} from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -34,6 +46,9 @@ import { buildShopMapHtml, PIN_ZOOM, type ShopMapEvent } from "@/lib/mapHtml";
 import {
   isFarFromDavao,
   isPlaced,
+  nudgePin,
+  NUDGE_METERS,
+  type NudgeDirection,
   PIN_CONSEQUENCE,
   pinBlocker,
   pinStatus,
@@ -55,6 +70,9 @@ type Props = {
    */
   onBlockerChange?: (problem: string | null) => void;
 };
+
+/** How long the pin rests after a nudge before its address is read. */
+const NUDGE_SETTLE_MS = 800;
 
 /** How close the map comes in on a search result, by how exactly it pins. */
 const RESULT_ZOOM: Record<PinPrecision, number> = { exact: PIN_ZOOM, street: 17, area: 16 };
@@ -182,6 +200,16 @@ export function ShopLocationPicker({
     [onChange],
   );
 
+  // A run of nudges is read once, after the shop stops pressing: a lookup per
+  // press would spend OpenStreetMap's one-a-second budget on points left behind.
+  const nudgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (nudgeTimer.current) clearTimeout(nudgeTimer.current);
+    },
+    [],
+  );
+
   /** Something else placed the pin: a fix still on its way is for nobody. */
   const dropLocate = useCallback(() => {
     take(locateTicket);
@@ -191,6 +219,13 @@ export function ShopLocationPicker({
 
   const onEvent = useCallback(
     (event: ShopMapEvent) => {
+      if (event.type === "grab") {
+        // Picked up by hand: a fix still on its way loses, now rather than at
+        // the drop, or it would move the pin out from under the finger.
+        dropLocate();
+        setAccuracyMeters(null);
+        return;
+      }
       if (event.type !== "pin") return;
       // A search still out is for somewhere the shop has stopped looking.
       take(searchTicket);
@@ -208,6 +243,36 @@ export function ShopLocationPicker({
       readPlace(lat, lng);
     },
     [onChange, readPlace, dropLocate],
+  );
+
+  /**
+   * The last few metres without a drag: a keyboard, a switch or a screen
+   * reader cannot pick the pin up, and "drag it onto your door" is advice
+   * they could not follow. Each press moves it about `NUDGE_METERS`.
+   */
+  const nudge = useCallback(
+    (direction: NudgeDirection) => {
+      if (!isPlaced(pin)) return;
+      take(searchTicket);
+      dropLocate();
+      setChosen(null);
+      setLookup(null);
+      setSearching(false);
+      setResults(null);
+      setAccuracyMeters(null);
+      const next = nudgePin(pin, direction);
+      // Any lookup still out named the point the pin just left.
+      const isCurrent = take(pinTicket);
+      setReading(true);
+      onChange({ ...next, label: "" });
+      if (nudgeTimer.current) clearTimeout(nudgeTimer.current);
+      nudgeTimer.current = setTimeout(() => {
+        nudgeTimer.current = null;
+        // A drag, a search pick or a phone fix since then owns the pin.
+        if (isCurrent()) readPlace(next.lat, next.lng);
+      }, NUDGE_SETTLE_MS);
+    },
+    [pin, onChange, readPlace, dropLocate],
   );
 
   /**
@@ -340,7 +405,7 @@ export function ShopLocationPicker({
                 <Text className="text-body font-medium text-text-primary">
                   No place in Davao City matched that
                 </Text>
-                <Text className="text-caption text-text-muted">
+                <Text className="text-caption text-text-secondary">
                   Try a landmark or street nearby, or tap your shop on the map.
                 </Text>
                 <Pressable
@@ -356,7 +421,7 @@ export function ShopLocationPicker({
             ) : (
               <ScrollView keyboardShouldPersistTaps="handled">
                 <View className="flex-row items-center justify-between gap-3 px-4">
-                  <Text className="text-caption text-text-muted">
+                  <Text className="text-caption text-text-secondary">
                     {results.length === 1 ? "1 place in Davao City" : `${results.length} places in Davao City`}
                   </Text>
                   <Pressable
@@ -385,7 +450,7 @@ export function ShopLocationPicker({
                       <Text className="text-body font-medium text-text-primary" numberOfLines={1}>
                         {place.label}
                       </Text>
-                      <Text className="text-caption text-text-muted" numberOfLines={1}>
+                      <Text className="text-caption text-text-secondary" numberOfLines={1}>
                         {place.detail}
                       </Text>
                     </View>
@@ -469,6 +534,7 @@ export function ShopLocationPicker({
           <View className="pb-3">
             <ErrorNotice
               message={locateError.message}
+              announce
               onRetry={
                 locateError.remedy === "retry"
                   ? () => void locate()
@@ -485,6 +551,7 @@ export function ShopLocationPicker({
           <View className="pb-3">
             <ErrorNotice
               message={searchError}
+              announce
               onRetry={canRetry ? () => void runSearch() : undefined}
               retryLabel="Search again"
             />
@@ -494,9 +561,11 @@ export function ShopLocationPicker({
         <View className="gg-panel gap-3">
           {status ? <PinStatusLine status={status} /> : null}
 
+          {placed && !isOutside ? <PinNudge onNudge={nudge} /> : null}
+
           {placed ? (
             <View className="gap-2">
-              <Text className="text-caption text-text-muted">Address at this pin</Text>
+              <Text className="text-caption text-text-secondary">Address at this pin</Text>
               <TextInput
                 value={reading ? "" : (pin?.label ?? "")}
                 onChangeText={(label) => pin && onChange({ ...pin, label })}
@@ -519,8 +588,8 @@ export function ShopLocationPicker({
             </View>
           ) : null}
 
-          <Text className="text-caption text-text-muted">{PIN_CONSEQUENCE}</Text>
-          <WhyWeAsk>{WHY_WE_ASK.shopPin}</WhyWeAsk>
+          <Text className="text-caption text-text-secondary">{PIN_CONSEQUENCE}</Text>
+          <WhyWeAsk readable>{WHY_WE_ASK.shopPin}</WhyWeAsk>
         </View>
       </View>
     </View>
@@ -559,6 +628,45 @@ function LocateButton({ locating, onPress }: { locating: boolean; onPress: () =>
           </>
         )}
       </Pressable>
+    </View>
+  );
+}
+
+const NUDGES: { direction: NudgeDirection; Icon: LucideIcon; label: string }[] = [
+  { direction: "north", Icon: ArrowUp, label: "Move the pin up" },
+  { direction: "south", Icon: ArrowDown, label: "Move the pin down" },
+  { direction: "west", Icon: ArrowLeft, label: "Move the pin left" },
+  { direction: "east", Icon: ArrowRight, label: "Move the pin right" },
+];
+
+/**
+ * Four small, neutral steps for the pin, in reach of a keyboard and a screen
+ * reader. Outlined charcoal: Save stays the only yellow on the screen.
+ */
+function PinNudge({ onNudge }: { onNudge: (direction: NudgeDirection) => void }) {
+  const colors = useThemeColors();
+  return (
+    <View className="flex-row items-center gap-2" testID="shop-pin-nudge">
+      <Text className="min-w-0 flex-1 text-caption text-text-secondary">
+        Move the pin a little
+      </Text>
+      {NUDGES.map(({ direction, Icon, label }) => (
+        <Pressable
+          key={direction}
+          onPress={() => onNudge(direction)}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          accessibilityHint={`Moves your shop pin about ${NUDGE_METERS} metres`}
+          className="h-11 w-11 items-center justify-center overflow-hidden rounded-field border border-outline bg-surface"
+        >
+          {({ pressed }) => (
+            <>
+              <Icon size={18} color={colors.textPrimary} strokeWidth={2} />
+              {pressed ? <View pointerEvents="none" className="gg-pressed absolute inset-0" /> : null}
+            </>
+          )}
+        </Pressable>
+      ))}
     </View>
   );
 }

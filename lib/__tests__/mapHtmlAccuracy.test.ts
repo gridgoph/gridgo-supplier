@@ -13,6 +13,7 @@ function runDocument(model: ShopMapModel) {
   const mapHandlers: Record<string, Handler> = {};
   const markerHandlers: Record<string, Handler> = {};
   const sent: unknown[] = [];
+  const moves: unknown[] = [];
   const layerRemoved = (layer: { removed?: boolean }) => {
     layer.removed = true;
   };
@@ -27,7 +28,10 @@ function runDocument(model: ShopMapModel) {
   const marker = {
     addTo: () => marker,
     on: (name: string, fn: Handler) => (markerHandlers[name] = fn),
-    setLatLng: () => marker,
+    setLatLng: (at: unknown) => {
+      moves.push(at);
+      return marker;
+    },
     getLatLng: () => ({ lat: 7.07, lng: 125.61 }),
     getElement: () => ({ classList: { add: () => undefined, remove: () => undefined }, title: "" }),
   };
@@ -62,7 +66,7 @@ function runDocument(model: ShopMapModel) {
   const body = scripts[scripts.length - 1];
   const env = new Function("L", "document", "window", `${body}; return { applyModel: applyModel };`);
   const doc = env(L, fakeDocument, fakeWindow) as { applyModel: (m: ShopMapModel) => void };
-  return { circles, views, mapHandlers, markerHandlers, sent, doc };
+  return { circles, views, mapHandlers, markerHandlers, sent, moves, doc };
 }
 
 const PIN = { lat: 7.0731, lng: 125.6128 };
@@ -101,5 +105,28 @@ describe("the phone's accuracy circle", () => {
     run.mapHandlers.click?.({ latlng: { lat: 7.08, lng: 125.62 } });
     expect(run.circles[0].removed).toBe(true);
     expect(run.sent).toContainEqual({ type: "pin", lat: 7.08, lng: 125.62 });
+  });
+});
+
+describe("a pin held by the shop", () => {
+  it("tells the host the moment it is picked up, before any drop", () => {
+    const run = runDocument(BASE);
+    run.markerHandlers.dragstart?.();
+    expect(run.sent).toContainEqual({ type: "grab" });
+    expect(run.sent).not.toContainEqual(expect.objectContaining({ type: "pin" }));
+  });
+
+  /** Review F1: a late fix landed mid-drag and moved the pin ~2 km under the finger. */
+  it("is not moved, ringed or re-framed by a model pushed while it is held", () => {
+    const run = runDocument(BASE);
+    const viewsBefore = run.views.length;
+    run.markerHandlers.dragstart?.();
+    run.doc.applyModel({ ...BASE, pin: { lat: 7.09, lng: 125.62 }, accuracyMeters: 8, recentre: true });
+    expect(run.circles).toHaveLength(0);
+    expect(run.views).toHaveLength(viewsBefore);
+    expect(run.moves).toHaveLength(0);
+    run.markerHandlers.dragend?.();
+    // The drop is where the hand left it.
+    expect(run.sent.at(-1)).toEqual({ type: "pin", lat: 7.07, lng: 125.61 });
   });
 });

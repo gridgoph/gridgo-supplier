@@ -25,6 +25,12 @@ export type GeoPoint = { lat: number; lng: number };
 /** How long a satellite fix may take before the network's rougher one is used. */
 export const PRECISE_FIX_TIMEOUT_MS = 10000;
 
+/**
+ * How long the network's fallback reading may take. Without a bound, a phone
+ * whose location provider never answers left "Finding you…" up for good.
+ */
+export const FALLBACK_FIX_TIMEOUT_MS = 10000;
+
 /** Above this, a phone's fix is a neighbourhood, not a door. Same as the client. */
 export const ROUGH_FIX_METERS = 30;
 
@@ -42,6 +48,9 @@ export const LOCATION_SERVICES_OFF =
 
 export const LOCATION_UNAVAILABLE =
   "This phone could not find where it is. Step outside or near a window and tap Try again, or search for your street or tap the map.";
+
+export const LOCATION_TIMED_OUT =
+  "This phone took too long to find where it is. Step outside or near a window and tap Try again, or search for your street or tap the map.";
 
 export const LOCATION_NEEDS_REBUILD =
   "Use my location needs the newest GRIDGO app on this phone. Search for your street, or tap the map.";
@@ -63,7 +72,7 @@ export type DeviceLocationResult =
       accuracyMeters?: number;
     }
   | {
-      status: "denied" | "blocked" | "services_off" | "unavailable" | "needs_rebuild";
+      status: "denied" | "blocked" | "services_off" | "unavailable" | "timed_out" | "needs_rebuild";
       message: string;
       remedy: LocationRemedy;
     };
@@ -120,6 +129,8 @@ function failure(status: Exclude<DeviceLocationResult["status"], "ok">): DeviceL
       return { status, message: LOCATION_BLOCKED, remedy: "settings" };
     case "services_off":
       return { status, message: LOCATION_SERVICES_OFF, remedy: "retry" };
+    case "timed_out":
+      return { status, message: LOCATION_TIMED_OUT, remedy: "retry" };
     case "needs_rebuild":
       return { status, message: LOCATION_NEEDS_REBUILD, remedy: "none" };
     default:
@@ -190,7 +201,11 @@ async function readPosition(Location: LocationModule): Promise<DeviceLocationRes
     }
   }
   try {
-    return resultFrom(await Location.getCurrentPositionAsync({ accuracy: rough })) ?? failure("unavailable");
+    // Bounded too: the whole read now ends within both timeouts, with a
+    // sentence and Try again rather than a spinner that never stops.
+    const reading = await withTimeout(Location.getCurrentPositionAsync({ accuracy: rough }), FALLBACK_FIX_TIMEOUT_MS);
+    if (reading === null) return failure("timed_out");
+    return resultFrom(reading) ?? failure("unavailable");
   } catch (error) {
     return failure(isServicesOff(error) ? "services_off" : "unavailable");
   }
@@ -228,7 +243,7 @@ function readBrowserPosition(geo: BrowserGeolocation): Promise<DeviceLocationRes
           error.code === 1
             ? // No settings screen to open from a page: the browser owns this.
               { status: "blocked", message: LOCATION_BROWSER_BLOCKED, remedy: "none" }
-            : failure("unavailable"),
+            : failure(error.code === 3 ? "timed_out" : "unavailable"),
         ),
       { enableHighAccuracy: true, timeout: PRECISE_FIX_TIMEOUT_MS, maximumAge: 0 },
     );

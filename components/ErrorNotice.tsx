@@ -1,5 +1,6 @@
 import { TriangleAlert } from "lucide-react-native";
-import { Pressable, Text, View } from "react-native";
+import { useEffect } from "react";
+import { AccessibilityInfo, Platform, Pressable, Text, View } from "react-native";
 
 import { useThemeColors } from "@/hooks/useTheme";
 
@@ -9,6 +10,13 @@ type Props = {
   /** Offered when trying again is the fix. */
   onRetry?: () => void;
   retryLabel?: string;
+  /**
+   * Say the message aloud when it appears. For a failure that arrives on its
+   * own, after the person has moved on (a location fix, a lookup), where a
+   * screen reader would otherwise never reach it. Android and web read the
+   * alert role and live region; iOS has no live regions, so it is announced.
+   */
+  announce?: boolean;
 };
 
 /**
@@ -18,11 +26,20 @@ type Props = {
  * competes with the screen's one yellow action. Icon plus label plus colour, so
  * it reads in greyscale.
  */
-export function ErrorNotice({ message, onRetry, retryLabel = "Try again" }: Props) {
+export function ErrorNotice({ message, onRetry, retryLabel = "Try again", announce = false }: Props) {
   const colors = useThemeColors();
 
+  useEffect(() => {
+    if (announce && Platform.OS === "ios") AccessibilityInfo.announceForAccessibility(message);
+  }, [announce, message]);
+
   return (
-    <View className="flex-row items-start gap-3 rounded-field border border-error bg-surface p-3">
+    <View
+      className="flex-row items-start gap-3 rounded-field border border-error bg-surface p-3"
+      accessibilityRole={announce ? "alert" : undefined}
+      accessibilityLiveRegion={announce ? "assertive" : undefined}
+      aria-live={announce ? "assertive" : undefined}
+    >
       <View className="pt-0.5">
         <TriangleAlert size={16} color={colors.error} strokeWidth={2} />
       </View>

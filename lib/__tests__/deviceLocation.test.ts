@@ -6,6 +6,8 @@ import {
   LOCATION_NEEDS_REBUILD,
   LOCATION_SERVICES_OFF,
   LOCATION_UNAVAILABLE,
+  FALLBACK_FIX_TIMEOUT_MS,
+  LOCATION_TIMED_OUT,
   PRECISE_FIX_TIMEOUT_MS,
   requestCurrentLocation,
   roughFixMeters,
@@ -207,5 +209,38 @@ describe("on the web build", () => {
   it("hides the control in a browser with no geolocation", () => {
     onWeb(undefined);
     expect(canUseDeviceLocation()).toBe(false);
+  });
+});
+
+describe("a fix that never comes", () => {
+  it("gives up on the network fallback too, with Try again, instead of Finding you… for good", async () => {
+    jest.useFakeTimers();
+    const Location = fakeLocation();
+    Location.getCurrentPositionAsync.mockImplementation(() => new Promise(() => undefined));
+    setLocationModuleForTests(Location);
+    let settled: unknown = null;
+    void requestCurrentLocation().then((result) => (settled = result));
+    await jest.advanceTimersByTimeAsync(PRECISE_FIX_TIMEOUT_MS);
+    expect(settled).toBeNull();
+    expect(Location.getCurrentPositionAsync).toHaveBeenLastCalledWith({ accuracy: Accuracy.Balanced });
+    await jest.advanceTimersByTimeAsync(FALLBACK_FIX_TIMEOUT_MS);
+    expect(settled).toEqual({ status: "timed_out", message: LOCATION_TIMED_OUT, remedy: "retry" });
+  });
+
+  it("reads the browser's own timeout the same way", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Platform } = require("react-native") as typeof import("react-native");
+    const realNavigator = (globalThis as { navigator?: unknown }).navigator;
+    jest.replaceProperty(Platform, "OS", "web");
+    Object.defineProperty(globalThis, "navigator", {
+      value: { geolocation: { getCurrentPosition: (_ok: unknown, fail: (e: { code: number }) => void) => fail({ code: 3 }) } },
+      configurable: true,
+    });
+    try {
+      await expect(requestCurrentLocation()).resolves.toMatchObject({ status: "timed_out", remedy: "retry" });
+    } finally {
+      jest.restoreAllMocks();
+      Object.defineProperty(globalThis, "navigator", { value: realNavigator, configurable: true });
+    }
   });
 });

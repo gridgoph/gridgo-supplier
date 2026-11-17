@@ -48,6 +48,8 @@ export type ShopMapModel = {
 /** What the document sends back. Anything else is ignored by the host. */
 export type ShopMapEvent =
   | { type: "ready" }
+  /** A finger (or mouse) has picked the pin up. Sent before any move ends. */
+  | { type: "grab" }
   | { type: "pin"; lat: number; lng: number };
 
 const LIGHT_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -78,6 +80,7 @@ export function parseShopMapEvent(raw: string): ShopMapEvent | null {
     if (typeof parsed !== "object" || !parsed) return null;
     const value = parsed as Record<string, unknown>;
     if (value.type === "ready") return { type: "ready" };
+    if (value.type === "grab") return { type: "grab" };
     if (value.type === "pin" && typeof value.lat === "number" && typeof value.lng === "number") {
       return { type: "pin", lat: value.lat, lng: value.lng };
     }
@@ -194,6 +197,9 @@ export function buildShopMapHtml(model: ShopMapModel): string {
     var tileTheme = null;
     var marker = null;
     var accuracyLayer = null;
+    // True while the shop holds the pin. A model pushed meanwhile (a late
+    // phone fix, say) must not move the pin out from under the finger.
+    var dragging = false;
     var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
     function send(payload) {
@@ -263,12 +269,17 @@ export function buildShopMapHtml(model: ShopMapModel): string {
         marker.on('dragstart', function () {
           var el = marker.getElement();
           if (el) el.classList.add('is-lifted');
-          // Picked up by hand: the phone's circle no longer describes it.
+          dragging = true;
+          // Picked up by hand: the phone's circle no longer describes it,
+          // and a fix still on its way is for nobody. Said now, not at the
+          // drop, so the host can drop that fix before it lands.
           clearAccuracy();
+          send({ type: 'grab' });
         });
         marker.on('dragend', function () {
           var el = marker.getElement();
           if (el) el.classList.remove('is-lifted');
+          dragging = false;
           var p = marker.getLatLng();
           send({ type: 'pin', lat: p.lat, lng: p.lng });
         });
@@ -313,6 +324,9 @@ export function buildShopMapHtml(model: ShopMapModel): string {
       ).addTo(map);
       }
 
+      // Mid-drag the hand owns the pin: theme and tiles may change, the pin,
+      // its circle and the view may not.
+      if (dragging) return;
       drawAccuracy(m);
       if (m.pin) {
         place(m.pin.lat, m.pin.lng, false);

@@ -65,6 +65,33 @@ export function pinProblem(
   return null;
 }
 
+/** One press of a nudge button: a doorway's width, small enough to aim with. */
+export const NUDGE_METERS = 3;
+
+export type NudgeDirection = "north" | "south" | "east" | "west";
+
+const METERS_PER_DEGREE_LAT = 111320;
+
+/** The pin moved `meters` one way: up the screen is north on this map. */
+export function nudgePin(
+  pin: { lat: number; lng: number },
+  direction: NudgeDirection,
+  meters: number = NUDGE_METERS,
+): { lat: number; lng: number } {
+  const dLat = meters / METERS_PER_DEGREE_LAT;
+  const dLng = meters / (METERS_PER_DEGREE_LAT * Math.cos((pin.lat * Math.PI) / 180));
+  switch (direction) {
+    case "north":
+      return { lat: pin.lat + dLat, lng: pin.lng };
+    case "south":
+      return { lat: pin.lat - dLat, lng: pin.lng };
+    case "east":
+      return { lat: pin.lat, lng: pin.lng + dLng };
+    default:
+      return { lat: pin.lat, lng: pin.lng - dLng };
+  }
+}
+
 /** The sentence a shop needs to read before it accepts a pin it dragged roughly. */
 export const PIN_CONSEQUENCE =
   "GRIDGO measures every delivery fee from this pin. Put it on your own door, not on the street corner.";
