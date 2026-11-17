@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.433 (New feature)
+
+- Place your shop pin with Use my location: the map shows how close your phone got, then you drag it onto your door.
+
 ## 1.0.425 (Improvement)
 
 - Shop location search stays inside Davao City, and the map zooms in close so you can drag the pin onto your door.
