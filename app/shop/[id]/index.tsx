@@ -29,6 +29,8 @@ import { PrintLayoutField } from "@/components/listing/PrintLayoutField";
 import { PagePricingField, pagePricingApplies } from "@/components/listing/PagePricingField";
 import { ProductionTimeCheckJump, ProductionTimeSection } from "@/components/listing/ProductionTimeQuestion";
 import { SampleOfferField } from "@/components/listing/SampleOfferField";
+import { ExpressField } from "@/components/listing/ExpressField";
+import { offersExpressSwitch } from "@/lib/express";
 import { SampleStrip } from "@/components/listing/SampleStrip";
 import { PriceTierEditor } from "@/components/listing/TierEditor";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
@@ -101,6 +103,7 @@ import {
   reorderPrepSteps,
   saveGroup,
   saveListing,
+  setExpress,
   setFileFormats,
   submitForReview,
   type BoardOutcome,
@@ -150,6 +153,8 @@ export default function ListingScreen() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [expressPending, setExpressPending] = useState<boolean | null>(null);
+  const [expressError, setExpressError] = useState<string | null>(null);
 
   // The reload guard and the leaving-the-screen save both need to know whether
   // there are unsaved words, from callbacks that must not re-subscribe on every
@@ -247,6 +252,23 @@ export default function ListingScreen() {
             step.code !== "listing_suspended",
         )
       : [];
+
+  /**
+   * Express saves on its own, at once: only `express` with the listing's
+   * version, so it never carries half-typed words and never opens review. A
+   * refusal reloads too, so the switch shows what GRIDGO has.
+   */
+  async function saveExpress(next: boolean) {
+    if (!listing || busy) return;
+    setBusy(true);
+    setExpressPending(next);
+    setExpressError(null);
+    const saved = await setExpress(listing, next);
+    await reload();
+    if (saved.status !== "ok") setExpressError(saved.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : saved.message);
+    setExpressPending(null);
+    setBusy(false);
+  }
 
   /** Every write goes through here, so one failure sentence has one home. */
   const run = useCallback(
@@ -836,6 +858,19 @@ export default function ListingScreen() {
               onChange={setDraft}
               holdDays={sampleHoldDays}
               disabled={busy}
+            />
+          </Section>
+        ) : null}
+
+        {/* Express: nearby clients' documents, answered in five minutes. Saved at once. */}
+        {offersExpressSwitch(listing) ? (
+          <Section title="EXPRESS">
+            <ExpressField
+              on={listing.express === true}
+              pending={expressPending}
+              disabled={busy}
+              error={expressError}
+              onChange={(next) => void saveExpress(next)}
             />
           </Section>
         ) : null}

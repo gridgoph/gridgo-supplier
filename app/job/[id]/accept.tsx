@@ -25,6 +25,8 @@ import { useJob } from "@/hooks/useJob";
 import { useJobAction } from "@/hooks/useJobAction";
 import { useNow } from "@/hooks/useNow";
 import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
+import { ExpressAcceptFlow } from "@/components/express/ExpressAcceptFlow";
+import { isExpressDocumentOrder } from "@/lib/expressOrder";
 import { useShopHours } from "@/store/shopHours";
 import { isShopStaff, useSession } from "@/store/session";
 
@@ -112,6 +114,11 @@ export default function AcceptJobScreen() {
     }
     clearDraft(job.id);
     router.back();
+  }
+
+  // Express answers in five minutes, at GRIDGO's page rate: its own short screen.
+  if (job && isExpressDocumentOrder(job)) {
+    return <ExpressAcceptFlow job={job} reload={reload} staff={staff} />;
   }
 
   return (

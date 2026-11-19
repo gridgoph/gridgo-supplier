@@ -22,6 +22,8 @@ import { isTightBeforeAccepting, TIGHT_DECLINE_NO_PENALTY } from "@/lib/scheduli
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { useJob } from "@/hooks/useJob";
 import { askConfirm } from "@/store/sheets";
+import { ExpressDeclineFlow } from "@/components/express/ExpressDeclineFlow";
+import { isExpressDocumentOrder } from "@/lib/expressOrder";
 
 /**
  * Declining cannot be undone by the shop, so it asks for a reason, states the
@@ -75,6 +77,11 @@ export default function DeclineJobScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  // Express goes straight to the next shop, with no record: its own short screen.
+  if (job && isExpressDocumentOrder(job) && !declined) {
+    return <ExpressDeclineFlow job={job} reload={reload} />;
   }
 
   if (declined) {

@@ -2,6 +2,7 @@ import type { Order } from "@/lib/api";
 import { formatPhp } from "@/lib/api";
 import { formatDeadlineFull } from "@/lib/dates";
 import { custodyForOrder } from "@/lib/handoff";
+import { isExpressDocumentOrder } from "@/lib/expressOrder";
 import { primaryAction } from "@/lib/jobState";
 import { approvalRowSummary, approvalSummaryOf } from "@/lib/approvalProof";
 import { linkOnlySummary, orderDesignLinks } from "@/lib/designLink";
@@ -248,7 +249,9 @@ export function handoffSummary(order: BriefOrder): string {
 }
 
 /** True once the package is ready to leave, until the client has it. */
-export function hasHandoff(order: BriefOrder): boolean {
+export function hasHandoff(order: BriefOrder & Partial<Pick<Order, "orderType" | "fulfillmentMode">>): boolean {
+  // An Express pickup never meets a rider: the client collects it with a counter code.
+  if (isExpressDocumentOrder(order) && order.fulfillmentMode !== "delivery") return false;
   return ["ready", "rider_assigned", "pickup_blocked", "with_rider"].includes(custodyForOrder(order).state);
 }
 

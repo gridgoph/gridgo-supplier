@@ -1,6 +1,7 @@
 import type { MilestoneCode, Order, PayoutPlanVersion } from "@/lib/api";
 import type { StatusIconName, StatusTone } from "@/components/StatusChip";
 import { acceptWindow } from "@/lib/acceptWindow";
+import { awaitsCounterCode, isExpressDocumentOrder } from "@/lib/expressOrder";
 import { CURRENT_PAYOUT_PLAN, milestoneDefinition, nextShopProof } from "@/lib/milestones";
 import { counterCheck, presentCheckCodes } from "@/lib/pickupCheck";
 import { needsPackingPhoto } from "@/lib/packingPhoto";
@@ -42,6 +43,8 @@ export type SupplierActionKind =
   | "add_receipt_scan"
   /** Newer handover: photograph the finished, unpacked products for GRIDGO's review. */
   | "send_finished_photos"
+  /** Express pickup: the client collects with a six-digit code (`lib/expressOrder.ts`). */
+  | "enter_counter_code"
   | "add_proof";
 
 export type SupplierAction = {
@@ -150,7 +153,7 @@ export function presentJobStatus(
     | "handoverFlow"
     | "shopHandover"
   > &
-    Partial<Pick<Order, "supplierId" | "riderId" | "payments" | "downpaymentPercent" | "balanceMinor">>,
+    Partial<Pick<Order, "supplierId" | "riderId" | "payments" | "downpaymentPercent" | "balanceMinor" | "orderType" | "expressOrder" | "fulfillmentMode">>,
 ): StatePresentation {
   const refund = refundStatus(order);
   if (refund) return refund;
@@ -167,6 +170,7 @@ export function presentJobStatus(
       return { label: check.status, tone: check.tone, icon: check.icon };
     }
   }
+  if (awaitsCounterCode(order)) return { label: "Ready for the client", tone: "success", icon: "circle-check" };
   return ridersPack(order)
     ? presentRiderPacksStatus(order) ?? presentOrderState(order.state, order)
     : presentOrderState(order.state, order);
@@ -239,6 +243,27 @@ export function actionsForJob(order: JobActionOrder, now: Date = new Date()): Su
 
   switch (state) {
     case "supplier_assigned":
+      if (isExpressDocumentOrder(order)) {
+        return [
+          {
+            kind: "accept",
+            label: "Accept",
+            targetState: "payment_authorized",
+            primary: true,
+            consequence: "At 0:00 it goes to the next shop.",
+            resultLabel: "Accepted",
+          },
+          {
+            kind: "decline",
+            label: "Decline",
+            targetState: null,
+            primary: false,
+            destructive: true,
+            consequence: "It goes to the next nearest shop.",
+            resultLabel: "Declined",
+          },
+        ];
+      }
       return [
         {
           kind: "accept",
@@ -305,6 +330,16 @@ export function actionsForJob(order: JobActionOrder, now: Date = new Date()): Su
         });
       }
       if (owesReceiptScan(order)) return demote(proofStep, receiptScanStep());
+      if (expressPickup(order)) {
+        return demote(proofStep, {
+          kind: "ready_for_pickup",
+          label: "Ready for the client",
+          targetState: "ready_for_dispatch",
+          primary: true,
+          consequence: "The client gets a pickup code. Enter it when they collect.",
+          resultLabel: "Ready for the client",
+        });
+      }
       return demote(proofStep, {
         kind: "ready_for_pickup",
         label: "Package for pickup",
@@ -314,6 +349,18 @@ export function actionsForJob(order: JobActionOrder, now: Date = new Date()): Su
           "GRIDGO notifies riders that the package is ready. Check it together at the counter after a rider accepts, before it leaves your shop.",
         resultLabel: "Ready for pickup",
       });
+    case "ready_for_dispatch":
+      if (awaitsCounterCode(order)) {
+        return demote(proofStep, {
+          kind: "enter_counter_code",
+          label: "Enter pickup code",
+          targetState: null,
+          primary: true,
+          consequence: "Ask the client for their 6-digit code.",
+          resultLabel: "Handed over",
+        });
+      }
+      return proofStep ? [proofStep] : [];
     default:
       // Past the shop's floor, an unfiled proof is still the shop's money.
       return proofStep ? [proofStep] : [];
@@ -374,7 +421,12 @@ export type JobActionOrder = Pick<
   | "shopRecovery"
   | "rescheduleRequest"
 > &
-  Partial<Pick<Order, "supplierId">>;
+  Partial<Pick<Order, "supplierId" | "orderType" | "expressOrder" | "fulfillmentMode">>;
+
+/** An Express order the client collects here. */
+function expressPickup(order: JobActionOrder): boolean {
+  return isExpressDocumentOrder(order) && order.fulfillmentMode !== "delivery";
+}
 
 /**
  * GRIDGO's Finance switch wants the shop's receipt scan before a rider is
@@ -411,7 +463,8 @@ export type SupplierActionRoute =
   | "/job/[id]/advance"
   | "/job/[id]/handoff"
   | "/job/[id]/progress-photo"
-  | "/job/[id]/finished";
+  | "/job/[id]/finished"
+  | "/job/[id]/counter-code";
 
 /** The flow screen an action opens. Nothing state-changing is a bare row tap. */
 export function routeForAction(kind: SupplierActionKind): SupplierActionRoute {
@@ -430,6 +483,8 @@ export function routeForAction(kind: SupplierActionKind): SupplierActionRoute {
       return "/job/[id]/progress-photo";
     case "send_finished_photos":
       return "/job/[id]/finished";
+    case "enter_counter_code":
+      return "/job/[id]/counter-code";
     default:
       return "/job/[id]/advance";
   }

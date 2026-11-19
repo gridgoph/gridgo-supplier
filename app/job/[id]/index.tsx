@@ -11,6 +11,8 @@ import { DeadlineRequestPanel } from "@/components/DeadlineRequestPanel";
 import { DispatchClosedNotice } from "@/components/DispatchClosedNotice";
 import { EmptyState } from "@/components/EmptyState";
 import { ExpressChip } from "@/components/ExpressChip";
+import { ExpressOffer } from "@/components/express/ExpressOffer";
+import { ExpressPrintList } from "@/components/ExpressPrintList";
 import { SchedulingNotice } from "@/components/SchedulingNotice";
 import { ForcedStepNotice } from "@/components/ForcedStepNotice";
 import { JobActionBar } from "@/components/JobActionBar";
@@ -37,6 +39,7 @@ import { acceptWindow } from "@/lib/acceptWindow";
 import { formatDeadlineFull, shopDueAt } from "@/lib/dates";
 import { waitsForDispatch } from "@/lib/dispatchHours";
 import { EXPRESS_JOB_NOTE, isExpressOrder } from "@/lib/express";
+import { expressView } from "@/lib/expressOrder";
 import { SAMPLE_JOB_NOTE, sampleTagOf, showsSampleDecision } from "@/lib/sampleFirst";
 import { defaultBriefSection, hasHandoff, workspaceBriefSections } from "@/lib/jobBrief";
 import {
@@ -175,6 +178,8 @@ export default function JobWorkspaceScreen() {
   }
 
   const status = presentJobStatus(job);
+  // An Express document order: its offer and print list lead the screen.
+  const express = expressView(job);
   const sampleTag = sampleTagOf(job);
   // The shop's own date only; a job without one is undated here, never dated by the client.
   const dueAt = shopDueAt(job);
@@ -316,7 +321,11 @@ export default function JobWorkspaceScreen() {
           </View>
           <Text className="text-h1 text-text-primary">{job.title}</Text>
           <Text className="text-caption text-text-muted">Order {job.id}</Text>
-          {isExpressOrder(job) ? (
+          {express ? (
+            <View className="flex-row">
+              <ExpressChip />
+            </View>
+          ) : isExpressOrder(job) ? (
             <View className="gap-1.5">
               <View className="flex-row">
                 <ExpressChip />
@@ -359,7 +368,11 @@ export default function JobWorkspaceScreen() {
           A new job's clock, above everything else on it: the one thing here
           that costs the shop if it is missed.
         */}
-        {acceptWindow(job).kind !== "none" ? (
+        {express && job.state === "supplier_assigned" ? (
+          <View className="mt-6">
+            <ExpressOffer order={job} view={express} hideEarnings={staff} onExpire={onAnswerExpired} />
+          </View>
+        ) : acceptWindow(job).kind !== "none" ? (
           <View className="mt-6">
             <AcceptWindowPanel order={job} onExpire={onAnswerExpired} />
           </View>
@@ -427,7 +440,13 @@ export default function JobWorkspaceScreen() {
           </View>
         ) : null}
 
-        {showNotes ? (
+        {express && job.state !== "supplier_assigned" && ["accepted", "printing", "ready"].includes(express.status) ? (
+          <View className="mt-6">
+            <ExpressPrintList view={express} />
+          </View>
+        ) : null}
+
+        {showNotes && !express ? (
           <View className="mt-6">
             <SpecialInstructionsPanel
               notes={notes}

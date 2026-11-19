@@ -1,9 +1,8 @@
-import { useRef } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
+import { DigitBoxes, digitsOf } from "@/components/DigitBoxes";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { useThemeColors } from "@/hooks/useTheme";
 
 const LENGTH = 6;
 
@@ -40,10 +39,7 @@ export function JobTicketCode({
   busy = false,
   error = null,
 }: Props) {
-  const colors = useThemeColors();
-  const inputRef = useRef<TextInput>(null);
   const digits = digitsOf(value);
-  const caret = Math.min(digits.length, LENGTH - 1);
 
   return (
     <View className="gap-6">
@@ -60,53 +56,7 @@ export function JobTicketCode({
         </Text>
       )}
 
-      <Pressable onPress={() => inputRef.current?.focus()} className="relative">
-        <View className="flex-row gap-2" pointerEvents="none">
-          {Array.from({ length: LENGTH }, (_, index) => {
-            const filled = Boolean(digits[index]);
-            const current = !busy && index === caret && digits.length < LENGTH;
-            return (
-              <View
-                key={index}
-                className={
-                  current
-                    ? "h-14 min-w-0 flex-1 items-center justify-center rounded-field border-2 border-action-yellow bg-surface"
-                    : filled
-                      ? "h-14 min-w-0 flex-1 items-center justify-center rounded-field border border-outline bg-surface-high"
-                      : "h-14 min-w-0 flex-1 items-center justify-center rounded-field border border-outline bg-surface"
-                }
-              >
-                <Text className="text-h2 text-text-primary">{digits[index] ?? ""}</Text>
-              </View>
-            );
-          })}
-        </View>
-
-        <TextInput
-          ref={inputRef}
-          value={digits}
-          onChangeText={(next) => onChange(digitsOf(next))}
-          onSubmitEditing={() => {
-            if (digits.length === LENGTH && !busy) onVerify();
-          }}
-          keyboardType="number-pad"
-          inputMode="numeric"
-          textContentType="oneTimeCode"
-          autoComplete={process.env.EXPO_OS === "android" ? "sms-otp" : "one-time-code"}
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoFocus
-          maxLength={LENGTH}
-          caretHidden
-          importantForAutofill="yes"
-          accessibilityLabel="6-digit code"
-          editable={!busy}
-          style={[
-            styles.hiddenInput,
-            { color: colors.textPrimary },
-          ]}
-        />
-      </Pressable>
+      <DigitBoxes value={value} onChange={onChange} onSubmit={onVerify} editable={!busy} oneTimeCode />
 
       {error ? <ErrorNotice message={error} /> : null}
 
@@ -131,15 +81,3 @@ export function JobTicketCode({
     </View>
   );
 }
-
-function digitsOf(value: string): string {
-  return value.replace(/\D/g, "").slice(0, LENGTH);
-}
-
-const styles = StyleSheet.create({
-  hiddenInput: {
-    ...StyleSheet.absoluteFill,
-    opacity: 0.02,
-    fontSize: 16,
-  },
-});
