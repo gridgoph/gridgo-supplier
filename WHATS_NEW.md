@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.440 (New feature)
+
+- Take Express print orders: answer within 5 minutes, then hand over with the client's pickup code.
+
 ## 1.0.433 (New feature)
 
 - Place your shop pin with Use my location: the map shows how close your phone got, then you drag it onto your door.
