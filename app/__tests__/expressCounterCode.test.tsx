@@ -106,3 +106,14 @@ describe("Express countdown", () => {
     await view.unmount();
   });
 });
+
+describe("autofill", () => {
+  it("never offers an SMS one-time code for the client's pickup code", async () => {
+    const view = await render(<CounterCodeScreen />);
+    const input = await screen.findByTestId("counter-code-input");
+    expect(input.props.textContentType).toBe("none");
+    expect(input.props.autoComplete).toBe("off");
+    expect(input.props.importantForAutofill).toBe("no");
+    await view.unmount();
+  });
+});

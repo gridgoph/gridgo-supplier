@@ -20,6 +20,7 @@ describe("JobTicketCode", () => {
     expect(field).toBeTruthy();
     expect(field.props.textContentType).toBe("oneTimeCode");
     expect(field.props.autoComplete).toBe("one-time-code");
+    expect(field.props.importantForAutofill).toBe("yes");
     expect(field.props.inputMode).toBe("numeric");
     expect(field.props.autoFocus).toBe(true);
     expect(field.props.maxLength).toBe(6);
