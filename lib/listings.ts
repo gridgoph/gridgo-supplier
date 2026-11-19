@@ -313,6 +313,11 @@ export type Listing = {
   samplePriceMinor?: number | null;
   /** A private quote listing (Operations'): it never offers a sample. */
   quoteListing?: boolean;
+  /**
+   * Takes Express document orders (gridgo-api `docs/EXPRESS_API.md`). Saved on
+   * its own and never reviewed; absent from a GRIDGO without the field.
+   */
+  express?: boolean;
   /** The least the shop will run. */
   minimumOrderQuantity: number | null;
   priceTiers: PriceTier[];
@@ -640,6 +645,7 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
           samplePriceMinor: num(pick(raw, "samplePriceMinor", "sample_price_minor")),
         }
       : {}),
+    ...(typeof raw.express === "boolean" ? { express: raw.express } : {}),
     ...(str(pick(raw, "quoteRequestId", "quote_request_id")) ? { quoteListing: true } : {}),
     minimumOrderQuantity: num(pick(raw, "minimumOrderQuantity", "minimum_order_quantity")),
     priceTiers: readPriceTiers(pick(raw, "priceTiers", "price_tiers")),

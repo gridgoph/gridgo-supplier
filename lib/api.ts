@@ -373,6 +373,15 @@ export type Order = {
    */
   express?: boolean;
   /**
+   * `"express"` on an order placed through Express's document flow (gridgo-api
+   * `docs/EXPRESS_API.md`); absent on every other order. Read, with
+   * `expressOrder`, only through `lib/expressOrder.ts`.
+   */
+  orderType?: string;
+  expressOrder?: unknown;
+  /** `pickup` (the client collects at this shop) or `delivery`. */
+  fulfillmentMode?: string | null;
+  /**
    * Sample First (gridgo-api `docs/SAMPLE_FIRST_API.md`): `sample` on a paid
    * one-piece sample, `batch_from_sample` on the batch ordered after it.
    * Read, with the links and the decision below, only through `lib/sampleFirst.ts`.
@@ -1555,6 +1564,37 @@ export async function declineJob(orderId: string, reason: string, reasonCode?: s
   await request(`/orders/${orderId}/decline`, {
     method: "POST",
     body: JSON.stringify(reasonCode ? { reason, reasonCode } : { reason }),
+  });
+}
+
+/**
+ * Express (gridgo-api `docs/EXPRESS_API.md`): answer inside the five minutes.
+ * `specialInstructionsRead` is sent only when the order has notes.
+ */
+export async function acceptExpress(orderId: string, specialInstructionsRead: boolean): Promise<void> {
+  await request(`/orders/${orderId}/express/accept`, {
+    method: "POST",
+    body: JSON.stringify(specialInstructionsRead ? { specialInstructionsRead: true } : {}),
+  });
+}
+
+/** Pass an Express order on; GRIDGO moves it to the next nearest Express shop. */
+export async function declineExpress(orderId: string, reason: string): Promise<void> {
+  await request(`/orders/${orderId}/express/decline`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+/**
+ * Close a ready Express pickup with the client's six-digit counter code. A
+ * wrong code is `409`; five wrong ones lock the counter with `429` and
+ * `retryAfter`, read through `counterCodeOutcome` in `lib/expressOrder.ts`.
+ */
+export async function enterCounterCode(orderId: string, code: string): Promise<void> {
+  await request(`/orders/${orderId}/express/pickup`, {
+    method: "POST",
+    body: JSON.stringify({ code }),
   });
 }
 

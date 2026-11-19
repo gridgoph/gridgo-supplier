@@ -294,6 +294,18 @@ export async function saveListing(
   });
 }
 
+/**
+ * The Express opt-in, saved alone with the listing's version: GRIDGO refuses
+ * `express` beside a production time, and it never opens review.
+ */
+export async function setExpress(listing: Listing, on: boolean): Promise<BoardOutcome<Listing>> {
+  return attemptWrite("change Express", async () => {
+    const saved = normalizeListing(await api.updateCatalogItem(listing.id, listing.version, { express: on }));
+    if (!saved) throw new api.ApiError(502, { error: "unreadable" });
+    return saved;
+  });
+}
+
 /** The dates clients would see for this answer, before it is saved. */
 export async function loadProductionTimePreview(
   listing: Listing,

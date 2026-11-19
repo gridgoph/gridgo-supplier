@@ -22,9 +22,12 @@ import { closureOnDay, manilaClock } from "@/lib/shopHours";
 import { canRequestChange, hasSpecialInstructions, itemInstructions } from "@/lib/orderChanges";
 import { NO_SUBCONTRACTING_ACCEPT_LINE } from "@/lib/supplierTerms";
 import { useJob } from "@/hooks/useJob";
+import { useLastExpressJob } from "@/hooks/useLastExpressJob";
 import { useJobAction } from "@/hooks/useJobAction";
 import { useNow } from "@/hooks/useNow";
 import { useJobDraft, useJobDrafts } from "@/store/jobDrafts";
+import { ExpressAcceptFlow } from "@/components/express/ExpressAcceptFlow";
+import { isExpressDocumentOrder } from "@/lib/expressOrder";
 import { useShopHours } from "@/store/shopHours";
 import { isShopStaff, useSession } from "@/store/session";
 
@@ -50,7 +53,9 @@ import { isShopStaff, useSession } from "@/store/session";
  */
 export default function AcceptJobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { job, loading, error, reload } = useJob(id);
+  const { job: live, loading, error, reload } = useJob(id);
+  // An Express order that timed out leaves this shop at once; keep it for the outcome.
+  const job = useLastExpressJob(live);
   const action = useJobAction();
   const draft = useJobDraft(id);
   const setAccept = useJobDrafts((s) => s.setAccept);
@@ -112,6 +117,11 @@ export default function AcceptJobScreen() {
     }
     clearDraft(job.id);
     router.back();
+  }
+
+  // Express answers in five minutes, at GRIDGO's page rate: its own short screen.
+  if (job && isExpressDocumentOrder(job)) {
+    return <ExpressAcceptFlow job={job} reload={reload} staff={staff} />;
   }
 
   return (

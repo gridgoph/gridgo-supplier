@@ -1,4 +1,5 @@
 import type { Order } from "@/lib/api";
+import { isExpressDocumentOrder } from "@/lib/expressOrder";
 import { refundStanding } from "@/lib/refund";
 import { manilaClock, timeLabel } from "@/lib/shopHours";
 import { shopRelease } from "@/lib/shopRecovery";
@@ -64,10 +65,13 @@ export function dispatchClosedLine(hours: DispatchHours | null, now: Date): stri
 
 /** A job ready and waiting for a rider to take it, with nothing else stopping it. */
 export function waitsForDispatch(
-  order: Pick<Order, "state" | "riderId" | "refundHold" | "refundDisposition" | "shopAcceptance" | "shopRecovery">,
+  order: Pick<Order, "state" | "riderId" | "refundHold" | "refundDisposition" | "shopAcceptance" | "shopRecovery"> &
+    Partial<Pick<Order, "orderType" | "fulfillmentMode">>,
 ): boolean {
   return (
     order.state === "ready_for_dispatch" &&
+    // An Express pickup is collected by the client, never dispatched.
+    !(isExpressDocumentOrder(order) && order.fulfillmentMode !== "delivery") &&
     !order.riderId &&
     refundStanding(order) === "none" &&
     !shopRelease(order)

@@ -21,7 +21,10 @@ import { performanceHref } from "@/lib/performance";
 import { isTightBeforeAccepting, TIGHT_DECLINE_NO_PENALTY } from "@/lib/scheduling";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { useJob } from "@/hooks/useJob";
+import { useLastExpressJob } from "@/hooks/useLastExpressJob";
 import { askConfirm } from "@/store/sheets";
+import { ExpressDeclineFlow } from "@/components/express/ExpressDeclineFlow";
+import { isExpressDocumentOrder } from "@/lib/expressOrder";
 
 /**
  * Declining cannot be undone by the shop, so it asks for a reason, states the
@@ -32,7 +35,9 @@ import { askConfirm } from "@/store/sheets";
 export default function DeclineJobScreen() {
   // `reason` arrives from the accept screen's "Not possible?" link, already chosen.
   const { id, reason: preset } = useLocalSearchParams<{ id: string; reason?: string }>();
-  const { job, loading, error, reload } = useJob(id);
+  const { job: live, loading, error, reload } = useJob(id);
+  // A declined Express order leaves this shop at once; keep it for the outcome.
+  const job = useLastExpressJob(live);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -75,6 +80,11 @@ export default function DeclineJobScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  // Express goes straight to the next shop, with no record: its own short screen.
+  if (job && isExpressDocumentOrder(job) && !declined) {
+    return <ExpressDeclineFlow job={job} reload={reload} />;
   }
 
   if (declined) {
