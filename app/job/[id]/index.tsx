@@ -81,6 +81,7 @@ import { deadlineUrgency } from "@/lib/urgency";
 import { useViewing } from "@/store/toasts";
 import { useDispatchHours } from "@/hooks/useDispatchHours";
 import { useJob } from "@/hooks/useJob";
+import { useLastExpressJob } from "@/hooks/useLastExpressJob";
 import { useOrderCalls } from "@/hooks/useOrderCalls";
 import { useProductionLapses } from "@/hooks/useProductionLapses";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -95,7 +96,9 @@ export default function JobWorkspaceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
   const colors = useThemeColors();
-  const { job, loading, error, reload } = useJob(id);
+  const { job: live, loading, error, reload } = useJob(id);
+  // An Express order that ran out of time goes to the next shop; it still reads "Time's up" here.
+  const job = useLastExpressJob(live);
   // Staff work the order; its money, record, calls and Operations chat are the Owner's.
   const staff = useSession((s) => isShopStaff(s.user));
   const lapses = useProductionLapses(!staff);
@@ -162,7 +165,7 @@ export default function JobWorkspaceScreen() {
     );
   }
 
-  if (error || !job) {
+  if (!job || (error && live)) {
     return (
       <View className="gg-screen gg-page justify-center">
         <EmptyState

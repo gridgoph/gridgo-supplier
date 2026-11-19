@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { router } from "expo-router";
 
 import AcceptJobScreen from "@/app/job/[id]/accept";
@@ -95,5 +95,19 @@ it("declines with a one-tap reason and says it went to the next shop", async () 
   await fireEvent.press(screen.getByText("Decline"));
   expect(api.declineExpress).toHaveBeenCalledWith("ord_x", "Printer unavailable");
   expect(await screen.findByText("GRIDGO sent it to the next shop.")).toBeTruthy();
+  await view.unmount();
+});
+
+it("keeps the Express screen when GRIDGO stops showing the order to this shop", async () => {
+  (api.getOrder as jest.Mock).mockResolvedValueOnce(offer()).mockRejectedValue(new api.ApiError(403, { error: "forbidden" }));
+  (api.declineExpress as jest.Mock).mockRejectedValue(new api.ApiError(409, { error: "express_acceptance_not_pending" }));
+  (askConfirm as jest.Mock).mockResolvedValue(true);
+  const view = await render(<DeclineJobScreen />);
+  await fireEvent.press(await screen.findByText("Printer unavailable"));
+  await fireEvent.press(screen.getByText("Decline"));
+  // The refusal re-reads the order, which has moved on and is now refused.
+  await waitFor(() => expect(api.getOrder).toHaveBeenCalledTimes(2));
+  expect(screen.getByText("Decline Express order")).toBeTruthy();
+  expect(screen.queryByText(/not reachable/)).toBeNull();
   await view.unmount();
 });
