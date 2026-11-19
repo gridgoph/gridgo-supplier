@@ -96,8 +96,11 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(source("lib/clerkSignIn.ts")).toContain("needs_client_trust");
     expect(source("app/(auth)/recover-password.tsx")).toContain("JobTicketCode");
     expect(source("components/JobTicketCode.tsx")).toContain("Send another code");
-    expect(source("components/JobTicketCode.tsx")).toContain('textContentType="oneTimeCode"');
-    expect(source("components/JobTicketCode.tsx")).toContain('inputMode="numeric"');
+    // The boxes live in DigitBoxes; sign-in codes switch on one-time-code autofill there.
+    expect(source("components/JobTicketCode.tsx")).toMatch(/<DigitBoxes\b[^>]*\boneTimeCode\b/);
+    expect(source("components/DigitBoxes.tsx")).toContain('textContentType={oneTimeCode ? "oneTimeCode"');
+    expect(source("components/DigitBoxes.tsx")).toContain('"sms-otp"');
+    expect(source("components/DigitBoxes.tsx")).toContain('inputMode="numeric"');
     expect(source("components/JobTicketCode.tsx")).not.toContain("Verification code");
   });
 

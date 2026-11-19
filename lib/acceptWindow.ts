@@ -34,7 +34,7 @@ export type AcceptWindow =
       remainingMs: number;
       /** Share of the hour already gone, 0–1, for the bar. */
       elapsed: number;
-      /** Ten minutes or less to go. */
+      /** The last stretch: ten minutes of an hour, one of Express's five. */
       closing: boolean;
     }
   | { kind: "spans_closed"; deadlineAt: Date }
@@ -77,7 +77,8 @@ export function acceptWindow(
     deadlineAt,
     remainingMs,
     elapsed: Math.min(1, Math.max(0, 1 - remainingMs / workingMs)),
-    closing: remainingMs <= CLOSING_MS,
+    // The last ten minutes of an hour; the last minute of Express's five.
+    closing: remainingMs <= Math.min(CLOSING_MS, workingMs / 5),
   };
 }
 

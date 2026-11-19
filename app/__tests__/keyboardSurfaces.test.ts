@@ -50,6 +50,7 @@ const HANDLED_BY_ITS_CALLERS = [
   "components/ConversationDetails.tsx",
   "components/ShopLocationPicker.tsx",
   "components/JobTicketCode.tsx",
+  "components/DigitBoxes.tsx",
   "components/SpecGroupEditor.tsx",
   "components/PrepStepEditor.tsx",
   "components/BoardHuntField.tsx",
@@ -114,6 +115,8 @@ const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
   // The product-type search sits in the Pick step, inside the wizard shell.
   { component: "ProductTypeGrid", users: /<ProductTypeGrid\b/, least: 1 },
   { component: "PickStep", users: /<PickStep\b/, least: 1 },
+  // Six-digit boxes: the emailed code (inside JobTicketCode) and the Express counter code.
+  { component: "DigitBoxes", users: /<DigitBoxes\b/, least: 2 },
 ];
 
 describe("every field a shop types into sits in a keyboard-aware surface", () => {

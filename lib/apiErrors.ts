@@ -224,6 +224,14 @@ const MESSAGES: Record<string, string> = {
   refund_settlement_payout_hold:
     "A refund settlement replaced the rest of this job's payout. Operations sends the agreed settlement instead.",
 
+  // Express (gridgo-api docs/EXPRESS_API.md). Expiry has its own words on the Express screens.
+  express_acceptance_not_pending: "This Express order is no longer waiting for your answer. Refresh to see where it is.",
+  artwork_file_check_required: "GRIDGO is still checking the client's files. Try again in a moment.",
+  payment_required: "GRIDGO is still confirming the client's payment. Try again in a moment.",
+  express_not_ready: "Mark the order ready before the client collects it.",
+  express_pickup_required: "This order goes out with a rider, so there is no counter code.",
+  express_pickup_code_required: "Enter the client's counter code to hand this order over.",
+
   // Letting a job go, and asking for more time.
   shop_acceptance_expired:
     "The hour to answer this job has run out, so GRIDGO is passing it to another shop. It goes on your record as not answered in time.",
