@@ -315,6 +315,18 @@ const MESSAGES: Record<string, string> = {
   last_shop_owner: "Your shop needs at least one owner. Make someone else owner first.",
   invalid_invite_identity: "Check the email or phone number. A phone looks like +639171234567.",
   invalid_shop_invite_claim: "That link is not a GRIDGO team invite. Ask the owner to share it again.",
+  // Phone-free staff, the shop phone and the team view (report F315793B).
+  shop_mobile_verification_required:
+    "Verify your mobile number to join with a link or QR. Make your login with your mobile, then try again.",
+  shop_pin_invalid: "That PIN is not right. Try again.",
+  shop_pin_rate_limited: "Too many wrong PINs. Wait 15 minutes, or ask the owner for a new PIN.",
+  invalid_shop_pin: "A PIN is exactly 4 numbers.",
+  shop_worker_locked: "This shop phone is locked. Pick who is working.",
+  shop_worker_invalid: "This shop phone is locked. Pick who is working.",
+  shop_device_session_required: "Sign in again on this phone, then pick who is working.",
+  invalid_shop_member_name: "Check the name. Use up to 100 letters.",
+  invalid_shop_team_photo: "That photo could not be used. Pick another, or leave it out.",
+  invalid_shop_team_settings: "That setting could not be saved. Try again.",
 
   // Opening an account.
   email_already_registered:

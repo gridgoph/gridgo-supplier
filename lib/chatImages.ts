@@ -109,6 +109,7 @@ async function postChatFile(
     xhr.open("POST", `${api.getApiBase()}/files`);
     xhr.setRequestHeader("Accept", "application/json");
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    for (const [name, value] of Object.entries(api.workerHeaders())) xhr.setRequestHeader(name, value);
     xhr.setRequestHeader("X-GRIDGO-Role", "supplier");
     xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText });
     xhr.onerror = () => reject(new Error(`That ${noun} did not reach GRIDGO. Try again.`));

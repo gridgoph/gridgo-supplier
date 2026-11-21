@@ -145,6 +145,8 @@ export function ClerkSessionBridge({ children }: Props) {
           current.teamAccessRemoved();
           return;
         }
+        // A shared shop phone: the worker handler has already opened the picker.
+        if (api.workerLostCode(error)) return;
         if (error instanceof api.ApiError && error.status === 403) {
           current.setClerkIdentity({
             kind: "error",

@@ -1,7 +1,7 @@
 import { useClerk, useSignUp } from "@clerk/expo";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { FormScrollView } from "@/components/FormScrollView";
@@ -10,22 +10,36 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { PasswordField } from "@/components/controls/PasswordField";
 import { TextField } from "@/components/controls/TextField";
-import { clerkErrorMessage, isAlreadySignedInError, splitPersonName } from "@/lib/clerk";
+import {
+  clerkErrorMessage,
+  isAlreadySignedInError,
+  splitPersonName,
+} from "@/lib/clerk";
 import { continuationAfterSignUp } from "@/lib/clerkSignUp";
 import { isEmailish } from "@/lib/onboardingSteps";
-import { MIN_PASSWORD_LENGTH, PASSWORD_RULE, PASSWORD_TOO_SHORT } from "@/lib/signup";
+import { normalizeInviteIdentity } from "@/lib/shopTeam";
+import {
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_RULE,
+  PASSWORD_TOO_SHORT,
+} from "@/lib/signup";
 import { useTeamJoin } from "@/store/teamJoin";
 
 /**
  * A login for someone joining a shop's team.
  *
- * Only the person: name, email, password, and the emailed code. No shop is
- * opened — the join screen claims the invite next and the Owner approves.
- * Use the same email the Owner invited, so the invite finds you.
+ * Only the person. With a link or QR in hand (report F315793B): name, mobile
+ * and the texted six-digit code — GRIDGO asks a new person joining that way
+ * for a verified mobile. With an email invite: name, email, password and the
+ * emailed code. No shop is opened — the join screen claims the invite next,
+ * naming the person with what they typed here, and the Owner approves.
  */
 export default function JoinAccountScreen() {
   const { signUp } = useSignUp();
   const { setActive } = useClerk();
+  const hasLink = useTeamJoin((s) => s.token != null);
+  const [withMobile, setWithMobile] = useState(hasLink);
+  const [mobile, setMobile] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,11 +50,24 @@ export default function JoinAccountScreen() {
   const [tried, setTried] = useState(false);
 
   const nameProblem = name.trim() ? null : "Add your name.";
-  const emailProblem = isEmailish(email.trim()) ? null : "Add the email the owner invited.";
-  const passwordProblem = password.length >= MIN_PASSWORD_LENGTH ? null : PASSWORD_TOO_SHORT;
-  const ready = !nameProblem && !emailProblem && !passwordProblem;
+  const emailProblem =
+    withMobile || isEmailish(email.trim())
+      ? null
+      : "Add the email the owner invited.";
+  const passwordProblem =
+    withMobile || password.length >= MIN_PASSWORD_LENGTH
+      ? null
+      : PASSWORD_TOO_SHORT;
+  const phone = normalizeInviteIdentity("phone", mobile);
+  const mobileProblem =
+    !withMobile || phone
+      ? null
+      : "Check the number. It looks like 0917 123 4567.";
+  const ready =
+    !nameProblem && !emailProblem && !passwordProblem && !mobileProblem;
 
   function done() {
+    useTeamJoin.getState().holdName(name);
     useTeamJoin.getState().startJoining();
     router.dismissTo("/join-team");
   }
@@ -60,12 +87,26 @@ export default function JoinAccountScreen() {
     }
     if (next.kind === "complete") {
       const finalized = await signUp.finalize();
-      if (finalized.error && !isAlreadySignedInError(finalized.error)) throw finalized.error;
+      if (finalized.error && !isAlreadySignedInError(finalized.error))
+        throw finalized.error;
       done();
       return;
     }
+    if (next.kind === "phone_code") {
+      if (verifying)
+        throw new Error(
+          "Your number is checked, but the login still needs attention.",
+        );
+      const sent = await signUp.verifications.sendPhoneCode();
+      if (sent.error) throw sent.error;
+      setVerifying(true);
+      return;
+    }
     if (next.kind === "email_code") {
-      if (verifying) throw new Error("Your email is checked, but the login still needs attention.");
+      if (verifying)
+        throw new Error(
+          "Your email is checked, but the login still needs attention.",
+        );
       const sent = await signUp.verifications.sendEmailCode();
       if (sent.error) throw sent.error;
       setVerifying(true);
@@ -80,11 +121,17 @@ export default function JoinAccountScreen() {
     setBusy(true);
     setProblem(null);
     try {
-      const result = await signUp.password({
-        emailAddress: email.trim().toLowerCase(),
-        password,
-        ...splitPersonName(name.trim()),
-      });
+      const result =
+        withMobile && phone
+          ? await signUp.create({
+              phoneNumber: phone,
+              ...splitPersonName(name.trim()),
+            })
+          : await signUp.password({
+              emailAddress: email.trim().toLowerCase(),
+              password,
+              ...splitPersonName(name.trim()),
+            });
       if (result.error) {
         if (isAlreadySignedInError(result.error)) {
           done();
@@ -94,7 +141,12 @@ export default function JoinAccountScreen() {
       }
       await finish();
     } catch (error) {
-      setProblem(clerkErrorMessage(error, "GRIDGO could not make your login. Check your details and try again."));
+      setProblem(
+        clerkErrorMessage(
+          error,
+          "GRIDGO could not make your login. Check your details and try again.",
+        ),
+      );
     } finally {
       setBusy(false);
     }
@@ -106,7 +158,9 @@ export default function JoinAccountScreen() {
     setBusy(true);
     setProblem(null);
     try {
-      const checked = await signUp.verifications.verifyEmailCode({ code: typed });
+      const checked = withMobile
+        ? await signUp.verifications.verifyPhoneCode({ code: typed })
+        : await signUp.verifications.verifyEmailCode({ code: typed });
       if (checked.error) throw checked.error;
       await finish();
     } catch (error) {
@@ -121,10 +175,17 @@ export default function JoinAccountScreen() {
     setBusy(true);
     setProblem(null);
     try {
-      const sent = await signUp.verifications.sendEmailCode();
+      const sent = withMobile
+        ? await signUp.verifications.sendPhoneCode()
+        : await signUp.verifications.sendEmailCode();
       if (sent.error) throw sent.error;
     } catch (error) {
-      setProblem(clerkErrorMessage(error, "GRIDGO could not send another code. Try again."));
+      setProblem(
+        clerkErrorMessage(
+          error,
+          "GRIDGO could not send another code. Try again.",
+        ),
+      );
     } finally {
       setBusy(false);
     }
@@ -134,8 +195,8 @@ export default function JoinAccountScreen() {
     return (
       <FormScrollView contentClassName="gg-page gap-4 pb-10 pt-6">
         <JobTicketCode
-          title="Check your email"
-          email={email.trim()}
+          title={withMobile ? "Check your texts" : "Check your email"}
+          email={withMobile ? mobile.trim() : email.trim()}
           value={code}
           onChange={setCode}
           onVerify={() => void verify()}
@@ -153,37 +214,89 @@ export default function JoinAccountScreen() {
         <Text className="text-h1 text-text-primary" accessibilityRole="header">
           Your login
         </Text>
-        <Text className="text-body-lg text-text-secondary">Use the email the owner invited.</Text>
+        <Text className="text-body-lg text-text-secondary">
+          {withMobile
+            ? "Your name and mobile. We text you a 6-digit code."
+            : "Use the email the owner invited."}
+        </Text>
       </View>
       <FieldShell label="Your name" error={tried ? nameProblem : null}>
-        <TextField value={name} onChange={setName} kind="name" placeholder="Sam Santos" accessibilityLabel="Your name" />
-      </FieldShell>
-      <FieldShell label="Email" error={tried ? emailProblem : null}>
         <TextField
-          value={email}
-          onChange={setEmail}
-          kind="email"
-          placeholder="you@example.com"
-          accessibilityLabel="Email"
+          value={name}
+          onChange={setName}
+          kind="name"
+          placeholder="Sam Santos"
+          accessibilityLabel="Your name"
         />
       </FieldShell>
-      <FieldShell label="Password" hint={PASSWORD_RULE} error={tried ? passwordProblem : null}>
-        <PasswordField
-          value={password}
-          onChange={setPassword}
-          kind="new-password"
-          placeholder="Choose a password"
-          accessibilityLabel="Password"
-          returnKeyType="done"
-          onSubmit={() => void create()}
-        />
-      </FieldShell>
+      {withMobile ? (
+        <FieldShell label="Your mobile" error={tried ? mobileProblem : null}>
+          <TextField
+            value={mobile}
+            onChange={setMobile}
+            kind="phone"
+            placeholder="0917 123 4567"
+            accessibilityLabel="Your mobile"
+            returnKeyType="done"
+            onSubmit={() => void create()}
+          />
+        </FieldShell>
+      ) : null}
+      {withMobile ? null : (
+        <>
+          <FieldShell label="Email" error={tried ? emailProblem : null}>
+            <TextField
+              value={email}
+              onChange={setEmail}
+              kind="email"
+              placeholder="you@example.com"
+              accessibilityLabel="Email"
+            />
+          </FieldShell>
+          <FieldShell
+            label="Password"
+            hint={PASSWORD_RULE}
+            error={tried ? passwordProblem : null}
+          >
+            <PasswordField
+              value={password}
+              onChange={setPassword}
+              kind="new-password"
+              placeholder="Choose a password"
+              accessibilityLabel="Password"
+              returnKeyType="done"
+              onSubmit={() => void create()}
+            />
+          </FieldShell>
+        </>
+      )}
       {problem ? <ErrorNotice message={problem} /> : null}
       <PrimaryButton
-        label={busy ? "Making your login…" : "Make my login"}
+        label={
+          busy
+            ? "Making your login…"
+            : withMobile
+              ? "Send my code"
+              : "Make my login"
+        }
         disabled={busy}
         onPress={() => void create()}
       />
+      <Pressable
+        onPress={() => {
+          setWithMobile(!withMobile);
+          setProblem(null);
+          setTried(false);
+        }}
+        accessibilityRole="button"
+        className="gg-touch items-center justify-center"
+      >
+        <Text className="text-button text-text-primary underline">
+          {withMobile
+            ? "The owner invited my email instead"
+            : "Join with my mobile instead"}
+        </Text>
+      </Pressable>
     </FormScrollView>
   );
 }

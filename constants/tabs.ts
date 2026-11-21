@@ -52,3 +52,10 @@ export const TAB_SECTION: Record<TabName, BarTabName> = {
  * and products) are the Owner's — GRIDGO refuses their routes to Staff.
  */
 export const STAFF_TABS: readonly TabName[] = ["home", "messages", "account", "jobs"];
+
+/**
+ * A Manager's tabs: Staff's, plus Schedule and Catalogues — the shop's hours
+ * and products are theirs to change. Money stays the Owner's
+ * (gridgo-api `docs/SHOP_TEAM_API.md`, report F315793B).
+ */
+export const MANAGER_TABS: readonly TabName[] = [...STAFF_TABS, "schedule", "catalogues"];

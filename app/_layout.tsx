@@ -46,7 +46,9 @@ import { bounceToIsolatedDevWebHost, GRIDGO_DEV_WEB_HOST } from "@/lib/devWebHos
 import { useAppUpdate } from "@/store/appUpdate";
 import { legalGateFor, useLegalConsent } from "@/store/legalConsent";
 import { usePushPrompt } from "@/store/pushPrompt";
-import { isMatchable, isShopOwner, isSignedIn, useSession } from "@/store/session";
+import { canRunShop, isMatchable, isShopOwner, isSignedIn, useSession } from "@/store/session";
+import "@/store/shopWorker";
+import { useWorkerAutoLock } from "@/hooks/useWorkerAutoLock";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -181,7 +183,10 @@ function RootStack({ introDone }: { introDone: boolean }) {
   const identity = useSession((s) => s.identity);
   const sessionWait = useSession((s) => s.sessionWait);
   const scheme = useThemeName();
-  const signedIn = isSignedIn(user);
+  // A shared shop phone between turns is signed in at Clerk but open to no
+  // one: only "Who's working?" is mounted (`store/shopWorker.ts`).
+  const deviceLocked = identity.kind === "device_locked";
+  const signedIn = isSignedIn(user) && !deviceLocked;
   const matchable = signedIn && isMatchable(user);
   const accessBlocked = identity.kind === "mismatch" || identity.kind === "error";
   // Unassigned Clerk stays on apply so Send can enroll. Loading stays on the
@@ -198,11 +203,17 @@ function RootStack({ introDone }: { introDone: boolean }) {
   // docs/SHOP_TEAM_API.md). Every Owner-only screen sits behind `owner`, so a
   // typed address reaches nothing GRIDGO would refuse them anyway.
   const owner = signedIn && isShopOwner(user);
+  // Owners and Managers run the team, the hours and the products; a Manager
+  // never reaches Money (gridgo-api docs/SHOP_TEAM_API.md, report F315793B).
+  const runsShop = signedIn && canRunShop(user);
   // Joined a team; the Owner has not answered yet.
   const teamPending = identity.kind === "team_pending";
 
   // Live alerts for as long as there is a session to receive them.
-  useAlertStream(signedIn);
+  // Not on a shared shop phone: GRIDGO refuses personal alert routes there.
+  useAlertStream(signedIn && !user?.worker);
+  // A shared shop phone hands itself back to the picker after a while away.
+  useWorkerAutoLock();
   // Operations chat is the Owner's; GRIDGO refuses it to Staff.
   useSupportChatUnread(owner);
   // The third delivery leg: the same alerts, on the phone, with GRIDGO closed.
@@ -265,6 +276,14 @@ function RootStack({ introDone }: { introDone: boolean }) {
         name="scan-team"
         options={{ title: "Scan", headerShown: false, presentation: "fullScreenModal" }}
       />
+
+      {/* The shared shop phone between turns. No back: the picker is the floor. */}
+      <Stack.Protected guard={deviceLocked}>
+        <Stack.Screen
+          name="who-is-working"
+          options={{ headerShown: false, title: "Who's working?", gestureEnabled: false }}
+        />
+      </Stack.Protected>
 
       <Stack.Protected guard={teamPending}>
         <Stack.Screen name="team-waiting" options={{ headerShown: false, title: "Waiting" }} />
@@ -394,6 +413,73 @@ function RootStack({ introDone }: { introDone: boolean }) {
           Owner-only: Staff read it too, with every control held still.
         */}
         <Stack.Screen name="shop-status" options={sheetScreenOptions(scheme)} />
+        {/*
+          The team: everyone reads it — Staff see the positive view only, and
+          GRIDGO decides what each role receives. One person's card is pushed,
+          because removing them asks a confirmation sheet of its own.
+        */}
+        <Stack.Screen
+          name="team"
+          options={{ title: "Team", headerBackButtonDisplayMode: "minimal" }}
+        />
+        <Stack.Screen
+          name="team-person"
+          options={{ title: "Team member", headerBackButtonDisplayMode: "minimal" }}
+        />
+      </Stack.Protected>
+
+      {/*
+        Adding people, their PINs, and the shop's hours and products: an Owner
+        or a Manager. Money and the Owner's settings stay below, Owner only.
+      */}
+      <Stack.Protected guard={floorOpen && runsShop}>
+        <Stack.Screen
+          name="team-invite"
+          options={{ title: "Add staff", headerBackButtonDisplayMode: "minimal" }}
+        />
+        <Stack.Screen
+          name="team-pin"
+          options={{ title: "Add staff with a PIN", headerBackButtonDisplayMode: "minimal" }}
+        />
+        {/*
+          Hours sit behind the floor guard like the pin: a waiting shop sets
+          when it opens before its first job is timed on it.
+        */}
+        <Stack.Screen
+          name="shop-hours"
+          options={{
+            title: "Shop hours",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
+          A closure used to be presented as a modal, which is why it drew its
+          own "Cancel" in the header — a modal is dismissed, not navigated back
+          from. The captain wants the chevron every other screen in this app
+          has, and nothing here needed the modal: both entry points push it, it
+          has no dismiss guard, and its date picker is its own sheet route
+          either way. So it is an ordinary pushed screen and takes the stack's
+          own back control, rather than a modal wearing a chevron it should not
+          have.
+        */}
+        <Stack.Screen
+          name="shop-closure"
+          options={{
+            title: "Closure dates",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+        {/*
+          The board itself is a tab now; this group is what opens on top of it —
+          adding a listing, and the editor with its samples and preview. It sits
+          under the signed-in guard rather than the matchable one because
+          approval requires a finished listing, so trapping a waiting shop out
+          of the screens where it builds one would hold it behind the thing it
+          is waiting for. The stack draws its own headers.
+        */}
+        <Stack.Screen name="shop" options={{ headerShown: false, title: "Listings" }} />
+        {/* One product's quick actions from My shop: show or hide, edit, remove. */}
+        <Stack.Screen name="product-actions" options={sheetScreenOptions(scheme)} />
       </Stack.Protected>
 
       <Stack.Protected guard={matchable && !legalBlocked}>
@@ -415,14 +501,6 @@ function RootStack({ introDone }: { introDone: boolean }) {
         chat and team. Staff never reach these, by tap or by address.
       */}
       <Stack.Protected guard={floorOpen && owner}>
-        <Stack.Screen
-          name="team"
-          options={{ title: "Team", headerBackButtonDisplayMode: "minimal" }}
-        />
-        <Stack.Screen
-          name="team-invite"
-          options={{ title: "Add staff", headerBackButtonDisplayMode: "minimal" }}
-        />
         <Stack.Screen
           name="chat/index"
           options={{
@@ -469,34 +547,6 @@ function RootStack({ introDone }: { introDone: boolean }) {
           name="shop-location"
           options={{
             title: "Where you print",
-            headerBackButtonDisplayMode: "minimal",
-          }}
-        />
-        {/*
-          Hours sit behind the floor guard like the pin: a waiting shop sets
-          when it opens before its first job is timed on it.
-        */}
-        <Stack.Screen
-          name="shop-hours"
-          options={{
-            title: "Shop hours",
-            headerBackButtonDisplayMode: "minimal",
-          }}
-        />
-        {/*
-          A closure used to be presented as a modal, which is why it drew its
-          own "Cancel" in the header — a modal is dismissed, not navigated back
-          from. The captain wants the chevron every other screen in this app
-          has, and nothing here needed the modal: both entry points push it, it
-          has no dismiss guard, and its date picker is its own sheet route
-          either way. So it is an ordinary pushed screen and takes the stack's
-          own back control, rather than a modal wearing a chevron it should not
-          have.
-        */}
-        <Stack.Screen
-          name="shop-closure"
-          options={{
-            title: "Closure dates",
             headerBackButtonDisplayMode: "minimal",
           }}
         />
@@ -550,17 +600,6 @@ function RootStack({ introDone }: { introDone: boolean }) {
             headerBackButtonDisplayMode: "minimal",
           }}
         />
-        {/*
-          The board itself is a tab now; this group is what opens on top of it —
-          adding a listing, and the editor with its samples and preview. It sits
-          under the signed-in guard rather than the matchable one because
-          approval requires a finished listing, so trapping a waiting shop out
-          of the screens where it builds one would hold it behind the thing it
-          is waiting for. The stack draws its own headers.
-        */}
-        <Stack.Screen name="shop" options={{ headerShown: false, title: "Listings" }} />
-        {/* One product's quick actions from My shop: show or hide, edit, remove. */}
-        <Stack.Screen name="product-actions" options={sheetScreenOptions(scheme)} />
       </Stack.Protected>
 
       <Stack.Protected guard={matchable && !legalBlocked && owner}>

@@ -227,7 +227,7 @@ export async function uploadFile(
         // routinely wrong here.
         mimeType: item.mimeType ?? undefined,
         parameters: { purpose },
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...api.workerHeaders() },
       },
       (data) => {
         if (!data.totalBytesExpectedToSend) return;
@@ -294,6 +294,7 @@ async function uploadFileOnWeb(
       xhr.responseType = "text";
       xhr.setRequestHeader("Accept", "application/json");
       xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      for (const [name, value] of Object.entries(api.workerHeaders())) xhr.setRequestHeader(name, value);
       if (xhr.upload) {
         xhr.upload.onprogress = (event: ProgressEvent) => {
           if (!event.lengthComputable || event.total <= 0) return;

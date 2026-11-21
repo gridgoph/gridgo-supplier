@@ -39,7 +39,7 @@ export default function ServicesStep() {
       setShowProblem(true);
       return;
     }
-    router.push("/(auth)/signup/review");
+    router.push("/(auth)/signup/team");
   }
 
   return (

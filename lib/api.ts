@@ -1,5 +1,5 @@
 import { withDeadline } from "@/lib/withDeadline";
-import { ApiError, isUnmappedIdentity } from "@/lib/apiErrors";
+import { ApiError, apiErrorCode, isUnmappedIdentity } from "@/lib/apiErrors";
 import { assertLiveGeneration, liveGeneration } from "@/lib/live";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
@@ -29,6 +29,15 @@ import type {
   TeamInvite,
   TeamMember,
 } from "@/lib/shopTeam";
+import { readShopRole } from "@/lib/shopTeam";
+import {
+  readPinPerson,
+  readShopTeam,
+  readTeamSettings,
+  type ShopTeam,
+  type TeamPerson,
+  type TeamSettings,
+} from "@/lib/teamRoster";
 
 export { ApiError } from "@/lib/apiErrors";
 
@@ -87,6 +96,11 @@ export type User = {
   shopStatus?: ShopMemberStatus;
   /** The business's id when the signed-in person is not the shop's own account. */
   shopId?: string;
+  /**
+   * The phone-free teammate the shop's phone is acting as, after they picked
+   * themselves with their PIN. `shopRole` is then theirs, never the login's.
+   */
+  worker?: { pinStaffId: string; name: string };
 };
 
 /**
@@ -678,7 +692,9 @@ export type StoredFile = {
     | "supplier_payout_qr"
     /** The shop's own receipt or invoice for an order, scanned before a rider is called. */
     | "supplier_invoice"
-    | "support_chat_image";
+    | "support_chat_image"
+    /** An optional face for a teammate, bound by the team route itself. */
+    | "shop_team_photo";
   originalFilename: string;
   declaredContentType: string;
   detectedContentType: string;
@@ -1033,6 +1049,49 @@ function shopAccessCode(status: number, data: unknown): "shop_access_removed" | 
   return code === "shop_access_removed" || code === "shop_approval_pending" ? code : null;
 }
 
+/**
+ * The shop's phone, shared (gridgo-api `docs/SHOP_TEAM_API.md`, "Phone-free
+ * Staff and shared devices"). After a phone-free teammate picks themselves
+ * with their PIN, GRIDGO hands back an opaque token for 30 minutes. It lives
+ * here, in memory only, and rides on every request — never on disk, never in
+ * a log. `store/shopWorker.ts` owns when it is set and dropped.
+ */
+let workerToken: string | null = null;
+
+export function setWorkerToken(token: string | null): void {
+  workerToken = token;
+}
+
+export function hasWorkerToken(): boolean {
+  return workerToken != null;
+}
+
+/** Extra headers for transports that do not go through `request` (uploads). */
+export function workerHeaders(): Record<string, string> {
+  return workerToken ? { "X-GRIDGO-Worker-Token": workerToken } : {};
+}
+
+/** The shop's phone is locked to the picker: expired, locked, reset, removed. */
+export type WorkerLostCode = "shop_worker_locked" | "shop_worker_invalid" | "shop_device_session_required";
+
+const WORKER_LOST: readonly string[] = ["shop_worker_locked", "shop_worker_invalid", "shop_device_session_required"];
+
+export function workerLostCode(error: unknown): WorkerLostCode | null {
+  if (!(error instanceof ApiError) || error.status !== 403) return null;
+  const code = apiErrorCode(error);
+  return WORKER_LOST.includes(code) ? (code as WorkerLostCode) : null;
+}
+
+let workerLostHandler: ((code: WorkerLostCode) => void) | null = null;
+
+/**
+ * Fired when GRIDGO answers a request with a worker error. Never retried with
+ * the old token: the shop's phone goes back to "Who's working?".
+ */
+export function setWorkerLostHandler(handler: ((code: WorkerLostCode) => void) | null): void {
+  workerLostHandler = handler;
+}
+
 let unauthorizedHandler: UnauthorizedHandler | null = null;
 
 /**
@@ -1085,6 +1144,8 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     assertLiveGeneration(generation);
     for (let attempt = 0; ; attempt += 1) {
       if (token) { headers.Authorization = `Bearer ${token}`; headers["X-GRIDGO-Role"] = "supplier"; }
+      if (token && workerToken) headers["X-GRIDGO-Worker-Token"] = workerToken;
+      else delete headers["X-GRIDGO-Worker-Token"];
       res = await Promise.race([fetch(`${getApiBase()}${path}`, {
         ...fetchInit,
         headers: { ...headers },
@@ -1124,7 +1185,13 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     }
     const shopCode = token ? shopAccessCode(res.status, data) : null;
     if (shopCode) shopAccessHandler?.(shopCode);
-    throw new ApiError(res.status, data);
+    const failure = new ApiError(res.status, data);
+    const lost = token ? workerLostCode(failure) : null;
+    if (lost) {
+      workerToken = null;
+      workerLostHandler?.(lost);
+    }
+    throw failure;
   }
   return data as T;
 }
@@ -1405,12 +1472,16 @@ export async function me(options: { ignoreUnauthorized?: boolean } = {}): Promis
     ignoreUnauthorized: options.ignoreUnauthorized,
   });
   const shop = readShopSummary(result.shop);
+  const worker = readWorker(result.shop);
   // A teammate's bootstrap (gridgo-api docs/SHOP_TEAM_API.md): `user` is the
   // person and `shop` the business. It carries no approval case — GRIDGO only
   // lets an active teammate in to a shop it serves, so active reads approved.
-  if (shop && result.user?.id !== shop.id) {
+  // On a shared shop phone the Owner's own login reads the same way: the
+  // person working is the one who picked themselves, with their role.
+  if (shop && (result.user?.id !== shop.id || worker)) {
     return {
       ...result.user,
+      ...(worker ? { name: worker.name, worker } : {}),
       email: result.user.email ?? "",
       role: "supplier",
       supplierName: shop.name,
@@ -1445,22 +1516,123 @@ function readShopSummary(value: unknown): ShopSummary | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Partial<ShopSummary>;
   if (typeof row.id !== "string") return null;
-  const role: ShopRole = row.role === "owner" ? "owner" : "staff";
+  const role: ShopRole = readShopRole(row.role);
   const status: ShopMemberStatus =
     row.status === "active" || row.status === "removed" ? row.status : "pending";
   return { id: row.id, name: typeof row.name === "string" && row.name ? row.name : "Print shop", role, status };
 }
 
-/** The Owner's team and its invites. Owner only. */
-export async function getShopTeam(): Promise<{ members: TeamMember[]; invites: TeamInvite[] }> {
-  const result = await request<{ members?: TeamMember[]; invites?: TeamInvite[] }>("/me/shop-team");
+function readWorker(value: unknown): { pinStaffId: string; name: string } | null {
+  if (!value || typeof value !== "object") return null;
+  const worker = (value as { worker?: unknown }).worker;
+  if (!worker || typeof worker !== "object") return null;
+  const row = worker as { pinStaffId?: unknown; name?: unknown };
+  if (typeof row.pinStaffId !== "string" || !row.pinStaffId) return null;
+  return { pinStaffId: row.pinStaffId, name: typeof row.name === "string" && row.name ? row.name : "Staff" };
+}
+
+/**
+ * The team, its invites, phone-free staff and the week's positive view. An
+ * older GRIDGO answers Owners only, with logins and invites — `hasPinStaff`
+ * says which this is (`lib/teamRoster.ts`).
+ */
+export async function getShopTeam(): Promise<ShopTeam> {
+  return readShopTeam(await request<unknown>("/me/shop-team"));
+}
+
+/** Owner only: whether the shop works alone and whether Staff see the ranking. */
+export async function updateTeamSettings(change: Partial<TeamSettings>): Promise<TeamSettings | null> {
+  const result = await request<{ settings?: unknown }>("/me/shop-team/settings", {
+    method: "PATCH",
+    body: JSON.stringify(change),
+  });
+  return readTeamSettings(result.settings);
+}
+
+/** The signed-in person's (or the picked PIN person's) own alerts and photo. */
+export async function updateTeamSelf(change: { jobAlerts?: boolean; photoFileId?: string | null }): Promise<void> {
+  await request("/me/shop-team/me", { method: "PATCH", body: JSON.stringify(change) });
+}
+
+/** Add someone with no phone or login: a name and a four-digit PIN for the shop's phone. */
+export async function createPinStaff(input: {
+  name: string;
+  pin: string;
+  role?: "staff" | "manager";
+  photoFileId?: string;
+}): Promise<TeamPerson | null> {
+  const result = await request<{ member?: unknown }>("/me/shop-team/pin-staff", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return readPinPerson(result.member);
+}
+
+export async function updatePinStaff(
+  id: string,
+  change: { name?: string; role?: "staff" | "manager"; jobAlerts?: boolean; photoFileId?: string | null },
+): Promise<void> {
+  await request(`/me/shop-team/pin-staff/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(change),
+  });
+}
+
+/** A new PIN. Whoever was working under the old one is sent back to the picker. */
+export async function resetPinStaff(id: string, pin: string): Promise<void> {
+  await request(`/me/shop-team/pin-staff/${encodeURIComponent(id)}/reset`, {
+    method: "POST",
+    body: JSON.stringify({ pin }),
+  });
+}
+
+/** Removing a PIN person stops their PIN at once. */
+export async function removePinStaff(id: string): Promise<void> {
+  await request(`/me/shop-team/pin-staff/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** "Who's working?": the phone-free people who can pick themselves here. */
+export async function getWorkingPicker(): Promise<{
+  people: TeamPerson[];
+  worker: { pinStaffId: string; name: string } | null;
+}> {
+  const result = await request<{ members?: unknown; worker?: unknown }>("/me/shop-team/working");
+  const rows = Array.isArray(result.members) ? result.members : [];
   return {
-    members: Array.isArray(result.members) ? result.members : [],
-    invites: Array.isArray(result.invites) ? result.invites : [],
+    // Logins work on their own phones; the picker selects phone-free records only.
+    people: rows
+      .filter((row) => row && typeof row === "object" && (row as { kind?: unknown }).kind === "pin")
+      .map(readPinPerson)
+      .filter((person): person is TeamPerson => person != null && person.status === "active"),
+    worker: readWorker({ worker: result.worker }),
   };
 }
 
-/** A single-use, 48-hour invite. The token comes back once, only here. */
+/** Pick a person with their PIN. The token is theirs for 30 minutes, on this phone only. */
+export async function selectWorker(
+  pinStaffId: string,
+  pin: string,
+): Promise<{ worker: { pinStaffId: string; name: string; role: ShopRole }; token: string; expiresAt: string | null }> {
+  const result = await request<{ worker?: { pinStaffId?: unknown; id?: unknown; name?: unknown; role?: unknown }; token?: unknown; expiresAt?: unknown }>(
+    "/me/shop-team/working/select",
+    { method: "POST", body: JSON.stringify({ pinStaffId, pin }) },
+  );
+  const row = result.worker ?? {};
+  const id = typeof row.pinStaffId === "string" ? row.pinStaffId : typeof row.id === "string" ? row.id : pinStaffId;
+  if (typeof result.token !== "string" || !result.token) throw new Error("GRIDGO did not open this turn. Try again.");
+  return {
+    worker: { pinStaffId: id, name: typeof row.name === "string" ? row.name : "Staff", role: readShopRole(row.role) },
+    token: result.token,
+    expiresAt: typeof result.expiresAt === "string" ? result.expiresAt : null,
+  };
+}
+
+/** Hand the phone back to the picker. Nobody is acting as anyone after this. */
+export async function lockWorker(): Promise<void> {
+  await request("/me/shop-team/working/lock", { method: "POST", body: "{}" });
+}
+
+/** A single-use, 24-hour invite. The token comes back once, only here. */
 export async function createShopInvite(
   kind: InviteKind,
   identity?: string,
@@ -1474,7 +1646,7 @@ export async function createShopInvite(
 
 /**
  * New code: GRIDGO revokes this open invite and issues its replacement in one
- * step (same kind and recipient, a fresh 48 hours). The old link and QR stop
+ * step (same kind and recipient, a fresh 24 hours). The old link and QR stop
  * working the moment this succeeds; nothing changes if it fails.
  */
 export async function replaceShopInvite(inviteId: string): Promise<CreatedInvite> {
@@ -1489,10 +1661,10 @@ export async function revokeShopInvite(inviteId: string): Promise<void> {
   await request(`/me/shop-team/invites/${encodeURIComponent(inviteId)}`, { method: "DELETE" });
 }
 
-/** Approve a pending person, or change an active member's role. */
+/** Approve a pending person, or change an active member's role, alerts or photo. */
 export async function updateShopMember(
   userId: string,
-  change: { status: "active" } | { role: ShopRole },
+  change: { status: "active" } | { role: ShopRole } | { jobAlerts: boolean } | { photoFileId: string | null },
 ): Promise<TeamMember> {
   const result = await request<{ member: TeamMember }>(
     `/me/shop-team/members/${encodeURIComponent(userId)}`,
@@ -1523,10 +1695,12 @@ export async function discoverShopInvites(): Promise<TeamInvite[]> {
 /** Claim an invite by its link token or a discovered invite's id. The person is then pending. */
 export async function claimShopInvite(
   claim: { token: string } | { inviteId: string },
+  name?: string,
 ): Promise<ShopSummary | null> {
+  // `name` only names a person GRIDGO does not know yet; an existing one keeps theirs.
   const result = await request<{ shop?: unknown }>("/auth/shop-invites/claim", {
     method: "POST",
-    body: JSON.stringify(claim),
+    body: JSON.stringify(name?.trim() ? { ...claim, name: name.trim() } : claim),
     ignoreUnauthorized: true,
   });
   return readShopSummary(result.shop);

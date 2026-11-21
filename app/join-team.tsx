@@ -70,7 +70,7 @@ export default function JoinTeamScreen() {
     setBusy(true);
     setProblem(null);
     try {
-      await api.claimShopInvite(claimWith);
+      await api.claimShopInvite(claimWith, useTeamJoin.getState().name ?? undefined);
       useTeamJoin.getState().clear();
       await useSession.getState().recheckTeam();
       const now = useSession.getState();

@@ -277,6 +277,8 @@ export function pushTargetRoute(data: PushData, threadId: string | null = null):
   if (data.type === PRINTER_DEMAND_PUSH_TYPE) return "/(tabs)/home";
   // A performance notice or warning opens the shop's Performance at that job's notice.
   if (data.type === PERFORMANCE_ALERT) return data.orderId ? `${PERFORMANCE_ROUTE}?orderId=${encodeURIComponent(data.orderId)}` : PERFORMANCE_ROUTE;
+  // Someone joined by link or QR: the Team screen, where the owner approves them.
+  if (data.type === "shop_invite_claimed") return "/team";
   if (!data.orderId) return "/alerts";
   // A message from the rider collecting the job opens the conversation itself;
   // its back control leads to the job (`app/job/[id]/messages.tsx`).

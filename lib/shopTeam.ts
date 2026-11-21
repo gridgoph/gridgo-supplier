@@ -7,7 +7,11 @@
  * here is presentation, never access.
  */
 
-export type ShopRole = "owner" | "staff";
+/**
+ * `manager` (report F315793B): works orders like Staff and also changes the
+ * shop's hours, products and Staff. Never Money, never owner settings.
+ */
+export type ShopRole = "owner" | "manager" | "staff";
 export type ShopMemberStatus = "pending" | "active" | "removed";
 export type InviteKind = "email" | "phone" | "qr" | "link";
 export type InviteStatus = "open" | "claimed" | "revoked" | "expired";
@@ -45,6 +49,8 @@ export type CreatedInvite = { invite: TeamInvite; token: string };
 
 export type ActionActor = {
   userId?: string | null;
+  /** Set when a phone-free teammate picked themselves on the shop's phone. */
+  pinStaffId?: string | null;
   name?: string | null;
   role?: string | null;
 };
@@ -62,6 +68,11 @@ export const JOIN_TEAM_URL = "https://gridgo-dash.talasora.com/join-team";
 /** The link an Owner shares, and what its QR encodes. The token rides in the fragment. */
 export function joinTeamLink(token: string): string {
   return `${JOIN_TEAM_URL}#token=${encodeURIComponent(token)}`;
+}
+
+/** The message a shared link travels with, in any chat app. */
+export function joinMessage(url: string): string {
+  return `Join my shop's team on GRIDGO: ${url}`;
 }
 
 /**
@@ -98,10 +109,14 @@ export function isLiveInvite(invite: TeamInvite, now: number = Date.now()): bool
   return invite.status === "open" && inviteTimeLeft(invite.expiresAt, now) != null;
 }
 
-export const ROLE_LABEL: Record<ShopRole, string> = { owner: "Owner", staff: "Staff" };
+export const ROLE_LABEL: Record<ShopRole, string> = { owner: "Owner", manager: "Manager", staff: "Staff" };
+
+export function readShopRole(role: unknown): ShopRole {
+  return role === "owner" || role === "manager" ? role : "staff";
+}
 
 export function roleLabel(role: unknown): string {
-  return role === "owner" || role === "staff" ? ROLE_LABEL[role] : "Staff";
+  return ROLE_LABEL[readShopRole(role)];
 }
 
 /** What an invite was sent to, in a line. QR and link invites have no address. */
@@ -138,6 +153,7 @@ export function actorLabel(actor: ActionActor | null | undefined): string | null
   const name = actor.name?.trim();
   switch (actor.role) {
     case "owner":
+    case "manager":
     case "staff":
       return name ? `${name} (${ROLE_LABEL[actor.role]})` : ROLE_LABEL[actor.role];
     case "system":
