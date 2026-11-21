@@ -129,6 +129,7 @@ export default function ScheduleScreen() {
       >
         <ScreenHeader
           title="Schedule"
+          back={{ label: "To do", onPress: () => router.navigate("/(tabs)/home") }}
           right={
             <View className="flex-row items-center">
               <ChatButton />

@@ -35,6 +35,8 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { ShopReleasePanel } from "@/components/ShopReleasePanel";
 import { SpecialInstructionsPanel } from "@/components/SpecialInstructionsPanel";
 import { StatusChip } from "@/components/StatusChip";
+import { OrderReference } from "@/components/OrderReference";
+import { fulfilmentLine, paymentLine } from "@/lib/todo";
 import { acceptWindow } from "@/lib/acceptWindow";
 import { formatDeadlineFull, shopDueAt } from "@/lib/dates";
 import { waitsForDispatch } from "@/lib/dispatchHours";
@@ -323,7 +325,14 @@ export default function JobWorkspaceScreen() {
             <StatusChip tone={status.tone} label={status.label} icon={status.icon} />
           </View>
           <Text className="text-h1 text-text-primary">{job.title}</Text>
-          <Text className="text-caption text-text-muted">Order {job.id}</Text>
+          <View className="flex-row">
+            <OrderReference id={job.id} />
+          </View>
+          {paymentLine(job) ? (
+            <Text className="text-body text-text-secondary" testID="job-paid-line">
+              {[fulfilmentLine(job), paymentLine(job)].join(" · ")}
+            </Text>
+          ) : null}
           {express ? (
             <View className="flex-row">
               <ExpressChip />

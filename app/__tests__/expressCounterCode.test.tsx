@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import CounterCodeScreen from "@/app/job/[id]/counter-code";
 import { ExpressCountdown } from "@/components/ExpressCountdown";
 import * as api from "@/lib/api";
+import { useFileOpens } from "@/store/fileOpens";
+import { useSession } from "@/store/session";
 
 jest.mock("expo-router", () => ({
   router: { back: jest.fn(), navigate: jest.fn() },
@@ -67,6 +69,61 @@ describe("counter code entry", () => {
     expect(screen.getByText("Too many tries")).toBeTruthy();
     expect(screen.getByText(/Try again in 14:(29|30)/)).toBeTruthy();
     expect(input.props.editable).toBe(false);
+    await view.unmount();
+  });
+
+  /** gridgo-supplier#269: the screen's own pad, so the boxes are never under the keyboard. */
+  it("takes the code from the number pad and hands over on the sixth digit", async () => {
+    (api.enterCounterCode as jest.Mock).mockResolvedValue(undefined);
+    const view = await render(<CounterCodeScreen />);
+    const input = await screen.findByTestId("counter-code-input");
+    expect(input.props.showSoftInputOnFocus).toBe(false);
+    expect(screen.getByTestId("counter-code-paid")).toBeTruthy();
+    expect(screen.getByText("Already paid. Don't collect cash.")).toBeTruthy();
+    for (const digit of ["4", "8", "2", "1", "7"]) await fireEvent.press(screen.getByTestId(`number-pad-${digit}`));
+    await fireEvent.press(screen.getByTestId("number-pad-del"));
+    await fireEvent.press(screen.getByTestId("number-pad-1"));
+    expect(api.enterCounterCode).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByTestId("number-pad-9"));
+    expect(api.enterCounterCode).toHaveBeenCalledWith("ord_x", "482119");
+    expect(await screen.findByTestId("counter-code-done")).toBeTruthy();
+    await view.unmount();
+  });
+
+  it("never says already paid on a cash job", async () => {
+    (api.getOrder as jest.Mock).mockResolvedValue({ ...ready, paymentMethod: "cash" });
+    const view = await render(<CounterCodeScreen />);
+    await screen.findByTestId("counter-code-input");
+    expect(screen.queryByTestId("counter-code-paid")).toBeNull();
+    await view.unmount();
+  });
+
+  it("says what the job adds to the Owner's earnings, and asks to delete files opened on this phone", async () => {
+    (api.getOrder as jest.Mock).mockResolvedValue({ ...ready, supplierPriceMinor: 7200, artworkFileIds: ["file_a", "file_b"] });
+    (api.enterCounterCode as jest.Mock).mockResolvedValue(undefined);
+    useFileOpens.setState({ fileIds: ["file_b"] });
+    const view = await render(<CounterCodeScreen />);
+    await fireEvent.changeText(await screen.findByTestId("counter-code-input"), "012345");
+    expect((await screen.findByTestId("counter-code-earned")).props.children).toEqual(["₱72.00", " is added to your earnings."]);
+    expect(screen.getByTestId("delete-files-card")).toBeTruthy();
+    await fireEvent.press(screen.getByText("Deleted, or only viewed"));
+    expect(screen.queryByTestId("delete-files-card")).toBeNull();
+    expect(useFileOpens.getState().fileIds).toEqual([]);
+    await view.unmount();
+  });
+
+  it("shows Staff no money and no delete card when nothing was opened", async () => {
+    useSession.setState({ user: { id: "staff_1", shopRole: "staff" } as never });
+    useFileOpens.setState({ fileIds: [] });
+    (api.getOrder as jest.Mock).mockResolvedValue({ ...ready, supplierPriceMinor: 7200, artworkFileIds: ["file_a"] });
+    (api.enterCounterCode as jest.Mock).mockResolvedValue(undefined);
+    const view = await render(<CounterCodeScreen />);
+    await fireEvent.changeText(await screen.findByTestId("counter-code-input"), "012345");
+    await screen.findByTestId("counter-code-done");
+    expect(screen.queryByTestId("counter-code-earned")).toBeNull();
+    expect(screen.queryByText(/₱/)).toBeNull();
+    expect(screen.queryByTestId("delete-files-card")).toBeNull();
+    useSession.setState({ user: null });
     await view.unmount();
   });
 

@@ -82,12 +82,15 @@ describe("the steps", () => {
     }
   });
 
-  it("light each tab from the screen before it, so the shop taps the real tab", () => {
-    for (const [tab, id] of Object.entries(TAB_TOUR_STEPS)) {
-      const index = TOUR_STEPS.findIndex((step) => step.id === id);
-      const tabScreen = tab === "catalogues" ? "catalogue" : tab;
-      expect(TOUR_STEPS[index + 1]?.screen).toBe(tabScreen);
-    }
+  /**
+   * The bar has four places (gridgo-supplier#269). Products sits inside My
+   * shop, so the step before it lights My shop and says to tap Products.
+   */
+  it("lights My shop before Products, the only step still on the bar", () => {
+    expect(TAB_TOUR_STEPS).toEqual({ account: "schedule.catalogueTab" });
+    const index = TOUR_STEPS.findIndex((step) => step.id === "schedule.catalogueTab");
+    expect(TOUR_STEPS[index + 1]?.screen).toBe("catalogue");
+    expect(TOUR_STEPS[index].body).toContain("My shop, then Products");
   });
 });
 

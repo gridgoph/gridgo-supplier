@@ -1,9 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { CircleCheck, Lock } from "lucide-react-native";
+import { Check, CircleCheck, Lock, Trash2 } from "lucide-react-native";
 
 import { DigitBoxes } from "@/components/DigitBoxes";
+import { NumberPad } from "@/components/NumberPad";
 import { FlowScreen } from "@/components/FlowScreen";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
@@ -20,13 +21,19 @@ import {
 import { useJob } from "@/hooks/useJob";
 import { useNow } from "@/hooks/useNow";
 import { useThemeColors } from "@/hooks/useTheme";
+import { formatPhp } from "@/lib/api";
+import { orderReference } from "@/lib/orderReference";
+import { alreadyPaidAtCounter, workLine } from "@/lib/todo";
+import { useFileOpens } from "@/store/fileOpens";
+import { isShopStaff, useSession } from "@/store/session";
 
 /**
  * Handing over an Express pickup: the client reads out the six-digit code
  * from their phone, the shop types it, and the order is closed.
  *
  * The code goes the moment the sixth digit is in — a busy counter should not
- * need a second tap. A wrong code empties the boxes and turns them red until
+ * need a second tap. The screen draws its own number pad, so the boxes are
+ * never covered by the phone's keyboard (gridgo-supplier#269). A wrong code empties the boxes and turns them red until
  * the next digit; five wrong ones lock the counter for fifteen minutes, which GRIDGO
  * counts and this screen only shows.
  */
@@ -34,6 +41,7 @@ export default function CounterCodeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { job, loading, error, reload } = useJob(id);
   const colors = useThemeColors();
+  const staff = useSession((s) => isShopStaff(s.user));
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [wrong, setWrong] = useState(false);
@@ -89,12 +97,24 @@ export default function CounterCodeScreen() {
         onRetry={() => void reload()}
         title="Handed over"
         subject={job?.title}
-        footer={<PrimaryButton label="Back to jobs" onPress={() => router.navigate("/(tabs)/jobs")} />}
+        footer={<PrimaryButton label="Next job" onPress={() => router.navigate("/(tabs)/home")} />}
       >
         <View className="items-center gap-3 py-6" testID="counter-code-done">
           <CircleCheck size={56} color={colors.success} strokeWidth={1.75} />
-          <Text className="text-body-lg text-text-secondary">The client has their order.</Text>
+          <Text className="text-h2 text-text-primary">Salamat po!</Text>
+          {/*
+            What the job adds to the shop's earnings, never when it arrives:
+            GRIDGO releases it with the shop's payouts, on GRIDGO's schedule.
+          */}
+          {!staff && job?.supplierPriceMinor != null ? (
+            <Text className="text-center text-body-lg text-text-secondary" testID="counter-code-earned">
+              {formatPhp(job.supplierPriceMinor)} is added to your earnings.
+            </Text>
+          ) : (
+            <Text className="text-center text-body-lg text-text-secondary">The client has their order.</Text>
+          )}
         </View>
+        {job ? <DeleteFilesCard fileIds={job.artworkFileIds ?? []} /> : null}
       </FlowScreen>
     );
   }
@@ -107,7 +127,7 @@ export default function CounterCodeScreen() {
       loading={loading && !job}
       error={job ? null : error}
       onRetry={() => void reload()}
-      title="Enter pickup code"
+      title="Type the client's code"
       subject={job?.title}
       actionError={actionError}
       footer={
@@ -125,13 +145,18 @@ export default function CounterCodeScreen() {
         </Text>
       ) : job ? (
         <View className="gap-4">
-          <Text className="text-body-lg text-text-secondary">Ask the client for the 6-digit code on their phone.</Text>
+          <Text className="text-body-lg text-text-secondary">
+            {`${[orderReference(job.id) ? `#${orderReference(job.id)}` : null, workLine(job)]
+              .filter(Boolean)
+              .join(" · ")}. The client shows 6 numbers on their phone.`}
+          </Text>
           <DigitBoxes
             value={code}
             onChange={change}
             onSubmit={() => void submit(code)}
             editable={!busy && !locked}
             invalid={wrong}
+            systemKeyboard={false}
             accessibilityLabel="Client's 6-digit pickup code"
             testID="counter-code-input"
           />
@@ -139,6 +164,15 @@ export default function CounterCodeScreen() {
             <Text className="text-body font-medium text-error" accessibilityRole="alert" testID="counter-code-wrong">
               Wrong code. Check it with the client.
             </Text>
+          ) : null}
+          {alreadyPaidAtCounter(job) ? (
+            <View className="flex-row items-center gap-2" testID="counter-code-paid">
+              <Check size={18} color={colors.success} strokeWidth={2.5} />
+              <Text className="text-body font-medium text-success">Already paid. Don&apos;t collect cash.</Text>
+            </View>
+          ) : null}
+          {!wrong && !locked ? (
+            <Text className="text-caption text-text-muted">It hands over by itself when the 6th number is in.</Text>
           ) : null}
           {locked && lockedUntil ? (
             <View
@@ -155,8 +189,41 @@ export default function CounterCodeScreen() {
               </View>
             </View>
           ) : null}
+          <View className="mt-2">
+            <NumberPad
+              disabled={busy || locked}
+              onDigit={(digit) => change(code + digit)}
+              onDelete={() => change(code.slice(0, -1))}
+            />
+          </View>
         </View>
       ) : null}
     </FlowScreen>
+  );
+}
+
+/**
+ * Only after a file was opened on this phone: a reminder to delete the
+ * client's files (gridgo-supplier#269). One tap answers it either way.
+ */
+function DeleteFilesCard({ fileIds }: { fileIds: string[] }) {
+  const colors = useThemeColors();
+  const opened = useFileOpens((s) => s.fileIds);
+  const forget = useFileOpens((s) => s.forget);
+  const held = fileIds.filter((id) => opened.includes(id));
+  if (!held.length) return null;
+  return (
+    <View className="gg-card gap-3" testID="delete-files-card">
+      <View className="flex-row items-center gap-2">
+        <Trash2 size={18} color={colors.textPrimary} strokeWidth={2} />
+        <Text className="text-body-lg font-medium text-text-primary">Delete the client&apos;s files</Text>
+      </View>
+      <Text className="text-body text-text-secondary">
+        You opened {held.length === 1 ? "a file" : `${held.length} files`} from this job on this phone. If you saved
+        {held.length === 1 ? " it" : " them"}, delete {held.length === 1 ? "it" : "them"} now. It protects the
+        client&apos;s privacy.
+      </Text>
+      <SecondaryButton label="Deleted, or only viewed" onPress={() => forget(held)} />
+    </View>
   );
 }

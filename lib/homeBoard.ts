@@ -13,6 +13,7 @@ import { summarizePayouts, unreleasedMinor } from "@/lib/payout";
 import { deadlineUrgency, type UrgencyLevel } from "@/lib/urgency";
 import { acceptWindow, acceptWindowLine } from "@/lib/acceptWindow";
 import { shopRelease } from "@/lib/shopRecovery";
+import { expressStage } from "@/lib/todo";
 
 /**
  * What a shop opens this app to find out.
@@ -241,6 +242,39 @@ export function buildObligations(jobs: Order[], now: Date = new Date()): Obligat
       when(byId(jobs, a.orderId)) - when(byId(jobs, b.orderId)) ||
       a.title.localeCompare(b.title),
   );
+}
+
+/**
+ * To do (gridgo-supplier#269): Express cards on top, then everything else.
+ *
+ * An Express job the shop has not finished printing is the sharpest thing on
+ * the floor — a five-minute offer, or a client on the way — so it leaves the
+ * list and gets a card above it: offers first, soonest to run out first, then
+ * accepted jobs by the time they were promised. Everything after that is the
+ * obligation list, in its own order. Still one ranking.
+ */
+export type TodoBoard = { express: Order[]; after: Obligation[] };
+
+export function buildTodo(jobs: Order[], now: Date = new Date()): TodoBoard {
+  const live = jobs.filter((job) => !shopRelease(job));
+  const offers = live
+    .filter((job) => expressStage(job) === "offer" && acceptWindow(job, now).kind !== "expired")
+    .sort((a, b) => clock(a) - clock(b));
+  const working = live.filter((job) => expressStage(job) === "working").sort((a, b) => when(a) - when(b));
+  const express = [...offers, ...working];
+  const carded = new Set(express.map((job) => job.id));
+  return {
+    express,
+    after: buildObligations(
+      jobs.filter((job) => !carded.has(job.id)),
+      now,
+    ),
+  };
+}
+
+function clock(job: Order): number {
+  const window = acceptWindow(job);
+  return window.kind === "running" || window.kind === "spans_closed" ? window.deadlineAt.getTime() : Number.POSITIVE_INFINITY;
 }
 
 function decideDetail(clock: string | null): string {

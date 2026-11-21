@@ -80,21 +80,24 @@ it("says time is up when GRIDGO answers that the five minutes ran out", async ()
   const view = await render(<AcceptJobScreen />);
   await fireEvent.press(await screen.findByText("Accept"));
   expect(await screen.findByTestId("express-expired")).toBeTruthy();
-  expect(screen.getByText("Back to jobs")).toBeTruthy();
+  expect(screen.getByText("Back to To do")).toBeTruthy();
   await view.unmount();
 });
 
-it("declines with a one-tap reason and says it went to the next shop", async () => {
+it("can't do it: a one-tap reason sends it to another shop, with no penalty said up front", async () => {
   (api.getOrder as jest.Mock).mockResolvedValue(offer());
   (api.declineExpress as jest.Mock).mockResolvedValue(undefined);
   (askConfirm as jest.Mock).mockResolvedValue(true);
   const view = await render(<DeclineJobScreen />);
-  await fireEvent.press(await screen.findByText("Decline"));
+  expect(await screen.findByText("Why can't you take it?")).toBeTruthy();
+  expect(screen.getByTestId("express-decline-no-penalty").props.children).toMatch(/doesn't count against you/);
+  await fireEvent.press(screen.getByText("Send to another shop"));
   expect(screen.getByText("Pick a reason.")).toBeTruthy();
-  await fireEvent.press(screen.getByText("Printer unavailable"));
-  await fireEvent.press(screen.getByText("Decline"));
-  expect(api.declineExpress).toHaveBeenCalledWith("ord_x", "Printer unavailable");
-  expect(await screen.findByText("GRIDGO sent it to the next shop.")).toBeTruthy();
+  await fireEvent.press(screen.getByText("Printer is down"));
+  await fireEvent.press(screen.getByText("Send to another shop"));
+  expect(api.declineExpress).toHaveBeenCalledWith("ord_x", "Printer is down");
+  expect(await screen.findByText("Sent to another shop")).toBeTruthy();
+  expect(screen.getByText("Nothing goes on your record.")).toBeTruthy();
   await view.unmount();
 });
 
@@ -103,11 +106,11 @@ it("keeps the Express screen when GRIDGO stops showing the order to this shop", 
   (api.declineExpress as jest.Mock).mockRejectedValue(new api.ApiError(409, { error: "express_acceptance_not_pending" }));
   (askConfirm as jest.Mock).mockResolvedValue(true);
   const view = await render(<DeclineJobScreen />);
-  await fireEvent.press(await screen.findByText("Printer unavailable"));
-  await fireEvent.press(screen.getByText("Decline"));
+  await fireEvent.press(await screen.findByText("Printer is down"));
+  await fireEvent.press(screen.getByText("Send to another shop"));
   // The refusal re-reads the order, which has moved on and is now refused.
   await waitFor(() => expect(api.getOrder).toHaveBeenCalledTimes(2));
-  expect(screen.getByText("Decline Express order")).toBeTruthy();
+  expect(screen.getByText("Why can't you take it?")).toBeTruthy();
   expect(screen.queryByText(/not reachable/)).toBeNull();
   await view.unmount();
 });

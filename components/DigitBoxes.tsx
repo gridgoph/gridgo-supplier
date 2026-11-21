@@ -17,6 +17,11 @@ type Props = {
   /** Offer the phone's one-time-code autofill (an emailed code, never a client's). */
   oneTimeCode?: boolean;
   autoFocus?: boolean;
+  /**
+   * False when the screen draws its own number pad (`NumberPad`): the field
+   * still takes a hardware keyboard and paste, but never opens the phone's.
+   */
+  systemKeyboard?: boolean;
   accessibilityLabel?: string;
   testID?: string;
 };
@@ -36,6 +41,7 @@ export function DigitBoxes({
   invalid = false,
   oneTimeCode = false,
   autoFocus = true,
+  systemKeyboard = true,
   accessibilityLabel = "6-digit code",
   testID,
 }: Props) {
@@ -91,6 +97,7 @@ export function DigitBoxes({
         importantForAutofill={oneTimeCode ? "yes" : "no"}
         accessibilityLabel={accessibilityLabel}
         editable={editable}
+        showSoftInputOnFocus={systemKeyboard}
         style={[styles.hiddenInput, { color: colors.textPrimary }]}
       />
     </Pressable>

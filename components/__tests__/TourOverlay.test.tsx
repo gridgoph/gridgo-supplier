@@ -27,7 +27,7 @@ it("draws nothing on a screen the current step does not belong to", async () => 
   useTour.setState({ screen: "schedule" });
   await render(<Overlay />);
   await settle();
-  expect(screen.queryByText("New jobs arrive in Jobs")).toBeNull();
+  expect(screen.queryByText("New jobs arrive in To do")).toBeNull();
 });
 
 it("waits while the notifications explainer is up", async () => {
@@ -35,7 +35,7 @@ it("waits while the notifications explainer is up", async () => {
   useTour.getState().arrive("usr_a", "home");
   await render(<Overlay />);
   await settle();
-  expect(screen.queryByText("New jobs arrive in Jobs")).toBeNull();
+  expect(screen.queryByText("New jobs arrive in To do")).toBeNull();
 });
 
 it("waits while the update sheet is up", async () => {
@@ -43,21 +43,21 @@ it("waits while the update sheet is up", async () => {
   useTour.getState().arrive("usr_a", "home");
   await render(<Overlay />);
   await settle();
-  expect(screen.queryByText("New jobs arrive in Jobs")).toBeNull();
+  expect(screen.queryByText("New jobs arrive in To do")).toBeNull();
 });
 
 it("draws nothing until the opening has played", async () => {
   useTour.getState().arrive("usr_a", "home");
   await render(<Overlay ready={false} />);
   await settle();
-  expect(screen.queryByText("New jobs arrive in Jobs")).toBeNull();
+  expect(screen.queryByText("New jobs arrive in To do")).toBeNull();
 });
 
 it("shows the step on its screen with dots and Skip, and Skip ends the tour", async () => {
   useTour.getState().arrive("usr_a", "home");
   await render(<Overlay />);
 
-  expect(await screen.findByText("New jobs arrive in Jobs")).toBeTruthy();
+  expect(await screen.findByText("New jobs arrive in To do")).toBeTruthy();
   expect(screen.getByLabelText("Tip 1 of 9")).toBeTruthy();
   // Home's only step: the card goes away until the shop reaches Jobs.
   expect(screen.getByText("Got it")).toBeTruthy();

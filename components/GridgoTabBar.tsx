@@ -1,10 +1,10 @@
 import type { BottomTabBarProps } from "expo-router/js-tabs";
-import { Briefcase, Calendar, Frame, House, User, type LucideIcon } from "lucide-react-native";
+import { ListChecks, MessageCircle, Store, Wallet, type LucideIcon } from "lucide-react-native";
 import { Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TourTarget } from "@/components/TourTarget";
-import { TABS, type TabName } from "@/constants/tabs";
+import { TAB_SECTION, TABS, type BarTabName, type TabName } from "@/constants/tabs";
 import { useThemeColors } from "@/hooks/useTheme";
 import { TAB_TOUR_STEPS } from "@/lib/tour";
 
@@ -107,37 +107,29 @@ export function tabBarPaddingBottom(insetBottom: number): number {
 }
 
 /**
- * One glyph each, and the fourth is the only one worth arguing about.
- *
- * Catalogues is a wall of print samples, and Lucide's `Frame` is four rules
- * crossing and running past the corners — which is exactly a crop mark, the
- * thing a printer trims to and the mark every listing photo in this app already
- * wears (`components/CropMarkFrame`). So the tab that opens the wall carries
- * the same mark the wall is built from, rather than the grid of rounded squares
- * every other product reaches for.
- *
- * It is also the only open glyph in the row. House, Briefcase, Calendar and
- * User are all closed outlines, so a shop finds this one by silhouette before
- * it reads the label.
+ * One closed outline each, so the row reads as one set: a checklist for the
+ * day's work, a speech bubble for conversations, a wallet for the shop's money
+ * and a shop front for the shop itself.
  */
-const ICONS: Record<TabName, LucideIcon> = {
-  home: House,
-  jobs: Briefcase,
-  schedule: Calendar,
-  catalogues: Frame,
-  account: User,
+const ICONS: Record<BarTabName, LucideIcon> = {
+  home: ListChecks,
+  messages: MessageCircle,
+  money: Wallet,
+  account: Store,
 };
 
 /**
  * The GRIDGO supplier tab bar.
  *
- * Five labelled destinations. No raised action disc — every tab is a place.
- * Each destination owns the same share of the bar (`flex-1`), icon and label
- * centred in that share, the way a five-up phone bar is actually read: equal
- * gaps between marks, and the same distance from the left edge to Home as from
- * Account to the right edge. Sizing each column to its own label ("Home" vs
- * "Catalogues") made those two distances different even when the leftover was
- * split evenly around the boxes. They bottom-align so all five share a baseline.
+ * Four labelled places (three for Staff). No raised action disc — every tab is
+ * a place. Each destination owns the same share of the bar (`flex-1`), icon and
+ * label centred in that share: equal gaps between marks, and the same distance
+ * from the left edge to To do as from My shop to the right edge. They
+ * bottom-align so all share a baseline.
+ *
+ * All jobs, Schedule and Products are pages inside a place (`TAB_SECTION`):
+ * while one is open the bar lights its place, and tapping that place goes back
+ * to it.
  *
  * The surface paints the whole container, so the bar a person sees is exactly
  * `content region + design pad + system inset` and nothing has to be subtracted
@@ -177,13 +169,15 @@ export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
         {/*
           Drawn in the bar's own order, not the navigator's: Staff tabs are
           declared first so the Owner's can sit behind a guard, and an Owner
-          must still read Home, Jobs, Schedule, Catalogues, Account.
+          must still read To do, Messages, Money, My shop.
         */}
         {orderedRoutes(state.routes).map(({ route, index }) => {
           const tab = TABS.find((entry) => entry.name === route.name);
           if (!tab) return null;
 
+          const open = state.routes[state.index]?.name as TabName | undefined;
           const focused = state.index === index;
+          const lit = focused || (open != null && TAB_SECTION[open] === tab.name);
 
           const onPress = () => {
             const event = navigation.emit({
@@ -192,6 +186,7 @@ export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
               canPreventDefault: true,
             });
 
+            // A page inside this place is open: the tap goes back to the place.
             if (!focused && !event.defaultPrevented) {
               navigation.navigate(route.name);
             }
@@ -202,7 +197,7 @@ export function GridgoTabBar({ state, navigation }: BottomTabBarProps) {
               key={route.key}
               name={tab.name}
               label={tab.label}
-              focused={focused}
+              focused={lit}
               onPress={onPress}
             />
           );
@@ -235,7 +230,7 @@ export function orderedRoutes<R extends { name: string }>(routes: readonly R[]):
 }
 
 type TabItemProps = {
-  name: TabName;
+  name: BarTabName;
   label: string;
   focused: boolean;
   onPress: () => void;
@@ -246,7 +241,7 @@ type TabItemProps = {
  *
  * The unread badge used to hang off the Alerts tab; alerts are now a bell in
  * every masthead and the badge went with them. A bar that carries a number on
- * one column is a bar a shop reads for numbers, and these five are places.
+ * one column is a bar a shop reads for numbers, and these four are places.
  */
 function TabItem({ name, label, focused, onPress }: TabItemProps) {
   const colors = useThemeColors();

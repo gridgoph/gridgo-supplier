@@ -5,17 +5,18 @@ import { useUser } from "@clerk/expo";
 import { useTourAutoStart, useTourScreen } from "@/hooks/useTourScreen";
 import { useCallback, useEffect, useState } from "react";
 import { AppState, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
-import { ChevronRight } from "lucide-react-native";
+import { ChevronRight, Zap } from "lucide-react-native";
 import { router, useFocusEffect } from "expo-router";
 
 import { AlertsBell } from "@/components/AlertsBell";
 import { ChatButton } from "@/components/ChatButton";
 import { EmptyState } from "@/components/EmptyState";
+import { ExpressJobCard } from "@/components/express/ExpressJobCard";
 import { HomeTesterSlot } from "@/components/HomeTesterSlot";
-import { ObligationRow } from "@/components/ObligationRow";
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { SchedulingNotice } from "@/components/SchedulingNotice";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { LinkPill } from "@/components/LinkPill";
 import { LegalNoticeCard } from "@/components/legal/LegalNoticeCard";
 import { PushEnableCard } from "@/components/PushEnableCard";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -23,15 +24,19 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { ShopNotReadyCard, ShopReadyLine, ShopSetupGaps } from "@/components/ShopReadiness";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { StatusChip } from "@/components/StatusChip";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { TodoRow } from "@/components/TodoRow";
+import { TourTarget } from "@/components/TourTarget";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { clerkDisplayName } from "@/lib/clerk";
-import { buildObligations, greeting, homeHeadline, type Obligation } from "@/lib/homeBoard";
+import { buildTodo, greeting, homeHeadline, type Obligation } from "@/lib/homeBoard";
+import { quickAction, todoTitle } from "@/lib/todo";
 import { boardCountLine, boardPrompt, photoViewUrl, type Listing, type ServiceLine } from "@/lib/listings";
 import { loadBoard } from "@/lib/listingsApi";
 import { isTightBeforeAccepting } from "@/lib/scheduling";
 import { useAlertsStore } from "@/store/alerts";
-import { isMatchable, useSession } from "@/store/session";
+import { isMatchable, isShopStaff, useSession } from "@/store/session";
 import { usePlayOptIn } from "@/store/playOptIn";
 import { useTesterProgram } from "@/store/testerProgram";
 import { loadServiceLines } from "@/hooks/useBoard";
@@ -43,18 +48,21 @@ import { useThemeColors } from "@/hooks/useTheme";
 type QuietRead = { loading: boolean; error: string | null };
 
 /**
- * The floor at a glance.
+ * To do: the floor at a glance (gridgo-supplier#269).
  *
- * A greeting and one figure, then everything the shop has to do today. The
- * trade is deliberate and the captain made it: the fold is smaller, so the top
- * of the screen has to earn its space in one line and one number.
+ * A count of what needs the shop, then the work in the order it should be
+ * done: Express cards on top — a five-minute offer to accept, or an accepted
+ * job to mark ready — then every other job as a row whose next step (Ready,
+ * Code, Photos) is a button on the row. All jobs and Schedule open from here.
  *
- * The figure is the shop's own money that has stopped moving — see the note in
- * `lib/homeBoard`. Underneath it, obligations in the order they should be
- * worked through, with the sharpest one carrying the screen's only yellow.
+ * The Owner's figure — the shop's own money that has stopped moving, see
+ * `lib/homeBoard` — sits under the work as one line into Money. Staff work the
+ * same screen without it, and without the board, readiness or team cards,
+ * which are the Owner's.
  */
 export default function HomeScreen() {
   const { user, refresh } = useSession();
+  const staff = isShopStaff(user);
   const { user: clerkUser } = useUser();
   const colors = useThemeColors();
   const refreshAlerts = useAlertsStore((s) => s.refresh);
@@ -137,8 +145,9 @@ export default function HomeScreen() {
   }, []);
   const reload = useCallback(async () => {
     const current = beginRead();
-    void loadJoining(current);
-    const boardTask = loadBoardQuietly(current);
+    // The board, readiness and team are the Owner's; GRIDGO refuses them to Staff.
+    if (!staff) void loadJoining(current);
+    const boardTask = staff ? Promise.resolve() : loadBoardQuietly(current);
     if (waitingOnOps) {
       await Promise.all([refresh(), boardTask]);
       return;
@@ -160,7 +169,7 @@ export default function HomeScreen() {
       // serialization until the optional work has also settled.
       await Promise.all([boardTask, alertsTask]);
     }
-  }, [beginRead, loadBoardQuietly, loadAlertsQuietly, loadJoining, refresh, waitingOnOps]);
+  }, [beginRead, loadBoardQuietly, loadAlertsQuietly, loadJoining, refresh, waitingOnOps, staff]);
 
   useLiveRefresh(["jobs", "orders", "payouts", "identity", "approvals", "catalog", "services", "availability"], reload);
   // The board strip's photo links expire in five minutes; a resume re-reads
@@ -205,8 +214,13 @@ export default function HomeScreen() {
   const firstLoad = loading && !loaded;
 
   const headline = homeHeadline(jobs);
-  const obligations = buildObligations(jobs);
-  const [first, ...rest] = obligations;
+  const todo = buildTodo(jobs);
+  // With an Express card on top, the card owns the yellow; otherwise the first
+  // obligation still gets the card and the action it always had.
+  const first: Obligation | undefined = todo.express.length ? undefined : todo.after[0];
+  const rest = todo.express.length ? todo.after : todo.after.slice(1);
+  const thingsToDo = todo.express.length + todo.after.length;
+  const expressOn = !staff && listings.some((listing) => listing.express === true);
   /*
     The first-run tour starts here, once, for a shop with no job on its books
     (`lib/tour.ts`). A shop still with Operations has none by definition. Its
@@ -224,6 +238,10 @@ export default function HomeScreen() {
   */
   const notReady = readiness != null && !readiness.ready;
   const listingNames = Object.fromEntries(listings.map((l) => [l.id, l.name]));
+
+  function openJob(orderId: string) {
+    router.push({ pathname: "/job/[id]", params: { id: orderId } });
+  }
 
   function open(obligation: Obligation) {
     router.push({
@@ -262,14 +280,35 @@ export default function HomeScreen() {
         */}
         <ScreenHeader
           eyebrow={greeting(clerkDisplayName(clerkUser) || user?.name)}
-          title={user?.supplierName || "Your shop"}
+          title={
+            waitingOnOps || !loaded ? user?.supplierName || "Your shop" : todoTitle(thingsToDo)
+          }
           right={
-            <View className="flex-row items-center" accessibilityState={{ busy: alertsRead.loading }}>
-              <ChatButton />
+            <View className="flex-row items-center gap-1" accessibilityState={{ busy: alertsRead.loading }}>
+              <ThemeToggle />
+              {staff ? null : <ChatButton />}
               <AlertsBell />
             </View>
           }
         />
+
+        {/*
+          Whether clients can send this shop Express jobs. The switch is on each
+          document listing, so the pill opens Products; Staff never see it.
+        */}
+        {expressOn ? (
+          <Pressable
+            onPress={() => router.push("/(tabs)/catalogues")}
+            accessibilityRole="button"
+            accessibilityLabel="Express is on. Open your products."
+            className="gg-touch mb-4 flex-row items-center gap-1.5 self-start rounded-pill border border-outline bg-surface px-3"
+            style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+            testID="express-on-pill"
+          >
+            <Zap size={14} color={colors.info} strokeWidth={2.25} />
+            <Text className="text-caption font-medium text-text-primary">Express on</Text>
+          </Pressable>
+        ) : null}
 
         {/*
           An editorial change to a legal document: read once, never asked to
@@ -398,79 +437,93 @@ export default function HomeScreen() {
                 />
               </View>
             ) : null}
-            {/* One figure, in the same place every day. */}
-            <Pressable
-              onPress={() => router.push("/payout")}
-              accessibilityRole="button"
-              accessibilityLabel={`${headline.label}. Open earnings.`}
-              className="gg-card flex-row items-start gap-3"
-              style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
-            >
-              <View className="min-w-0 flex-1 gap-1">
-                <Text className="text-caption text-text-muted">{headline.label}</Text>
-                {/*
-                  Monochrome, deliberately. This is the biggest type on the
-                  screen and its label says exactly what it is; painting it
-                  yellow as well would put a second attention magnet next to
-                  the one action the screen wants pressed.
-                */}
-                <Text
-                  className="text-display text-text-primary"
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                >
-                  {api.formatPhp(headline.amountMinor)}
-                </Text>
-                <Text className="text-body text-text-secondary">{headline.detail}</Text>
-              </View>
-              <View className="pt-0.5">
-                <ChevronRight size={20} color={colors.textMuted} aria-hidden />
-              </View>
-            </Pressable>
-
-            {first ? (
-              <View className="mt-6 gap-2">
-                <Text className="text-overline text-text-muted">TODAY</Text>
-                <NextCard
-                  obligation={first}
-                  job={jobs.find((job) => job.id === first.orderId)}
-                  onPress={() => open(first)}
-                />
-                {rest.map((obligation) => (
-                  <ObligationRow
-                    key={obligation.id}
-                    obligation={obligation}
-                    onPress={() => open(obligation)}
-                  />
+            {todo.express.length ? (
+              <View className="gap-3" testID="express-cards">
+                {todo.express.map((job) => (
+                  <ExpressJobCard key={job.id} job={job} reload={reload} staff={staff} />
                 ))}
-                {rest.length === 0 ? (
-                  <Text className="mt-1 text-caption text-text-muted">
-                    Nothing else needs you today. Schedule shows what is coming.
-                  </Text>
+              </View>
+            ) : null}
+
+            {first || rest.length ? (
+              <View className={todo.express.length ? "mt-6 gap-2" : "gap-2"}>
+                <Text className="text-body font-medium text-text-secondary">
+                  {todo.express.length ? "After that" : "Today"}
+                </Text>
+                {first ? (
+                  <NextCard
+                    obligation={first}
+                    job={jobs.find((job) => job.id === first.orderId)}
+                    hideMoney={staff}
+                    onPress={() => open(first)}
+                  />
                 ) : null}
-              </View>
-            ) : (
-              <View className="mt-6">
-                {/*
-                  With nothing owed, the sharpest thing on this screen is an
-                  unfinished board — so the yellow goes there and schedule
-                  steps down to a quiet action. One yellow, always on the thing
-                  most worth doing next.
-                */}
-                <EmptyState
-                  title="Nothing owed today"
-                  body="No job is waiting on a decision, a proof or a handover from you. Check Schedule for what is coming, or Jobs when GRIDGO matches new work."
-                  {...(needsBoardWork || notReady
-                    ? {
-                        secondaryLabel: "Open schedule",
-                        onSecondary: () => router.push("/(tabs)/schedule"),
+                {rest.map((obligation) => {
+                  const job = jobs.find((row) => row.id === obligation.orderId);
+                  const quick = job ? quickAction(job) : null;
+                  return (
+                    <TodoRow
+                      key={obligation.id}
+                      obligation={obligation}
+                      job={job}
+                      quick={quick}
+                      hideMoney={staff}
+                      onOpen={() => openJob(obligation.orderId)}
+                      onQuick={() =>
+                        quick &&
+                        router.push({
+                          pathname: quick.route,
+                          params: { id: obligation.orderId, action: quick.kind },
+                        })
                       }
-                    : {
-                        actionLabel: "Open schedule",
-                        onAction: () => router.push("/(tabs)/schedule"),
-                      })}
-                />
+                    />
+                  );
+                })}
               </View>
+            ) : !todo.express.length ? (
+              <EmptyState
+                title="Nothing to do right now"
+                body="No job is waiting on you. A new one lands here with a sound, and Express jobs come first."
+                {...(needsBoardWork || notReady || staff
+                  ? {}
+                  : {
+                      secondaryLabel: "Open schedule",
+                      onSecondary: () => router.push("/(tabs)/schedule"),
+                    })}
+              />
+            ) : null}
+
+            {/* Every job and the week, one tap from the floor. */}
+            <View className="mt-4 flex-row flex-wrap gap-2">
+              <TourTarget step="home.jobsTab">
+                <LinkPill label="All jobs" onPress={() => router.push("/(tabs)/jobs")} testID="todo-all-jobs" />
+              </TourTarget>
+              {staff ? null : (
+                <LinkPill label="Schedule" onPress={() => router.push("/(tabs)/schedule")} testID="todo-schedule" />
+              )}
+            </View>
+
+            {/*
+              The Owner's one figure: money that has stopped moving, as a line
+              under the work rather than above it. Staff never see it.
+            */}
+            {staff ? null : (
+              <Pressable
+                onPress={() => router.push("/(tabs)/money")}
+                accessibilityRole="button"
+                accessibilityLabel={`${headline.label}: ${api.formatPhp(headline.amountMinor)}. Open Money.`}
+                className="gg-touch mt-6 flex-row items-center gap-3 rounded-card bg-surface-variant px-4 py-3"
+                style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+                testID="todo-money-line"
+              >
+                <View className="min-w-0 flex-1">
+                  <Text className="text-caption text-text-muted">{headline.label}</Text>
+                  <Text className="text-h3 text-text-primary" numberOfLines={1} adjustsFontSizeToFit>
+                    {api.formatPhp(headline.amountMinor)}
+                  </Text>
+                </View>
+                <ChevronRight size={20} color={colors.textMuted} aria-hidden />
+              </Pressable>
             )}
 
             {/*
@@ -534,10 +587,12 @@ export default function HomeScreen() {
 function NextCard({
   obligation,
   job,
+  hideMoney,
   onPress,
 }: {
   obligation: Obligation;
   job?: api.Order;
+  hideMoney: boolean;
   onPress: () => void;
 }) {
   return (
@@ -562,7 +617,7 @@ function NextCard({
         <Text className="text-h2 text-text-primary">{obligation.title}</Text>
         {/* The same Tight badge the job screen shows: it is why the shop may decline. */}
         {job && isTightBeforeAccepting(job) ? <SchedulingNotice order={job} compact /> : null}
-        {obligation.kind === "proof" && obligation.amountMinor != null ? (
+        {obligation.kind === "proof" && obligation.amountMinor != null && !hideMoney ? (
           <Text className="text-body-lg font-medium text-text-primary">
             {api.formatPhp(obligation.amountMinor)} waits on this photo
           </Text>

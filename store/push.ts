@@ -13,6 +13,11 @@ import {
   PUSH_CHANNEL,
   PUSH_CHANNEL_ID,
   PUSH_PRODUCTION_NUDGE_CHANNEL_ID,
+  PUSH_EXPRESS_CHANNEL_ID,
+  EXPRESS_VIBRATION,
+  EXPRESS_OFFER_CATEGORY,
+  EXPRESS_ACCEPT_ACTION,
+  EXPRESS_SEE_ACTION,
   pushTokenProvider,
   readPushPermission,
   type ChannelAudibility,
@@ -125,10 +130,29 @@ function isUnclaimedRouteAbsent(error: unknown): boolean {
  * exists — so this runs before the first permission read, not before the first
  * notification.
  */
+/**
+ * Accept and See job on an Express offer (`EXPRESS_OFFER_CATEGORY`). Both
+ * platforms; a phone that refuses categories still gets the plain notification.
+ */
+async function ensureExpressCategory(Notifications: NonNullable<ReturnType<typeof notifications>>): Promise<void> {
+  try {
+    await withDeadline(
+      Notifications.setNotificationCategoryAsync(EXPRESS_OFFER_CATEGORY, [
+        { identifier: EXPRESS_ACCEPT_ACTION, buttonTitle: "Accept", options: { opensAppToForeground: true } },
+        { identifier: EXPRESS_SEE_ACTION, buttonTitle: "See job", options: { opensAppToForeground: true } },
+      ]),
+      api.API_REQUEST_MS,
+    );
+  } catch {
+    // Buttons are a shortcut; the notification itself still opens the job.
+  }
+}
+
 async function ensureChannel(): Promise<ChannelAudibility> {
-  if (Platform.OS !== "android") return "unknown";
   const Notifications = notifications();
   if (!Notifications) return "unknown";
+  await ensureExpressCategory(Notifications);
+  if (Platform.OS !== "android") return "unknown";
   await withDeadline(Notifications.setNotificationChannelAsync(PUSH_CHANNEL_ID, {
     name: PUSH_CHANNEL.name,
     description: PUSH_CHANNEL.description,
@@ -146,6 +170,17 @@ async function ensureChannel(): Promise<ChannelAudibility> {
     sound: PRODUCTION_NUDGE_SOUND,
     enableVibrate: true,
     vibrationPattern: [0, 250, 250, 250],
+  }), api.API_REQUEST_MS);
+  await withDeadline(Notifications.setNotificationChannelAsync(PUSH_EXPRESS_CHANNEL_ID, {
+    name: "New Express jobs",
+    description: "A new Express job to accept within five minutes.",
+    importance: Notifications.AndroidImportance.MAX,
+    enableVibrate: true,
+    vibrationPattern: [...EXPRESS_VIBRATION],
+    // The lock screen shows the offer itself: Accept is meant to be pressed there.
+    ...(Notifications.AndroidNotificationVisibility
+      ? { lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC }
+      : {}),
   }), api.API_REQUEST_MS);
   // Android keeps the shop's own choices on an existing channel, so what was
   // asked for above is not necessarily what is installed. Read it back.
