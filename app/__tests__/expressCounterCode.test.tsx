@@ -74,6 +74,7 @@ describe("counter code entry", () => {
 
   /** gridgo-supplier#269: the screen's own pad, so the boxes are never under the keyboard. */
   it("takes the code from the number pad and hands over on the sixth digit", async () => {
+    (api.getOrder as jest.Mock).mockResolvedValue({ ...ready, paymentMethod: "qr_manual" });
     (api.enterCounterCode as jest.Mock).mockResolvedValue(undefined);
     const view = await render(<CounterCodeScreen />);
     const input = await screen.findByTestId("counter-code-input");
@@ -87,6 +88,13 @@ describe("counter code entry", () => {
     await fireEvent.press(screen.getByTestId("number-pad-9"));
     expect(api.enterCounterCode).toHaveBeenCalledWith("ord_x", "482119");
     expect(await screen.findByTestId("counter-code-done")).toBeTruthy();
+    await view.unmount();
+  });
+
+  it("never says already paid when the method is unknown", async () => {
+    const view = await render(<CounterCodeScreen />);
+    await screen.findByTestId("counter-code-input");
+    expect(screen.queryByTestId("counter-code-paid")).toBeNull();
     await view.unmount();
   });
 

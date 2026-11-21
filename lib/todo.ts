@@ -42,11 +42,13 @@ export function paymentLine(order: Pick<Order, "paymentMethod" | "payments">): s
 }
 
 /**
- * Nothing to collect at the counter. Cash is delivery-only and goes to the
- * rider, so a client collecting here has always paid.
+ * Nothing to collect at the counter: only when GRIDGO says the client paid in
+ * the app or by voucher. A missing or unknown method says nothing, because
+ * "Don't collect cash" on a guess could cost the shop the job's money.
  */
 export function alreadyPaidAtCounter(order: Pick<Order, "paymentMethod" | "payments">): boolean {
-  return paymentKind(order) !== "cash";
+  const kind = paymentKind(order);
+  return kind === "in_app" || kind === "voucher";
 }
 
 /* -------------------------------------------------------------------------- */

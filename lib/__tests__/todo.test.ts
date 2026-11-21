@@ -57,6 +57,12 @@ describe("how the client paid", () => {
   it("only cash is collected; everything else is already paid at the counter", () => {
     expect(alreadyPaidAtCounter(express())).toBe(true);
     expect(alreadyPaidAtCounter(regular())).toBe(false);
+    expect(alreadyPaidAtCounter(express({ payments: { initial: { method: "gridgo_voucher" } } } as never))).toBe(true);
+  });
+
+  it("never says already paid when the method is missing or unknown", () => {
+    expect(alreadyPaidAtCounter(express({ paymentMethod: null, payments: {} } as never))).toBe(false);
+    expect(alreadyPaidAtCounter(express({ paymentMethod: "something_new", payments: { initial: { method: "something_new" } } } as never))).toBe(false);
   });
 });
 
