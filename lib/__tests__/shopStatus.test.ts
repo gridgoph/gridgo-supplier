@@ -126,3 +126,12 @@ describe("words around the status", () => {
     expect(changeSentence({ temporarilyClosed: true })).toMatch(/closed/);
   });
 });
+
+describe("the night printer ping", () => {
+  it("opens To do, where the next Express offer lands", () => {
+    const { pushTargetRoute } = jest.requireActual("@/lib/push") as typeof import("@/lib/push");
+    expect(pushTargetRoute({ notificationId: "ntf_1", type: "printer_demand", orderId: null, at: "2026-11-22T13:00:00Z" })).toBe(
+      "/(tabs)/home",
+    );
+  });
+});

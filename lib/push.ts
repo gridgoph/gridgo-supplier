@@ -262,6 +262,9 @@ export function supportThreadRoute(threadId: string | null | undefined): string 
  * the owner's own notification names (`usePushNotifications` reads it); without
  * one it opens the chat history.
  */
+/** GRIDGO's opt-in night ping (gridgo-api `docs/EXPRESS_API.md#opt-in-demand-pings`). */
+export const PRINTER_DEMAND_PUSH_TYPE = "printer_demand";
+
 export function pushTargetRoute(data: PushData, threadId: string | null = null): string {
   // A tester's daily reminder is local, names no job, and Home holds the check-in card.
   if (data.type === TESTER_REMINDER_TYPE) return "/(tabs)/home";
@@ -269,6 +272,9 @@ export function pushTargetRoute(data: PushData, threadId: string | null = null):
   if (data.type === PLAY_OPTIN_PUSH_TYPE) return `${PLAY_OPTIN_ROUTE}?from=push`;
   if (data.type === SUPPORT_MESSAGE_PUSH_TYPE) return supportThreadRoute(threadId);
   if (data.type === SHOP_HOURS_NOTICE) return SHOP_HOURS_ROUTE;
+  // "Clients near you need a printer" (opt-in, at night): the next Express
+  // offer lands on To do, so that is where the ping opens (gridgo-supplier#267).
+  if (data.type === PRINTER_DEMAND_PUSH_TYPE) return "/(tabs)/home";
   // A performance notice or warning opens the shop's Performance at that job's notice.
   if (data.type === PERFORMANCE_ALERT) return data.orderId ? `${PERFORMANCE_ROUTE}?orderId=${encodeURIComponent(data.orderId)}` : PERFORMANCE_ROUTE;
   if (!data.orderId) return "/alerts";
