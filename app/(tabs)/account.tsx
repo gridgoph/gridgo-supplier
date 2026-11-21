@@ -8,20 +8,25 @@ import { AlertsBell } from "@/components/AlertsBell";
 import { ChatButton } from "@/components/ChatButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
-import { ShopPortrait } from "@/components/ShopPortrait";
+import { ProductRail } from "@/components/myshop/ProductRail";
+import { ShopSignCard } from "@/components/myshop/ShopSignCard";
 import { StatusChip } from "@/components/StatusChip";
+import { useBoard } from "@/hooks/useBoard";
+import { useReadiness } from "@/hooks/useReadiness";
 import * as api from "@/lib/api";
 import { clerkDisplayName } from "@/lib/clerk";
 import { pendingCount } from "@/lib/shopTeam";
 import { performanceHref } from "@/lib/performance";
 import { standingLine } from "@/lib/reviews";
 import { shopHoursSummary } from "@/lib/shopHours";
+import { nightChipLabel, signOf } from "@/lib/shopStatus";
 import { WHATS_NEW_HISTORY_COPY } from "@/lib/whatsNewHistory";
 import { useThemeColors } from "@/hooks/useTheme";
 import { askConfirm } from "@/store/sheets";
 import { isMatchable, isShopStaff, useSession } from "@/store/session";
 import { useShopContact } from "@/store/shopContact";
 import { useShopHours } from "@/store/shopHours";
+import { useShopStatus } from "@/store/shopStatus";
 import { useTour } from "@/store/tour";
 
 /**
@@ -53,6 +58,13 @@ function StaffAccount() {
   const logout = useSession((s) => s.logout);
   const { user: clerkUser } = useUser();
   const personName = clerkDisplayName(clerkUser) || user?.name || "—";
+  const shopStatus = useShopStatus((s) => s.status);
+  const loadStatus = useShopStatus((s) => s.load);
+  useFocusEffect(
+    useCallback(() => {
+      void loadStatus();
+    }, [loadStatus]),
+  );
 
   async function signOut() {
     const confirmed = await askConfirm({
@@ -69,25 +81,21 @@ function StaffAccount() {
     <View className="gg-screen">
       <ScrollView className="flex-1" contentContainerClassName="gg-page pb-10" showsVerticalScrollIndicator={false}>
         <ScreenHeader title="My shop" right={<AlertsBell />} />
-        <View className="gg-card gap-3">
-          <View className="flex-row items-center gap-3">
-            <ShopPortrait imageUrl={clerkUser?.imageUrl} shopName={personName} size={56} />
-            <View className="min-w-0 flex-1 gap-0.5">
-              <Text className="text-h3 text-text-primary" numberOfLines={2}>
-                {personName}
-              </Text>
-              <Text className="text-body text-text-secondary" numberOfLines={1}>
-                {user?.supplierName || "Your shop"}
-              </Text>
-              <Text className="text-caption text-text-muted" numberOfLines={1}>
-                {clerkUser?.primaryEmailAddress?.emailAddress || user?.email || ""}
-              </Text>
-            </View>
-          </View>
-          <View className="flex-row">
-            <StatusChip tone="neutral" icon="wrench" label="Staff" />
-          </View>
+        <ShopSignCard
+          shopName={user?.supplierName || "Your shop"}
+          subtitle={personName}
+          status={shopStatus}
+          canChange={false}
+          onSignPress={() => {}}
+          verification={null}
+        />
+        {shopStatus ? null : <StatusLoadNote />}
+        <View className="mt-3 flex-row">
+          <StatusChip tone="neutral" icon="wrench" label="Staff" />
         </View>
+        <Text className="mt-2 text-caption text-text-muted" numberOfLines={1}>
+          {clerkUser?.primaryEmailAddress?.emailAddress || user?.email || ""}
+        </Text>
 
         <View className="mt-6 gap-2">
           <DestinationRow
@@ -115,7 +123,6 @@ function OwnerAccount() {
   const logout = useSession((s) => s.logout);
   const refresh = useSession((s) => s.refresh);
   const { user: clerkUser } = useUser();
-  const colors = useThemeColors();
   const approved = isMatchable(user);
   // The card is the way into "Your shop details", so it names the shop's
   // contact person from there; the sign-in's own name is the fallback until
@@ -195,6 +202,61 @@ function OwnerAccount() {
     }, [loadShopHours]),
   );
 
+  // The sign, the chips and the status sheet read one answer.
+  const shopStatus = useShopStatus((s) => s.status);
+  const loadStatus = useShopStatus((s) => s.load);
+  const saveStatus = useShopStatus((s) => s.save);
+  useFocusEffect(
+    useCallback(() => {
+      void loadStatus();
+    }, [loadStatus]),
+  );
+  const [signFeedback, setSignFeedback] = useState<{ ok: boolean; message: string; undo?: boolean } | null>(null);
+
+  // The first few products, with their standing, for the rail.
+  const board = useBoard(PRODUCT_RAIL_QUERY);
+  const { readiness } = useReadiness();
+
+  const night = shopStatus ? nightChipLabel(shopStatus.nightJobs) : null;
+  const hoursDetail = [
+    shopHours ? shopHoursSummary(shopHours, new Date()) : "When you open, closure dates, and closing for a while",
+    night,
+  ]
+    .filter(Boolean)
+    .join(". ");
+
+  async function changeStatus(patch: { temporarilyClosed: boolean } | { pause: null }) {
+    setSignFeedback(null);
+    const outcome = await saveStatus(patch);
+    if (!outcome.message) return;
+    setSignFeedback({
+      ok: outcome.ok,
+      message: outcome.message,
+      undo: outcome.ok && "temporarilyClosed" in patch && patch.temporarilyClosed,
+    });
+  }
+
+  /** The sign does what its word suggests; closing asks first. */
+  async function pressSign() {
+    if (!shopStatus) return;
+    const sign = signOf(shopStatus, new Date());
+    if (sign.action === "hours") {
+      router.push("/shop-hours" as Href);
+      return;
+    }
+    if (sign.action === "open") return changeStatus({ temporarilyClosed: false });
+    if (sign.action === "resume") return changeStatus({ pause: null });
+    const confirmed = await askConfirm({
+      question: "Close your shop now?",
+      consequence:
+        "Clients cannot send you new jobs until you open it again. Jobs you already have still finish. To stop for a short while, pause from Shop status instead.",
+      confirmLabel: "Close shop",
+      cancelLabel: "Stay open",
+      destructive: true,
+    });
+    if (confirmed) await changeStatus({ temporarilyClosed: true });
+  }
+
   async function signOut() {
     const confirmed = await askConfirm({
       question: "Sign out of GRIDGO on this phone?",
@@ -225,63 +287,59 @@ function OwnerAccount() {
         />
 
         {/*
-          Identity first, and the one status that governs everything else.
-
-          The card is also the way into correcting it. This is where a shop
-          reads its own name, so it is where a wrong one is noticed, and a fact
-          you can see but not reach is the thing that sends a shop to
-          Operations for a typo. The chevron is the same one every destination
-          below uses, so the card reads as a way through rather than a panel
-          that happens to respond to a tap.
+          Identity, whether the shop is open, and the chips that open the
+          status sheet (gridgo-supplier#267). The shop's name still opens its
+          details: this is where a shop reads its own name, so it is where a
+          wrong one is noticed.
         */}
-        <Pressable
-          onPress={() => router.push("/shop-details")}
-          accessibilityRole="button"
-          accessibilityLabel="Your shop details"
-          accessibilityHint="Change your shop photo, name, contact person, number and email"
-          className="gg-card gap-3"
-          style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
-        >
-          <View className="flex-row items-center gap-3">
-            <ShopPortrait
-              imageUrl={clerkUser?.imageUrl}
-              shopName={user?.supplierName || "Your shop"}
-              size={56}
-            />
-            <View className="min-w-0 flex-1 gap-0.5">
-              <Text className="text-h3 text-text-primary" numberOfLines={2}>
-                {user?.supplierName || "Your shop"}
-              </Text>
-              <Text className="text-body text-text-secondary" numberOfLines={1}>
-                {personName}
-              </Text>
-              <Text className="text-caption text-text-muted" numberOfLines={1}>
-                {user?.email || "—"}
-              </Text>
-            </View>
-            <ChevronRight size={20} color={colors.textMuted} aria-hidden />
-          </View>
-          {/*
-            The chip sits under the whole row rather than beside the name, so it
-            reads as the standing of the shop and not as a label on the picture.
-            Approved shops get the chip and nothing else — the sentence that
-            used to follow it explained a rule nobody was about to break, and a
-            paragraph a shop reads once and skips forever is a paragraph that
-            teaches it to skip the one under it that matters.
-          */}
-          <View className="flex-row">
-            {approved ? (
-              <StatusChip tone="success" icon="circle-check" label="Accredited" />
-            ) : (
-              <StatusChip tone="warning" icon="clock" label="With Operations" />
-            )}
-          </View>
-          {approved ? null : (
-            <Text className="text-caption text-text-muted">
-              Operations is reviewing your shop. No job is matched until they approve.
+        <ShopSignCard
+          shopName={user?.supplierName || "Your shop"}
+          imageUrl={clerkUser?.imageUrl}
+          subtitle={user?.shop?.label || personName}
+          status={shopStatus}
+          canChange
+          onSignPress={() => void pressSign()}
+          verification={{ approved }}
+          onDetailsPress={() => router.push("/shop-details")}
+        />
+        {approved ? null : (
+          <Text className="mt-2 text-caption text-text-muted">
+            Operations is reviewing your shop. No job is matched until they approve.
+          </Text>
+        )}
+        {shopStatus ? null : <StatusLoadNote />}
+        {signFeedback ? (
+          <View className="mt-3 flex-row items-center gap-3" accessibilityLiveRegion="polite">
+            <Text
+              className={signFeedback.ok ? "min-w-0 flex-1 text-body text-success" : "min-w-0 flex-1 text-body text-error"}
+              testID="sign-feedback"
+            >
+              {signFeedback.message}
             </Text>
-          )}
-        </Pressable>
+            {signFeedback.undo ? (
+              <Pressable
+                onPress={() => void changeStatus({ temporarilyClosed: false })}
+                accessibilityRole="button"
+                accessibilityLabel="Undo, open the shop again"
+                className="gg-touch justify-center px-2"
+              >
+                <Text className="text-button text-text-primary underline">Undo</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        <View className="mt-6">
+          <ProductRail
+            listings={board.listings}
+            total={board.total}
+            services={board.services}
+            readiness={readiness}
+            shopApproved={approved}
+            loading={board.loading}
+            error={board.error}
+          />
+        </View>
 
         <View className="mt-6 gap-2">
           <Text className="text-overline text-text-muted">YOUR SHOP</Text>
@@ -305,11 +363,6 @@ function OwnerAccount() {
             badge={team?.waiting ? team.waiting : undefined}
             onPress={() => router.push("/team" as Href)}
           />
-          <DestinationRow
-            title="Products"
-            detail="What clients see: prices, samples and Express"
-            onPress={() => router.push("/(tabs)/catalogues")}
-          />
           {approved ? (
             <DestinationRow
               title="Services you offer"
@@ -318,12 +371,8 @@ function OwnerAccount() {
             />
           ) : null}
           <DestinationRow
-            title="Shop hours & closures"
-            detail={
-              shopHours
-                ? shopHoursSummary(shopHours, new Date())
-                : "When you open, closure dates, and closing for a while"
-            }
+            title="Hours and night jobs"
+            detail={hoursDetail}
             onPress={() => router.push("/shop-hours" as Href)}
           />
           <DestinationRow
@@ -480,4 +529,17 @@ function DestinationRow({
       <ChevronRight size={20} color={colors.textMuted} aria-hidden />
     </Pressable>
   );
+}
+
+/** The rail asks for a short first page; See all opens the whole board. */
+const PRODUCT_RAIL_QUERY = { limit: 8 };
+
+/** Said in place of the sign while GRIDGO's status answer is missing. */
+function StatusLoadNote() {
+  const phase = useShopStatus((s) => s.phase);
+  const error = useShopStatus((s) => s.error);
+  if (phase === "failed" && error) {
+    return <Text className="mt-2 text-caption text-error">{error}</Text>;
+  }
+  return null;
 }

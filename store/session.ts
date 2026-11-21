@@ -3,6 +3,7 @@ import { useToasts } from "@/store/toasts";
 import { useAccountDeletion } from "@/store/accountDeletion";
 import { useShopContact } from "@/store/shopContact";
 import { useShopHours } from "@/store/shopHours";
+import { useShopStatus } from "@/store/shopStatus";
 import { afterShopPlanLoads, useShopPlan } from "@/store/shopPlan";
 import { usePrivacyRequests } from "@/store/privacyRequests";
 import { useSignInNotice } from "@/store/signInNotice";
@@ -525,6 +526,7 @@ useSession.subscribe((state, previous) => {
   if (next) useSignInNotice.getState().clear();
   else useSignInNotice.getState().forgetHeld();
   useShopHours.getState().reset();
+  useShopStatus.getState().reset();
   useShopContact.getState().reset();
   // Tester reminders belong to the shop signed in: signing out cancels them,
   // and the next account's open plans its own.

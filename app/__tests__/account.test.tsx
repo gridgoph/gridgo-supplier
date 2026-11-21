@@ -96,12 +96,11 @@ describe("the shop's account", () => {
     });
   });
 
-  it("leads with the shop, the person and the sign-in", async () => {
+  it("leads with the shop and the person", async () => {
     view = await render(<AccountScreen />);
 
     expect(await screen.findByText("Lovis Printshop")).toBeTruthy();
     expect(screen.getByText("Ben Santos")).toBeTruthy();
-    expect(screen.getByText("ben@lovisprint.ph")).toBeTruthy();
     expect(screen.getByLabelText("Lovis Printshop, shop photo")).toBeTruthy();
   });
 

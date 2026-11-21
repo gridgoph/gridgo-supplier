@@ -5,8 +5,8 @@ import { useUser } from "@clerk/expo";
 import { useTourAutoStart, useTourScreen } from "@/hooks/useTourScreen";
 import { useCallback, useEffect, useState } from "react";
 import { AppState, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
-import { ChevronRight, Zap } from "lucide-react-native";
-import { router, useFocusEffect } from "expo-router";
+import { ChevronDown, ChevronRight, Zap } from "lucide-react-native";
+import { router, useFocusEffect, type Href } from "expo-router";
 
 import { AlertsBell } from "@/components/AlertsBell";
 import { ChatButton } from "@/components/ChatButton";
@@ -35,9 +35,11 @@ import { quickAction, todoTitle } from "@/lib/todo";
 import { boardCountLine, boardPrompt, photoViewUrl, type Listing, type ServiceLine } from "@/lib/listings";
 import { loadBoard } from "@/lib/listingsApi";
 import { isTightBeforeAccepting } from "@/lib/scheduling";
+import { statusPillLabel } from "@/lib/shopStatus";
 import { useAlertsStore } from "@/store/alerts";
 import { isMatchable, isShopStaff, useSession } from "@/store/session";
 import { usePlayOptIn } from "@/store/playOptIn";
+import { useShopStatus } from "@/store/shopStatus";
 import { useTesterProgram } from "@/store/testerProgram";
 import { loadServiceLines } from "@/hooks/useBoard";
 import { loadReadiness } from "@/hooks/useReadiness";
@@ -183,6 +185,14 @@ export default function HomeScreen() {
     }, [reload]),
   );
 
+  // The status pill's answer, shared with My shop and the status sheet.
+  const shopStatus = useShopStatus((s) => s.status);
+  useFocusEffect(
+    useCallback(() => {
+      void useShopStatus.getState().load();
+    }, []),
+  );
+
   /*
     A Google Play tester's open is the day's check-in, and so is coming back
     to the app on a new day. Nothing at all for an account that is not
@@ -220,7 +230,6 @@ export default function HomeScreen() {
   const first: Obligation | undefined = todo.express.length ? undefined : todo.after[0];
   const rest = todo.express.length ? todo.after : todo.after.slice(1);
   const thingsToDo = todo.express.length + todo.after.length;
-  const expressOn = !staff && listings.some((listing) => listing.express === true);
   /*
     The first-run tour starts here, once, for a shop with no job on its books
     (`lib/tour.ts`). A shop still with Operations has none by definition. Its
@@ -293,20 +302,25 @@ export default function HomeScreen() {
         />
 
         {/*
-          Whether clients can send this shop Express jobs. The switch is on each
-          document listing, so the pill opens Products; Staff never see it.
+          The status pill (gridgo-supplier#267): what clients can send this
+          shop right now, in a few words, opening the status sheet. It replaced
+          the old "Express on" pill that sent a shop to Products to find a
+          switch. Staff see it too; the sheet holds its controls still for them.
         */}
-        {expressOn ? (
+        {shopStatus ? (
           <Pressable
-            onPress={() => router.push("/(tabs)/catalogues")}
+            onPress={() => router.push("/shop-status" as Href)}
             accessibilityRole="button"
-            accessibilityLabel="Express is on. Open your products."
+            accessibilityLabel={`${statusPillLabel(shopStatus, new Date())}. Open shop status.`}
             className="gg-touch mb-4 flex-row items-center gap-1.5 self-start rounded-pill border border-outline bg-surface px-3"
             style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
-            testID="express-on-pill"
+            testID="shop-status-pill"
           >
-            <Zap size={14} color={colors.info} strokeWidth={2.25} />
-            <Text className="text-caption font-medium text-text-primary">Express on</Text>
+            <Zap size={14} color={shopStatus.expressEnabled ? colors.info : colors.textMuted} strokeWidth={2.25} />
+            <Text className="text-caption font-medium text-text-primary">
+              {statusPillLabel(shopStatus, new Date())}
+            </Text>
+            <ChevronDown size={14} color={colors.textMuted} aria-hidden />
           </Pressable>
         ) : null}
 

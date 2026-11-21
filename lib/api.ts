@@ -2429,6 +2429,26 @@ export async function updateShopHours(
   });
 }
 
+/**
+ * The shop's status for My shop and the status sheet (gridgo-api
+ * `docs/EXPRESS_API.md#my-shop-status-and-night-documents`). Read through
+ * `normalizeShopStatus` in `lib/shopStatus.ts`. Staff may read; only the Owner
+ * may write.
+ */
+export async function getShopStatus(): Promise<unknown> {
+  return request<unknown>("/me/shop-status");
+}
+
+export async function updateShopStatus(
+  version: number,
+  patch: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>("/me/shop-status", {
+    method: "PATCH",
+    body: JSON.stringify({ ...patch, expectedVersion: version }),
+  });
+}
+
 /* --------------------------------------------------------------------------
  * Reviews: what clients said about each finished job, read back.
  * ------------------------------------------------------------------------ */
