@@ -88,7 +88,18 @@ describe("Staff reach only the work", () => {
       (name) => !reachable({ ...STAFF, signedIn: false, floorOpen: false, matchable: false }).includes(name),
     );
     expect(staffOnly).toEqual(
-      ["(tabs)", "alerts", "confirm", "job/[id]", "pick", "pick-date", "push-prompt", "settings", "whats-new"].sort(),
+      [
+        "(tabs)",
+        "alerts",
+        "confirm",
+        "job/[id]",
+        "pick",
+        "pick-date",
+        "push-prompt",
+        "settings",
+        "shop-status",
+        "whats-new",
+      ].sort(),
     );
   });
 
