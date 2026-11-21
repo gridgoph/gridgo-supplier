@@ -95,14 +95,19 @@ export const useShopWorker = create<ShopWorkerState>()(
       },
 
       lock: async () => {
-        // GRIDGO locks by this login's device session, so the call needs no
-        // worker token; the phone is handed back at once, before the answer.
+        // The phone is handed back at once; the lock goes to GRIDGO with the
+        // turn's token still on it, and the token is dropped after either way.
+        // Best effort: GRIDGO keeps a device lock of its own (a database-backed
+        // session lock), so a lost answer never falls back to the Owner.
         set({ worker: null, notice: null });
-        api.setWorkerToken(null);
         useSession.getState().lockDevice();
-        // Best effort: an expired turn is already locked, and GRIDGO never
-        // falls back to the Owner either way.
-        await api.lockWorker().catch(() => undefined);
+        try {
+          await api.lockWorker();
+        } catch {
+          // An expired turn is already locked.
+        } finally {
+          api.setWorkerToken(null);
+        }
       },
 
       lost: (code) => {

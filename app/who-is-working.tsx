@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -44,7 +44,9 @@ export default function WhoIsWorkingScreen() {
   const logout = useSession((s) => s.logout);
   const [people, setPeople] = useState<TeamPerson[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [picked, setPicked] = useState<TeamPerson | null>(null);
+  const [chosen, setPicked] = useState<TeamPerson | null>(null);
+  // A picked person who left the team is not a choice any more.
+  const picked = chosen && people?.some((person) => person.key === chosen.key) ? chosen : null;
   const [pin, setPin] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,11 +66,6 @@ export default function WhoIsWorkingScreen() {
       void load();
     }, [load]),
   );
-
-  // A picked person who left the team is not a choice any more.
-  useEffect(() => {
-    if (picked && people && !people.some((person) => person.key === picked.key)) setPicked(null);
-  }, [people, picked]);
 
   async function submit(next: string) {
     if (!picked || busy || next.length !== 4) return;
@@ -106,7 +103,7 @@ export default function WhoIsWorkingScreen() {
       <FormScrollView contentClassName="gg-page gap-6 pb-10">
         <View className="gap-1" style={{ paddingTop: insets.top + spacing.md }}>
           <Text className="text-body text-text-secondary" numberOfLines={1}>
-            {shopName ? `${shopName} · shop phone` : "Shop phone"}
+            {shopName ? `Shop phone for ${shopName}` : "Shop phone"}
           </Text>
           <Text className="text-h1 text-text-primary" accessibilityRole="header">
             Who&apos;s working?
@@ -206,7 +203,10 @@ export default function WhoIsWorkingScreen() {
             />
           </View>
         ) : people && people.length ? (
-          <Text className="text-center text-body text-text-secondary">Tap your face to start.</Text>
+          <View className="gap-4">
+            {problem ? <ErrorNotice message={problem} announce /> : null}
+            <Text className="text-center text-body text-text-secondary">Tap your face to start.</Text>
+          </View>
         ) : null}
 
         <View className="gap-2 pt-4">

@@ -3,7 +3,6 @@ import { Users } from "lucide-react-native";
 
 import { TeamFace } from "@/components/team/TeamFace";
 import { useThemeColors } from "@/hooks/useTheme";
-import { roleLabel } from "@/lib/shopTeam";
 import { useSession } from "@/store/session";
 import { useShopWorker } from "@/store/shopWorker";
 
@@ -20,7 +19,6 @@ import { useShopWorker } from "@/store/shopWorker";
 export function WorkerBar() {
   const colors = useThemeColors();
   const worker = useSession((s) => s.user?.worker ?? null);
-  const role = useSession((s) => s.user?.shopRole);
   const lock = useShopWorker((s) => s.lock);
   if (!worker) return null;
 
@@ -37,7 +35,7 @@ export function WorkerBar() {
           {worker.name} is working
         </Text>
         <Text className="text-caption text-text-muted" numberOfLines={1}>
-          {roleLabel(role)} · every job you touch shows your name
+          Jobs you touch show your name
         </Text>
       </View>
       <Pressable
