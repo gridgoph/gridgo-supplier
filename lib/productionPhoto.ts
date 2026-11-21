@@ -1,4 +1,5 @@
 import type { Order, ProductionProgress, ProductionProgressPhoto } from "@/lib/api";
+import { isExpressDocumentOrder } from "@/lib/expressOrder";
 
 /**
  * The production photo a job needs before it can be packed.
@@ -122,19 +123,24 @@ export function uncountedPhotoProof(
 }
 
 /** The brief row's one line: how many photos, or why none matters yet. */
-export function progressPhotoSummary(order: ProgressOrder): { summary: string; empty: boolean } {
+export function progressPhotoSummary(
+  order: ProgressOrder & Partial<Pick<Order, "orderType">>,
+): { summary: string; empty: boolean } {
   const progress = productionProgressOf(order);
   const count = progress?.photos.length ?? 0;
   if (count) {
     return { summary: `${count} ${count === 1 ? "photo" : "photos"} · the client sees these`, empty: false };
   }
-  if (takesProductionPhoto(order)) return { summary: "None yet · needed before packing", empty: true };
+  // Express has no photo step (gridgo-api `docs/EXPRESS_API.md`).
+  if (takesProductionPhoto(order) && !isExpressDocumentOrder(order)) {
+    return { summary: "None yet · needed before packing", empty: true };
+  }
   return { summary: "No photo on this job", empty: true };
 }
 
 /** Whether the job workspace draws the progress row at all. */
-export function showsProgressPhotos(order: ProgressOrder): boolean {
+export function showsProgressPhotos(order: ProgressOrder & Partial<Pick<Order, "orderType">>): boolean {
   const progress = productionProgressOf(order);
   if (!progress) return false;
-  return progress.photos.length > 0 || takesProductionPhoto(order);
+  return progress.photos.length > 0 || (takesProductionPhoto(order) && !isExpressDocumentOrder(order));
 }

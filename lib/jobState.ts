@@ -5,7 +5,7 @@ import { awaitsCounterCode, isExpressDocumentOrder } from "@/lib/expressOrder";
 import { CURRENT_PAYOUT_PLAN, milestoneDefinition, nextShopProof } from "@/lib/milestones";
 import { counterCheck, presentCheckCodes } from "@/lib/pickupCheck";
 import { needsPackingPhoto } from "@/lib/packingPhoto";
-import { packagingCheck, packagingHeld } from "@/lib/packagingReadiness";
+import { expressReadyNow, packagingCheck, packagingHeld } from "@/lib/packagingReadiness";
 import { paysInFull } from "@/lib/payment";
 import { needsProductionPhoto } from "@/lib/productionPhoto";
 import { owesReceiptScan } from "@/lib/receiptScan";
@@ -153,7 +153,7 @@ export function presentJobStatus(
     | "handoverFlow"
     | "shopHandover"
   > &
-    Partial<Pick<Order, "supplierId" | "riderId" | "payments" | "downpaymentPercent" | "balanceMinor" | "orderType" | "expressOrder" | "fulfillmentMode">>,
+    Partial<Pick<Order, "supplierId" | "riderId" | "payments" | "downpaymentPercent" | "balanceMinor" | "orderType" | "expressOrder" | "fulfillmentMode" | "transitionReadiness">>,
 ): StatePresentation {
   const refund = refundStatus(order);
   if (refund) return refund;
@@ -171,6 +171,8 @@ export function presentJobStatus(
     }
   }
   if (awaitsCounterCode(order)) return { label: "Ready for the client", tone: "success", icon: "circle-check" };
+  // An Express job GRIDGO would take as ready has no photos under review.
+  if (expressReadyNow(order)) return presentOrderState(order.state, order);
   return ridersPack(order)
     ? presentRiderPacksStatus(order) ?? presentOrderState(order.state, order)
     : presentOrderState(order.state, order);
@@ -225,8 +227,9 @@ export function actionsForJob(order: JobActionOrder, now: Date = new Date()): Su
   if (acceptWindow(order, now).kind === "expired") return [];
   const state = order.state;
   const owed = nextShopProof(order as Order);
-  // Packing waits on a photo, and a proof filed as a picture is one.
-  const photoOwed = needsProductionPhoto(order);
+  // Packing waits on a photo, and a proof filed as a picture is one. Not on
+  // an Express job GRIDGO already takes as ready: it has no photo step.
+  const photoOwed = needsProductionPhoto(order) && !expressReadyNow(order);
   const proofStep: SupplierAction | null = owed
     ? {
         kind: "add_proof",
@@ -304,6 +307,9 @@ export function actionsForJob(order: JobActionOrder, now: Date = new Date()): Su
     case "production":
     // Older clients may still leave a job at this state.
     case "supplier_self_qc":
+      // Express skips the shop's photos and GRIDGO's review: its ready step
+      // follows GRIDGO's readiness, not the handover's photo stages.
+      if (expressReadyNow(order)) return demote(proofStep, readyStep(order));
       if (ridersPack(order)) return riderPacksSteps(order, proofStep);
       // A claim, or a stop the shop cannot lift, stands in the way: GRIDGO
       // would refuse every packing step, so none is offered. The job's
@@ -330,25 +336,7 @@ export function actionsForJob(order: JobActionOrder, now: Date = new Date()): Su
         });
       }
       if (owesReceiptScan(order)) return demote(proofStep, receiptScanStep());
-      if (expressPickup(order)) {
-        return demote(proofStep, {
-          kind: "ready_for_pickup",
-          label: "Ready for the client",
-          targetState: "ready_for_dispatch",
-          primary: true,
-          consequence: "The client gets a pickup code. Enter it when they collect.",
-          resultLabel: "Ready for the client",
-        });
-      }
-      return demote(proofStep, {
-        kind: "ready_for_pickup",
-        label: "Package for pickup",
-        targetState: "ready_for_dispatch",
-        primary: true,
-        consequence:
-          "GRIDGO notifies riders that the package is ready. Check it together at the counter after a rider accepts, before it leaves your shop.",
-        resultLabel: "Ready for pickup",
-      });
+      return demote(proofStep, readyStep(order));
     case "ready_for_dispatch":
       if (awaitsCounterCode(order)) {
         return demote(proofStep, {
@@ -391,14 +379,7 @@ function riderPacksSteps(order: JobActionOrder, proofStep: SupplierAction | null
   }
   if (finished?.stage === "approved") {
     if (owesReceiptScan(order)) return demote(proofStep, receiptScanStep());
-    return demote(proofStep, {
-      kind: "ready_for_pickup",
-      label: "Ready for rider pickup",
-      targetState: "ready_for_dispatch",
-      primary: true,
-      consequence: `Riders are notified. ${DO_NOT_PACK_YET}`,
-      resultLabel: "Ready for rider pickup",
-    });
+    return demote(proofStep, readyStep(order));
   }
   // GRIDGO is reviewing, or holds the step itself: nothing forward is the shop's.
   return proofStep ? [proofStep] : [];
@@ -426,6 +407,38 @@ export type JobActionOrder = Pick<
 /** An Express order the client collects here. */
 function expressPickup(order: JobActionOrder): boolean {
   return isExpressDocumentOrder(order) && order.fulfillmentMode !== "delivery";
+}
+
+/**
+ * The shop's ready step, in the words of who comes for the job: the client
+ * with a code, a rider who checks unpacked products and packs them at the
+ * counter (newer handover), or a rider collecting a packed job.
+ */
+function readyStep(order: JobActionOrder): SupplierAction {
+  const step = { kind: "ready_for_pickup", targetState: "ready_for_dispatch", primary: true } as const;
+  if (expressPickup(order)) {
+    return {
+      ...step,
+      label: "Ready for the client",
+      consequence: "The client gets a pickup code. Enter it when they collect.",
+      resultLabel: "Ready for the client",
+    };
+  }
+  if (ridersPack(order)) {
+    return {
+      ...step,
+      label: "Ready for rider pickup",
+      consequence: `Riders are notified. ${DO_NOT_PACK_YET}`,
+      resultLabel: "Ready for rider pickup",
+    };
+  }
+  return {
+    ...step,
+    label: "Package for pickup",
+    consequence:
+      "GRIDGO notifies riders that the package is ready. Check it together at the counter after a rider accepts, before it leaves your shop.",
+    resultLabel: "Ready for pickup",
+  };
 }
 
 /**
