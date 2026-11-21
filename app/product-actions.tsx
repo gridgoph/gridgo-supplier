@@ -14,6 +14,9 @@ import { useListingWizard } from "@/store/listingWizard";
 import { endPhotoPolicySubmission, ensurePhotoPolicy } from "@/store/photoPolicy";
 import { askConfirm } from "@/store/sheets";
 
+const PRODUCT_CHANGED_MESSAGE =
+  "This product changed on another screen or phone. The latest is loaded — check it and remove it again.";
+
 /** Why a product has no show/hide switch here. */
 function visibilityLine(listing: Listing): string {
   if (isTakenDown(listing)) return "Taken down by GRIDGO. Only GRIDGO can put it back.";
@@ -117,7 +120,17 @@ export default function ProductActionsSheet() {
       setListing(null);
       return;
     }
-    setFeedback({ ok: false, message: result.status === "not_open_yet" ? BOARD_NOT_OPEN_YET : result.message });
+    if (result.status === "not_open_yet") {
+      setFeedback({ ok: false, message: BOARD_NOT_OPEN_YET });
+      return;
+    }
+    // Read it again so the next Remove carries GRIDGO's current version. When
+    // the version moved, another phone changed it: the shop looks again and
+    // confirms again — nothing is removed on its behalf.
+    const latest = await loadListing(listing.id);
+    apply(latest);
+    const moved = latest.status === "ok" && latest.value.version !== listing.version;
+    setFeedback({ ok: false, message: moved ? PRODUCT_CHANGED_MESSAGE : result.message });
   }
 
   // A listing GRIDGO took down, or one waiting for its first approval, is not

@@ -105,4 +105,26 @@ describe("a product's quick actions", () => {
     expect(await screen.findByText(/Only GRIDGO can put it back/)).toBeTruthy();
     expect(screen.queryByRole("switch", { name: "Show to clients" })).toBeNull();
   });
+
+  it("reloads a product another phone changed, and removes only after a fresh confirm", async () => {
+    const { ApiError } = jest.requireActual("@/lib/api");
+    (askConfirm as jest.Mock).mockResolvedValue(true);
+    (getCatalogItem as jest.Mock).mockResolvedValueOnce(item()).mockResolvedValue(item({ version: 4 }));
+    (deleteCatalogItem as jest.Mock)
+      .mockRejectedValueOnce(new ApiError(409, { error: "catalog_item_stale" }))
+      .mockResolvedValueOnce(null);
+    view = await render(<ProductActionsSheet />);
+
+    await fireEvent.press(await screen.findByText("Remove product"));
+
+    expect(deleteCatalogItem).toHaveBeenCalledTimes(1);
+    expect(getCatalogItem).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText(/changed on another screen or phone/)).toBeTruthy();
+
+    await fireEvent.press(screen.getByText("Remove product"));
+    expect(askConfirm).toHaveBeenCalledTimes(2);
+    expect(deleteCatalogItem).toHaveBeenLastCalledWith("item_1", 4);
+    expect(await screen.findByText("Removed from your shop.")).toBeTruthy();
+  });
 });
+

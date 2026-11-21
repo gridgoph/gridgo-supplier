@@ -61,4 +61,43 @@ describe("the shop status store", () => {
     await useShopStatus.getState().load();
     expect(useShopStatus.getState().phase).toBe("not_open_yet");
   });
+
+  it("never lets a read that started before a change undo it", async () => {
+    (getShopStatus as jest.Mock).mockResolvedValueOnce(body(1));
+    await useShopStatus.getState().load();
+    let finish: (value: unknown) => void = () => {};
+    (getShopStatus as jest.Mock).mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+    const pending = useShopStatus.getState().load();
+    (updateShopStatus as jest.Mock).mockResolvedValue(body(2, { expressEnabled: false }));
+
+    await useShopStatus.getState().save({ expressEnabled: false });
+    finish(body(1));
+    await pending;
+
+    expect(useShopStatus.getState().status).toMatchObject({ version: 2, expressEnabled: false });
+  });
+
+  it("keeps the newer read when two answer in reverse order", async () => {
+    let finishFirst: (value: unknown) => void = () => {};
+    let finishSecond: (value: unknown) => void = () => {};
+    (getShopStatus as jest.Mock)
+      .mockReturnValueOnce(new Promise((resolve) => (finishFirst = resolve)))
+      .mockReturnValueOnce(new Promise((resolve) => (finishSecond = resolve)));
+    const first = useShopStatus.getState().load();
+    const second = useShopStatus.getState().load();
+
+    finishSecond(body(5, { nightJobs: "until_23" }));
+    await second;
+    finishFirst(body(5, { nightJobs: "off" }));
+    await first;
+
+    expect(useShopStatus.getState().status).toMatchObject({ version: 5, nightJobs: "until_23" });
+  });
+
+  it("never steps back to an older version GRIDGO reported", async () => {
+    (getShopStatus as jest.Mock).mockResolvedValueOnce(body(4)).mockResolvedValueOnce(body(3, { expressEnabled: false }));
+    await useShopStatus.getState().load();
+    await useShopStatus.getState().load();
+    expect(useShopStatus.getState().status).toMatchObject({ version: 4, expressEnabled: true });
+  });
 });
