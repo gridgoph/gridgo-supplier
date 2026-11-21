@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DigitBoxes } from "@/components/DigitBoxes";
 import { EmptyState } from "@/components/EmptyState";
+import { FormScrollView } from "@/components/FormScrollView";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { NumberPad } from "@/components/NumberPad";
 import { SecondaryButton } from "@/components/SecondaryButton";
@@ -102,13 +103,8 @@ export default function WhoIsWorkingScreen() {
 
   return (
     <View className="gg-screen">
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="gg-page gap-6 pb-10"
-        contentContainerStyle={{ paddingTop: insets.top + spacing.md }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View className="gap-1">
+      <FormScrollView contentClassName="gg-page gap-6 pb-10">
+        <View className="gap-1" style={{ paddingTop: insets.top + spacing.md }}>
           <Text className="text-body text-text-secondary" numberOfLines={1}>
             {shopName ? `${shopName} · shop phone` : "Shop phone"}
           </Text>
@@ -219,7 +215,7 @@ export default function WhoIsWorkingScreen() {
             The owner gets their screens back by signing in again, or on their own phone.
           </Text>
         </View>
-      </ScrollView>
+      </FormScrollView>
     </View>
   );
 }

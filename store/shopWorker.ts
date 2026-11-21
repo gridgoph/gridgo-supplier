@@ -95,6 +95,8 @@ export const useShopWorker = create<ShopWorkerState>()(
       },
 
       lock: async () => {
+        // GRIDGO locks by this login's device session, so the call needs no
+        // worker token; the phone is handed back at once, before the answer.
         set({ worker: null, notice: null });
         api.setWorkerToken(null);
         useSession.getState().lockDevice();
@@ -122,7 +124,12 @@ export const useShopWorker = create<ShopWorkerState>()(
       storage: createPersistStorage<ShopWorkerState>(),
       partialize: (state) => ({ shared: state.shared, shopName: state.shopName }) as ShopWorkerState,
       onRehydrateStorage: () => (state) => {
-        if (state?.shared) setSharedDevice(true);
+        if (!state?.shared) return;
+        setSharedDevice(true);
+        // A session restored before this store finished reading must not keep
+        // the login's own screens open on a shared phone.
+        const session = useSession.getState();
+        if (session.identity.kind === "supplier" && !session.user?.worker) session.lockDevice();
       },
     },
   ),

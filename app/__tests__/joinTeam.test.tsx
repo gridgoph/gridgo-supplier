@@ -89,7 +89,7 @@ describe("joining a team", () => {
     await act(async () => {
       fireEvent.press(screen.getByText("Join"));
     });
-    expect(api.claimShopInvite).toHaveBeenCalledWith({ inviteId: "shi_1" });
+    expect(api.claimShopInvite).toHaveBeenCalledWith({ inviteId: "shi_1" }, undefined);
     expect(useSession.getState().identity).toEqual({ kind: "team_pending", shopName: "Print Shop" });
     expect(router.replace).toHaveBeenCalledWith("/team-waiting");
   });
@@ -107,7 +107,7 @@ describe("joining a team", () => {
     await act(async () => {
       fireEvent.press(screen.getByText("Join with link"));
     });
-    expect(api.claimShopInvite).toHaveBeenCalledWith({ token: TOKEN });
+    expect(api.claimShopInvite).toHaveBeenCalledWith({ token: TOKEN }, undefined);
   });
 
   it("says why a used link failed, in words", async () => {

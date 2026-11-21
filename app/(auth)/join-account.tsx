@@ -196,6 +196,7 @@ export default function JoinAccountScreen() {
       <FormScrollView contentClassName="gg-page gap-4 pb-10 pt-6">
         <JobTicketCode
           title={withMobile ? "Check your texts" : "Check your email"}
+          verifyLabel={withMobile ? "Verify my number" : undefined}
           email={withMobile ? mobile.trim() : email.trim()}
           value={code}
           onChange={setCode}
