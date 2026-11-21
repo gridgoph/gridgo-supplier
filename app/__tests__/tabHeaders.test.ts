@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { TABS } from "@/constants/tabs";
+import { SECTION_TABS, TAB_SECTION, TABS } from "@/constants/tabs";
 
 const ROOT = path.resolve(__dirname, "../..");
 
@@ -11,6 +11,8 @@ function source(file: string): string {
 
 const TAB_SCREENS = [
   "app/(tabs)/home.tsx",
+  "app/(tabs)/messages.tsx",
+  "app/(tabs)/money.tsx",
   "app/(tabs)/jobs.tsx",
   "app/(tabs)/schedule.tsx",
   "app/(tabs)/catalogues.tsx",
@@ -44,20 +46,30 @@ function masthead(file: string): string {
  * wants the opposite, and it is the ordinary shape: an inbox is a bell you
  * glance at while you work, and the bar is for places you stand.
  */
-describe("the five places and the one inbox", () => {
-  it("gives the bar to five places, and Catalogues is one of them", () => {
-    expect(TABS.map((tab) => tab.name)).toEqual([
-      "home",
-      "jobs",
-      "schedule",
-      "catalogues",
-      "account",
+describe("the four places and the one inbox", () => {
+  /** gridgo-supplier#269: the same four on phone and web, in plain words. */
+  it("gives the bar to To do, Messages, Money and My shop", () => {
+    expect(TABS.map((tab) => [tab.name, tab.label])).toEqual([
+      ["home", "To do"],
+      ["messages", "Messages"],
+      ["money", "Money"],
+      ["account", "My shop"],
     ]);
-    expect(TABS.find((tab) => tab.name === "catalogues")?.label).toBe("Catalogues");
   });
 
-  /** The tab is the board. Nothing else in the app is called Catalogues. */
-  it("mounts the shop's own board on the Catalogues tab", () => {
+  /** Moved, not deleted: every older page is still a tab route inside a place. */
+  it("keeps All jobs, Schedule and Products as pages inside a place", () => {
+    expect([...SECTION_TABS]).toEqual(["jobs", "schedule", "catalogues"]);
+    expect(TAB_SECTION.jobs).toBe("home");
+    expect(TAB_SECTION.schedule).toBe("home");
+    expect(TAB_SECTION.catalogues).toBe("account");
+    for (const page of SECTION_TABS) {
+      expect(masthead(`app/(tabs)/${page}.tsx`)).toContain("back={{");
+    }
+  });
+
+  /** The page is the board, now called Products. */
+  it("mounts the shop's own board on the Products page", () => {
     const board = source("app/(tabs)/catalogues.tsx");
 
     expect(board).toContain("useBoard");
@@ -110,7 +122,8 @@ describe("the five places and the one inbox", () => {
   it("counts unread on the bell alone", () => {
     expect(source("components/AlertsBell.tsx")).toContain("unreadCount");
     expect(source("components/GridgoTabBar.tsx")).not.toContain("unreadCount");
-    for (const file of TAB_SCREENS) {
+    // Messages marks its own unread conversations; that is its job, not an alert count.
+    for (const file of TAB_SCREENS.filter((file) => !file.endsWith("messages.tsx"))) {
       expect({ file, counts: source(file).includes("unreadCount") }).toEqual({
         file,
         counts: false,
@@ -118,17 +131,13 @@ describe("the five places and the one inbox", () => {
     }
   });
 
-  /**
-   * The tab bar's fourth glyph is a crop mark — the register mark a printer
-   * trims to, and the frame every listing photo in this app already wears. Not
-   * a bell, and not the grid of rounded squares every other product uses.
-   */
-  it("gives Catalogues a print mark rather than a bell", () => {
+  /** One closed outline per place, and never a bell. */
+  it("draws one glyph per place and no bell in the bar", () => {
     const bar = source("components/GridgoTabBar.tsx");
 
-    expect(bar).toContain("catalogues: Frame");
+    expect(bar).toContain("home: ListChecks");
+    expect(bar).toContain("money: Wallet");
     expect(bar).not.toContain("Bell");
-    expect(bar).not.toContain("LayoutGrid");
   });
 
   /**

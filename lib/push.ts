@@ -79,6 +79,26 @@ export const PUSH_PRODUCTION_NUDGE_CHANNEL_ID = "gridgo_production_nudge";
 export const PRODUCTION_NUDGE_SOUND = "notification_alert.mp3";
 
 /**
+ * A new Express job (gridgo-supplier#269): its own channel, so the offer can
+ * buzz long and break through as a heads-up even when the shop has quietened
+ * ordinary job news. The sound stays the phone's default — the production
+ * nudge's sound is for production inactivity only.
+ */
+export const PUSH_EXPRESS_CHANNEL_ID = "gridgo_express";
+export const EXPRESS_VIBRATION = [0, 600, 250, 600, 250, 600] as const;
+
+/**
+ * The buttons on an Express offer's notification: Accept is tap one of three,
+ * from the lock screen; See job opens it. Both open the app — accepting needs
+ * the shop's session, and a refusal (notes to read, time up) needs a screen.
+ * GRIDGO's message names the category; until it does, the offer arrives as an
+ * ordinary job notification and a tap opens the job.
+ */
+export const EXPRESS_OFFER_CATEGORY = "gridgo_express_offer";
+export const EXPRESS_ACCEPT_ACTION = "express_accept";
+export const EXPRESS_SEE_ACTION = "express_see";
+
+/**
  * Channel presentation. Importance is high — these are SLA-bearing updates and
  * messages from a rider at the counter — so they sound, vibrate and show a
  * banner. The sound is Android's default, which is what a channel gets when no

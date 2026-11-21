@@ -51,7 +51,7 @@ export function ExpressAcceptFlow({ job, reload, staff }: Props) {
     } catch (e) {
       if (apiErrorCode(e) === "shop_acceptance_expired") setTimedOut(true);
       else {
-        setError(humanizeApiError(e, offlineMessage("accept this order")));
+        setError(humanizeApiError(e, offlineMessage("accept this job")));
         void reload();
       }
     } finally {
@@ -64,17 +64,17 @@ export function ExpressAcceptFlow({ job, reload, staff }: Props) {
       loading={false}
       error={null}
       onRetry={() => void reload()}
-      title="New Express order"
+      title="New Express job"
       subject={job.title}
       actionError={error}
       footer={
         expired ? (
-          <PrimaryButton label="Back to jobs" onPress={() => router.navigate("/(tabs)/jobs")} />
+          <PrimaryButton label="Back to To do" onPress={() => router.navigate("/(tabs)/home")} />
         ) : (
           <>
-            <PrimaryButton label={busy ? "Accepting…" : "Accept"} disabled={busy} onPress={() => void accept()} />
+            <PrimaryButton label={busy ? "Accepting…" : "Accept"} hint="Dawata" disabled={busy} onPress={() => void accept()} />
             <SecondaryButton
-              label="Decline"
+              label="Can't do it"
               disabled={busy}
               onPress={() => router.replace({ pathname: "/job/[id]/decline", params: { id: job.id } })}
             />
@@ -85,7 +85,7 @@ export function ExpressAcceptFlow({ job, reload, staff }: Props) {
       {view ? <ExpressOffer order={job} view={view} hideEarnings={staff} onExpire={onExpire} /> : null}
       {expired ? (
         <Text className="text-body text-text-secondary" testID="express-expired">
-          Time&apos;s up. GRIDGO sent this order to the next shop.
+          Time&apos;s up. GRIDGO sent it to the next shop.
         </Text>
       ) : needsTick ? (
         <View className="gap-2">

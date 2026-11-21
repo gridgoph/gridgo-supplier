@@ -549,7 +549,7 @@ describe("job workspace due date", () => {
   ])("never shows a client date when readyBy is missing ($promisedDate, $deadline)", async ({ promisedDate, deadline }) => {
     (getOrder as jest.Mock).mockResolvedValue(job({ promisedDate, deadline, readyBy: null }));
     await render(<JobWorkspaceScreen />);
-    expect(await screen.findByText("Order ord_1")).toBeTruthy();
+    expect(await screen.findByLabelText(/order/i)).toBeTruthy();
     expect(screen.queryByText(/Client needs it by|Promised/)).toBeNull();
     expect(screen.queryByText(/Due in|Late by/)).toBeNull();
     for (const date of [promisedDate, deadline]) {

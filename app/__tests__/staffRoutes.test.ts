@@ -124,12 +124,15 @@ describe("Staff reach only the work", () => {
     expect(reachable(STAFF)).not.toContain("team-waiting");
   });
 
-  it("guards the Owner's tabs: Staff see Jobs and Account", () => {
+  it("guards the Owner's tabs: Staff see To do, Messages, All jobs and My shop, never Money", () => {
     const source = read("app/(tabs)/_layout.tsx");
     expect(source).toMatch(/<Tabs\.Protected guard=\{owner\}>[\s\S]*!STAFF_TABS\.includes[\s\S]*<\/Tabs\.Protected>/);
     const { STAFF_TABS, TABS } = jest.requireActual("@/constants/tabs") as typeof import("@/constants/tabs");
-    expect([...STAFF_TABS].sort()).toEqual(["account", "jobs"]);
-    expect(TABS.map((t) => t.name)).toEqual(["home", "jobs", "schedule", "catalogues", "account"]);
+    expect([...STAFF_TABS].sort()).toEqual(["account", "home", "jobs", "messages"]);
+    expect(STAFF_TABS).not.toContain("money");
+    expect(STAFF_TABS).not.toContain("schedule");
+    expect(STAFF_TABS).not.toContain("catalogues");
+    expect(TABS.map((t) => t.name)).toEqual(["home", "messages", "money", "account"]);
   });
 
   it("guards the Owner's steps on a job: cancel, renegotiate and payout evidence", () => {
@@ -138,7 +141,7 @@ describe("Staff reach only the work", () => {
       expect(open(job.get(name) ?? [], { owner: false })).toBe(false);
       expect(open(job.get(name) ?? [], { owner: true })).toBe(true);
     }
-    for (const name of ["index", "accept", "decline", "advance", "self-qc", "handoff", "messages", "client-messages", "progress-photo", "finished"]) {
+    for (const name of ["index", "accept", "decline", "advance", "self-qc", "handoff", "messages", "client-messages", "progress-photo", "finished", "print", "counter-code"]) {
       expect(open(job.get(name) ?? [], { owner: false })).toBe(true);
     }
   });

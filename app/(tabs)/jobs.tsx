@@ -9,6 +9,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { FormScrollView } from "@/components/FormScrollView";
 import { JobCard } from "@/components/JobCard";
 import { JobDocketRail } from "@/components/JobDocketRail";
+import { LinkPill } from "@/components/LinkPill";
 import { AlertsBell } from "@/components/AlertsBell";
 import { ChatButton } from "@/components/ChatButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -104,7 +105,8 @@ export default function JobsScreen() {
         }
       >
         <ScreenHeader
-          title="Jobs"
+          title="All jobs"
+          back={{ label: "To do", onPress: () => router.navigate("/(tabs)/home") }}
           right={
             <View className="flex-row items-center">
               <ChatButton />
@@ -112,6 +114,13 @@ export default function JobsScreen() {
             </View>
           }
         />
+
+        {/* The rest of To do: the week, for the Owner who sets it. */}
+        {staff ? null : (
+          <TourTarget step="jobs.scheduleTab" className="mb-4 self-start">
+            <LinkPill label="Schedule" onPress={() => router.push("/(tabs)/schedule")} testID="jobs-schedule" />
+          </TourTarget>
+        )}
 
         {loaded && jobs.length > 0 ? (
           <JobDocketRail

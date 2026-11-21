@@ -1,6 +1,6 @@
 import type { User } from "@/lib/api";
 import type { LegalGateStatus } from "@/lib/legal";
-import { isShopStaff, isSignedIn, signedOutWithNotice, type IdentityState } from "@/store/session";
+import { isSignedIn, signedOutWithNotice, type IdentityState } from "@/store/session";
 
 export type LaunchHref =
   | "/access"
@@ -36,8 +36,8 @@ export function launchHref(
   if (signedOutWithNotice(identity)) return "/(auth)/login";
   if (!isSignedIn(user)) return "/(auth)/welcome";
   if (legal === "blocked") return "/legal/review";
-  // Staff work orders; Home is the Owner's money and board.
-  return isShopStaff(user) ? "/(tabs)/jobs" : "/(tabs)/home";
+  // Staff and Owner both open on To do; Staff simply see no money there.
+  return "/(tabs)/home";
 }
 
 /**

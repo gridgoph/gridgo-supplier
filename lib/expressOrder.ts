@@ -128,9 +128,9 @@ export function rangeLine(print: ExpressPrint): string | null {
 
 /** Reasons a shop gives in one tap. GRIDGO takes free text; these are only words. */
 export const EXPRESS_DECLINE_REASONS = [
-  "Printer unavailable",
+  "Printer is down",
   "Out of paper or ink",
-  "Too busy right now",
+  "Too many jobs right now",
   "Closing soon",
 ] as const;
 

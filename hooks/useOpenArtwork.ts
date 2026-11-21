@@ -2,6 +2,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useEffect, useRef, useState } from "react";
 
 import { getDownloadUrl } from "@/lib/api";
+import { useFileOpens } from "@/store/fileOpens";
 
 /**
  * Open one of the job's stored files at full size, where the shop can look
@@ -26,7 +27,11 @@ export function useOpenArtwork(fileId: string) {
     setOpenError(null);
     try {
       const link = await getDownloadUrl(fileId);
-      if (mounted.current) await WebBrowser.openBrowserAsync(link.url);
+      if (mounted.current) {
+        // Remembered so the hand-over can ask for it to be deleted afterwards.
+        useFileOpens.getState().record(fileId);
+        await WebBrowser.openBrowserAsync(link.url);
+      }
     } catch {
       if (mounted.current) setOpenError("The file could not open. Check your connection and try again.");
     } finally {

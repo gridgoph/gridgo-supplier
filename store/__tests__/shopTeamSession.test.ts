@@ -87,10 +87,10 @@ describe("a teammate's bootstrap", () => {
     expect(authDoorOpen(state.identity, state.user)).toBe(false);
   });
 
-  it("opens Staff on Jobs and an Owner on Home", async () => {
+  it("opens Staff and an Owner on To do", async () => {
     jest.spyOn(global, "fetch").mockResolvedValue(response(200, staffBootstrap));
     useSession.getState().adoptClerkUser(await api.me());
-    expect(launchHref(useSession.getState().identity, useSession.getState().user)).toBe("/(tabs)/jobs");
+    expect(launchHref(useSession.getState().identity, useSession.getState().user)).toBe("/(tabs)/home");
 
     jest.spyOn(global, "fetch").mockResolvedValue(response(200, ownerResponse));
     useSession.getState().adoptClerkUser(await api.me());

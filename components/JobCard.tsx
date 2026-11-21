@@ -7,6 +7,7 @@ import { SampleTagChip } from "@/components/SampleTagChip";
 import { orderReferenceSpoken } from "@/lib/orderReference";
 import { SchedulingNotice } from "@/components/SchedulingNotice";
 import { StatusChip } from "@/components/StatusChip";
+import { paymentLine } from "@/lib/todo";
 import { formatDeadlineFull, shopDueAt } from "@/lib/dates";
 import { formatPhp, type Order } from "@/lib/api";
 import { isFulfilmentFinished, presentJobStatus } from "@/lib/jobState";
@@ -102,6 +103,9 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
           {dueAt ? "Ready by " : ""}{formatDeadlineFull(dueAt)}
           {urgency.level === "undated" ? "" : ` · ${urgency.label}`}
         </Text>
+        {paymentLine(job) ? (
+          <Text className="text-caption text-text-muted">{paymentLine(job)}</Text>
+        ) : null}
         {express || sampleTag ? (
           <View className="flex-row flex-wrap gap-2 py-1">
             {express ? <ExpressChip /> : null}

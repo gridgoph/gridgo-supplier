@@ -13,6 +13,7 @@ import { playProductionNudgeSting } from "@/lib/nudgeSound";
 import { PLAY_OPTIN_PUSH_TYPE } from "@/lib/playOptIn";
 import { TESTER_REMINDER_TYPE } from "@/lib/testerProgram";
 import {
+  EXPRESS_ACCEPT_ACTION,
   parsePushData,
   PUSH_FOREGROUND_BEHAVIOR,
   pushTapKey,
@@ -111,6 +112,17 @@ async function refreshUnread(): Promise<void> {
   }
 }
 
+/** Accept from the notification; where the shop lands either way. */
+async function acceptFromPush(orderId: string): Promise<Href> {
+  try {
+    await api.acceptExpress(orderId, false);
+    invalidate("*");
+    return "/(tabs)/home" as Href;
+  } catch {
+    return { pathname: "/job/[id]/accept", params: { id: orderId } } as Href;
+  }
+}
+
 export function usePushNotifications(): void {
   const router = useRouter();
   const navigationReady = Boolean(useRootNavigationState()?.key);
@@ -122,7 +134,7 @@ export function usePushNotifications(): void {
   const loading = useSession((s) => s.loading);
   const sessionWait = useSession((s) => s.sessionWait);
   /** A tap waits for identity, then resolves its owned notification. */
-  const pending = useRef<{identifier:string; data:unknown; owner:string|null} | null>(null);
+  const pending = useRef<{identifier:string; data:unknown; owner:string|null; action?:string|null} | null>(null);
   /** Taps already routed (`pushTapKey`), so a tap opens its screen once. */
   const routed = useRef(new Set<string>());
 
@@ -160,6 +172,15 @@ export function usePushNotifications(): void {
       // Job screens sit behind approval; Operations chat and the tester asks do not.
       const notGated = data.type === SUPPORT_MESSAGE_PUSH_TYPE || data.type === TESTER_REMINDER_TYPE || data.type === PLAY_OPTIN_PUSH_TYPE;
       const staff = isShopStaff(useSession.getState().user);
+      // Accept on an Express offer's notification: tap one, from the lock
+      // screen. GRIDGO decides; a refusal (notes to read, time up) opens the
+      // accept screen, which says why.
+      if (target.action === EXPRESS_ACCEPT_ACTION && data.orderId && isMatchable(useSession.getState().user)) {
+        router.push(await acceptFromPush(data.orderId));
+        const module = notifications();
+        withoutNativeModule(() => module?.clearLastNotificationResponseAsync().catch(noop));
+        return;
+      }
       const destination = data.type === PLAY_OPTIN_PUSH_TYPE && staff
         ? "/alerts"
         : notGated
@@ -218,7 +239,7 @@ export function usePushNotifications(): void {
   }, []);
 
   useEffect(() => {
-    const route = (identifier: string, data: unknown, title?: string | null) => {
+    const route = (identifier: string, data: unknown, title?: string | null, action?: string | null) => {
       // The same notification can arrive as a background tap and again as the
       // launch response, under two native identifiers; it opens once.
       const key = pushTapKey(identifier, parsePushData(data));
@@ -234,7 +255,7 @@ export function usePushNotifications(): void {
         return;
       }
       const owner = useSession.getState().user?.id ?? null;
-      pending.current = {identifier, data, owner};
+      pending.current = {identifier, data, owner, action: action ?? null};
       // Defer capture; spending separately requires navigator and session readiness.
       setTimeout(() => { void spend.current(); }, 0);
     };
@@ -248,6 +269,7 @@ export function usePushNotifications(): void {
           response.notification.request.identifier,
           response.notification.request.content.data,
           response.notification.request.content.title,
+          response.actionIdentifier,
         );
       }),
     );
@@ -260,6 +282,7 @@ export function usePushNotifications(): void {
           response.notification.request.identifier,
           response.notification.request.content.data,
           response.notification.request.content.title,
+          response.actionIdentifier,
         );
       }, noop),
     );

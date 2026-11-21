@@ -1,6 +1,6 @@
 import { useReadVersion } from "@/hooks/useReadVersion";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { router, useFocusEffect } from "expo-router";
@@ -63,6 +63,14 @@ function formatReleasedOn(releasedAt: string): string {
 }
 
 export default function PayoutScreen() {
+  return <PayoutView />;
+}
+
+/**
+ * The statement itself, shared by this pushed screen and the Money tab
+ * (gridgo-supplier#269), which draws its own masthead above it.
+ */
+export function PayoutView({ header }: { header?: ReactNode }) {
   const colors = useThemeColors();
   const [jobs, setJobs] = useState<api.Order[]>([]);
   const [filter, setFilter] = useState<PayoutFilter>("unsettled");
@@ -113,7 +121,7 @@ export default function PayoutScreen() {
     <View className="gg-screen">
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gg-page pb-16 pt-4"
+        contentContainerClassName={header ? "gg-page pb-16" : "gg-page pb-16 pt-4"}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -123,6 +131,7 @@ export default function PayoutScreen() {
           />
         }
       >
+        {header}
         <View className="gap-2">
           <Text className="text-overline text-text-muted">STILL TO REACH YOU</Text>
           <Text className="text-display text-text-primary">
