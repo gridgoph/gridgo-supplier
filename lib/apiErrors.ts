@@ -68,6 +68,13 @@ export function isSupplierProfileStale(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "supplier_profile_stale";
 }
 
+/** The status sheet's write found the shop's record moved on (`shop_profile_stale`). */
+export function isShopStatusStale(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 409) return false;
+  const code = apiErrorCode(error);
+  return code === "shop_profile_stale" || code === "supplier_profile_stale";
+}
+
 /** The listing moved on since this phone read it (another device, or GRIDGO). */
 export function isCatalogItemStale(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409 && apiErrorCode(error) === "catalog_item_stale";
@@ -431,6 +438,9 @@ const MESSAGES: Record<string, string> = {
     "Your shop details changed somewhere else while this screen was open. Load the latest, then make your change again.",
   expected_version_required:
     "GRIDGO could not tell which version of your details this change was made against. Load the latest and make the change again.",
+  // My shop status (docs/EXPRESS_API.md#my-shop-status-and-night-documents).
+  invalid_shop_status: "GRIDGO could not use that change. Load your shop again and try once more.",
+  express_night_capacity: "This job does not fit before your night jobs end.",
   // The shop's hours (docs/SHOP_HOURS_API.md).
   invalid_shop_hours:
     "GRIDGO could not use those hours. Each day needs a closing time later than its opening time, and closure dates can cover 90 dates or fewer.",

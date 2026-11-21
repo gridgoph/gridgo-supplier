@@ -389,6 +389,11 @@ function RootStack({ introDone }: { introDone: boolean }) {
           shop's own jobs.
         */}
         <Stack.Screen name="push-prompt" options={sheetScreenOptions(scheme)} />
+        {/*
+          The shop status sheet (gridgo-supplier#267). Signed-in rather than
+          Owner-only: Staff read it too, with every control held still.
+        */}
+        <Stack.Screen name="shop-status" options={sheetScreenOptions(scheme)} />
       </Stack.Protected>
 
       <Stack.Protected guard={matchable && !legalBlocked}>
@@ -554,6 +559,8 @@ function RootStack({ introDone }: { introDone: boolean }) {
           is waiting for. The stack draws its own headers.
         */}
         <Stack.Screen name="shop" options={{ headerShown: false, title: "Listings" }} />
+        {/* One product's quick actions from My shop: show or hide, edit, remove. */}
+        <Stack.Screen name="product-actions" options={sheetScreenOptions(scheme)} />
       </Stack.Protected>
 
       <Stack.Protected guard={matchable && !legalBlocked && owner}>
