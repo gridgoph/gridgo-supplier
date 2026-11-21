@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.448 (New feature)
+
+- Express jobs take three taps: Accept, It's ready, and the client's code. New tabs: To do, Messages, Money, My shop.
+- It's ready on an Express job already printing now marks it ready instead of asking for photos.
+
 ## 1.0.440 (New feature)
 
 - Take Express print orders: answer within 5 minutes, then hand over with the client's pickup code.
