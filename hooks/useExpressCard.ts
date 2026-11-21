@@ -68,8 +68,9 @@ export function useExpressCard(job: api.Order, reload: () => Promise<unknown>) {
         router.push({ pathname: photoStep, params: { id: job.id } });
       } else {
         setError(stepRefusal(e)?.message ?? humanizeApiError(e, offlineMessage("mark this job ready")));
-        // The first step may have gone through: the job screen says what is left.
-        if (current !== job) openNextStep(current);
+        // The first step may have gone through. If It's ready can still be
+        // sent, the card keeps it for another tap; otherwise the job says what is left.
+        if (current !== job && !expressReadySteps(current).length) openNextStep(current);
       }
       return false;
     } finally {

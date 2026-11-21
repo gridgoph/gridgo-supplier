@@ -61,7 +61,7 @@ import {
   itemInstructions,
 } from "@/lib/orderChanges";
 import { correctableColourLines, readColourQuote } from "@/lib/colourPricing";
-import { packagingCheck } from "@/lib/packagingReadiness";
+import { expressReadyNow, packagingCheck } from "@/lib/packagingReadiness";
 import { lapseForOrder, lapseNotice } from "@/lib/productionLapse";
 import { refundNotice, refundStanding } from "@/lib/refund";
 import { canRequestNewDeadline, rescheduleNotice } from "@/lib/reschedule";
@@ -289,6 +289,11 @@ export default function JobWorkspaceScreen() {
   }
 
   function openStep(action: SupplierAction) {
+    // Express is marked ready where its card does it: one tap, no photo step.
+    if (express && action.kind === "ready_for_pickup") {
+      router.push({ pathname: "/job/[id]/print", params: { id: job!.id } });
+      return;
+    }
     router.push({
       pathname: routeForAction(action.kind),
       params: {
@@ -424,7 +429,7 @@ export default function JobWorkspaceScreen() {
           <View className="mt-6">
             <DeadlineRequestPanel request={deadlineRequest} />
           </View>
-        ) : packaging && (!packaging.allowed || flow === "rider_packs") ? (
+        ) : packaging && (!packaging.allowed || (flow === "rider_packs" && !expressReadyNow(job))) ? (
           <View className="mt-6">
             <PackagingChecklist
               check={packaging}

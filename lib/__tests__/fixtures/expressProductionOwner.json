@@ -1,0 +1,506 @@
+{
+  "express": false,
+  "deadline": null,
+  "timeline": [
+    {
+      "at": "2026-11-21T02:30:00.000Z",
+      "state": "initial_payment_review",
+      "note": "Payment being checked"
+    },
+    {
+      "at": "2026-11-21T15:07:58.944Z",
+      "state": "payment_authorized",
+      "note": "Shop accepted Express order.",
+      "actor": {
+        "name": "Shop member",
+        "role": "owner",
+        "userId": "user_shop"
+      }
+    },
+    {
+      "at": "2026-11-21T15:08:01.724Z",
+      "state": "production",
+      "note": "Printing",
+      "actor": {
+        "name": "Shop member",
+        "role": "owner",
+        "userId": "user_shop"
+      }
+    }
+  ],
+  "orderType": "express",
+  "scheduling": {
+    "status": "secured",
+    "sameDay": false,
+    "tightDeadline": false,
+    "label": null
+  },
+  "distanceZone": {
+    "key": "nearby",
+    "label": "Nearby"
+  },
+  "scheduledFor": null,
+  "serviceLevel": "standard",
+  "invoiceNumber": "GG-20261121-EA3937FAFFFD",
+  "shopAcceptance": {
+    "status": "accepted",
+    "acceptedAt": "2026-11-21T15:07:58.944Z",
+    "acceptedBy": "user_shop",
+    "assignedAt": "2026-11-21T15:06:19.081Z",
+    "deadlineAt": "2026-11-21T15:11:19.081Z",
+    "supplierId": "user_shop",
+    "workingMinutes": 5
+  },
+  "downpaymentPercent": 100,
+  "shopHandoverVersion": 2,
+  "grossServiceFeeMinor": 3240,
+  "organizationDiscountMinor": 0,
+  "organizationDiscountRateBps": 0,
+  "reviewData": false,
+  "id": "ord_ea3937fafffd",
+  "clientId": "user_6cedeab3694a",
+  "supplierId": "user_shop",
+  "riderId": null,
+  "productId": null,
+  "state": "production",
+  "readyBy": "2027-01-14T03:30:00.000Z",
+  "zone": null,
+  "supplierSubtotalMinor": 7200,
+  "subtotalMinor": 7200,
+  "serviceFeeRateBps": null,
+  "serviceFeeMinor": 3240,
+  "deliveryFeeMinor": 0,
+  "totalMinor": 10440,
+  "fulfillmentMode": "pickup",
+  "paymentPlan": "order_match_qr_75_25",
+  "quoteVersion": 1,
+  "supplierDownpaymentRateBps": 10000,
+  "onlineDueMinor": 10440,
+  "directStoreDueMinor": 0,
+  "supplierPlatformPayoutMinor": 7200,
+  "commercialCommittedAt": "2026-11-21T02:30:00.000Z",
+  "moneyModelVersion": 3,
+  "payoutPlanVersion": 2,
+  "payoutHold": false,
+  "pickup": {
+    "lat": 7.07,
+    "lng": 125.61,
+    "label": "Shop counter"
+  },
+  "dropoff": {
+    "lat": 7.07,
+    "lng": 125.61,
+    "label": "GRIDGO Office"
+  },
+  "payments": {
+    "initial": {
+      "label": "Full payment",
+      "confirmedAt": "2026-11-21T15:06:19.081Z",
+      "submittedAt": "2026-11-21T02:30:00.000Z",
+      "amountMinor": 10440,
+      "method": "qr_manual",
+      "status": "confirmed"
+    },
+    "final_online": {
+      "label": "No balance",
+      "submittedAt": null,
+      "amountMinor": 0,
+      "method": "qr_manual",
+      "status": "not_required"
+    }
+  },
+  "paymentAllocations": [
+    {
+      "paymentCode": "initial",
+      "component": "service_fee",
+      "amountMinor": 3240
+    },
+    {
+      "paymentCode": "initial",
+      "component": "supplier_principal",
+      "amountMinor": 7200
+    }
+  ],
+  "payoutMilestones": [
+    {
+      "pofFileIds": [],
+      "releasedAt": null,
+      "releasedBy": null,
+      "code": "production_started",
+      "sharePercent": 40,
+      "amountMinor": 2880,
+      "status": "pending_pof",
+      "label": "Start of production",
+      "releaseRequires": "shop_proof"
+    },
+    {
+      "pofFileIds": [],
+      "releasedAt": null,
+      "releasedBy": null,
+      "code": "delivered",
+      "sharePercent": 35,
+      "amountMinor": 2520,
+      "status": "pending_pof",
+      "label": "Delivered",
+      "releaseRequires": "delivery_proof"
+    },
+    {
+      "pofFileIds": [],
+      "releasedAt": null,
+      "releasedBy": null,
+      "code": "issue_window",
+      "sharePercent": 25,
+      "amountMinor": 1800,
+      "status": "pending_pof",
+      "label": "Issue window closed",
+      "releaseRequires": "issue_window_closed"
+    }
+  ],
+  "createdAt": "2026-11-21T02:30:00.000Z",
+  "updatedAt": "2026-11-21T15:08:01.737Z",
+  "expressOrder": {
+    "status": "printing",
+    "originalSupplierId": "user_shop",
+    "currentSupplierId": "user_shop",
+    "declineCount": 0,
+    "acceptBy": null,
+    "events": [
+      {
+        "at": "2026-11-21T02:30:00.000Z",
+        "state": "sending",
+        "supplierId": "user_shop"
+      },
+      {
+        "at": "2026-11-21T15:06:19.081Z",
+        "state": "sending",
+        "supplierId": "user_shop"
+      },
+      {
+        "at": "2026-11-21T15:07:58.944Z",
+        "state": "accepted",
+        "supplierId": "user_shop"
+      },
+      {
+        "at": "2026-11-21T15:08:01.737Z",
+        "state": "printing",
+        "supplierId": "user_shop"
+      }
+    ],
+    "refundRequired": false,
+    "printSettings": [
+      {
+        "note": "",
+        "pages": {
+          "range": null,
+          "total": 2,
+          "printed": 2
+        },
+        "paper": "a4",
+        "sides": "one",
+        "colour": "bw",
+        "copies": 12,
+        "fileId": "file_304b305540e6",
+        "layout": "fit_to_paper",
+        "paperStock": "70gsm bond",
+        "acceptedWarnings": [
+          "paper_size_mismatch",
+          "rgb_colour"
+        ]
+      }
+    ]
+  },
+  "changeRequests": [],
+  "specialInstructionLines": [],
+  "title": "Document printing",
+  "quantity": 12,
+  "unit": "",
+  "size": "a4",
+  "material": "Not specified",
+  "finish": null,
+  "address": "",
+  "artworkFileIds": [
+    "file_304b305540e6"
+  ],
+  "artworkName": "sample-artwork.pdf",
+  "productionItems": [
+    {
+      "id": "line_46b5a07d8b9c",
+      "itemName": "Document printing",
+      "quantity": 12,
+      "turnaroundDays": 1,
+      "turnaroundMinutes": 600,
+      "pricingUnit": "per_page",
+      "packageQty": null,
+      "measurement": {
+        "pages": 2,
+        "unit": null
+      },
+      "documentPages": {
+        "range": null,
+        "total": 2,
+        "printed": 2
+      },
+      "quantityMode": null,
+      "totalSheets": 24,
+      "colourPricing": null,
+      "specialInstructions": "",
+      "structuredSpec": {
+        "size": "a4",
+        "colourMode": "bw",
+        "sides": "one"
+      },
+      "options": [
+        {
+          "groupName": "Colour",
+          "label": "Black and white"
+        },
+        {
+          "groupName": "Paper size",
+          "label": "A4"
+        },
+        {
+          "groupName": "Paper",
+          "label": "70gsm bond"
+        }
+      ],
+      "artworkFileId": "file_304b305540e6",
+      "mockupFileId": null,
+      "artworkLinks": [],
+      "artworkAttachments": [
+        {
+          "kind": "file",
+          "fileId": "file_304b305540e6"
+        }
+      ],
+      "artworkPreviewFileId": "file_304b305540e6",
+      "printLayout": "fit_to_paper",
+      "printLayoutCheck": {
+        "files": [
+          {
+            "page": {
+              "pageSize": "A4",
+              "widthMilli": 210227,
+              "heightMilli": 297349,
+              "orientation": "portrait",
+              "mixedPageSizes": false,
+              "largestLongSideMilli": 297349,
+              "largestShortSideMilli": 210227
+            },
+            "fileId": "file_304b305540e6",
+            "exceedsPaper": false
+          }
+        ],
+        "paper": {
+          "label": "A4",
+          "optionId": "cop_shop_lsto_doc_a4",
+          "pageSize": "A4",
+          "widthMilli": 210000,
+          "heightMilli": 297000
+        },
+        "cutOff": false,
+        "layout": "fit_to_paper",
+        "unknown": [],
+        "exceedsPaper": false,
+        "scaleChanges": false,
+        "suggestedPaper": null,
+        "supportedLayouts": [
+          "fit_to_paper"
+        ]
+      },
+      "artworkGuidance": {
+        "files": [
+          {
+            "fileId": "file_304b305540e6",
+            "warnings": [],
+            "colorMode": null,
+            "pixelWidth": null,
+            "pixelHeight": null,
+            "effectiveDpi": null
+          }
+        ],
+        "version": 1,
+        "acceptsRgb": false,
+        "minimumDpi": 300,
+        "evaluatedAt": "2026-11-21T02:30:00.000Z",
+        "orderedSize": {
+          "widthMilli": 210000,
+          "heightMilli": 297000
+        },
+        "subcategoryCode": "document_printing",
+        "openWarningCount": 0,
+        "expectedColorMode": "cmyk"
+      },
+      "colorTargets": [],
+      "artworkColors": [
+        {
+          "fileId": "file_304b305540e6",
+          "colors": {
+            "version": 1,
+            "status": "unknown",
+            "reasons": [
+              "not_read_at_upload"
+            ],
+            "colors": []
+          }
+        }
+      ],
+      "coverSpine": null
+    }
+  ],
+  "mockupFileIds": [],
+  "artworkPreviews": [
+    {
+      "fileId": "file_304b305540e6",
+      "status": "pending",
+      "downloadUrlPath": "/files/file_304b305540e6/preview-url",
+      "retryPath": "/files/file_304b305540e6/preview"
+    }
+  ],
+  "fileAccesses": [],
+  "rated": false,
+  "approvalProof": {
+    "requirement": {
+      "method": "one_tap",
+      "version": 1,
+      "required": false
+    },
+    "records": [
+      {
+        "id": "apr_733c8e452392",
+        "phase": "checkout",
+        "status": "legacy_unrecorded",
+        "method": null,
+        "at": "2026-11-21T02:30:00.000Z",
+        "snapshotSha256": "4d314c7a3ca2728f7b6cdcf9f813387096d2263c9df043514faa0348af854905"
+      }
+    ],
+    "readUrl": "/orders/ord_ea3937fafffd/approval-proof"
+  },
+  "packingProgress": {
+    "status": "waiting_for_photo",
+    "photos": []
+  },
+  "shopHandover": {},
+  "forcedSteps": [],
+  "handoverFlow": "rider_packs",
+  "pickupReminder": "Ready for rider pickup. Prepare packing materials. Do not pack yet; unpack any already-packed items for the rider check.",
+  "forcedByGridgo": false,
+  "transitionReadiness": {
+    "supplier_self_qc": {
+      "allowed": true,
+      "missing": [],
+      "receiptScan": {
+        "required": false,
+        "attached": false
+      }
+    },
+    "ready_for_dispatch": {
+      "allowed": true,
+      "missing": [],
+      "receiptScan": {
+        "required": false,
+        "attached": false
+      }
+    }
+  },
+  "jobDetails": {
+    "material": "Not specified",
+    "zone": "Nearby",
+    "promisedDate": "2027-01-14T03:30:00.000Z",
+    "missing": [
+      "material"
+    ]
+  },
+  "promisedDate": "2027-01-14T03:30:00.000Z",
+  "clientShopChat": {
+    "status": "open",
+    "closesAt": null,
+    "participants": [
+      "Client",
+      "Print shop",
+      "GRIDGO"
+    ],
+    "reminder": "Price, specification and deadline changes require a formal change request. Chat messages do not change the order."
+  },
+  "productionProgress": {
+    "status": "waiting_for_photo",
+    "photos": []
+  },
+  "supplierContact": {},
+  "pickupCountItems": [
+    {
+      "lineItemId": "line_46b5a07d8b9c",
+      "itemName": "Document printing",
+      "expectedQuantity": 12
+    }
+  ],
+  "supplierPriceMinor": 7200,
+  "supplierEarningsMinor": 7200,
+  "supplierSettlement": {
+    "orderPriceMinor": 7200,
+    "dueAtStoreMinor": 0,
+    "receivedAtStoreMinor": 0,
+    "collectedSupplierPrincipalMinor": 7200,
+    "protectedPaymentMinor": 7200,
+    "gridgoDeductionsMinor": 0,
+    "totalSupplierEarningsMinor": 7200,
+    "supplierReleasedMinor": 0,
+    "supplierOutstandingMinor": 7200
+  },
+  "refundHold": false,
+  "refundDisposition": null,
+  "unpaidBalanceCancelled": false,
+  "supplierSettlementPayouts": [],
+  "actions": [
+    {
+      "id": "aud_29fc032c4d08:ord_ea3937fafffd",
+      "at": "2026-11-21T15:07:58.944Z",
+      "action": "express.accepted",
+      "actor": {
+        "userId": "user_shop",
+        "name": "Shop member",
+        "role": "owner"
+      }
+    },
+    {
+      "id": "aud_33bb0da8-2643-4603-8c63-7da64610aafb:ord_ea3937fafffd",
+      "at": "2026-11-21T15:07:58.961Z",
+      "action": "order.transition",
+      "actor": {
+        "userId": "user_shop",
+        "name": "Shop member",
+        "role": "owner"
+      }
+    },
+    {
+      "id": "aud_3cc75863c8a5:ord_ea3937fafffd",
+      "at": "2026-11-21T15:08:01.737Z",
+      "action": "express.printing",
+      "actor": {
+        "userId": null,
+        "name": "Shop member",
+        "role": "system"
+      }
+    },
+    {
+      "id": "aud_df30d12e-06b0-4cbf-a03c-a9a861f4b356:ord_ea3937fafffd",
+      "at": "2026-11-21T15:08:01.739Z",
+      "action": "order.transition",
+      "actor": {
+        "userId": "user_shop",
+        "name": "Shop member",
+        "role": "owner"
+      }
+    },
+    {
+      "id": "aud_fceeeb370e04:ord_ea3937fafffd",
+      "at": "2026-11-21T15:08:03.171Z",
+      "action": "order.transition_refused",
+      "actor": {
+        "userId": "user_shop",
+        "name": "Shop member",
+        "role": "owner"
+      }
+    }
+  ]
+}
