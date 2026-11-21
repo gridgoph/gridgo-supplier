@@ -1,5 +1,6 @@
 import type { Order } from "@/lib/api";
 import { readRequirements, type Requirement, type RequirementKind } from "@/lib/apiErrors";
+import { isExpressDocumentOrder } from "@/lib/expressOrder";
 import { handoverFlowOf, type HandoverFlow } from "@/lib/shopHandover";
 
 /**
@@ -69,6 +70,23 @@ export function packagingCheck(order: ReadinessOrder): PackagingCheck | null {
     receiptAttached: raw.receiptScan?.attached === true,
     receiptRequired: raw.receiptScan?.required === true,
   };
+}
+
+/**
+ * An Express document job GRIDGO would mark ready as of this read
+ * (gridgo-api `docs/EXPRESS_API.md`, "It's ready").
+ *
+ * Express has no production, finished or packing photo and no GRIDGO review,
+ * but the job still carries the ordinary handover fields, so a job reopened in
+ * production would otherwise read as owing finished photos. GRIDGO's own
+ * readiness decides: allowed means the shop's ready step, a hold means none.
+ * A read without readiness (an older GRIDGO) keeps the ordinary steps, because
+ * that GRIDGO still asks for them.
+ */
+export function expressReadyNow(
+  order: ReadinessOrder & Partial<Pick<Order, "orderType">>,
+): boolean {
+  return isExpressDocumentOrder(order) && packagingCheck(order)?.allowed === true;
 }
 
 /**

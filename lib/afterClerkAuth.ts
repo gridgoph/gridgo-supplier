@@ -3,7 +3,7 @@ import { apiErrorCode, humanizeApiError, isNonSupplierIdentity, isUnmappedIdenti
 import { awaitClerkSessionToken, clerkSessionToken, type ClerkAccess, type ClerkGetToken } from "@/lib/clerk";
 import { debugAuth } from "@/lib/debugAuth";
 import { applyRoute } from "@/lib/onboardingSteps";
-import { APP_ROLE, isShopStaff, useSession } from "@/store/session";
+import { APP_ROLE, useSession } from "@/store/session";
 import { isJoiningTeam, useTeamJoin } from "@/store/teamJoin";
 import { useSignupDraft } from "@/store/signupDraft";
 
@@ -165,7 +165,7 @@ export function hrefAfterClerkAuth(
   | "/team-waiting"
   | ReturnType<typeof applyRoute> {
   if (result.kind === "home") {
-    return isShopStaff(useSession.getState().user) ? "/(tabs)/jobs" : "/(tabs)/home";
+    return "/(tabs)/home";
   }
   if (result.kind === "join") return "/join-team";
   if (result.kind === "team_waiting") return "/team-waiting";

@@ -1,31 +1,54 @@
 /**
- * The supplier tab bar — five honest destinations.
- * No floating action disc; every tab is a place, not an action.
+ * The supplier tab bar: four places, the same four on phone and web
+ * (gridgo-supplier#269, gridgo-web#327).
+ *
+ * To do is the floor: today's work with Express on top, and the doors to every
+ * job and the week. Messages is every conversation. Money is the Owner's.
+ * My shop is the shop itself: products, hours, team and account.
  *
  * Alerts are not one of them. An inbox is something a shop glances at while it
- * works, not a room it walks into, so it lives on a bell in every masthead and
- * the bar is spent on the five places a shop actually stands: the floor, the
- * work, the week, its own catalogue, and its account.
+ * works, so it lives on a bell in every masthead.
+ *
+ * Jobs, Schedule and Catalogues are still tab routes, so every address that
+ * opens them still works, but they are not drawn in the bar: each belongs to
+ * one of the four places (`TAB_SECTION`), and the bar lights that place while
+ * one of them is open.
  */
 
-export type TabName = "home" | "jobs" | "schedule" | "catalogues" | "account";
+export type TabName = "home" | "messages" | "money" | "account" | "jobs" | "schedule" | "catalogues";
+
+export type BarTabName = "home" | "messages" | "money" | "account";
 
 export type TabDefinition = {
-  name: TabName;
+  name: BarTabName;
   label: string;
 };
 
+/** The bar, in order. */
 export const TABS: readonly TabDefinition[] = [
-  { name: "home", label: "Home" },
-  { name: "jobs", label: "Jobs" },
-  { name: "schedule", label: "Schedule" },
-  { name: "catalogues", label: "Catalogues" },
-  { name: "account", label: "Account" },
+  { name: "home", label: "To do" },
+  { name: "messages", label: "Messages" },
+  { name: "money", label: "Money" },
+  { name: "account", label: "My shop" },
 ];
 
+/** Tab routes that are pages inside one of the four places, not places of their own. */
+export const SECTION_TABS: readonly TabName[] = ["jobs", "schedule", "catalogues"];
+
+/** Which place in the bar a page belongs to. */
+export const TAB_SECTION: Record<TabName, BarTabName> = {
+  home: "home",
+  messages: "messages",
+  money: "money",
+  account: "account",
+  jobs: "home",
+  schedule: "home",
+  catalogues: "account",
+};
+
 /**
- * The tabs a shop's Staff member sees: the work and their own account.
- * Home (the shop's money), Schedule (the shop's hours) and Catalogues (prices
+ * What a shop's Staff member reaches: the work, its conversations and their own
+ * account. Money (earnings), Schedule (the shop's hours) and Catalogues (prices
  * and products) are the Owner's — GRIDGO refuses their routes to Staff.
  */
-export const STAFF_TABS: readonly TabName[] = ["jobs", "account"];
+export const STAFF_TABS: readonly TabName[] = ["home", "messages", "account", "jobs"];

@@ -45,8 +45,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "home.jobsTab",
     screen: "home",
-    title: "New jobs arrive in Jobs",
-    body: "When GRIDGO matches a job to your shop, it lands in Jobs and you get an alert. Tap Jobs.",
+    title: "New jobs arrive in To do",
+    body: "When GRIDGO sends a job to your shop, it lands here and your phone alerts you. Tap All jobs to see every job.",
   },
   {
     id: "jobs.list",
@@ -69,8 +69,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "schedule.catalogueTab",
     screen: "schedule",
-    title: "Now, your catalogue",
-    body: "Clients order from the listings on your board. Tap Catalogues.",
+    title: "Now, your products",
+    body: "Clients order from the products on your board. Tap My shop, then Products.",
   },
   {
     id: "catalogue.add",
@@ -105,9 +105,7 @@ export const TOUR_LENGTH = TOUR_STEPS.length;
  * every tab screen, so it asks here rather than each screen wrapping it.
  */
 export const TAB_TOUR_STEPS = {
-  jobs: "home.jobsTab",
-  schedule: "jobs.scheduleTab",
-  catalogues: "schedule.catalogueTab",
+  account: "schedule.catalogueTab",
 } as const satisfies Partial<Record<string, TourStepId>>;
 
 /**

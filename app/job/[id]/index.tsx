@@ -35,6 +35,8 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { ShopReleasePanel } from "@/components/ShopReleasePanel";
 import { SpecialInstructionsPanel } from "@/components/SpecialInstructionsPanel";
 import { StatusChip } from "@/components/StatusChip";
+import { OrderReference } from "@/components/OrderReference";
+import { fulfilmentLine, paymentLine } from "@/lib/todo";
 import { acceptWindow } from "@/lib/acceptWindow";
 import { formatDeadlineFull, shopDueAt } from "@/lib/dates";
 import { waitsForDispatch } from "@/lib/dispatchHours";
@@ -59,7 +61,7 @@ import {
   itemInstructions,
 } from "@/lib/orderChanges";
 import { correctableColourLines, readColourQuote } from "@/lib/colourPricing";
-import { packagingCheck } from "@/lib/packagingReadiness";
+import { expressReadyNow, packagingCheck } from "@/lib/packagingReadiness";
 import { lapseForOrder, lapseNotice } from "@/lib/productionLapse";
 import { refundNotice, refundStanding } from "@/lib/refund";
 import { canRequestNewDeadline, rescheduleNotice } from "@/lib/reschedule";
@@ -287,6 +289,11 @@ export default function JobWorkspaceScreen() {
   }
 
   function openStep(action: SupplierAction) {
+    // Express is marked ready where its card does it: one tap, no photo step.
+    if (express && action.kind === "ready_for_pickup") {
+      router.push({ pathname: "/job/[id]/print", params: { id: job!.id } });
+      return;
+    }
     router.push({
       pathname: routeForAction(action.kind),
       params: {
@@ -323,7 +330,14 @@ export default function JobWorkspaceScreen() {
             <StatusChip tone={status.tone} label={status.label} icon={status.icon} />
           </View>
           <Text className="text-h1 text-text-primary">{job.title}</Text>
-          <Text className="text-caption text-text-muted">Order {job.id}</Text>
+          <View className="flex-row">
+            <OrderReference id={job.id} />
+          </View>
+          {paymentLine(job) ? (
+            <Text className="text-body text-text-secondary" testID="job-paid-line">
+              {[fulfilmentLine(job), paymentLine(job)].join(" · ")}
+            </Text>
+          ) : null}
           {express ? (
             <View className="flex-row">
               <ExpressChip />
@@ -415,7 +429,7 @@ export default function JobWorkspaceScreen() {
           <View className="mt-6">
             <DeadlineRequestPanel request={deadlineRequest} />
           </View>
-        ) : packaging && (!packaging.allowed || flow === "rider_packs") ? (
+        ) : packaging && (!packaging.allowed || (flow === "rider_packs" && !expressReadyNow(job))) ? (
           <View className="mt-6">
             <PackagingChecklist
               check={packaging}

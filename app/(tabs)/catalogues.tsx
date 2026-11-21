@@ -241,7 +241,8 @@ export default function BoardScreen() {
         }
       >
         <ScreenHeader
-          title="Catalogues"
+          title="Products"
+          back={{ label: "My shop", onPress: () => router.navigate("/(tabs)/account") }}
           right={
             <View className="flex-row items-center">
               <ChatButton />

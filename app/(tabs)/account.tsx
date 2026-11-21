@@ -68,7 +68,7 @@ function StaffAccount() {
   return (
     <View className="gg-screen">
       <ScrollView className="flex-1" contentContainerClassName="gg-page pb-10" showsVerticalScrollIndicator={false}>
-        <ScreenHeader title="Account" right={<AlertsBell />} />
+        <ScreenHeader title="My shop" right={<AlertsBell />} />
         <View className="gg-card gap-3">
           <View className="flex-row items-center gap-3">
             <ShopPortrait imageUrl={clerkUser?.imageUrl} shopName={personName} size={56} />
@@ -215,7 +215,7 @@ function OwnerAccount() {
         showsVerticalScrollIndicator={false}
       >
         <ScreenHeader
-          title="Account"
+          title="My shop"
           right={
             <View className="flex-row items-center">
               <ChatButton />
@@ -306,8 +306,8 @@ function OwnerAccount() {
             onPress={() => router.push("/team" as Href)}
           />
           <DestinationRow
-            title="Your board"
-            detail="What clients see: listings, prices, samples"
+            title="Products"
+            detail="What clients see: prices, samples and Express"
             onPress={() => router.push("/(tabs)/catalogues")}
           />
           {approved ? (

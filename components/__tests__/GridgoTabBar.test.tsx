@@ -71,7 +71,7 @@ describe("GridgoTabBar", () => {
     useAlertsStore.setState({ unreadCount: 0 });
   });
 
-  it("labels every destination, including Schedule", async () => {
+  it("labels every place, including Money", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
     for (const tab of TABS) {
@@ -90,15 +90,15 @@ describe("GridgoTabBar", () => {
   it("marks only the open tab as selected", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(1)} />);
 
-    expect(screen.getByRole("tab", { name: "Jobs", selected: true })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Messages", selected: true })).toBeTruthy();
     expect(screen.queryAllByRole("tab", { selected: true })).toHaveLength(1);
   });
 
   it("paints the open mark in the same off-white the rider bar uses, not yellow", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    const openLabel = screen.getByText("Home");
-    const restLabel = screen.getByText("Jobs");
+    const openLabel = screen.getByText("To do");
+    const restLabel = screen.getByText("Messages");
     expect(String(openLabel.props.className ?? "")).toContain("text-text-primary");
     expect(String(openLabel.props.className ?? "")).toContain("font-medium");
     expect(String(restLabel.props.className ?? "")).toContain("text-text-muted");
@@ -109,17 +109,34 @@ describe("GridgoTabBar", () => {
   it("navigates to a tab that is not open", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    fireEvent.press(screen.getByRole("tab", { name: "Catalogues" }));
+    fireEvent.press(screen.getByRole("tab", { name: "My shop" }));
 
-    expect(navigate).toHaveBeenCalledWith("catalogues");
+    expect(navigate).toHaveBeenCalledWith("account");
   });
 
   it("stays put when the open tab is pressed again", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    fireEvent.press(screen.getByRole("tab", { name: "Home" }));
+    fireEvent.press(screen.getByRole("tab", { name: "To do" }));
 
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  /** All jobs is a page inside To do: the bar lights To do, and To do goes back to it. */
+  it("lights the place a page belongs to, and returns to it", async () => {
+    const props = {
+      state: {
+        index: 4,
+        routes: [...TABS.map((tab) => ({ key: `${tab.name}-key`, name: tab.name })), { key: "jobs-key", name: "jobs" }],
+      },
+      navigation: { emit, navigate },
+    } as unknown as BottomTabBarProps;
+    await renderInSafeArea(<GridgoTabBar {...props} />);
+
+    expect(screen.getByRole("tab", { name: "To do", selected: true })).toBeTruthy();
+    expect(screen.queryByText("All jobs")).toBeNull();
+    fireEvent.press(screen.getByRole("tab", { name: "To do" }));
+    expect(navigate).toHaveBeenCalledWith("home");
   });
 
   it("honours a tabPress handler that prevents the default", async () => {
@@ -127,7 +144,7 @@ describe("GridgoTabBar", () => {
 
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    fireEvent.press(screen.getByRole("tab", { name: "Schedule" }));
+    fireEvent.press(screen.getByRole("tab", { name: "Money" }));
 
     expect(navigate).not.toHaveBeenCalled();
   });
@@ -152,7 +169,7 @@ describe("GridgoTabBar", () => {
   it("lets a column grow rather than clipping a label under dynamic type", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    const tab = screen.getByRole("tab", { name: "Catalogues" });
+    const tab = screen.getByRole("tab", { name: "My shop" });
     const className = String(tab.props.className ?? "");
     expect(className).toContain("justify-end");
     expect(className).not.toContain("h-13");
@@ -266,7 +283,7 @@ describe("GridgoTabBar", () => {
   it("allows modest dynamic type growth on tab labels", async () => {
     await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-    const homeLabel = screen.getByText("Home");
+    const homeLabel = screen.getByText("To do");
     // Constrained bar, not a hard lockout of accessibility text.
     expect(homeLabel.props.maxFontSizeMultiplier).toBe(1.4);
     expect(homeLabel.props.maxFontSizeMultiplier).toBeGreaterThan(1);
@@ -274,7 +291,7 @@ describe("GridgoTabBar", () => {
 
   /**
    * Five equal columns, so Home's distance from the left edge is Account's
-   * from the right — even though "Catalogues" is a longer word than "Home".
+   * from the right — even though "My shop" is a longer word than "To do".
    * Side safe-area is applied equally; it is zero on a typical phone.
    */
   describe("icon gutters", () => {
@@ -306,12 +323,12 @@ describe("GridgoTabBar", () => {
     it("centres each mark in an equal column, so a long label does not steal the edge", async () => {
       await renderInSafeArea(<GridgoTabBar {...tabBarProps(0)} />);
 
-      const home = screen.getByRole("tab", { name: "Home" });
-      const catalogues = screen.getByRole("tab", { name: "Catalogues" });
+      const home = screen.getByRole("tab", { name: "To do" });
+      const catalogues = screen.getByRole("tab", { name: "My shop" });
       expect(String(home.props.className ?? "")).toContain("flex-1");
       expect(String(catalogues.props.className ?? "")).toContain("flex-1");
       expect(String(home.props.className ?? "")).toContain("items-center");
-      expect(String(screen.getByText("Catalogues").props.className ?? "")).toContain("text-center");
+      expect(String(screen.getByText("My shop").props.className ?? "")).toContain("text-center");
     });
   });
 

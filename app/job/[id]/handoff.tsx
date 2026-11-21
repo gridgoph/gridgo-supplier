@@ -12,7 +12,7 @@ import { attachPackingPhoto, attachReceiptScan } from "@/lib/api";
 import { needsPackingPhoto, packingPhotoViews } from "@/lib/packingPhoto";
 import { CounterCheckPanel } from "@/components/CounterCheckPanel";
 import { PackagingChecklist } from "@/components/PackagingChecklist";
-import { packagingCheck, packagingHeld, stepRequirement } from "@/lib/packagingReadiness";
+import { expressReadyNow, packagingCheck, packagingHeld, stepRequirement } from "@/lib/packagingReadiness";
 import { ReceiptScanCard } from "@/components/ReceiptScanCard";
 import { RECEIPT_SCAN_MAX_BYTES, RECEIPT_SCAN_NEEDED, receiptScanOf } from "@/lib/receiptScan";
 import { FlowScreen } from "@/components/FlowScreen";
@@ -129,8 +129,10 @@ export default function HandoffScreen() {
   const sendFinished = job ? findAction(job, "send_finished_photos") : null;
   // A refusal speaks for a GRIDGO too old to say whether a photo is on the job.
   const refused = isProductionPhotoRequired(action.failure);
-  const photoGate = job && !newer ? needsProductionPhoto(job, refused) : false;
-  const packingGate = job && !newer
+  // Express has no photo step: GRIDGO's readiness already says it can be marked ready.
+  const expressReady = job ? expressReadyNow(job) : false;
+  const photoGate = job && !newer && !expressReady ? needsProductionPhoto(job, refused) : false;
+  const packingGate = job && !newer && !expressReady
     ? needsPackingPhoto(job, isPackingPhotoRequired(action.failure))
     : false;
   const canAddPacking =
@@ -327,7 +329,9 @@ export default function HandoffScreen() {
           ? "Before a rider is called, attach a scan of your own receipt or invoice for this order."
           : newer && !held && !counterIssue
           ? step
-            ? "GRIDGO approved your finished products."
+            ? expressReady
+              ? "Express jobs need no photos before they are ready."
+              : "GRIDGO approved your finished products."
             : sendFinished
               ? "Before a rider is called, GRIDGO checks photos of the finished, unpacked products."
               : finished?.stage === "in_review" || finished?.stage === "with_gridgo"
