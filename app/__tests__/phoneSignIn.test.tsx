@@ -198,4 +198,19 @@ describe("a teammate who joined with only a mobile", () => {
     expect(mockSignIn.phoneCode.sendCode).not.toHaveBeenCalled();
     expect(screen.getByText(/Check the number/)).toBeTruthy();
   });
+
+  it("says plainly when mobile sign-in is closed and sends the person back to email or Google", async () => {
+    mockSignIn.phoneCode.sendCode.mockResolvedValueOnce({
+      error: { errors: [{ code: "strategy_for_user_invalid", message: "The strategy is not valid for this user." }] },
+    } as never);
+    await signInByPhone("0915 123 7781");
+    expect(screen.getByText("Mobile login not open yet")).toBeTruthy();
+    expect(screen.queryByText(/strategy is not valid/)).toBeNull();
+    expect(screen.queryByText("Send my code")).toBeNull();
+    await act(async () => {
+      fireEvent.press(screen.getByText("Sign in with email"));
+    });
+    expect(router.dismissTo).toHaveBeenCalledWith("/(auth)/login");
+    expect(mockSignUp.create).not.toHaveBeenCalled();
+  });
 });

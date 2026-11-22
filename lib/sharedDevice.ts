@@ -18,6 +18,25 @@ export function isSharedDevice(): boolean {
 }
 
 /**
+ * A handover is being prepared: the signed-in person's push is coming off.
+ *
+ * Only new push registrations stop for this. The phone is not shared yet —
+ * the session does not open the picker until the removal has succeeded and
+ * `setSharedDevice(true)` follows — so a refusal leaves the Owner's screens
+ * exactly as they were.
+ */
+let handoverPending = false;
+
+export function setHandoverPending(next: boolean): void {
+  handoverPending = next;
+}
+
+/** Whether personal push registration must wait: shared, or about to be. */
+export function personalPushPaused(): boolean {
+  return shared || handoverPending;
+}
+
+/**
  * A camera, gallery or file picker this app opened itself, still open.
  *
  * On a shared phone every trip to the background locks the worker's turn

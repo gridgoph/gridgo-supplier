@@ -91,4 +91,33 @@ describe("a new person joining by link or QR", () => {
     });
     expect(screen.getByLabelText("Your mobile")).toBeTruthy();
   });
+
+  it("says plainly when mobile logins are closed and offers the email invite instead", async () => {
+    mockSignUp.create.mockResolvedValueOnce({
+      error: { errors: [{ code: "form_param_unknown", meta: { paramName: "phone_number" }, message: "phone_number is not a valid parameter for this request." }] },
+    } as never);
+    useTeamJoin.getState().holdToken(TOKEN);
+    await render(<JoinAccountScreen />);
+    await act(async () => {
+      fireEvent.changeText(screen.getByLabelText("Your name"), "Lito Cruz");
+      fireEvent.changeText(screen.getByLabelText("Your mobile"), "0915 123 7781");
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText("Send my code"));
+    });
+    expect(screen.getByText("Mobile login not open yet")).toBeTruthy();
+    expect(screen.getByText(/Ask the owner to invite your email from Team/)).toBeTruthy();
+    expect(screen.getByText(/add you with a PIN/)).toBeTruthy();
+    expect(screen.queryByText(/not a valid parameter/)).toBeNull();
+    expect(screen.queryByText("Send my code")).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByText("Make my login with my email"));
+    });
+    expect(screen.getByLabelText("Email")).toBeTruthy();
+    // The link cannot be claimed by a new email login; the email invite is found instead.
+    expect(useTeamJoin.getState().token).toBeNull();
+    expect(useTeamJoin.getState().joining).toBe(true);
+    expect(mockSignUp.password).not.toHaveBeenCalled();
+  });
 });

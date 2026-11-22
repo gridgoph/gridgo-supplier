@@ -317,7 +317,7 @@ const MESSAGES: Record<string, string> = {
   invalid_shop_invite_claim: "That link is not a GRIDGO team invite. Ask the owner to share it again.",
   // Phone-free staff, the shop phone and the team view (report F315793B).
   shop_mobile_verification_required:
-    "Verify your mobile number to join with a link or QR. Make your login with your mobile, then try again.",
+    "A team link or QR needs a login made with a mobile. Ask the owner to invite your email from Team instead, or to add you with a PIN on the shop's phone.",
   shop_pin_invalid: "That PIN is not right. Try again.",
   shop_pin_rate_limited: "Too many wrong PINs. Wait 15 minutes, or ask the owner for a new PIN.",
   invalid_shop_pin: "A PIN is exactly 4 numbers.",

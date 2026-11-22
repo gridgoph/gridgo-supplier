@@ -10,7 +10,8 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { TextField } from "@/components/controls/TextField";
 import { emailUnavailableMessage, enterAfterClerkSession, hrefAfterClerkAuth } from "@/lib/afterClerkAuth";
-import { clerkErrorMessage, type ClerkGetToken } from "@/lib/clerk";
+import { PhoneUnavailable } from "@/components/team/PhoneUnavailable";
+import { clerkErrorMessage, isPhoneUnavailableError, type ClerkGetToken } from "@/lib/clerk";
 import { clerkSignOutRecoveryMessage, releaseClerkSession } from "@/lib/clerkSignIn";
 import { normalizeInviteIdentity } from "@/lib/shopTeam";
 import { useSession } from "@/store/session";
@@ -35,6 +36,7 @@ export default function PhoneSignInScreen() {
   const [busy, setBusy] = useState(false);
   const [tried, setTried] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
 
   const phone = normalizeInviteIdentity("phone", mobile);
   const mobileProblem = phone ? null : "Check the number. It looks like 0917 123 4567.";
@@ -49,6 +51,10 @@ export default function PhoneSignInScreen() {
       if (result.error) throw result.error;
       setSent(true);
     } catch (error) {
+      if (isPhoneUnavailableError(error)) {
+        setUnavailable(true);
+        return;
+      }
       setProblem(clerkErrorMessage(error, "GRIDGO could not text a code to that number. Try again."));
     } finally {
       setBusy(false);
@@ -138,7 +144,12 @@ export default function PhoneSignInScreen() {
         />
       </FieldShell>
       {problem ? <ErrorNotice message={problem} /> : null}
-      <PrimaryButton label={busy ? "Sending…" : "Send my code"} disabled={busy} onPress={() => void sendCode()} />
+      {unavailable ? (
+        // Back to Sign in, where email, password and Google still work.
+        <PhoneUnavailable moment="sign_in" onEmail={() => router.dismissTo("/(auth)/login")} />
+      ) : (
+        <PrimaryButton label={busy ? "Sending…" : "Send my code"} disabled={busy} onPress={() => void sendCode()} />
+      )}
     </FormScrollView>
   );
 }

@@ -200,4 +200,44 @@ describe("review fixes on the shop phone", () => {
     expect(api.workerHeaders()).toEqual({});
     expect(useShopWorker.getState().worker).toBeNull();
   });
+
+  it("keeps the Owner's screens while the push removal is still out, even through a refresh", async () => {
+    usePush.setState({ token: "fcm-owner", claimed: true });
+    let fail: (error: Error) => void = () => {};
+    (api.unregisterDevice as jest.Mock).mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }));
+    const entering = useShopWorker.getState().enter("Print Hub");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.unregisterDevice).toHaveBeenCalledWith("fcm-owner");
+
+    // The ordinary Owner bootstrap lands before GRIDGO answers the removal.
+    (api.me as jest.Mock).mockResolvedValueOnce(owner);
+    await useSession.getState().refresh();
+    expect(useSession.getState().identity).toEqual({ kind: "supplier" });
+    expect(isSharedDevice()).toBe(false);
+
+    // Nobody can pick themselves on a phone that is not handed over yet.
+    expect(await useShopWorker.getState().select("shp_lito", "4821")).toMatch(/not set up for PIN staff/);
+    expect(api.selectWorker).not.toHaveBeenCalled();
+
+    fail(new Error("Network request failed"));
+    expect(await entering).toMatch(/not handed over/);
+    expect(useSession.getState().identity).toEqual({ kind: "supplier" });
+    expect(usePush.getState().token).toBe("fcm-owner");
+    expect(useShopWorker.getState().shared).toBe(false);
+  });
+
+  it("does not register the Owner's push while the handover is pending", async () => {
+    usePush.setState({ token: "fcm-owner", claimed: true });
+    let answer: () => void = () => {};
+    (api.unregisterDevice as jest.Mock).mockImplementationOnce(() => new Promise<void>((resolve) => { answer = resolve; }));
+    const entering = useShopWorker.getState().enter("Print Hub");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const { personalPushPaused } = jest.requireActual("@/lib/sharedDevice") as typeof import("@/lib/sharedDevice");
+    expect(personalPushPaused()).toBe(true);
+    expect(isSharedDevice()).toBe(false);
+    answer();
+    expect(await entering).toBeNull();
+    expect(isSharedDevice()).toBe(true);
+    expect(useSession.getState().identity).toEqual({ kind: "device_locked" });
+  });
 });

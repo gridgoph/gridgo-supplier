@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware";
 import * as api from "@/lib/api";
 import { apiErrorCode, humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { createPersistStorage } from "@/lib/persistStorage";
-import { setSharedDevice } from "@/lib/sharedDevice";
+import { setHandoverPending, setSharedDevice } from "@/lib/sharedDevice";
 import type { ShopRole } from "@/lib/shopTeam";
 import { useAlertsStore } from "@/store/alerts";
 import { dismissDeliveredNotifications, serializeDeviceMutation, usePush } from "@/store/push";
@@ -76,8 +76,9 @@ export const useShopWorker = create<ShopWorkerState>()(
 
       enter: async (shopName) => {
         // New registrations stop first: one queued behind this handover finds
-        // the phone shared and leaves it alone.
-        setSharedDevice(true);
+        // it pending and leaves the phone alone. The phone is not shared yet,
+        // so nothing opens the picker until the removal below has succeeded.
+        setHandoverPending(true);
         let refused: string | null = null;
         // Behind any registration already on its way, so the token read here is
         // the newest one and nothing re-registers it for the login afterwards.
@@ -95,14 +96,18 @@ export const useShopWorker = create<ShopWorkerState>()(
             }
           }
           usePush.setState({ token: null, claimed: false });
+        }).catch(() => {
+          refused = offlineMessage("turn off your alerts on this phone");
         });
         if (refused) {
           // The token stays, so the next try (or a sign-out) can still remove it.
-          setSharedDevice(false);
+          setHandoverPending(false);
           return `Your alerts could not be turned off on this phone, so it was not handed over. ${refused}`;
         }
         // Alerts already on the lock screen were the Owner's too.
         await dismissDeliveredNotifications();
+        setSharedDevice(true);
+        setHandoverPending(false);
         handover += 1;
         api.setWorkerToken(null);
         useAlertsStore.getState().bindOwner(null);
@@ -116,6 +121,8 @@ export const useShopWorker = create<ShopWorkerState>()(
         // A lock still on its way to GRIDGO settles before the next turn opens,
         // or it could end the turn that follows it.
         await locking;
+        // Only a phone the Owner finished handing over has a picker to pick from.
+        if (!get().shared) return "This phone is not set up for PIN staff yet. Ask the owner to start it from Team.";
         const mine = ++handover;
         const current = () => mine === handover;
         try {
@@ -161,6 +168,7 @@ export const useShopWorker = create<ShopWorkerState>()(
         handover += 1;
         api.setWorkerToken(null);
         setSharedDevice(false);
+        setHandoverPending(false);
         set({ shared: false, shopName: null, worker: null, notice: null });
       },
     }),

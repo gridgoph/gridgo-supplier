@@ -120,6 +120,17 @@ describe("joining a team", () => {
     expect(screen.getByText("This invite was already used. Ask the owner for a new one.")).toBeTruthy();
     expect(useTeamJoin.getState().token).toBeNull();
   });
+
+  it("names what works when a link needs a mobile login this person does not have", async () => {
+    (api.claimShopInvite as jest.Mock).mockRejectedValue(new api.ApiError(403, { error: "shop_mobile_verification_required" }));
+    useTeamJoin.getState().holdToken(TOKEN);
+    await render(<JoinTeamScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByText("Join"));
+    });
+    expect(screen.getByText(/Ask the owner to invite your email from Team instead, or to add you with a PIN/)).toBeTruthy();
+    expect(screen.queryByText(/Make your login with your mobile/)).toBeNull();
+  });
 });
 
 describe("waiting for the Owner", () => {

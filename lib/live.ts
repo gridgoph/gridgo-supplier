@@ -7,10 +7,17 @@ const listeners = new Set<Listener>();
 let owner: string | null = null;
 let generation = 0;
 export const liveGeneration = () => generation;
+const generationListeners = new Set<() => void>();
 export function setLiveOwner(next: string | null): void {
   if (owner === next) return;
   owner = next;
   generation += 1;
+  for (const listener of generationListeners) listener();
+}
+/** Told whenever a new live generation starts (`useSyncExternalStore` shape). */
+export function subscribeLiveGeneration(listener: () => void): () => void {
+  generationListeners.add(listener);
+  return () => { generationListeners.delete(listener); };
 }
 export function assertLiveGeneration(expected: number): void {
   if (expected !== generation) throw new Error("The account changed. Open this screen again.");

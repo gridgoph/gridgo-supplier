@@ -6,7 +6,7 @@ import { getNotificationsNative as notifications, pushSupported } from "@/lib/ex
 import * as api from "@/lib/api";
 import { getFirebaseMessaging } from "@/lib/firebaseMessaging";
 import { humanizeApiError } from "@/lib/apiErrors";
-import { isSharedDevice } from "@/lib/sharedDevice";
+import { personalPushPaused } from "@/lib/sharedDevice";
 import {
   channelAudibility,
   devicePlatform,
@@ -310,7 +310,7 @@ export const usePush = create<PushState>((set, get) => ({
     const state = get();
     if (!state.supported) return;
     // A shared shop phone carries nobody's personal alerts (store/shopWorker.ts).
-    if (isSharedDevice()) return;
+    if (personalPushPaused()) return;
 
     const platform = devicePlatform();
     if (!platform) return;

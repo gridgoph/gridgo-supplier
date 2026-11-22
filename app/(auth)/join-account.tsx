@@ -10,9 +10,11 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { FieldShell } from "@/components/controls/FieldShell";
 import { PasswordField } from "@/components/controls/PasswordField";
 import { TextField } from "@/components/controls/TextField";
+import { PhoneUnavailable } from "@/components/team/PhoneUnavailable";
 import {
   clerkErrorMessage,
   isAlreadySignedInError,
+  isPhoneUnavailableError,
   splitPersonName,
 } from "@/lib/clerk";
 import { continuationAfterSignUp } from "@/lib/clerkSignUp";
@@ -48,6 +50,8 @@ export default function JoinAccountScreen() {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
+  // Clerk refused a mobile login outright: this GRIDGO does not text codes yet.
+  const [phoneUnavailable, setPhoneUnavailable] = useState(false);
 
   const nameProblem = name.trim() ? null : "Add your name.";
   const emailProblem =
@@ -141,6 +145,10 @@ export default function JoinAccountScreen() {
       }
       await finish();
     } catch (error) {
+      if (withMobile && isPhoneUnavailableError(error)) {
+        setPhoneUnavailable(true);
+        return;
+      }
       setProblem(
         clerkErrorMessage(
           error,
@@ -189,6 +197,20 @@ export default function JoinAccountScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /**
+   * The way in that works while mobile logins are closed: an email invite
+   * from the owner. A new person cannot claim a link or QR with an email
+   * login (GRIDGO asks for a verified mobile), so the link is let go here and
+   * the join screen finds the email invite instead. Still joining.
+   */
+  function joinWithEmail() {
+    useTeamJoin.getState().dropToken();
+    setPhoneUnavailable(false);
+    setWithMobile(false);
+    setProblem(null);
+    setTried(false);
   }
 
   if (verifying) {
@@ -272,17 +294,21 @@ export default function JoinAccountScreen() {
         </>
       )}
       {problem ? <ErrorNotice message={problem} /> : null}
-      <PrimaryButton
-        label={
-          busy
-            ? "Making your login…"
-            : withMobile
-              ? "Send my code"
-              : "Make my login"
-        }
-        disabled={busy}
-        onPress={() => void create()}
-      />
+      {withMobile && phoneUnavailable ? (
+        <PhoneUnavailable moment="join" onEmail={joinWithEmail} />
+      ) : (
+        <PrimaryButton
+          label={
+            busy
+              ? "Making your login…"
+              : withMobile
+                ? "Send my code"
+                : "Make my login"
+          }
+          disabled={busy}
+          onPress={() => void create()}
+        />
+      )}
       <Pressable
         onPress={() => {
           setWithMobile(!withMobile);
@@ -298,7 +324,7 @@ export default function JoinAccountScreen() {
             : "Join with my mobile instead"}
         </Text>
       </Pressable>
-      {withMobile ? (
+      {withMobile && !phoneUnavailable ? (
         <Pressable
           onPress={() => router.push("/(auth)/phone-sign-in")}
           accessibilityRole="link"
