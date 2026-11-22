@@ -17,7 +17,7 @@ import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";
 import { humanizeApiError, offlineMessage } from "@/lib/apiErrors";
 import { roleLabel } from "@/lib/shopTeam";
-import { acceptSpeedLabel, canChangeRole, canManagePerson, personLine, type TeamPerson } from "@/lib/teamRoster";
+import { acceptSpeedLabel, canChangeRole, canManagePerson, type TeamPerson } from "@/lib/teamRoster";
 import { askConfirm } from "@/store/sheets";
 
 const ROLE_OPTIONS = [
@@ -130,8 +130,8 @@ export default function TeamPersonScreen() {
             <Text className="text-body text-text-secondary">
               {[roleLabel(person.role), joined ? `joined ${joined}` : null, how].filter(Boolean).join(" · ")}
             </Text>
-            {person.kind === "pin" ? (
-              <Text className="text-caption text-text-muted">{personLine(person)}</Text>
+            {person.kind === "pin" && person.onShift ? (
+              <Text className="text-caption text-text-muted">On shift now</Text>
             ) : null}
           </View>
         </View>
@@ -171,8 +171,12 @@ export default function TeamPersonScreen() {
                 label="Gets job alerts"
                 hint={
                   person.kind === "pin"
-                    ? "Shows new jobs to them when they pick themselves on the shop phone."
-                    : "New jobs and Express offers reach their phone."
+                    ? self
+                      ? "Shows you new jobs when you pick yourself on the shop phone."
+                      : "Shows new jobs to them when they pick themselves on the shop phone."
+                    : self
+                      ? "New jobs and Express offers reach your phone."
+                      : "New jobs and Express offers reach their phone."
                 }
               />
             ) : null}

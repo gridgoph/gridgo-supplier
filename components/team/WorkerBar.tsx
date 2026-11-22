@@ -1,5 +1,7 @@
+import { useSegments } from "expo-router";
 import { Text, View, Pressable } from "react-native";
 import { Users } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TeamFace } from "@/components/team/TeamFace";
 import { useThemeColors } from "@/hooks/useTheme";
@@ -16,6 +18,23 @@ import { useShopWorker } from "@/store/shopWorker";
  * GRIDGO never falls back to the login's own access — so the next person
  * picks themselves on the picker.
  */
+/**
+ * The same bar under a pushed screen, where no tab bar carries it: a job is
+ * where "who is acting" matters most. The tabs draw their own above the tab
+ * bar, so this one stays away from them; the inset stacks under it.
+ */
+export function PushedWorkerBar() {
+  const segments = useSegments();
+  const { bottom } = useSafeAreaInsets();
+  const working = useSession((s) => s.user?.worker != null);
+  if (!working || segments[0] === "(tabs)" || segments[0] === "who-is-working") return null;
+  return (
+    <View className="bg-surface" style={{ paddingBottom: bottom }}>
+      <WorkerBar />
+    </View>
+  );
+}
+
 export function WorkerBar() {
   const colors = useThemeColors();
   const worker = useSession((s) => s.user?.worker ?? null);

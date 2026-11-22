@@ -100,7 +100,7 @@ describe("words", () => {
   });
 
   it("caps the mission's progress at its target", () => {
-    expect(missionProgress({ code: "m", targetJobs: 10, acceptedJobs: 14, quickAcceptedJobs: 12, completed: true })).toEqual({
+    expect(missionProgress({ targetJobs: 10, acceptedJobs: 14, quickAcceptedJobs: 12, completed: true })).toEqual({
       done: 10,
       target: 10,
       fraction: 1,

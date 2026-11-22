@@ -15,6 +15,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import {
   SafeAreaProvider,
@@ -24,6 +25,7 @@ import {
 
 import { BrandIntro } from "@/components/BrandIntro";
 import { SessionShell } from "@/components/SessionShell";
+import { PushedWorkerBar } from "@/components/team/WorkerBar";
 import { ToastHost } from "@/components/ToastHost";
 import { TourOverlay } from "@/components/TourOverlay";
 import { ClerkSessionBridge } from "@/components/ClerkSessionBridge";
@@ -242,6 +244,7 @@ function RootStack({ introDone }: { introDone: boolean }) {
 
   return (
     <SessionShell>
+    <View style={{ flex: 1 }}>
     <Stack key={rootStackKey(user)} screenOptions={stackScreenOptions(scheme, top)}>
       {/* Launch redirect stays public so cold start always has an anchor. */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -664,6 +667,9 @@ function RootStack({ introDone }: { introDone: boolean }) {
         />
       </Stack.Protected>
     </Stack>
+    {/* Over a pushed screen (a job, the team), who the shop phone is acting as. */}
+    <PushedWorkerBar />
+    </View>
     </SessionShell>
   );
 }
