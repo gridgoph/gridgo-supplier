@@ -649,6 +649,8 @@ function RootStack({ introDone }: { introDone: boolean }) {
             headerBackButtonDisplayMode: "minimal",
           }}
         />
+        {/* Pay GRIDGO: the QR Ph, amount and reference for what the shop owes. */}
+        <Stack.Screen name="pay-gridgo" options={sheetScreenOptions(scheme)} />
         <Stack.Screen
           name="late-production"
           options={{

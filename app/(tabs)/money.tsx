@@ -1,23 +1,39 @@
-import { View } from "react-native";
+import { useState } from "react";
+import { Text, View } from "react-native";
 
 import { AlertsBell } from "@/components/AlertsBell";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { HowYouEarn } from "@/components/money/HowYouEarn";
+import { LaunchBonusCard } from "@/components/money/LaunchBonusCard";
+import { MoneyActivity } from "@/components/money/MoneyActivity";
+import { ShopBalances } from "@/components/money/ShopBalances";
 import { VerifyNoticeCard } from "@/components/verify/VerifyNoticeCard";
 import { WaitingPayoutList } from "@/components/verify/WaitingPayoutList";
+import { useShopMoney } from "@/hooks/useShopMoney";
 import { useShopVerification } from "@/hooks/useShopVerification";
+import { launchBonusSummary, type MoneyPeriod } from "@/lib/shopMoney";
 import { missingPapers, moneyVerifyBanner } from "@/lib/shopVerification";
 import { PayoutView } from "../payout";
 
 /**
- * Money: what the shop has earned and where each part is (gridgo-supplier#269).
- * The Owner's only — the tab is guarded out for Staff, and GRIDGO refuses them
- * the figures anyway. The statement is the same one Earnings has always shown.
+ * Money: the shop's balances with GRIDGO, how it earns and where each part is
+ * (gridgo-supplier#269, gridgo-api#416). The Owner's only — the tab is guarded
+ * out for Staff, and GRIDGO refuses them the figures anyway.
+ *
+ * The balances, the period's activity and "How you earn" come from
+ * `GET /me/shop-money` and `GET /settings`; a GRIDGO without them draws only
+ * the staged statement below, as Money did before. That statement stays: it is
+ * where each Regular job's parts and their evidence are.
  */
 export default function MoneyScreen() {
   // While the shop is not verified: how much of the cap is used, and which
   // staged payments wait on verification. Kept off the receiving-QR screen.
   const { read } = useShopVerification();
   const banner = read ? moneyVerifyBanner(read.verification, missingPapers(read.files)) : null;
+  const [period, setPeriod] = useState<MoneyPeriod>("week");
+  const money = useShopMoney(period);
+  const bonus = money.read ? launchBonusSummary(money.read.jobs) : null;
+
   return (
     <PayoutView
       header={
@@ -35,10 +51,25 @@ export default function MoneyScreen() {
               <VerifyNoticeCard notice={banner} testID="money-verify-banner" />
             </View>
           ) : null}
+          {money.read ? (
+            <View className="mb-8 gap-6">
+              <ShopBalances
+                balances={money.read.balances}
+                schedule={money.schedule}
+                payGridgo={money.read.payGridgo}
+              />
+              {bonus ? <LaunchBonusCard summary={bonus} /> : null}
+              <MoneyActivity read={money.read} period={period} onPeriod={setPeriod} />
+              <HowYouEarn schedule={money.schedule} />
+            </View>
+          ) : null}
           {read?.waiting.length ? (
             <View className="mb-4">
               <WaitingPayoutList waiting={read.waiting} />
             </View>
+          ) : null}
+          {money.read ? (
+            <Text className="mb-3 text-h3 text-text-primary">Jobs paid in parts</Text>
           ) : null}
         </>
       }
