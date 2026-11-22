@@ -190,7 +190,7 @@ type SessionState = {
   /** The shop's phone is shared: only the picker is open until someone picks themselves. */
   lockDevice: () => void;
   /** Someone picked themselves: read who the phone is acting as now. */
-  adoptWorker: () => Promise<void>;
+  adoptWorker: (stillCurrent?: () => boolean) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
   beginSessionWait: (tone: "in" | "out") => void;
@@ -317,7 +317,9 @@ export const useSession = create<SessionState>((set, get) => ({
     try {
       const user = await api.me();
       if (!current()) return;
-      if (user.role !== APP_ROLE) get().adoptClerkUser(user);
+      // On a shared phone the bootstrap decides between the picker and a worker;
+      // it is never installed over them as a plain user.
+      if (user.role !== APP_ROLE || isSharedDevice()) get().adoptClerkUser(user);
       else set({ user });
     } catch (error) {
       if (!current()) return;
@@ -460,8 +462,11 @@ export const useSession = create<SessionState>((set, get) => ({
     if (get().authSource === "none") return;
     set({ identity: { kind: "device_locked" }, loading: false, error: null, sessionWait: null });
   },
-  adoptWorker: async () => {
+  adoptWorker: async (stillCurrent) => {
+    const generation = liveGeneration();
     const user = await api.me();
+    // A lock or another pick while this read was out wins over it.
+    if (generation !== liveGeneration() || (stillCurrent && !stillCurrent())) return;
     get().adoptClerkUser(user);
   },
   logout: async () => {
@@ -551,10 +556,28 @@ useSession.subscribe((state, previous) => {
   useTesterProgram.getState().forget();
 });
 
+/**
+ * Who the app is acting for, not only which login: on a shared shop phone the
+ * login stays the Owner's while the person working changes (report F315793B).
+ * Every change of this key starts a new live generation, so a read that began
+ * for the Owner (or for the last worker) is dropped when it lands rather than
+ * drawn for whoever holds the phone now.
+ */
+export function actingContextKey(state: Pick<SessionState, "user" | "identity">): string | null {
+  const user = state.user;
+  if (!user) return null;
+  const locked = state.identity.kind === "device_locked" ? "locked" : "open";
+  return [user.id, locked, user.shopId ?? "", user.shopRole ?? "", user.worker?.pinStaffId ?? ""].join("|");
+}
+
+useSession.subscribe((state, previous) => {
+  const key = actingContextKey(state);
+  if (key !== actingContextKey(previous)) setLiveOwner(key);
+});
+
 useSession.subscribe((state, previous) => {
   const next = state.user?.id ?? null;
   if (next === (previous.user?.id ?? null)) return;
-  setLiveOwner(next);
   useAlertsStore.getState().bindOwner(next);
   useToasts.getState().clear();
   // One shop's privacy requests are never drawn for the next one on this phone.

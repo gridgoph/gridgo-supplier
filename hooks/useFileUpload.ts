@@ -1,4 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
+import { withSystemPicker } from "@/lib/sharedDevice";
 import * as ImagePicker from "expo-image-picker";
 import { useCallback, useRef, useState } from "react";
 
@@ -158,7 +159,7 @@ export function useFileUpload(purpose: StoredFile["purpose"], { maxBytes = MAX_P
       );
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+    const result = await withSystemPicker(() => ImagePicker.launchCameraAsync({ quality: 0.8 }));
     const asset = result.canceled ? null : result.assets[0];
     if (!asset) return;
     await accept({
@@ -182,10 +183,10 @@ export function useFileUpload(purpose: StoredFile["purpose"], { maxBytes = MAX_P
       });
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
+    const result = await withSystemPicker(() => ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       quality: 0.8,
-    });
+    }));
     const asset = result.canceled ? null : result.assets[0];
     if (!asset) return;
     await accept({
@@ -209,10 +210,10 @@ export function useFileUpload(purpose: StoredFile["purpose"], { maxBytes = MAX_P
       });
       return;
     }
-    const result = await DocumentPicker.getDocumentAsync({
+    const result = await withSystemPicker(() => DocumentPicker.getDocumentAsync({
       type: ["application/pdf", "image/*"],
       copyToCacheDirectory: true,
-    });
+    }));
     const asset = result.canceled ? null : result.assets[0];
     if (!asset) return;
     await accept({
@@ -232,13 +233,13 @@ export function useFileUpload(purpose: StoredFile["purpose"], { maxBytes = MAX_P
         await acceptMany(capped.map((p, i) => fromWeb(p, `evidence-${counter.current + i + 1}.jpg`)));
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
+      const result = await withSystemPicker(() => ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         quality: 0.8,
         allowsMultipleSelection: true,
         selectionLimit: limit,
         orderedSelection: true,
-      });
+      }));
       if (result.canceled) return;
       const assets = limit > 0 ? result.assets.slice(0, limit) : result.assets;
       await acceptMany(
@@ -262,11 +263,11 @@ export function useFileUpload(purpose: StoredFile["purpose"], { maxBytes = MAX_P
         await acceptMany(capped.map((p, i) => fromWeb(p, `evidence-${counter.current + i + 1}`)));
         return;
       }
-      const result = await DocumentPicker.getDocumentAsync({
+      const result = await withSystemPicker(() => DocumentPicker.getDocumentAsync({
         type: ["application/pdf", "image/*"],
         copyToCacheDirectory: true,
         multiple: true,
-      });
+      }));
       if (result.canceled) return;
       const assets = limit > 0 ? result.assets.slice(0, limit) : result.assets;
       await acceptMany(

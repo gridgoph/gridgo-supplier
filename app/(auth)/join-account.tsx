@@ -298,6 +298,15 @@ export default function JoinAccountScreen() {
             : "Join with my mobile instead"}
         </Text>
       </Pressable>
+      {withMobile ? (
+        <Pressable
+          onPress={() => router.push("/(auth)/phone-sign-in")}
+          accessibilityRole="link"
+          className="gg-touch items-center justify-center"
+        >
+          <Text className="text-button text-text-primary underline">I already have a login with this mobile</Text>
+        </Pressable>
+      ) : null}
     </FormScrollView>
   );
 }

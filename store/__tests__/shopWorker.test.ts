@@ -61,15 +61,16 @@ describe("the shop phone", () => {
     expect(useSession.getState().identity).toEqual({ kind: "device_locked" });
   });
 
-  it("locks with the turn's token still on the call, then drops it", async () => {
+  it("locks naming the turn it ends, and drops the token before GRIDGO answers", async () => {
     api.setWorkerToken("wkr_token");
     useShopWorker.setState({ shared: true, worker: { pinStaffId: "shp_lito", name: "Lito", role: "staff" } });
-    let headersAtLock: Record<string, string> = {};
+    let localAtLock: Record<string, string> = { unset: "" };
     (api.lockWorker as jest.Mock).mockImplementation(async () => {
-      headersAtLock = api.workerHeaders();
+      localAtLock = api.workerHeaders();
     });
     await useShopWorker.getState().lock();
-    expect(headersAtLock).toEqual({ "X-GRIDGO-Worker-Token": "wkr_token" });
+    expect(api.lockWorker).toHaveBeenCalledWith("wkr_token");
+    expect(localAtLock).toEqual({});
     expect(api.workerHeaders()).toEqual({});
     expect(useSession.getState().identity).toEqual({ kind: "device_locked" });
   });
@@ -91,5 +92,112 @@ describe("the shop phone", () => {
 
   it("never repeats a code it does not know", () => {
     expect(pickProblem(new api.ApiError(500, { error: "weird_code" }))).not.toContain("weird_code");
+  });
+});
+
+describe("review fixes on the shop phone", () => {
+  const lito = { pinStaffId: "shp_lito", name: "Lito", role: "staff" as const };
+  const ana = { pinStaffId: "shp_ana", name: "Ana", role: "staff" as const };
+  const asWorker = (worker: typeof lito) => ({ ...owner, name: worker.name, shopRole: "staff", worker: { pinStaffId: worker.pinStaffId, name: worker.name } });
+
+  it("does not hand the phone over when the owner's push cannot be removed, and keeps the token", async () => {
+    usePush.setState({ token: "fcm-owner", claimed: true });
+    (api.unregisterDevice as jest.Mock).mockRejectedValueOnce(new Error("Network request failed"));
+    const refused = await useShopWorker.getState().enter("Print Hub");
+    expect(refused).toMatch(/not handed over/);
+    expect(usePush.getState().token).toBe("fcm-owner");
+    expect(isSharedDevice()).toBe(false);
+    expect(useShopWorker.getState().shared).toBe(false);
+    expect(useSession.getState().identity).toEqual({ kind: "supplier" });
+
+    const second = await useShopWorker.getState().enter("Print Hub");
+    expect(second).toBeNull();
+    expect(api.unregisterDevice).toHaveBeenLastCalledWith("fcm-owner");
+    expect(usePush.getState().token).toBeNull();
+    expect(isSharedDevice()).toBe(true);
+  });
+
+  it("treats a registration GRIDGO never had as already removed", async () => {
+    usePush.setState({ token: "fcm-owner", claimed: true });
+    (api.unregisterDevice as jest.Mock).mockRejectedValueOnce(new api.ApiError(404, { error: "not_found" }));
+    expect(await useShopWorker.getState().enter("Print Hub")).toBeNull();
+    expect(usePush.getState().token).toBeNull();
+  });
+
+  it("drops a delayed owner bootstrap that lands after a worker picked themselves", async () => {
+    let answerOwner: (user: typeof owner) => void = () => {};
+    (api.me as jest.Mock).mockImplementationOnce(() => new Promise((resolve) => { answerOwner = resolve; }));
+    const bootstrap = useSession.getState().refresh();
+
+    await useShopWorker.getState().enter("Print Hub");
+    (api.selectWorker as jest.Mock).mockResolvedValue({ worker: lito, token: "wkr_lito", expiresAt: null });
+    (api.me as jest.Mock).mockResolvedValueOnce(asWorker(lito));
+    await useShopWorker.getState().select("shp_lito", "4821");
+    expect(useSession.getState().user?.worker?.pinStaffId).toBe("shp_lito");
+
+    answerOwner(owner);
+    await bootstrap;
+    expect(useSession.getState().user?.worker?.pinStaffId).toBe("shp_lito");
+    expect(useSession.getState().user?.shopRole).toBe("staff");
+  });
+
+  it("never installs a plain owner bootstrap over the picker on a shared phone", async () => {
+    await useShopWorker.getState().enter("Print Hub");
+    (api.me as jest.Mock).mockResolvedValueOnce(owner);
+    await useSession.getState().refresh();
+    expect(useSession.getState().identity).toEqual({ kind: "device_locked" });
+  });
+
+  it("drops a worker read that lands after the phone was locked", async () => {
+    await useShopWorker.getState().enter("Print Hub");
+    (api.selectWorker as jest.Mock).mockResolvedValue({ worker: lito, token: "wkr_lito", expiresAt: null });
+    let answer: (user: unknown) => void = () => {};
+    (api.me as jest.Mock).mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+    const picking = useShopWorker.getState().select("shp_lito", "4821");
+    await Promise.resolve();
+    await Promise.resolve();
+    await useShopWorker.getState().lock();
+    answer(asWorker(lito));
+    await picking;
+    expect(useSession.getState().identity).toEqual({ kind: "device_locked" });
+    expect(api.workerHeaders()).toEqual({});
+  });
+
+  it("a late lock answer never ends the next worker's turn", async () => {
+    await useShopWorker.getState().enter("Print Hub");
+    (api.selectWorker as jest.Mock).mockResolvedValueOnce({ worker: lito, token: "wkr_lito", expiresAt: null });
+    (api.me as jest.Mock).mockResolvedValueOnce(asWorker(lito));
+    await useShopWorker.getState().select("shp_lito", "4821");
+
+    let answerLock: () => void = () => {};
+    (api.lockWorker as jest.Mock).mockImplementationOnce(() => new Promise<void>((resolve) => { answerLock = resolve; }));
+    const locking = useShopWorker.getState().lock();
+
+    (api.selectWorker as jest.Mock).mockResolvedValueOnce({ worker: ana, token: "wkr_ana", expiresAt: null });
+    (api.me as jest.Mock).mockResolvedValueOnce(asWorker(ana));
+    const picking = useShopWorker.getState().select("shp_ana", "1234");
+    // The pick waits for the lock still on its way.
+    await Promise.resolve();
+    expect(api.selectWorker).toHaveBeenCalledTimes(1);
+
+    answerLock();
+    await locking;
+    await picking;
+    expect(api.lockWorker).toHaveBeenCalledWith("wkr_lito");
+    expect(api.workerHeaders()).toEqual({ "X-GRIDGO-Worker-Token": "wkr_ana" });
+    expect(useShopWorker.getState().worker?.name).toBe("Ana");
+  });
+
+  it("a refusal for an ended turn is that turn's news, not the next one's", () => {
+    api.setWorkerToken("wkr_ana");
+    useShopWorker.setState({ shared: true, worker: ana });
+    const lost = api.noteWorkerRefusal(new api.ApiError(403, { error: "shop_worker_invalid" }), "wkr_lito");
+    expect(lost).toBeNull();
+    expect(api.workerHeaders()).toEqual({ "X-GRIDGO-Worker-Token": "wkr_ana" });
+    expect(useShopWorker.getState().worker?.name).toBe("Ana");
+
+    expect(api.noteWorkerRefusal(new api.ApiError(403, { error: "shop_worker_invalid" }), "wkr_ana")).toBe("shop_worker_invalid");
+    expect(api.workerHeaders()).toEqual({});
+    expect(useShopWorker.getState().worker).toBeNull();
   });
 });

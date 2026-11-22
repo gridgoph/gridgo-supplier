@@ -193,3 +193,69 @@ describe("upload authentication", () => {
     );
   });
 });
+
+describe("upload on a shared shop phone", () => {
+  afterEach(() => {
+    api.setToken(null);
+    api.setTokenProvider(null);
+    api.setWorkerToken(null);
+    api.setWorkerLostHandler(null);
+    jest.clearAllMocks();
+  });
+
+  function refusing(code: string) {
+    jest.mocked(FileSystem.createUploadTask).mockReturnValue({
+      uploadAsync: jest.fn(async () => ({ status: 403, body: JSON.stringify({ error: code }) })),
+    } as never);
+  }
+
+  it.each(["shop_worker_invalid", "shop_worker_locked", "shop_device_session_required"])(
+    "sends the turn's token from the device URI and goes back to the picker on %s",
+    async (code) => {
+      api.setTokenProvider(async () => "clerk-token");
+      api.setWorkerToken("wkr_lito");
+      const lost = jest.fn();
+      api.setWorkerLostHandler(lost);
+      refusing(code);
+      const result = await uploadFile(item(), "fulfilment_proof", jest.fn());
+      expect(result.ok).toBe(false);
+      expect(FileSystem.createUploadTask).toHaveBeenCalledWith(
+        expect.any(String),
+        "file:///proof.pdf",
+        expect.objectContaining({ headers: expect.objectContaining({ "X-GRIDGO-Worker-Token": "wkr_lito" }) }),
+        expect.any(Function),
+      );
+      expect(lost).toHaveBeenCalledWith(code);
+      expect(api.workerHeaders()).toEqual({});
+    },
+  );
+
+  it("leaves the next worker's turn alone when an upload from the last turn is refused", async () => {
+    api.setTokenProvider(async () => "clerk-token");
+    api.setWorkerToken("wkr_lito");
+    const lost = jest.fn();
+    api.setWorkerLostHandler(lost);
+    let answer: (value: { status: number; body: string }) => void = () => {};
+    jest.mocked(FileSystem.createUploadTask).mockReturnValue({
+      uploadAsync: jest.fn(() => new Promise((resolve) => { answer = resolve; })),
+    } as never);
+    const sending = uploadFile(item(), "fulfilment_proof", jest.fn());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    api.setWorkerToken("wkr_ana");
+    answer({ status: 403, body: JSON.stringify({ error: "shop_worker_locked" }) });
+    await sending;
+    expect(lost).not.toHaveBeenCalled();
+    expect(api.workerHeaders()).toEqual({ "X-GRIDGO-Worker-Token": "wkr_ana" });
+  });
+
+  it("does not touch the turn for an ordinary refusal", async () => {
+    api.setTokenProvider(async () => "clerk-token");
+    api.setWorkerToken("wkr_lito");
+    const lost = jest.fn();
+    api.setWorkerLostHandler(lost);
+    refusing("file_too_large");
+    await uploadFile(item(), "fulfilment_proof", jest.fn());
+    expect(lost).not.toHaveBeenCalled();
+    expect(api.workerHeaders()).toEqual({ "X-GRIDGO-Worker-Token": "wkr_lito" });
+  });
+});

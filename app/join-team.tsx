@@ -121,6 +121,10 @@ export default function JoinTeamScreen() {
         <View className="gap-3">
           <PrimaryButton label="Sign in" onPress={() => router.push("/(auth)/login")} />
           <SecondaryButton label="Create a login" onPress={() => router.push("/(auth)/join-account")} />
+          <SecondaryButton
+            label="Sign in with my mobile"
+            onPress={() => router.push("/(auth)/phone-sign-in")}
+          />
         </View>
       </FormScrollView>
     );

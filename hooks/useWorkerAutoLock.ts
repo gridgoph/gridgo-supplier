@@ -1,29 +1,38 @@
 import { useEffect } from "react";
 import { AppState } from "react-native";
 
+import { systemPickerOpen } from "@/lib/sharedDevice";
 import { BACKGROUND_LOCK_MS, useShopWorker } from "@/store/shopWorker";
 
 /**
- * A shared shop phone that sat in the background hands itself back.
+ * A shared shop phone that goes to the background hands itself back at once
+ * (gridgo-api `docs/SHOP_TEAM_API.md`: lock on handover and background).
  *
- * GRIDGO asks for a lock on handover and background. Not on every trip to the
- * background, though: the camera that takes a production photo sends the app
- * there for a few seconds, and locking then would throw the worker out of the
- * step they were finishing. Two minutes away is a phone put down, so on the
- * way back it goes to the picker. GRIDGO's own 30 minutes still apply on top.
+ * The one exception is a camera, gallery or file picker this app opened
+ * itself (`withSystemPicker`): it sends the app to the background for a few
+ * seconds while the worker photographs their work, and locking then would
+ * throw them out of the step they were finishing. Even that trip locks on
+ * the way back if it ran past two minutes — a phone left on the camera is a
+ * phone put down. GRIDGO's own 30 minutes still apply on top.
  */
 export function useWorkerAutoLock(): void {
   useEffect(() => {
-    let awayAt: number | null = null;
+    let pickerAwayAt: number | null = null;
     const subscription = AppState.addEventListener("change", (next) => {
+      const shop = useShopWorker.getState();
       if (next === "background") {
-        awayAt = Date.now();
+        if (!shop.worker) return;
+        if (systemPickerOpen()) {
+          pickerAwayAt = Date.now();
+          return;
+        }
+        void shop.lock();
         return;
       }
       if (next !== "active") return;
-      const away = awayAt == null ? 0 : Date.now() - awayAt;
-      awayAt = null;
-      if (away >= BACKGROUND_LOCK_MS && useShopWorker.getState().worker) void useShopWorker.getState().lock();
+      const away = pickerAwayAt == null ? 0 : Date.now() - pickerAwayAt;
+      pickerAwayAt = null;
+      if (away >= BACKGROUND_LOCK_MS && shop.worker) void shop.lock();
     });
     return () => subscription.remove();
   }, []);

@@ -16,3 +16,28 @@ export function setSharedDevice(next: boolean): void {
 export function isSharedDevice(): boolean {
   return shared;
 }
+
+/**
+ * A camera, gallery or file picker this app opened itself, still open.
+ *
+ * On a shared phone every trip to the background locks the worker's turn
+ * (gridgo-api `docs/SHOP_TEAM_API.md`: lock on handover and background), with
+ * one exception scoped to exactly this: the system picker a worker opened to
+ * photograph their work sends the app to the background too, and locking then
+ * would throw them out of the step they were finishing. Only a call wrapped
+ * here counts; anything else in the background is a phone put down.
+ */
+let pickersOpen = 0;
+
+export async function withSystemPicker<T>(open: () => Promise<T>): Promise<T> {
+  pickersOpen += 1;
+  try {
+    return await open();
+  } finally {
+    pickersOpen -= 1;
+  }
+}
+
+export function systemPickerOpen(): boolean {
+  return pickersOpen > 0;
+}

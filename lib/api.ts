@@ -1071,6 +1071,27 @@ export function workerHeaders(): Record<string, string> {
   return workerToken ? { "X-GRIDGO-Worker-Token": workerToken } : {};
 }
 
+/**
+ * A refusal from any transport, read at the same boundary as `request`'s
+ * (gridgo-api `docs/SHOP_TEAM_API.md`: every worker error locks the picker).
+ * `sentToken` is the worker token the call carried: a refusal for a turn that
+ * has already ended is that turn's news, never the next person's, so it
+ * neither clears the current token nor locks the phone over them.
+ */
+export function noteWorkerRefusal(failure: ApiError, sentToken: string | null): WorkerLostCode | null {
+  const lost = workerLostCode(failure);
+  if (!lost) return null;
+  if (sentToken !== workerToken) return null;
+  workerToken = null;
+  workerLostHandler?.(lost);
+  return lost;
+}
+
+/** The token a transport is about to send, to hand back to `noteWorkerRefusal`. */
+export function currentWorkerToken(): string | null {
+  return workerToken;
+}
+
 /** The shop's phone is locked to the picker: expired, locked, reset, removed. */
 export type WorkerLostCode = "shop_worker_locked" | "shop_worker_invalid" | "shop_device_session_required";
 
@@ -1138,13 +1159,18 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   let res: Response;
   let data: unknown = null;
   let token: string | null = null;
+  // A call may name the turn it belongs to (the lock that ends it); every
+  // other call carries the turn that is current when it is sent.
+  const namedWorker = headers["X-GRIDGO-Worker-Token"] ?? null;
+  let sentWorker: string | null = null;
   const clerkOwned = tokenProvider != null;
   try {
     token = await Promise.race([getAuthToken(), aborted]);
     assertLiveGeneration(generation);
     for (let attempt = 0; ; attempt += 1) {
       if (token) { headers.Authorization = `Bearer ${token}`; headers["X-GRIDGO-Role"] = "supplier"; }
-      if (token && workerToken) headers["X-GRIDGO-Worker-Token"] = workerToken;
+      sentWorker = token ? (namedWorker ?? workerToken) : null;
+      if (sentWorker) headers["X-GRIDGO-Worker-Token"] = sentWorker;
       else delete headers["X-GRIDGO-Worker-Token"];
       res = await Promise.race([fetch(`${getApiBase()}${path}`, {
         ...fetchInit,
@@ -1186,11 +1212,7 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     const shopCode = token ? shopAccessCode(res.status, data) : null;
     if (shopCode) shopAccessHandler?.(shopCode);
     const failure = new ApiError(res.status, data);
-    const lost = token ? workerLostCode(failure) : null;
-    if (lost) {
-      workerToken = null;
-      workerLostHandler?.(lost);
-    }
+    if (token) noteWorkerRefusal(failure, sentWorker);
     throw failure;
   }
   return data as T;
@@ -1628,8 +1650,13 @@ export async function selectWorker(
 }
 
 /** Hand the phone back to the picker. Nobody is acting as anyone after this. */
-export async function lockWorker(): Promise<void> {
-  await request("/me/shop-team/working/lock", { method: "POST", body: "{}" });
+/** Lock the shop phone, naming the turn being ended (its token may already be dropped locally). */
+export async function lockWorker(turnToken: string | null = null): Promise<void> {
+  await request("/me/shop-team/working/lock", {
+    method: "POST",
+    body: "{}",
+    ...(turnToken ? { headers: { "X-GRIDGO-Worker-Token": turnToken } } : {}),
+  });
 }
 
 /** A single-use, 24-hour invite. The token comes back once, only here. */

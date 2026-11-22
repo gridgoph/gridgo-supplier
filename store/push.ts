@@ -437,3 +437,26 @@ function androidPackage(): string {
     return "ph.gridgo.supplier";
   }
 }
+
+/**
+ * Take every notification already delivered off the tray and zero the badge.
+ *
+ * Used before a phone is handed to PIN staff (`store/shopWorker.ts`): the
+ * alerts already on the lock screen were the signed-in person's own, and
+ * removing the registration stops only the ones still to come. Best effort —
+ * a phone with no native module has nothing in its tray from GRIDGO.
+ */
+export async function dismissDeliveredNotifications(): Promise<void> {
+  const Notifications = notifications();
+  if (!Notifications) return;
+  try {
+    await Notifications.dismissAllNotificationsAsync();
+  } catch {
+    // Nothing more this phone can do.
+  }
+  try {
+    await Notifications.setBadgeCountAsync(0);
+  } catch {
+    // Badges are not on every launcher.
+  }
+}

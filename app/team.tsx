@@ -58,6 +58,7 @@ export default function TeamScreen() {
   const fallbackShopName = useSession((s) => s.user?.supplierName ?? null);
   const enterShared = useShopWorker((s) => s.enter);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
   const { refreshing, onRefresh } = usePullToRefresh(reload);
 
@@ -116,7 +117,12 @@ export default function TeamScreen() {
       confirmLabel: "Start",
       cancelLabel: "Not now",
     });
-    if (ok) await enterShared(team?.shopName ?? fallbackShopName);
+    if (!ok) return;
+    setPhoneError(null);
+    setWorking("shop-phone");
+    const refused = await enterShared(team?.shopName ?? fallbackShopName);
+    setWorking(null);
+    if (refused) setPhoneError(refused);
   }
 
   const layout = team ? teamLayout(team.people) : null;
@@ -327,9 +333,13 @@ export default function TeamScreen() {
                     icon={Smartphone}
                     title="Use this phone for PIN staff"
                     detail="Staff tap their face and PIN. Every job shows who handled it."
+                    disabled={working === "shop-phone"}
                     onPress={() => void shareThisPhone()}
                   />
                 </View>
+                {phoneError ? (
+                  <ErrorNotice message={phoneError} onRetry={() => void shareThisPhone()} />
+                ) : null}
               </View>
             ) : null}
 

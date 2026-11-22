@@ -7,7 +7,7 @@ import { createPersistStorage } from "@/lib/persistStorage";
 import { setSharedDevice } from "@/lib/sharedDevice";
 import type { ShopRole } from "@/lib/shopTeam";
 import { useAlertsStore } from "@/store/alerts";
-import { usePush } from "@/store/push";
+import { dismissDeliveredNotifications, serializeDeviceMutation, usePush } from "@/store/push";
 import { useSession } from "@/store/session";
 import { useToasts } from "@/store/toasts";
 
@@ -32,9 +32,14 @@ import { useToasts } from "@/store/toasts";
  * with a worker error, which brings the picker back (`api.setWorkerLostHandler`).
  */
 
+/** Counts handovers: a pick or lock that started before the latest one is stale. */
+let handover = 0;
+/** The lock most recently sent to GRIDGO, until it has an answer. */
+let locking: Promise<void> = Promise.resolve();
+
 export type ActiveWorker = { pinStaffId: string; name: string; role: ShopRole };
 
-/** How long the app may sit in the background before the phone locks itself. */
+/** How long a camera or file picker the app opened may hold the turn open in the background. */
 export const BACKGROUND_LOCK_MS = 2 * 60_000;
 
 /** Why the picker is showing, said once above the faces. */
@@ -45,8 +50,12 @@ type ShopWorkerState = {
   shopName: string | null;
   worker: ActiveWorker | null;
   notice: PickerNotice;
-  /** Start sharing this phone: the signed-in person's own alerts and push leave it first. */
-  enter: (shopName: string | null) => Promise<void>;
+  /**
+   * Start sharing this phone: the signed-in person's own alerts and push leave
+   * it first. Returns the sentence to show when that could not be confirmed —
+   * the phone is then not shared, and nothing about it changed.
+   */
+  enter: (shopName: string | null) => Promise<string | null>;
   /** Pick a person with their PIN. Returns the sentence to show, or null when they are in. */
   select: (pinStaffId: string, pin: string) => Promise<string | null>;
   /** Hand the phone to the next person. */
@@ -66,52 +75,82 @@ export const useShopWorker = create<ShopWorkerState>()(
       notice: null,
 
       enter: async (shopName) => {
-        const push = usePush.getState();
-        const token = push.token;
-        if (token) {
-          // While the login is still the Owner's own, so GRIDGO accepts it.
-          await api.unregisterDevice(token).catch(() => undefined);
-        }
-        usePush.setState({ token: null, claimed: false });
+        // New registrations stop first: one queued behind this handover finds
+        // the phone shared and leaves it alone.
         setSharedDevice(true);
+        let refused: string | null = null;
+        // Behind any registration already on its way, so the token read here is
+        // the newest one and nothing re-registers it for the login afterwards.
+        await serializeDeviceMutation(async () => {
+          const token = usePush.getState().token;
+          if (!token) return;
+          try {
+            // While the login is still the Owner's own, so GRIDGO accepts it.
+            await api.unregisterDevice(token);
+          } catch (error) {
+            // 404: GRIDGO holds no registration of this token for this login.
+            if (!(error instanceof api.ApiError && error.status === 404)) {
+              refused = humanizeApiError(error, offlineMessage("turn off your alerts on this phone"));
+              return;
+            }
+          }
+          usePush.setState({ token: null, claimed: false });
+        });
+        if (refused) {
+          // The token stays, so the next try (or a sign-out) can still remove it.
+          setSharedDevice(false);
+          return `Your alerts could not be turned off on this phone, so it was not handed over. ${refused}`;
+        }
+        // Alerts already on the lock screen were the Owner's too.
+        await dismissDeliveredNotifications();
+        handover += 1;
         api.setWorkerToken(null);
         useAlertsStore.getState().bindOwner(null);
         useToasts.getState().clear();
         set({ shared: true, shopName, worker: null, notice: null });
         useSession.getState().lockDevice();
+        return null;
       },
 
       select: async (pinStaffId, pin) => {
+        // A lock still on its way to GRIDGO settles before the next turn opens,
+        // or it could end the turn that follows it.
+        await locking;
+        const mine = ++handover;
+        const current = () => mine === handover;
         try {
           const picked = await api.selectWorker(pinStaffId, pin);
+          if (!current()) return null;
           api.setWorkerToken(picked.token);
           set({ worker: picked.worker, notice: null, shared: true });
           setSharedDevice(true);
-          await useSession.getState().adoptWorker();
+          await useSession.getState().adoptWorker(current);
           return null;
         } catch (error) {
+          if (!current()) return null;
           return pickProblem(error);
         }
       },
 
       lock: async () => {
-        // The phone is handed back at once; the lock goes to GRIDGO with the
-        // turn's token still on it, and the token is dropped after either way.
-        // Best effort: GRIDGO keeps a device lock of its own (a database-backed
-        // session lock), so a lost answer never falls back to the Owner.
+        // The phone is handed back at once. The lock names the turn it ends, so
+        // its answer — however late — can never touch the next person's turn.
+        handover += 1;
+        const ending = api.currentWorkerToken();
+        api.setWorkerToken(null);
         set({ worker: null, notice: null });
         useSession.getState().lockDevice();
-        try {
-          await api.lockWorker();
-        } catch {
-          // An expired turn is already locked.
-        } finally {
-          api.setWorkerToken(null);
-        }
+        // Best effort: GRIDGO keeps a device lock of its own (a database-backed
+        // session lock), and an expired turn is already locked.
+        const call = api.lockWorker(ending).catch(() => undefined);
+        locking = call;
+        await call;
+        if (locking === call) locking = Promise.resolve();
       },
 
       lost: (code) => {
         if (!get().shared && code === "shop_device_session_required") return;
+        handover += 1;
         const hadWorker = get().worker != null;
         set({ shared: true, worker: null, notice: hadWorker ? "timed_out" : get().notice });
         setSharedDevice(true);
@@ -119,6 +158,7 @@ export const useShopWorker = create<ShopWorkerState>()(
       },
 
       reset: () => {
+        handover += 1;
         api.setWorkerToken(null);
         setSharedDevice(false);
         set({ shared: false, shopName: null, worker: null, notice: null });

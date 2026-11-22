@@ -299,6 +299,8 @@ function RootStack({ introDone }: { introDone: boolean }) {
         <Stack.Screen name="(auth)/recover-password" options={{ title: "Recover password" }} />
         <Stack.Screen name="(auth)/signup" options={{ headerShown: false, title: "Sign up" }} />
         <Stack.Screen name="(auth)/join-account" options={{ title: "Your login" }} />
+        {/* A teammate who joined with their mobile signs back in with a texted code. */}
+        <Stack.Screen name="(auth)/phone-sign-in" options={{ title: "Sign in with mobile" }} />
       </Stack.Protected>
 
       <Stack.Protected guard={accessBlocked}>
