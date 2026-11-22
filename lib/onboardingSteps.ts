@@ -6,8 +6,8 @@ import { passwordLengthProblem } from "@/lib/signup";
  * Opening a shop account, as a sequence rather than one long form.
  *
  * The order is the one a print-shop owner would use standing at their own
- * counter: who you are, where you print from, what you print, then one
- * read-through. Papers live on the accreditation screen after the account
+ * counter: who you are, where you print from, what you print, who handles the
+ * jobs (report F315793B), then one read-through. Papers live on the accreditation screen after the account
  * exists — they are not part of apply.
  *
  * The numbering is honest: this genuinely is a sequence, and a shop needs to
@@ -15,7 +15,7 @@ import { passwordLengthProblem } from "@/lib/signup";
  * plainly that Operations reviews the account before any job arrives.
  */
 
-export type OnboardingStepId = "shop" | "location" | "services" | "review";
+export type OnboardingStepId = "shop" | "location" | "services" | "team" | "review";
 
 export type OnboardingStep = {
   id: OnboardingStepId;
@@ -24,6 +24,7 @@ export type OnboardingStep = {
     | "/(auth)/signup"
     | "/(auth)/signup/location"
     | "/(auth)/signup/services"
+    | "/(auth)/signup/team"
     | "/(auth)/signup/review";
   /** What the step is called in the header and the progress line. */
   title: string;
@@ -49,6 +50,12 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
     route: "/(auth)/signup/services",
     title: "What you print",
     lede: "Best first. GRIDGO offers you work in the order you rank here.",
+  },
+  {
+    id: "team",
+    route: "/(auth)/signup/team",
+    title: "Who handles the jobs?",
+    lede: "Just you, or you and your staff. Staff accept and print jobs, and never see money or settings.",
   },
   {
     id: "review",

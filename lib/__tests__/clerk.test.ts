@@ -176,3 +176,22 @@ describe("clerkPublishableKey", () => {
     }
   });
 });
+
+describe("isPhoneUnavailableError", () => {
+  const { isPhoneUnavailableError } = jest.requireActual("@/lib/clerk") as typeof import("@/lib/clerk");
+  it.each([
+    [{ errors: [{ code: "form_param_unknown", meta: { paramName: "phone_number" }, message: "is unknown" }] }],
+    [{ errors: [{ code: "strategy_for_user_invalid", message: "The strategy is not valid for this user." }] }],
+    [{ errors: [{ message: "phone_number is not a valid parameter for this request." }] }],
+  ])("knows a mobile login is closed: %j", (error) => {
+    expect(isPhoneUnavailableError(error)).toBe(true);
+  });
+  it.each([
+    [{ errors: [{ code: "form_identifier_not_found", message: "Couldn't find your account." }] }],
+    [{ errors: [{ code: "form_code_incorrect", message: "Incorrect code" }] }],
+    [new Error("Network request failed")],
+    [null],
+  ])("leaves every other refusal alone: %j", (error) => {
+    expect(isPhoneUnavailableError(error)).toBe(false);
+  });
+});

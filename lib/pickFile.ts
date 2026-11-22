@@ -1,4 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
+import { withSystemPicker } from "@/lib/sharedDevice";
 import * as ImagePicker from "expo-image-picker";
 
 import type { PickedDocument } from "@/store/signupDraft";
@@ -45,7 +46,7 @@ export async function takePhoto(): Promise<PickOutcome> {
         "GRIDGO needs camera access to photograph your papers. Turn it on for this app in your phone's settings, or choose a file instead.",
     };
   }
-  const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+  const result = await withSystemPicker(() => ImagePicker.launchCameraAsync({ quality: 0.8 }));
   const asset = result.canceled ? null : result.assets[0];
   if (!asset) return CANCELLED;
   return {
@@ -65,10 +66,10 @@ export async function chooseFile(): Promise<PickOutcome> {
     if (!picked) return CANCELLED;
     return { ok: true, document: fromWeb(picked) };
   }
-  const result = await DocumentPicker.getDocumentAsync({
+  const result = await withSystemPicker(() => DocumentPicker.getDocumentAsync({
     type: ["application/pdf", "image/*"],
     copyToCacheDirectory: true,
-  });
+  }));
   const asset = result.canceled ? null : result.assets[0];
   if (!asset) return CANCELLED;
   return {

@@ -15,7 +15,7 @@ import { useBoard } from "@/hooks/useBoard";
 import { useReadiness } from "@/hooks/useReadiness";
 import * as api from "@/lib/api";
 import { clerkDisplayName } from "@/lib/clerk";
-import { pendingCount } from "@/lib/shopTeam";
+import { pendingCount, roleLabel } from "@/lib/shopTeam";
 import { performanceHref } from "@/lib/performance";
 import { standingLine } from "@/lib/reviews";
 import { shopHoursSummary } from "@/lib/shopHours";
@@ -23,10 +23,11 @@ import { nightChipLabel, signOf } from "@/lib/shopStatus";
 import { WHATS_NEW_HISTORY_COPY } from "@/lib/whatsNewHistory";
 import { useThemeColors } from "@/hooks/useTheme";
 import { askConfirm } from "@/store/sheets";
-import { isMatchable, isShopStaff, useSession } from "@/store/session";
+import { isMatchable, isShopManager, isShopStaff, useSession } from "@/store/session";
 import { useShopContact } from "@/store/shopContact";
 import { useShopHours } from "@/store/shopHours";
 import { useShopStatus } from "@/store/shopStatus";
+import { useShopWorker } from "@/store/shopWorker";
 import { useTour } from "@/store/tour";
 
 /**
@@ -57,7 +58,9 @@ function StaffAccount() {
   const user = useSession((s) => s.user);
   const logout = useSession((s) => s.logout);
   const { user: clerkUser } = useUser();
-  const personName = clerkDisplayName(clerkUser) || user?.name || "—";
+  const lockPhone = useShopWorker((s) => s.lock);
+  // On a shared shop phone the person is whoever picked themselves, not the login.
+  const personName = user?.worker?.name || clerkDisplayName(clerkUser) || user?.name || "—";
   const shopStatus = useShopStatus((s) => s.status);
   const loadStatus = useShopStatus((s) => s.load);
   useFocusEffect(
@@ -91,12 +94,16 @@ function StaffAccount() {
         />
         {shopStatus ? null : <StatusLoadNote />}
         <View className="mt-3 flex-row">
-          <StatusChip tone="neutral" icon="wrench" label="Staff" />
+          <StatusChip tone="neutral" icon="wrench" label={roleLabel(user?.shopRole)} />
         </View>
-        <Text className="mt-2 text-caption text-text-muted" numberOfLines={1}>
-          {clerkUser?.primaryEmailAddress?.emailAddress || user?.email || ""}
-        </Text>
+        {/* On the shop phone the login is the Owner's: its email is not the worker's. */}
+        {user?.worker ? null : (
+          <Text className="mt-2 text-caption text-text-muted" numberOfLines={1}>
+            {clerkUser?.primaryEmailAddress?.emailAddress || user?.email || ""}
+          </Text>
+        )}
 
+        <StaffShopRows />
         <View className="mt-6 gap-2">
           <DestinationRow
             title={WHATS_NEW_HISTORY_COPY.accountRow}
@@ -111,9 +118,73 @@ function StaffAccount() {
         </View>
 
         <View className="mt-8">
-          <SecondaryButton label="Sign out" onPress={() => void signOut()} />
+          {user?.worker ? (
+            // Signing out here would end the shop phone's login for everyone.
+            <SecondaryButton label="Switch person" onPress={() => void lockPhone()} />
+          ) : (
+            <SecondaryButton label="Sign out" onPress={() => void signOut()} />
+          )}
         </View>
       </ScrollView>
+    </View>
+  );
+}
+
+/**
+ * The team, for everyone on it (report F315793B), and — for a Manager — the
+ * hours and products a Manager runs. The Team row is drawn only once GRIDGO
+ * has answered the team read: an older GRIDGO keeps the team to Owners, and a
+ * row that opened a refusal would be a dead end.
+ */
+function StaffShopRows() {
+  const manager = useSession((s) => isShopManager(s.user));
+  const [team, setTeam] = useState<{ size: number; waiting: number } | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      api
+        .getShopTeam()
+        .then((result) => {
+          if (cancelled) return;
+          setTeam({
+            size: result.people.filter((person) => person.status === "active").length,
+            waiting: manager ? result.people.filter((person) => person.status === "pending").length : 0,
+          });
+        })
+        .catch(() => {
+          if (!cancelled) setTeam(null);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [manager]),
+  );
+  if (!team && !manager) return null;
+  return (
+    <View className="mt-6 gap-2">
+      <Text className="text-overline text-text-muted">YOUR SHOP</Text>
+      {team ? (
+        <DestinationRow
+          title="Team"
+          detail={team.waiting ? `${team.waiting} waiting for you` : `${team.size} people · this week's mission`}
+          badge={team.waiting || undefined}
+          onPress={() => router.push("/team" as Href)}
+        />
+      ) : null}
+      {manager ? (
+        <>
+          <DestinationRow
+            title="Products"
+            detail="What clients see: samples and Express"
+            onPress={() => router.push("/(tabs)/catalogues")}
+          />
+          <DestinationRow
+            title="Shop hours & closures"
+            detail="When you open, closure dates, and closing for a while"
+            onPress={() => router.push("/shop-hours" as Href)}
+          />
+        </>
+      ) : null}
     </View>
   );
 }

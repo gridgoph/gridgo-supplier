@@ -2,7 +2,7 @@ import { useReadVersion } from "@/hooks/useReadVersion";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
-import { router, useFocusEffect, useNavigation } from "expo-router";
+import { router, useFocusEffect, useNavigation, type Href } from "expo-router";
 
 import { AlertCard } from "@/components/AlertCard";
 import { AppUpdateNotices } from "@/components/AppUpdateNotices";
@@ -290,6 +290,8 @@ export default function NotificationsScreen() {
               ? () => router.push(clientChatHref(alert.orderId as string))
               : alert.type === SHOP_HOURS_NOTICE
               ? () => router.push(SHOP_HOURS_ROUTE)
+              : alert.type === "shop_invite_claimed"
+              ? () => router.push("/team" as Href)
               : alert.type === PLAY_OPTIN_PUSH_TYPE && !staff
               ? () => router.push(`${PLAY_OPTIN_ROUTE}?from=alert`)
               : isPerformanceAlert(alert.type)

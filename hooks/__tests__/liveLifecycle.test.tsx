@@ -39,6 +39,20 @@ describe("authenticated app stream lifecycle", () => {
     await act(async () => {change("active");});
     expect(openAlertStream).toHaveBeenCalledTimes(2);
   });
+  it("keeps hints flowing after the same login's role changes in the same shop", async () => {
+    const staff = {...user, shopId:"sup_shop", shopRole:"staff" as const};
+    useSession.setState({user:staff});
+    await renderHook(() => useAlertStream());
+    await act(async () => {useSession.setState({user:{...staff, shopRole:"manager" as const}});});
+    // A new stream opens inside the new generation; the old one is closed.
+    expect(openAlertStream).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalled();
+    const received=jest.fn();const unsubscribe=subscribeLive(received);
+    const fresh=(openAlertStream as jest.Mock).mock.calls[1][0];
+    await act(async () => {fresh.onInvalidate({resource:"jobs"});jest.advanceTimersByTime(100);});
+    expect(received).toHaveBeenCalledWith("jobs");
+    unsubscribe();
+  });
   it("rejects old stream callbacks after account switch and clears account caches", async () => {
     await renderHook(() => useAlertStream());
     const old=(openAlertStream as jest.Mock).mock.calls[0][0];

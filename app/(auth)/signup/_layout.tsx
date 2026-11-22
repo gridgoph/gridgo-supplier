@@ -41,6 +41,7 @@ export default function SignupLayout() {
       />
       <Stack.Screen name="location" options={{ title: "Where you print" }} />
       <Stack.Screen name="services" options={{ title: "What you print" }} />
+      <Stack.Screen name="team" options={{ title: "Your team" }} />
       <Stack.Screen name="review" options={{ title: "Check and send" }} />
     </Stack>
   );

@@ -30,13 +30,15 @@ describe("the sequence", () => {
       "shop",
       "location",
       "services",
+      "team",
       "review",
     ]);
   });
 
   it("numbers itself honestly, because this really is a sequence", () => {
-    expect(stepProgressLabel("shop")).toBe("Step 1 of 4");
-    expect(stepProgressLabel("review")).toBe("Step 4 of 4");
+    expect(stepProgressLabel("shop")).toBe("Step 1 of 5");
+    expect(stepProgressLabel("team")).toBe("Step 4 of 5");
+    expect(stepProgressLabel("review")).toBe("Step 5 of 5");
   });
 });
 

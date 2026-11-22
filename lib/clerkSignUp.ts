@@ -9,6 +9,8 @@ export type SignUpContinuation =
   | { kind: "existing_session"; sessionId: string }
   | { kind: "complete" }
   | { kind: "email_code" }
+  /** A texted six-digit code: a teammate joining with their mobile (report F315793B). */
+  | { kind: "phone_code" }
   | { kind: "blocked"; message: string };
 
 export type SignUpContinuationInput = {
@@ -55,6 +57,7 @@ export function continuationAfterSignUp(
 
   const unverified = input.unverifiedFields ?? [];
   if (unverified.includes("email_address")) return { kind: "email_code" };
+  if (unverified.includes("phone_number")) return { kind: "phone_code" };
 
   const missing = input.missingFields ?? [];
   if (missing.length > 0) {

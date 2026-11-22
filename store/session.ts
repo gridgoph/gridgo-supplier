@@ -19,6 +19,7 @@ import { releaseClerkSession } from "@/lib/clerkSignIn";
 import { serializeDeviceMutation, usePush } from "@/store/push";
 import { usePlayOptIn } from "@/store/playOptIn";
 import { useTesterProgram } from "@/store/testerProgram";
+import { isSharedDevice } from "@/lib/sharedDevice";
 import { isJoiningTeam } from "@/store/teamJoin";
 import { useJobDrafts } from "@/store/jobDrafts";
 import { useTeamRemovedNotice } from "@/store/teamRemovedNotice";
@@ -45,6 +46,11 @@ export type IdentityState =
   | { kind: "unassigned"; email?: string | null }
   /** Joined a shop's team; the Owner has not approved yet. No shop routes are open. */
   | { kind: "team_pending"; shopName: string }
+  /**
+   * The shop's phone is shared and nobody has picked themselves yet, or their
+   * turn ended. Only "Who's working?" is open (`store/shopWorker.ts`).
+   */
+  | { kind: "device_locked" }
   | { kind: "mismatch"; destination: string; email?: string | null }
   | {
       kind: "error";
@@ -105,12 +111,25 @@ export function isSignedIn(user: User | null | undefined): boolean {
  * to them; the app hides those routes so a Staff member never meets a refusal.
  */
 export function isShopStaff(user: User | null | undefined): boolean {
-  return user?.shopRole === "staff";
+  return user?.shopRole === "staff" || user?.shopRole === "manager";
+}
+
+/**
+ * A Manager works like Staff — no Money, no prices on jobs — and also changes
+ * the shop's hours, products and Staff (gridgo-api `docs/SHOP_TEAM_API.md`).
+ */
+export function isShopManager(user: User | null | undefined): boolean {
+  return user?.shopRole === "manager";
+}
+
+/** Who runs the team, the hours and the products: an Owner or a Manager. */
+export function canRunShop(user: User | null | undefined): boolean {
+  return user != null && (isShopOwner(user) || isShopManager(user));
 }
 
 /** Full access: the shop's own account, or a teammate made Owner. */
 export function isShopOwner(user: User | null | undefined): boolean {
-  return user != null && user.shopRole !== "staff";
+  return user != null && user.shopRole !== "staff" && user.shopRole !== "manager";
 }
 
 export function isMatchable(user: User | null | undefined): boolean {
@@ -168,6 +187,10 @@ type SessionState = {
    * claiming a new invite needs it.
    */
   teamAccessRemoved: () => void;
+  /** The shop's phone is shared: only the picker is open until someone picks themselves. */
+  lockDevice: () => void;
+  /** Someone picked themselves: read who the phone is acting as now. */
+  adoptWorker: (stillCurrent?: () => boolean) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
   beginSessionWait: (tone: "in" | "out") => void;
@@ -267,7 +290,8 @@ export const useSession = create<SessionState>((set, get) => ({
       loading: false,
       error: null,
       authSource: "clerk",
-      identity: { kind: "supplier" },
+      // A shared shop phone stays on the picker until someone picks themselves.
+      identity: isSharedDevice() && !user.worker ? { kind: "device_locked" } : { kind: "supplier" },
       sessionWait: null,
     });
     return true;
@@ -293,12 +317,18 @@ export const useSession = create<SessionState>((set, get) => ({
     try {
       const user = await api.me();
       if (!current()) return;
-      if (user.role !== APP_ROLE) get().adoptClerkUser(user);
+      // On a shared phone the bootstrap decides between the picker and a worker;
+      // it is never installed over them as a plain user.
+      if (user.role !== APP_ROLE || isSharedDevice()) get().adoptClerkUser(user);
       else set({ user });
     } catch (error) {
       if (!current()) return;
-      if (apiErrorCode(error) === "shop_access_removed" || apiErrorCode(error) === "shop_approval_pending") {
-        // The transport's shop-access handler has already moved the session.
+      if (
+        apiErrorCode(error) === "shop_access_removed" ||
+        apiErrorCode(error) === "shop_approval_pending" ||
+        api.workerLostCode(error)
+      ) {
+        // The transport's shop-access or worker handler has already moved the session.
         return;
       }
       if (error instanceof api.ApiError && error.status === 403) {
@@ -428,6 +458,17 @@ export const useSession = create<SessionState>((set, get) => ({
       });
     }
   },
+  lockDevice: () => {
+    if (get().authSource === "none") return;
+    set({ identity: { kind: "device_locked" }, loading: false, error: null, sessionWait: null });
+  },
+  adoptWorker: async (stillCurrent) => {
+    const generation = liveGeneration();
+    const user = await api.me();
+    // A lock or another pick while this read was out wins over it.
+    if (generation !== liveGeneration() || (stillCurrent && !stillCurrent())) return;
+    get().adoptClerkUser(user);
+  },
   logout: async () => {
     const startedAt = Date.now();
     set({ sessionWait: "out" });
@@ -443,7 +484,9 @@ export const useSession = create<SessionState>((set, get) => ({
     // a new version" still has to reach it.
     const deviceToken = usePush.getState().token;
     const clerkOwned = get().authSource === "clerk";
-    const hadDomainSession = Boolean(get().user);
+    // A locked shop phone has no user loaded, but GRIDGO still holds the lock
+    // on this login; signing out is its one way off the picker.
+    const hadDomainSession = Boolean(get().user) || get().identity.kind === "device_locked";
     try {
       // Unassigned and mismatched Clerk identities never opened or claimed a
       // GRIDGO domain session, so there is nothing server-side to release.
@@ -513,10 +556,28 @@ useSession.subscribe((state, previous) => {
   useTesterProgram.getState().forget();
 });
 
+/**
+ * Who the app is acting for, not only which login: on a shared shop phone the
+ * login stays the Owner's while the person working changes (report F315793B).
+ * Every change of this key starts a new live generation, so a read that began
+ * for the Owner (or for the last worker) is dropped when it lands rather than
+ * drawn for whoever holds the phone now.
+ */
+export function actingContextKey(state: Pick<SessionState, "user" | "identity">): string | null {
+  const user = state.user;
+  if (!user) return null;
+  const locked = state.identity.kind === "device_locked" ? "locked" : "open";
+  return [user.id, locked, user.shopId ?? "", user.shopRole ?? "", user.worker?.pinStaffId ?? ""].join("|");
+}
+
+useSession.subscribe((state, previous) => {
+  const key = actingContextKey(state);
+  if (key !== actingContextKey(previous)) setLiveOwner(key);
+});
+
 useSession.subscribe((state, previous) => {
   const next = state.user?.id ?? null;
   if (next === (previous.user?.id ?? null)) return;
-  setLiveOwner(next);
   useAlertsStore.getState().bindOwner(next);
   useToasts.getState().clear();
   // One shop's privacy requests are never drawn for the next one on this phone.

@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 
+import { withSystemPicker } from "@/lib/sharedDevice";
 import * as api from "@/lib/api";
 import { ApiError } from "@/lib/apiErrors";
 
@@ -37,11 +38,11 @@ export async function pickChatImages(): Promise<Array<{
       assets?: Array<{ uri: string; fileName?: string | null; mimeType?: string | null; fileSize?: number | null }>;
     }>;
   };
-  const picked = await ImagePicker.launchImageLibraryAsync({
+  const picked = await withSystemPicker(() => ImagePicker.launchImageLibraryAsync({
     mediaTypes: ["images"],
     allowsMultipleSelection: true,
     quality: 0.9,
-  });
+  }));
   if (picked.canceled || !picked.assets?.length) return [];
   return picked.assets.map((asset, index) => ({
     uri: asset.uri,
@@ -70,7 +71,7 @@ export async function takeChatPhoto(): Promise<Array<{
   if (!permission.granted) {
     throw new Error("GRIDGO needs camera access to take a photo. Turn it on for this app in your phone's settings, or choose a screenshot instead.");
   }
-  const taken = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.9 });
+  const taken = await withSystemPicker(() => ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.9 }));
   const asset = taken.canceled ? null : taken.assets?.[0];
   if (!asset) return [];
   return [{
@@ -103,12 +104,15 @@ async function postChatFile(
       type: asset.mimeType,
     } as unknown as Blob);
   }
+  // The shop-phone turn this upload belongs to (report F315793B).
+  const turn = api.currentWorkerToken();
   // Expo 57's fetch rejects React Native's URI form parts; XHR streams them.
   const response = await new Promise<{ status: number; text: string }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${api.getApiBase()}/files`);
     xhr.setRequestHeader("Accept", "application/json");
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    if (turn) xhr.setRequestHeader("X-GRIDGO-Worker-Token", turn);
     xhr.setRequestHeader("X-GRIDGO-Role", "supplier");
     xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText });
     xhr.onerror = () => reject(new Error(`That ${noun} did not reach GRIDGO. Try again.`));
@@ -122,6 +126,8 @@ async function postChatFile(
   } catch {
     // A malformed response cannot confirm storage.
   }
+  // Uploads bypass `request`: an ended, reset or removed turn still goes back to the picker.
+  if (response.status >= 400 && turn) api.noteWorkerRefusal(new api.ApiError(response.status, data), turn);
   return { status: response.status, data };
 }
 

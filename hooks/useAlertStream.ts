@@ -4,7 +4,7 @@ import { presentAlertBody, presentAlertTitle } from "@/lib/alertStages";
 import { openAlertStream, type AlertStreamHandle } from "@/lib/alertStream";
 import { accountHold } from "@/lib/accountHold";
 import { invalidate, liveGeneration, subscribeLive } from "@/lib/live";
-import { useSession } from "@/store/session";
+import { actingContextKey, useSession } from "@/store/session";
 import { useAlertsStore } from "@/store/alerts";
 import { useCall } from "@/store/call";
 import { playProductionNudgeSting } from "@/lib/nudgeSound";
@@ -21,6 +21,9 @@ export function useAlertStream(enabled = true): void {
   const userId = useSession((s) => s.user?.id ?? null);
   const verification = useSession((s) => s.user?.verificationStatus);
   const held = useSession((s) => accountHold(s.user) != null);
+  // Who the app is acting for: a role, shop or worker change starts a new live
+  // generation, so the stream restarts inside it rather than dropping every hint.
+  const acting = useSession(actingContextKey);
   useEffect(() => {
     if (!enabled || !userId || held) return;
     const generation = liveGeneration();
@@ -105,5 +108,5 @@ export function useAlertStream(enabled = true): void {
       stopped = true; handle?.close(); appState.remove(); unsubscribe(); clearInterval(fallback);
       if (timer) clearTimeout(timer);
     };
-  }, [enabled, userId, verification, held]);
+  }, [enabled, userId, verification, held, acting]);
 }

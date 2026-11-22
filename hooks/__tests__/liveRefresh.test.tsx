@@ -11,3 +11,15 @@ it("coalesces notification and resource bursts across callback re-renders",async
   expect(first).not.toHaveBeenCalled();expect(second).toHaveBeenCalledTimes(1);
   await view.unmount();jest.useRealTimers();
 });
+
+it("keeps refreshing after a new live generation, such as a role change", async () => {
+  const { setLiveOwner } = jest.requireActual("@/lib/live") as typeof import("@/lib/live");
+  jest.useFakeTimers();
+  const refresh = jest.fn();
+  setLiveOwner("user_1|open|sup_shop|staff|");
+  const view = await renderHook(() => useLiveRefresh(["jobs"], refresh));
+  await act(async () => { setLiveOwner("user_1|open|sup_shop|manager|"); });
+  await act(async () => { invalidate("jobs"); jest.advanceTimersByTime(100); });
+  expect(refresh).toHaveBeenCalledTimes(1);
+  await view.unmount(); jest.useRealTimers();
+});
