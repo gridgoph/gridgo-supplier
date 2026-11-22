@@ -61,3 +61,20 @@ describe("a shared shop phone going to the background", () => {
     expect(lock).not.toHaveBeenCalled();
   });
 });
+
+it("locks on return when someone picked themselves while the app was in the background", async () => {
+  let change: (next: AppStateStatus) => void = () => {};
+  jest.spyOn(AppState, "addEventListener").mockImplementation((_event, callback) => {
+    change = callback as (next: AppStateStatus) => void;
+    return { remove: jest.fn() } as never;
+  });
+  const lock = jest.fn(async () => undefined);
+  useShopWorker.setState({ shared: true, worker: null, lock });
+  await renderHook(() => useWorkerAutoLock());
+  change("background");
+  expect(lock).not.toHaveBeenCalled();
+  useShopWorker.setState({ worker: lito });
+  change("active");
+  expect(lock).toHaveBeenCalledTimes(1);
+  jest.restoreAllMocks();
+});

@@ -17,22 +17,23 @@ import { BACKGROUND_LOCK_MS, useShopWorker } from "@/store/shopWorker";
  */
 export function useWorkerAutoLock(): void {
   useEffect(() => {
-    let pickerAwayAt: number | null = null;
+    // Every trip away is recorded, worker or not: a pick that finishes while
+    // the app is already in the background must still lock on the way back.
+    let away: { at: number; picker: boolean } | null = null;
     const subscription = AppState.addEventListener("change", (next) => {
       const shop = useShopWorker.getState();
       if (next === "background") {
-        if (!shop.worker) return;
-        if (systemPickerOpen()) {
-          pickerAwayAt = Date.now();
-          return;
-        }
-        void shop.lock();
+        const picker = systemPickerOpen();
+        away = { at: Date.now(), picker };
+        if (shop.worker && !picker) void shop.lock();
         return;
       }
       if (next !== "active") return;
-      const away = pickerAwayAt == null ? 0 : Date.now() - pickerAwayAt;
-      pickerAwayAt = null;
-      if (away >= BACKGROUND_LOCK_MS && shop.worker) void shop.lock();
+      const trip = away;
+      away = null;
+      if (!trip || !useShopWorker.getState().worker) return;
+      const shortPickerTrip = trip.picker && Date.now() - trip.at < BACKGROUND_LOCK_MS;
+      if (!shortPickerTrip) void useShopWorker.getState().lock();
     });
     return () => subscription.remove();
   }, []);
