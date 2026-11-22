@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.467 (New feature)
+
+- Take jobs before GRIDGO verifies your shop. Send your ID and permit any time from To do or Money.
+
 ## 1.0.461 (New feature)
 
 - Add staff by link, QR or a 4-digit PIN, and see your team, its weekly mission and who is fastest.
