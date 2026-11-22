@@ -24,10 +24,14 @@ import { useShopWorker } from "@/store/shopWorker";
  * bar, so this one stays away from them; the inset stacks under it.
  */
 export function PushedWorkerBar() {
+  const working = useSession((s) => s.user?.worker != null);
+  return working ? <PushedWorkerBarInner /> : null;
+}
+
+function PushedWorkerBarInner() {
   const segments = useSegments();
   const { bottom } = useSafeAreaInsets();
-  const working = useSession((s) => s.user?.worker != null);
-  if (!working || segments[0] === "(tabs)" || segments[0] === "who-is-working") return null;
+  if (segments[0] === "(tabs)" || segments[0] === "who-is-working") return null;
   return (
     <View className="bg-surface" style={{ paddingBottom: bottom }}>
       <WorkerBar />
