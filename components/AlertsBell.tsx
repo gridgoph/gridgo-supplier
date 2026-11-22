@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 
 import { useAlertsStore } from "@/store/alerts";
+import { useSession } from "@/store/session";
 import { useThemeColors } from "@/hooks/useTheme";
 
 /**
@@ -27,7 +28,10 @@ import { useThemeColors } from "@/hooks/useTheme";
 export function AlertsBell() {
   const colors = useThemeColors();
   const unread = useAlertsStore((s) => s.unreadCount);
+  // A shared shop phone carries nobody's personal inbox (store/shopWorker.ts).
+  const shared = useSession((s) => s.user?.worker != null);
   const showBadge = unread > 0;
+  if (shared) return null;
 
   return (
     <Pressable

@@ -8,6 +8,7 @@ export type LaunchHref =
   | "/(auth)/login"
   | "/legal/review"
   | "/team-waiting"
+  | "/who-is-working"
   | "/(tabs)/jobs"
   | "/(tabs)/home";
 
@@ -33,6 +34,8 @@ export function launchHref(
 ): LaunchHref {
   if (identity.kind === "mismatch" || identity.kind === "error") return "/access";
   if (identity.kind === "team_pending") return "/team-waiting";
+  // A shared shop phone opens on the picker, never on the login's own screens.
+  if (identity.kind === "device_locked") return "/who-is-working";
   if (signedOutWithNotice(identity)) return "/(auth)/login";
   if (!isSignedIn(user)) return "/(auth)/welcome";
   if (legal === "blocked") return "/legal/review";
@@ -51,7 +54,12 @@ export function launchHref(
  */
 export function authDoorOpen(identity: IdentityState, user: User | null): boolean {
   if (isSignedIn(user)) return false;
-  return identity.kind !== "mismatch" && identity.kind !== "error" && identity.kind !== "team_pending";
+  return (
+    identity.kind !== "mismatch" &&
+    identity.kind !== "error" &&
+    identity.kind !== "team_pending" &&
+    identity.kind !== "device_locked"
+  );
 }
 
 /**
@@ -61,5 +69,8 @@ export function authDoorOpen(identity: IdentityState, user: User | null): boolea
  * phone (see `app/app-update.tsx`).
  */
 export function rootStackKey(user: User | null): string {
+  // A new person picking themselves on the shop's phone is a new floor: every
+  // screen the last one had open goes with them.
+  if (user?.worker) return `${user.id}:${user.worker.pinStaffId}`;
   return user?.id ?? "signed-out";
 }

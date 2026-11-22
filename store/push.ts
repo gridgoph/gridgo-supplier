@@ -6,6 +6,7 @@ import { getNotificationsNative as notifications, pushSupported } from "@/lib/ex
 import * as api from "@/lib/api";
 import { getFirebaseMessaging } from "@/lib/firebaseMessaging";
 import { humanizeApiError } from "@/lib/apiErrors";
+import { personalPushPaused } from "@/lib/sharedDevice";
 import {
   channelAudibility,
   devicePlatform,
@@ -308,6 +309,8 @@ export const usePush = create<PushState>((set, get) => ({
     const run = async () => {
     const state = get();
     if (!state.supported) return;
+    // A shared shop phone carries nobody's personal alerts (store/shopWorker.ts).
+    if (personalPushPaused()) return;
 
     const platform = devicePlatform();
     if (!platform) return;
@@ -432,5 +435,28 @@ function androidPackage(): string {
     return Constants.expoConfig?.android?.package ?? "ph.gridgo.supplier";
   } catch {
     return "ph.gridgo.supplier";
+  }
+}
+
+/**
+ * Take every notification already delivered off the tray and zero the badge.
+ *
+ * Used before a phone is handed to PIN staff (`store/shopWorker.ts`): the
+ * alerts already on the lock screen were the signed-in person's own, and
+ * removing the registration stops only the ones still to come. Best effort —
+ * a phone with no native module has nothing in its tray from GRIDGO.
+ */
+export async function dismissDeliveredNotifications(): Promise<void> {
+  const Notifications = notifications();
+  if (!Notifications) return;
+  try {
+    await Notifications.dismissAllNotificationsAsync();
+  } catch {
+    // Nothing more this phone can do.
+  }
+  try {
+    await Notifications.setBadgeCountAsync(0);
+  } catch {
+    // Badges are not on every launcher.
   }
 }

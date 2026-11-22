@@ -392,6 +392,13 @@ export default function LoginScreen() {
               >
                 <Text className="text-button text-brand">Recover Password</Text>
               </Pressable>
+              <Pressable
+                onPress={() => router.push("/(auth)/phone-sign-in")}
+                accessibilityRole="link"
+                className="gg-touch justify-center self-end"
+              >
+                <Text className="text-button text-brand">Staff: sign in with your mobile</Text>
+              </Pressable>
             </View>
 
             {shown ? (

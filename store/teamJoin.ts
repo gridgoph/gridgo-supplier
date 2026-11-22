@@ -12,6 +12,9 @@ type TeamJoinState = {
   joining: boolean;
   /** An invite token read from a link or QR, not yet claimed. */
   token: string | null;
+  /** The name a new person typed when making their login; GRIDGO names them with it. */
+  name: string | null;
+  holdName: (name: string) => void;
   startJoining: () => void;
   holdToken: (token: string) => void;
   /** The token was claimed or refused; the intent stays until the person is in. */
@@ -22,10 +25,12 @@ type TeamJoinState = {
 export const useTeamJoin = create<TeamJoinState>((set) => ({
   joining: false,
   token: null,
+  name: null,
+  holdName: (name) => set({ name: name.trim() || null }),
   startJoining: () => set({ joining: true }),
   holdToken: (token) => set({ joining: true, token }),
   dropToken: () => set({ token: null }),
-  clear: () => set({ joining: false, token: null }),
+  clear: () => set({ joining: false, token: null, name: null }),
 }));
 
 export function isJoiningTeam(): boolean {

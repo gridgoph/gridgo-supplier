@@ -1,9 +1,12 @@
-import { Tabs } from "expo-router";
+import { router, Tabs, type Href } from "expo-router";
+import { useEffect } from "react";
 
 import { GridgoTabBar } from "@/components/GridgoTabBar";
-import { SECTION_TABS, STAFF_TABS, TABS, type TabName } from "@/constants/tabs";
+import { MANAGER_TABS, SECTION_TABS, STAFF_TABS, TABS, type TabName } from "@/constants/tabs";
+import { WorkerBar } from "@/components/team/WorkerBar";
 import { useThemeColors } from "@/hooks/useTheme";
-import { isShopOwner, useSession } from "@/store/session";
+import { canRunShop, isShopOwner, useSession } from "@/store/session";
+import { useTeamSetup } from "@/store/teamSetup";
 
 /** Every tab route: the four places, then the pages that sit inside them. */
 const ROUTES: readonly TabName[] = [...TABS.map((tab) => tab.name), ...SECTION_TABS];
@@ -24,12 +27,24 @@ const ROUTES: readonly TabName[] = [...TABS.map((tab) => tab.name), ...SECTION_T
 export default function TabsLayout() {
   const colors = useThemeColors();
   const owner = useSession((s) => isShopOwner(s.user));
+  const runsShop = useSession((s) => canRunShop(s.user));
+  // "Me and staff" at sign-up: the Team screen opens once, over the new floor.
+  const openTeam = useTeamSetup((s) => s.openTeam);
+  useEffect(() => {
+    if (owner && openTeam && useTeamSetup.getState().consume()) router.push("/team" as Href);
+  }, [owner, openTeam]);
 
   return (
     <Tabs
       initialRouteName="home"
       backBehavior="history"
-      tabBar={(props) => <GridgoTabBar {...props} />}
+      tabBar={(props) => (
+        <>
+          {/* Who the shared shop phone is acting as, on every place. */}
+          <WorkerBar />
+          <GridgoTabBar {...props} />
+        </>
+      )}
       screenOptions={{
         headerShown: false,
         animation: "none",
@@ -47,8 +62,14 @@ export default function TabsLayout() {
         account. The rest are guarded out, not just hidden, so a typed address
         cannot reach them.
       */}
+      {/* A Manager also changes the shop's hours and products. */}
+      <Tabs.Protected guard={runsShop}>
+        {ROUTES.filter((name) => !STAFF_TABS.includes(name) && MANAGER_TABS.includes(name)).map((name) => (
+          <Tabs.Screen key={name} name={name} options={{ title: titleOf(name) }} />
+        ))}
+      </Tabs.Protected>
       <Tabs.Protected guard={owner}>
-        {ROUTES.filter((name) => !STAFF_TABS.includes(name)).map((name) => (
+        {ROUTES.filter((name) => !STAFF_TABS.includes(name) && !MANAGER_TABS.includes(name)).map((name) => (
           <Tabs.Screen key={name} name={name} options={{ title: titleOf(name) }} />
         ))}
       </Tabs.Protected>

@@ -35,6 +35,7 @@ import { legalContext } from "@/lib/legalContext";
 import { enrollmentIdempotencyKey, toEnrollRequest } from "@/lib/signup";
 import { useLegalLibrary } from "@/store/legalLibrary";
 import { useSession } from "@/store/session";
+import { rememberJobsHandledBy } from "@/store/teamSetup";
 import { useSignupDraft } from "@/store/signupDraft";
 
 /**
@@ -121,7 +122,8 @@ export default function ReviewStep() {
       setVerifying(true);
       return "email_code";
     }
-    setLocalError(next.message);
+    // A shop applies with its email; a texted code is a teammate's path, not this one.
+    setLocalError(next.kind === "blocked" ? next.message : "Your account could not be created yet. Check your details and try again.");
     return "blocked";
   }
 
@@ -189,6 +191,10 @@ export default function ReviewStep() {
       }
       return false;
     }
+    // Saved beside the account, never inside the enrollment body: an older
+    // GRIDGO refuses an enroll with a field it does not know. A shop with
+    // staff lands on the Team screen to add them while it carries on.
+    rememberJobsHandledBy(draft.jobsHandledBy ?? "just_me");
     clearDraft();
     router.replace("/(tabs)/home");
     return true;
@@ -329,6 +335,11 @@ export default function ReviewStep() {
             step={stepAt("services")}
             lines={draft.categoryCodes.map((code, index) => `${index + 1}. ${categoryName(code)}`)}
             missing={draft.categoryCodes.length === 0}
+          />
+
+          <ReviewCard
+            step={stepAt("team")}
+            lines={[draft.jobsHandledBy === "me_and_staff" ? "Me and staff" : "Just me"]}
           />
 
           <View className="gg-panel gap-2">

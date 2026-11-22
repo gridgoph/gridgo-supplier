@@ -19,6 +19,7 @@ import { humanizeApiError, offlineMessage, replaceInviteErrorMessage } from "@/l
 import { openInMessenger } from "@/lib/messengerShare";
 import {
   inviteTimeLeft,
+  joinMessage,
   joinTeamLink,
   normalizeInviteIdentity,
   type CreatedInvite,
@@ -55,7 +56,7 @@ const ACTION: Record<InviteKind, string> = {
  * sent in any chat, or their email or phone, found when they sign in.
  *
  * GRIDGO sends no message itself, so every method ends with something the
- * Owner can show or share. Each invite works once, for 48 hours — said by the
+ * Owner can show or share. Each invite works once, for 24 hours — said by the
  * clock chip, not a paragraph — and the person still waits for approval.
  */
 export default function TeamInviteScreen() {
@@ -76,7 +77,7 @@ export default function TeamInviteScreen() {
 
   async function share(url: string) {
     try {
-      await Share.share({ message: `Join my shop's team on GRIDGO: ${url}` });
+      await Share.share({ message: joinMessage(url) });
     } catch {
       await copy(url);
     }
@@ -189,7 +190,7 @@ export default function TeamInviteScreen() {
               <StatusChip
                 tone="neutral"
                 icon="clock"
-                label={`${inviteTimeLeft(current.invite.expiresAt) ?? "48h"} left`}
+                label={`${inviteTimeLeft(current.invite.expiresAt) ?? "24h"} left`}
               />
               <StatusChip tone="neutral" icon="circle-check" label="Works once" />
             </View>

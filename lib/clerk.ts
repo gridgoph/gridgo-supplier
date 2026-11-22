@@ -239,3 +239,24 @@ export function clerkErrorMessage(error: unknown, fallback: string): string {
   }
   return fallback;
 }
+
+/**
+ * True when Clerk refused because signing up or in with a mobile is not
+ * turned on for this GRIDGO (report F315793B): the phone field is unknown, or
+ * texted codes are not an allowed way in. A number Clerk simply does not know
+ * is not this — that is the person's own typo, and says so in Clerk's words.
+ */
+export function isPhoneUnavailableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const first = (error as { errors?: { code?: unknown; meta?: { paramName?: unknown } }[] }).errors?.[0];
+  const code = typeof first?.code === "string" ? first.code : "";
+  const param = typeof first?.meta?.paramName === "string" ? first.meta.paramName : "";
+  if (code === "strategy_for_user_invalid") return true;
+  if (code === "form_param_unknown" && /phone/.test(param)) return true;
+  const message = clerkErrorMessage(error, "").toLowerCase();
+  return (
+    /phone[_ ]number\b.*\b(is not a valid parameter|not enabled|not allowed|disabled)/.test(message) ||
+    message.includes("strategy is not valid") ||
+    /\bsms\b.*\b(not enabled|disabled|not allowed)/.test(message)
+  );
+}

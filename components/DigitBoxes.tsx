@@ -24,6 +24,10 @@ type Props = {
   systemKeyboard?: boolean;
   accessibilityLabel?: string;
   testID?: string;
+  /** Boxes to draw: six for a code, four for a teammate's PIN. */
+  length?: number;
+  /** Draw a dot for each digit typed (a PIN), never the digit. */
+  masked?: boolean;
 };
 
 /**
@@ -44,18 +48,20 @@ export function DigitBoxes({
   systemKeyboard = true,
   accessibilityLabel = "6-digit code",
   testID,
+  length = LENGTH,
+  masked = false,
 }: Props) {
   const colors = useThemeColors();
   const inputRef = useRef<TextInput>(null);
-  const digits = digitsOf(value);
-  const caret = Math.min(digits.length, LENGTH - 1);
+  const digits = digitsOf(value, length);
+  const caret = Math.min(digits.length, length - 1);
 
   return (
     <Pressable onPress={() => inputRef.current?.focus()} className="relative">
       <View className="flex-row gap-2" pointerEvents="none">
-        {Array.from({ length: LENGTH }, (_, index) => {
+        {Array.from({ length }, (_, index) => {
           const filled = Boolean(digits[index]);
-          const current = editable && !invalid && index === caret && digits.length < LENGTH;
+          const current = editable && !invalid && index === caret && digits.length < length;
           return (
             <View
               key={index}
@@ -71,7 +77,7 @@ export function DigitBoxes({
                         : "h-14 min-w-0 flex-1 items-center justify-center rounded-field border border-outline bg-surface-variant"
               }
             >
-              <Text className="text-h2 text-text-primary">{digits[index] ?? ""}</Text>
+              <Text className="text-h2 text-text-primary">{masked && digits[index] ? "•" : (digits[index] ?? "")}</Text>
             </View>
           );
         })}
@@ -81,9 +87,9 @@ export function DigitBoxes({
         ref={inputRef}
         testID={testID}
         value={digits}
-        onChangeText={(next) => onChange(digitsOf(next))}
+        onChangeText={(next) => onChange(digitsOf(next, length))}
         onSubmitEditing={() => {
-          if (digits.length === LENGTH && editable) onSubmit?.();
+          if (digits.length === length && editable) onSubmit?.();
         }}
         keyboardType="number-pad"
         inputMode="numeric"
@@ -92,7 +98,7 @@ export function DigitBoxes({
         autoCapitalize="none"
         autoCorrect={false}
         autoFocus={autoFocus}
-        maxLength={LENGTH}
+        maxLength={length}
         caretHidden
         importantForAutofill={oneTimeCode ? "yes" : "no"}
         accessibilityLabel={accessibilityLabel}
@@ -104,8 +110,8 @@ export function DigitBoxes({
   );
 }
 
-export function digitsOf(value: string): string {
-  return value.replace(/\D/g, "").slice(0, LENGTH);
+export function digitsOf(value: string, length: number = LENGTH): string {
+  return value.replace(/\D/g, "").slice(0, length);
 }
 
 const styles = StyleSheet.create({

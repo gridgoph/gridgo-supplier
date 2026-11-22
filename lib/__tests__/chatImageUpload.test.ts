@@ -131,3 +131,23 @@ it.each([
   });
   await expect(uploadChatImage(photo)).rejects.toThrow(message);
 });
+
+it("sends the turn's token over XHR and goes back to the picker when GRIDGO ended the turn", async () => {
+  api.setWorkerToken("wkr_lito");
+  const lost = jest.fn();
+  api.setWorkerLostHandler(lost);
+  const refused = class extends UploadRequest {
+    status = 403;
+    responseText = JSON.stringify({ error: "shop_worker_invalid" });
+  };
+  global.XMLHttpRequest = refused as unknown as typeof XMLHttpRequest;
+  try {
+    await expect(uploadChatImage(photo)).rejects.toThrow();
+    expect(UploadRequest.requests[0].setRequestHeader).toHaveBeenCalledWith("X-GRIDGO-Worker-Token", "wkr_lito");
+    expect(lost).toHaveBeenCalledWith("shop_worker_invalid");
+    expect(api.workerHeaders()).toEqual({});
+  } finally {
+    api.setWorkerToken(null);
+    api.setWorkerLostHandler(null);
+  }
+});

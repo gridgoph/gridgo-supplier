@@ -46,6 +46,11 @@ export type SignupDraft = {
   categoryCodes: string[];
   /** Stable enroll key for this draft. Papers are collected after the account exists. */
   enrollKey: string;
+  /**
+   * Who handles the jobs (report F315793B). Saved to GRIDGO's team settings
+   * right after the account opens; "me_and_staff" then opens the Team screen.
+   */
+  jobsHandledBy?: "just_me" | "me_and_staff";
   documents: Partial<Record<DocumentKind, PickedDocument>>;
 };
 
@@ -58,6 +63,7 @@ export const EMPTY_SIGNUP_DRAFT: SignupDraft = {
   pin: null,
   categoryCodes: [],
   enrollKey: "",
+  jobsHandledBy: "just_me",
   documents: {},
 };
 

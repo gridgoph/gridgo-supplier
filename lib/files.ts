@@ -211,8 +211,11 @@ export async function uploadFile(
     return { ok: false, error: "Your session ended. Sign in again to send this file." };
   }
 
+  // The shop-phone turn this upload belongs to, captured once (report F315793B).
+  const turn = api.currentWorkerToken();
+
   if (item.file || Platform.OS === "web") {
-    return uploadFileOnWeb(item, purpose, token, onProgress);
+    return uploadFileOnWeb(item, purpose, token, onProgress, turn);
   }
 
   try {
@@ -227,7 +230,7 @@ export async function uploadFile(
         // routinely wrong here.
         mimeType: item.mimeType ?? undefined,
         parameters: { purpose },
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...workerHeader(turn) },
       },
       (data) => {
         if (!data.totalBytesExpectedToSend) return;
@@ -241,6 +244,7 @@ export async function uploadFile(
     }
 
     const body = parseJson(response.body);
+    noteRefusal(response.status, body, turn);
     if (response.status === 201) {
       const fileId = readFileId(body);
       if (!fileId) {
@@ -271,6 +275,7 @@ async function uploadFileOnWeb(
   purpose: api.StoredFile["purpose"],
   token: string,
   onProgress: (fraction: number) => void,
+  turn: string | null,
 ): Promise<UploadResult> {
   try {
     const form = new FormData();
@@ -294,6 +299,7 @@ async function uploadFileOnWeb(
       xhr.responseType = "text";
       xhr.setRequestHeader("Accept", "application/json");
       xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      for (const [name, value] of Object.entries(workerHeader(turn))) xhr.setRequestHeader(name, value);
       if (xhr.upload) {
         xhr.upload.onprogress = (event: ProgressEvent) => {
           if (!event.lengthComputable || event.total <= 0) return;
@@ -308,6 +314,7 @@ async function uploadFileOnWeb(
     });
 
     const parsed = parseJson(body.text);
+    noteRefusal(body.status, parsed, turn);
     if (body.status === 201) {
       const fileId = readFileId(parsed);
       if (!fileId) {
@@ -340,6 +347,20 @@ export function messageFor(
   if (status === 401) return "Your session ended. Sign in again to send this file.";
   if (status >= 500) return "GRIDGO could not handle this file. Try again in a moment.";
   return "GRIDGO could not accept this file. Try again, or send a different export.";
+}
+
+function workerHeader(turn: string | null): Record<string, string> {
+  return turn ? { "X-GRIDGO-Worker-Token": turn } : {};
+}
+
+/**
+ * Uploads bypass `request`, so a worker refusal is handed to the same session
+ * boundary here: an ended, reset or removed turn goes back to the picker
+ * rather than leaving the old worker on screen retrying a dead token.
+ */
+function noteRefusal(status: number, body: Record<string, unknown> | null, turn: string | null): void {
+  if (status < 400 || !turn) return;
+  api.noteWorkerRefusal(new api.ApiError(status, body), turn);
 }
 
 function parseJson(text: string | undefined): Record<string, unknown> | null {

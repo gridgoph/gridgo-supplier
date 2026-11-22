@@ -67,9 +67,14 @@ const STAFF: Flags = {
   floorOpen: true,
   matchable: true,
   teamPending: false,
+  deviceLocked: false,
   owner: false,
+  runsShop: false,
 };
-const OWNER: Flags = { ...STAFF, owner: true };
+const MANAGER: Flags = { ...STAFF, runsShop: true };
+const OWNER: Flags = { ...STAFF, owner: true, runsShop: true };
+/** The shared shop phone between turns: Clerk signed in, nobody picked. */
+const LOCKED: Flags = { ...STAFF, signedIn: false, floorOpen: false, matchable: false, deviceLocked: true };
 
 const root = guardedScreens(read("app/_layout.tsx"), "Stack");
 
@@ -98,14 +103,16 @@ describe("Staff reach only the work", () => {
         "push-prompt",
         "settings",
         "shop-status",
+        "team",
+        "team-person",
         "whats-new",
       ].sort(),
     );
   });
 
   it.each([
-    "team",
     "team-invite",
+    "team-pin",
     "payout",
     "payout-account",
     "shop-hours",
@@ -128,6 +135,37 @@ describe("Staff reach only the work", () => {
     expect(reachable(OWNER)).toContain(name);
   });
 
+  it.each(["team-invite", "team-pin", "shop-hours", "shop-closure", "shop", "product-actions"])(
+    "opens %s to a Manager, who runs the team, hours and products",
+    (name) => {
+      expect(reachable(MANAGER)).toContain(name);
+    },
+  );
+
+  it.each([
+    "payout",
+    "payout-account",
+    "shop-details",
+    "shop-location",
+    "services",
+    "chat/index",
+    "report",
+    "delete-account",
+    "performance",
+    "late-production",
+  ])("keeps %s, the Owner's money and settings, closed to a Manager", (name) => {
+    expect(reachable(MANAGER)).not.toContain(name);
+  });
+
+  it("opens only the picker on a locked shop phone, never the login's own screens", () => {
+    const locked = reachable(LOCKED);
+    expect(locked).toContain("who-is-working");
+    for (const name of ["(tabs)", "team", "payout", "settings", "alerts", "job/[id]"]) {
+      expect(locked).not.toContain(name);
+    }
+    expect(reachable(OWNER)).not.toContain("who-is-working");
+  });
+
   it("opens the waiting screen only while the Owner has not answered", () => {
     const pending: Flags = { ...STAFF, signedIn: false, floorOpen: false, matchable: false, teamPending: true };
     expect(reachable(pending)).toContain("team-waiting");
@@ -137,8 +175,11 @@ describe("Staff reach only the work", () => {
 
   it("guards the Owner's tabs: Staff see To do, Messages, All jobs and My shop, never Money", () => {
     const source = read("app/(tabs)/_layout.tsx");
-    expect(source).toMatch(/<Tabs\.Protected guard=\{owner\}>[\s\S]*!STAFF_TABS\.includes[\s\S]*<\/Tabs\.Protected>/);
-    const { STAFF_TABS, TABS } = jest.requireActual("@/constants/tabs") as typeof import("@/constants/tabs");
+    expect(source).toMatch(/<Tabs\.Protected guard=\{owner\}>[\s\S]*!MANAGER_TABS\.includes[\s\S]*<\/Tabs\.Protected>/);
+    expect(source).toMatch(/<Tabs\.Protected guard=\{runsShop\}>[\s\S]*MANAGER_TABS\.includes[\s\S]*<\/Tabs\.Protected>/);
+    const { MANAGER_TABS, STAFF_TABS, TABS } = jest.requireActual("@/constants/tabs") as typeof import("@/constants/tabs");
+    // A Manager adds the hours (Schedule) and the products, never Money.
+    expect([...MANAGER_TABS].sort()).toEqual(["account", "catalogues", "home", "jobs", "messages", "schedule"]);
     expect([...STAFF_TABS].sort()).toEqual(["account", "home", "jobs", "messages"]);
     expect(STAFF_TABS).not.toContain("money");
     expect(STAFF_TABS).not.toContain("schedule");
