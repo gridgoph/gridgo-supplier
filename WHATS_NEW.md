@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.461 (New feature)
+
+- Add staff by link, QR or a 4-digit PIN, and see your team, its weekly mission and who is fastest.
+
 ## 1.0.454 (New feature)
 
 - My shop shows an Open or Closed sign, your products, and a Shop status sheet for Express, night jobs, pings and pause.
