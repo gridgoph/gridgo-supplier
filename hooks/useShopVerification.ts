@@ -32,9 +32,26 @@ export function useShopVerification(): {
     const current = beginRead();
     try {
       const next = await api.getSupplierVerification();
-      if (current()) setRead(next);
+      if (!current()) return;
+      setRead(next);
+      // This read is also the retry for a bootstrap whose own read failed:
+      // the session takes the fresh answer, so access follows GRIDGO.
+      const session = useSession.getState().user;
+      if (session) {
+        const verification = next?.verification ?? null;
+        api.rememberVerification(session.id, verification);
+        if (
+          JSON.stringify(session.verification ?? null) !==
+            JSON.stringify(verification) ||
+          session.verificationUnreachable
+        ) {
+          useSession.setState({
+            user: { ...session, verification, verificationUnreachable: false },
+          });
+        }
+      }
     } catch {
-      // Quiet: keep the last answer.
+      // Quiet: keep the last answer, and the session's.
     }
   }, [enabled, beginRead]);
 

@@ -1,4 +1,5 @@
 import {
+  missingPapers,
   moneyVerifyBanner,
   papersOnFile,
   readShopVerification,
@@ -8,6 +9,7 @@ import {
   waitingPayouts,
   waitingReasonLine,
   type ShopVerification,
+  type VerificationPaper,
 } from "@/lib/shopVerification";
 
 /** A fresh unverified shop, as `GET /me/supplier-verification` sends it. */
@@ -90,9 +92,15 @@ describe("payouts waiting on verification", () => {
   });
 });
 
+const ALL_MISSING = missingPapers([]);
+/** Existing cases: "being checked" here means every paper is in. */
+const missingFor = (v: ShopVerification) => (v.verificationState === "being_checked" ? [] : ALL_MISSING);
+const todo = (v: ShopVerification, missing: VerificationPaper[] = missingFor(v)) => todoVerifyNotice(v, missing);
+const money = (v: ShopVerification, missing: VerificationPaper[] = missingFor(v)) => moneyVerifyBanner(v, missing);
+
 describe("the To do card", () => {
   it("is a short pitch for a fresh shop, with no countdown", () => {
-    const notice = todoVerifyNotice(summary())!;
+    const notice = todo(summary())!;
     expect(notice.title).toBe("Get verified, get more jobs");
     expect(notice.chip).toBeNull();
     expect(notice.action).toBe("Get verified");
@@ -100,23 +108,23 @@ describe("the To do card", () => {
   });
 
   it("counts down only in the last seven days", () => {
-    const notice = todoVerifyNotice(summary({ daysLeft: 5, countdownDays: 5 }))!;
+    const notice = todo(summary({ daysLeft: 5, countdownDays: 5 }))!;
     expect(notice.chip).toBe("5 days left");
     expect(notice.body).toMatch(/New orders pause/);
-    expect(todoVerifyNotice(summary({ daysLeft: 1, countdownDays: 1 }))!.chip).toBe("1 day left");
+    expect(todo(summary({ daysLeft: 1, countdownDays: 1 }))!.chip).toBe("1 day left");
   });
 
   it("notes the cap from GRIDGO's figure when it is reached", () => {
-    const notice = todoVerifyNotice(
+    const notice = todo(
       summary({ capReached: true, paidBeforeVerificationMinor: 500000, remainingCapMinor: 0 }),
     )!;
     expect(notice.title).toBe("Payouts over ₱5,000.00 are waiting");
     expect(notice.body).toMatch(/The rest is paid in full once you're verified/);
-    expect(todoVerifyNotice(summary({ capReached: true, payoutCapMinor: 300000 }))!.title).toMatch(/₱3,000/);
+    expect(todo(summary({ capReached: true, payoutCapMinor: 300000 }))!.title).toMatch(/₱3,000/);
   });
 
   it("explains the pause at the end of the window, and that open jobs finish", () => {
-    const notice = todoVerifyNotice(summary({ daysLeft: 0, countdownDays: 0, newOrdersPaused: true }))!;
+    const notice = todo(summary({ daysLeft: 0, countdownDays: 0, newOrdersPaused: true }))!;
     expect(notice.tone).toBe("warning");
     expect(notice.title).toBe("New orders are paused");
     expect(notice.body).toMatch(/open jobs still finish/);
@@ -124,20 +132,20 @@ describe("the To do card", () => {
   });
 
   it("tells a shop paused after a dropped job why, and what comes out of its payouts", () => {
-    const notice = todoVerifyNotice(summary({ recoveryDueMinor: 86000, newOrdersPaused: true }))!;
+    const notice = todo(summary({ recoveryDueMinor: 86000, newOrdersPaused: true }))!;
     expect(notice.title).toBe("New orders are paused");
     expect(notice.body).toMatch(/₱860\.00 will come out of your next payouts/);
   });
 
   it("goes quiet once the papers are being checked, until the last week", () => {
-    expect(todoVerifyNotice(summary({ verificationState: "being_checked" }))).toBeNull();
-    const late = todoVerifyNotice(summary({ verificationState: "being_checked", countdownDays: 3 }))!;
+    expect(todo(summary({ verificationState: "being_checked" }))).toBeNull();
+    const late = todo(summary({ verificationState: "being_checked", countdownDays: 3 }))!;
     expect(late.title).toBe("GRIDGO is checking your papers");
     expect(late.action).toBeNull();
   });
 
   it("draws nothing for a verified shop", () => {
-    expect(todoVerifyNotice(summary({ verified: true, verificationState: "verified" }))).toBeNull();
+    expect(todo(summary({ verified: true, verificationState: "verified" }))).toBeNull();
   });
 
   it("never uses a word that shames the shop", () => {
@@ -150,40 +158,89 @@ describe("the To do card", () => {
       summary({ verificationState: "being_checked", countdownDays: 2 }),
     ];
     for (const v of states) {
-      const n = todoVerifyNotice(v)!;
+      const n = todo(v)!;
       expect(`${n.title} ${n.body}`).not.toMatch(NEGATIVE);
-      const m = moneyVerifyBanner(v)!;
+      const m = money(v)!;
       expect(`${m.title} ${m.body}`).not.toMatch(NEGATIVE);
     }
   });
 });
 
+describe("a shop that has sent some of its papers", () => {
+  // GRIDGO reads "being_checked" as soon as one paper is in.
+  const oneIn = readShopVerification({
+    verification: { verified: false, verificationState: "being_checked", daysLeft: 28, countdownDays: null, payoutCapMinor: 500000 },
+    verificationDocuments: [{ fileId: "f1", verificationDocumentType: "valid_id" }],
+    ledger: [],
+  })!;
+  const missing = missingPapers(oneIn.files);
+
+  it("knows which papers are still to send", () => {
+    expect(missing).toEqual(["id_selfie", "business_permit"]);
+    expect(missingPapers([])).toEqual(["valid_id", "id_selfie", "business_permit"]);
+  });
+
+  it("keeps asking for the rest on To do, by name, without a countdown before the last week", () => {
+    const n = todoVerifyNotice(oneIn.verification, missing)!;
+    expect(n.title).toBe("Finish getting verified");
+    expect(n.body).toBe("GRIDGO is checking what you sent. Send a selfie with your ID and your business permit to finish.");
+    expect(n.action).toBe("Finish verifying");
+    expect(n.chip).toBeNull();
+  });
+
+  it("counts down in the last week", () => {
+    const v = { ...oneIn.verification, daysLeft: 3, countdownDays: 3 };
+    expect(todoVerifyNotice(v, missing)!.chip).toBe("3 days left");
+  });
+
+  it("names the missing papers when new orders are paused, and keeps the button", () => {
+    const v = { ...oneIn.verification, daysLeft: 0, countdownDays: 0, newOrdersPaused: true };
+    const n = todoVerifyNotice(v, ["business_permit"])!;
+    expect(n.tone).toBe("warning");
+    expect(n.body).toMatch(/Send your business permit and new orders start again/);
+    expect(n.action).toBe("Finish verifying");
+    expect(todoVerifyNotice({ ...v, recoveryDueMinor: 86000 }, ["business_permit"])!.action).toBe("Finish verifying");
+  });
+
+  it("keeps the Money button and says what is left", () => {
+    const m = moneyVerifyBanner(oneIn.verification, missing)!;
+    expect(m.action).toBe("Finish verifying");
+    expect(m.body).toMatch(/Send a selfie with your ID and your business permit to finish\./);
+    expect(m.body).not.toMatch(/checking your papers/);
+  });
+
+  it("only goes quiet once every paper is in", () => {
+    expect(todoVerifyNotice(oneIn.verification, [])).toBeNull();
+    expect(moneyVerifyBanner(oneIn.verification, [])!.action).toBeNull();
+  });
+});
+
 describe("the Money banner", () => {
   it("shows how much of the cap is used while unverified", () => {
-    const banner = moneyVerifyBanner(summary())!;
+    const banner = money(summary())!;
     expect(banner.title).toBe("Get verified to unlock payouts over ₱5,000.00");
     expect(banner.body).toBe("₱1,240.00 of ₱5,000.00 paid out so far.");
     expect(banner.action).toBe("Get verified");
   });
 
   it("says the money over the cap is waiting once reached", () => {
-    expect(moneyVerifyBanner(summary({ capReached: true }))!.title).toBe("Payouts over ₱5,000.00 are waiting");
+    expect(money(summary({ capReached: true }))!.title).toBe("Payouts over ₱5,000.00 are waiting");
   });
 
   it("drops the button once the papers are with GRIDGO", () => {
-    const banner = moneyVerifyBanner(summary({ verificationState: "being_checked" }))!;
+    const banner = money(summary({ verificationState: "being_checked" }))!;
     expect(banner.action).toBeNull();
     expect(banner.body).toMatch(/checking your papers/);
   });
 
   it("says what a dropped job takes from the next payouts", () => {
-    expect(moneyVerifyBanner(summary({ recoveryDueMinor: 86000 }))!.body).toBe(
+    expect(money(summary({ recoveryDueMinor: 86000 }))!.body).toBe(
       "₱1,240.00 of ₱5,000.00 paid out so far. ₱860.00 from a dropped job will come out of your next payouts.",
     );
   });
 
   it("is gone once verified", () => {
-    expect(moneyVerifyBanner(summary({ verified: true }))).toBeNull();
+    expect(money(summary({ verified: true }))).toBeNull();
   });
 });
 

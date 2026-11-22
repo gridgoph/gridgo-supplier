@@ -5,7 +5,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { VerifyNoticeCard } from "@/components/verify/VerifyNoticeCard";
 import { WaitingPayoutList } from "@/components/verify/WaitingPayoutList";
 import { useShopVerification } from "@/hooks/useShopVerification";
-import { moneyVerifyBanner } from "@/lib/shopVerification";
+import { missingPapers, moneyVerifyBanner } from "@/lib/shopVerification";
 import { PayoutView } from "../payout";
 
 /**
@@ -17,7 +17,7 @@ export default function MoneyScreen() {
   // While the shop is not verified: how much of the cap is used, and which
   // staged payments wait on verification. Kept off the receiving-QR screen.
   const { read } = useShopVerification();
-  const banner = read ? moneyVerifyBanner(read.verification) : null;
+  const banner = read ? moneyVerifyBanner(read.verification, missingPapers(read.files)) : null;
   return (
     <PayoutView
       header={

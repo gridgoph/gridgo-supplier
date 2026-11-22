@@ -40,7 +40,7 @@ import { useAlertsStore } from "@/store/alerts";
 import { isMatchable, isShopStaff, useSession } from "@/store/session";
 import { VerifyNoticeCard } from "@/components/verify/VerifyNoticeCard";
 import { useShopVerification } from "@/hooks/useShopVerification";
-import { todoVerifyNotice } from "@/lib/shopVerification";
+import { missingPapers, todoVerifyNotice } from "@/lib/shopVerification";
 import { useVerifyOffer } from "@/store/verifyOffer";
 import { usePlayOptIn } from "@/store/playOptIn";
 import { useShopStatus } from "@/store/shopStatus";
@@ -227,7 +227,7 @@ export default function HomeScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const firstLoad = loading && !loaded;
   const verification = useShopVerification();
-  const verifyNotice = verification.read ? todoVerifyNotice(verification.read.verification) : null;
+  const verifyNotice = verification.read ? todoVerifyNotice(verification.read.verification, missingPapers(verification.read.files)) : null;
   // Sign-up's last, skippable step: Get verified opens once over To do.
   const offerVerify = useVerifyOffer((st) => st.open);
   useEffect(() => {

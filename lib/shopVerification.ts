@@ -229,14 +229,51 @@ function daysWord(days: number): string {
   return days === 1 ? "1 day left" : `${days} days left`;
 }
 
+/** The papers GRIDGO does not have yet, in the screen's order. */
+export function missingPapers(files: VerificationFile[]): VerificationPaper[] {
+  const onFile = papersOnFile(files);
+  return VERIFICATION_PAPERS.map((d) => d.paper).filter((paper) => !onFile[paper]);
+}
+
+const PAPER_NOUN: Record<VerificationPaper, string> = {
+  valid_id: "your ID",
+  id_selfie: "a selfie with your ID",
+  business_permit: "your business permit",
+};
+
+function paperList(papers: readonly VerificationPaper[]): string {
+  const nouns = papers.map((paper) => PAPER_NOUN[paper]);
+  return nouns.length <= 1 ? (nouns[0] ?? "") : `${nouns.slice(0, -1).join(", ")} and ${nouns[nouns.length - 1]}`;
+}
+
+/**
+ * Where the shop is with its papers. GRIDGO says "being checked" as soon as
+ * one paper is in, so "all sent" also needs every paper on file; until then
+ * the cards keep asking for the rest, by name.
+ */
+function papersProgress(v: ShopVerification, missing: readonly VerificationPaper[]) {
+  const checking = v.verificationState === "being_checked";
+  const allSent = checking && missing.length === 0;
+  const partly = checking && missing.length > 0;
+  return {
+    allSent,
+    partly,
+    rest: paperList(missing),
+    action: allSent ? null : partly ? "Finish verifying" : "Get verified",
+  };
+}
+
 /**
  * The To do card. Null when there is nothing to say: verified shops, and a
- * shop whose papers are with GRIDGO and that has no limit in its way.
+ * shop whose papers are all with GRIDGO and that has no limit in its way.
+ * `missing` comes from `missingPapers(read.files)`.
  */
-export function todoVerifyNotice(v: ShopVerification): VerifyNotice | null {
+export function todoVerifyNotice(
+  v: ShopVerification,
+  missing: readonly VerificationPaper[],
+): VerifyNotice | null {
   if (v.verified) return null;
-  const sent = v.verificationState === "being_checked";
-  const action = sent ? null : "Get verified";
+  const { allSent, partly, rest, action } = papersProgress(v, missing);
 
   if (v.recoveryDueMinor > 0) {
     return {
@@ -244,16 +281,18 @@ export function todoVerifyNotice(v: ShopVerification): VerifyNotice | null {
       title: "New orders are paused",
       body: `A job was dropped after part of it was paid. ${formatPhp(v.recoveryDueMinor)} will come out of your next payouts. Your open jobs still finish.`,
       chip: null,
-      action: sent ? null : "Get verified",
+      action,
     };
   }
   if (v.newOrdersPaused) {
     return {
       tone: "warning",
       title: "New orders are paused",
-      body: sent
+      body: allSent
         ? "GRIDGO is checking your papers. New orders start again once you're verified. Your open jobs still finish."
-        : "Your time to get verified has ended. Send your papers and new orders start again once GRIDGO checks them. Your open jobs still finish.",
+        : partly
+          ? `Your time to get verified has ended. Send ${rest} and new orders start again once you're verified. Your open jobs still finish.`
+          : "Your time to get verified has ended. Send your papers and new orders start again once GRIDGO checks them. Your open jobs still finish.",
       chip: null,
       action,
     };
@@ -262,14 +301,16 @@ export function todoVerifyNotice(v: ShopVerification): VerifyNotice | null {
     return {
       tone: "neutral",
       title: `Payouts over ${formatPhp(v.payoutCapMinor)} are waiting`,
-      body: sent
+      body: allSent
         ? "GRIDGO is checking your papers. The rest is paid in full once you're verified. Keep taking jobs."
-        : "The rest is paid in full once you're verified. Keep taking jobs.",
+        : partly
+          ? `The rest is paid in full once you're verified. Send ${rest} to finish.`
+          : "The rest is paid in full once you're verified. Keep taking jobs.",
       chip: v.countdownDays != null ? daysWord(v.countdownDays) : null,
       action,
     };
   }
-  if (sent) {
+  if (allSent) {
     if (v.countdownDays == null) return null;
     return {
       tone: "neutral",
@@ -277,6 +318,15 @@ export function todoVerifyNotice(v: ShopVerification): VerifyNotice | null {
       body: "Keep taking jobs while we check. We'll tell you when you're verified.",
       chip: daysWord(v.countdownDays),
       action: null,
+    };
+  }
+  if (partly) {
+    return {
+      tone: "neutral",
+      title: "Finish getting verified",
+      body: `GRIDGO is checking what you sent. Send ${rest} to finish.`,
+      chip: v.countdownDays != null ? daysWord(v.countdownDays) : null,
+      action,
     };
   }
   if (v.countdownDays != null) {
@@ -298,9 +348,12 @@ export function todoVerifyNotice(v: ShopVerification): VerifyNotice | null {
 }
 
 /** The Money tab banner, drawn for as long as the shop is not verified. */
-export function moneyVerifyBanner(v: ShopVerification): VerifyNotice | null {
+export function moneyVerifyBanner(
+  v: ShopVerification,
+  missing: readonly VerificationPaper[],
+): VerifyNotice | null {
   if (v.verified) return null;
-  const sent = v.verificationState === "being_checked";
+  const { allSent, partly, rest, action } = papersProgress(v, missing);
   const cap = formatPhp(v.payoutCapMinor);
   const paid = `${formatPhp(v.paidBeforeVerificationMinor)} of ${cap} paid out so far`;
   return {
@@ -313,12 +366,13 @@ export function moneyVerifyBanner(v: ShopVerification): VerifyNotice | null {
       v.recoveryDueMinor > 0
         ? `${formatPhp(v.recoveryDueMinor)} from a dropped job will come out of your next payouts.`
         : null,
-      sent ? "GRIDGO is checking your papers." : null,
+      allSent ? "GRIDGO is checking your papers." : null,
+      partly ? `Send ${rest} to finish.` : null,
     ]
       .filter(Boolean)
       .join(" "),
     chip: null,
-    action: sent ? null : "Get verified",
+    action,
   };
 }
 

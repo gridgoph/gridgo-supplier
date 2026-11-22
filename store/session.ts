@@ -142,7 +142,7 @@ export function isMatchable(user: User | null | undefined): boolean {
   if (user?.verificationStatus === "approved") return true;
   return (
     (user?.verificationStatus === "pending" || user?.verificationStatus === "unverified") &&
-    user.verification != null
+    (user.verification != null || user.verificationUnreachable === true)
   );
 }
 

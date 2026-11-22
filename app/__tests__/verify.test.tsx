@@ -22,7 +22,11 @@ jest.mock("@/lib/api", () => ({
   getSupplierVerification: jest.fn(),
 }));
 jest.mock("@/lib/verification", () => ({ sendDocument: jest.fn() }));
-jest.mock("@/lib/pickFile", () => ({ takePhoto: jest.fn(), choosePhoto: jest.fn() }));
+jest.mock("@/lib/pickFile", () => ({
+  takePhoto: jest.fn(),
+  choosePhoto: jest.fn(),
+  discardPickedCopy: jest.fn(() => Promise.resolve()),
+}));
 jest.mock("@/store/sheets", () => ({
   askPick: jest.fn(),
   afterNativePresentation: () => Promise.resolve(),
@@ -33,7 +37,7 @@ import { VerifyNoticeCard } from "@/components/verify/VerifyNoticeCard";
 import { WaitingPayoutList } from "@/components/verify/WaitingPayoutList";
 import { useShopVerification } from "@/hooks/useShopVerification";
 import { getSupplierVerification } from "@/lib/api";
-import { choosePhoto } from "@/lib/pickFile";
+import { choosePhoto, discardPickedCopy } from "@/lib/pickFile";
 import { readVerification, todoVerifyNotice } from "@/lib/shopVerification";
 import { sendDocument } from "@/lib/verification";
 import { askPick } from "@/store/sheets";
@@ -105,6 +109,8 @@ describe("Get verified", () => {
     await waitFor(() => expect(sendDocument).toHaveBeenCalledWith("valid_id", picked, expect.any(Function)));
     expect(await screen.findByText("Checking")).toBeTruthy();
     expect(screen.getByText("Verified shops get more jobs")).toBeTruthy();
+    // The phone's copy of the ID goes once GRIDGO has it.
+    expect(discardPickedCopy).toHaveBeenCalledWith(picked);
   });
 
   it("offers Try again with the same photo when an upload fails", async () => {
@@ -118,6 +124,19 @@ describe("Get verified", () => {
     await waitFor(() => expect(sendDocument).toHaveBeenCalledTimes(2));
     expect((sendDocument as jest.Mock).mock.calls[1][1]).toBe(picked);
     expect(await screen.findByText("Checking")).toBeTruthy();
+    // Kept for the retry, deleted only after it went through.
+    expect(discardPickedCopy).toHaveBeenCalledTimes(1);
+    expect(discardPickedCopy).toHaveBeenCalledWith(picked);
+  });
+
+  it("keeps a failed photo only while the screen is open", async () => {
+    (sendDocument as jest.Mock).mockResolvedValueOnce({ status: "failed", message: "The file could not be sent. Try again." });
+    const view = await render(<VerifyScreen />);
+    await fireEvent.press(await screen.findByTestId("paper-add-valid_id"));
+    expect(await screen.findByText("The file could not be sent. Try again.")).toBeTruthy();
+    expect(discardPickedCopy).not.toHaveBeenCalled();
+    await view.unmount();
+    expect(discardPickedCopy).toHaveBeenCalledWith(picked);
   });
 
   it("shows papers GRIDGO already has as being checked", async () => {
@@ -157,11 +176,34 @@ describe("who reads verification", () => {
     await render(<Probe />);
     expect(await screen.findByText("read")).toBeTruthy();
   });
+
+  it("settles a session whose own read failed, once a read lands", async () => {
+    useSession.setState({ user: { ...owner, verification: null, verificationUnreachable: true } });
+    await render(<Probe />);
+    expect(await screen.findByText("read")).toBeTruthy();
+    expect(useSession.getState().user?.verification).toEqual(summary);
+    expect(useSession.getState().user?.verificationUnreachable).toBe(false);
+  });
+
+  it("closes the floor when GRIDGO answers that it does not offer it", async () => {
+    (getSupplierVerification as jest.Mock).mockResolvedValue(null);
+    useSession.setState({ user: { ...owner, verification: null, verificationUnreachable: true } });
+    await render(<Probe />);
+    await waitFor(() => expect(useSession.getState().user?.verificationUnreachable).toBe(false));
+    expect(useSession.getState().user?.verification).toBeNull();
+  });
+
+  it("keeps the session as it was when the read fails", async () => {
+    (getSupplierVerification as jest.Mock).mockRejectedValue(new Error("offline"));
+    await render(<Probe />);
+    await act(async () => undefined);
+    expect(useSession.getState().user?.verification).toEqual(summary);
+  });
 });
 
 describe("the cards", () => {
   it("shows the countdown chip near the deadline and opens Get verified", async () => {
-    const notice = todoVerifyNotice(readVerification({ ...summary, daysLeft: 5, countdownDays: 5 })!)!;
+    const notice = todoVerifyNotice(readVerification({ ...summary, daysLeft: 5, countdownDays: 5 })!, [])!;
     await render(<VerifyNoticeCard notice={notice} testID="card" />);
     expect(screen.getByText("5 days left")).toBeTruthy();
     await fireEvent.press(screen.getByTestId("card-action"));
@@ -169,7 +211,7 @@ describe("the cards", () => {
   });
 
   it("marks a pause with its own chip", async () => {
-    const notice = todoVerifyNotice(readVerification({ ...summary, newOrdersPaused: true, daysLeft: 0 })!)!;
+    const notice = todoVerifyNotice(readVerification({ ...summary, newOrdersPaused: true, daysLeft: 0 })!, [])!;
     await render(<VerifyNoticeCard notice={notice} />);
     expect(screen.getByText("New orders paused")).toBeTruthy();
   });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUpToLine, BadgeCheck, CalendarCheck, Infinity as NoLimit } from "lucide-react-native";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
@@ -9,7 +9,7 @@ import { PaperRow, type PaperRowState } from "@/components/verify/PaperRow";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useShopVerification } from "@/hooks/useShopVerification";
 import { useThemeColors } from "@/hooks/useTheme";
-import { choosePhoto, takePhoto, type PickOutcome } from "@/lib/pickFile";
+import { choosePhoto, discardPickedCopy, takePhoto, type PickOutcome } from "@/lib/pickFile";
 import {
   papersOnFile,
   VERIFICATION_PAPERS,
@@ -34,8 +34,8 @@ const BENEFIT_ICONS = [BadgeCheck, ArrowUpToLine, NoLimit, CalendarCheck] as con
  * opens once after sign-up (`?first=1`, with Skip) and from To do, Money and
  * My shop afterwards. Each paper uploads the moment it is picked, with its own
  * progress and Try again, and once GRIDGO has it the row reads "Checking".
- * Nothing is kept on the phone: a picked photo lives in this screen's memory
- * only until it is sent.
+ * Nothing is kept on the phone: a picked photo's cached copy is deleted once
+ * it is sent, or when the screen is left with it unsent (`discardPickedCopy`).
  */
 export default function VerifyScreen() {
   const colors = useThemeColors();
@@ -45,17 +45,39 @@ export default function VerifyScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const [local, setLocal] = useState<Partial<Record<VerificationPaper, Local>>>({});
   const [problem, setProblem] = useState<string | null>(null);
+  // Picks still held for a retry. Leaving the screen abandons them, and their
+  // cached copies go with it: an ID must not outlive its upload on the phone.
+  const held = useRef(new Map<VerificationPaper, PickedDocument>());
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    const picks = held.current;
+    return () => {
+      mounted.current = false;
+      for (const picked of picks.values()) void discardPickedCopy(picked);
+      picks.clear();
+    };
+  }, []);
 
   const onFile = read ? papersOnFile(read.files) : {};
   const v = read?.verification ?? null;
 
   async function send(paper: VerificationPaper, picked: PickedDocument) {
+    // A new pick for the same paper replaces, and forgets, the one before.
+    const previous = held.current.get(paper);
+    if (previous && previous !== picked) void discardPickedCopy(previous);
+    held.current.set(paper, picked);
     setLocal((s) => ({ ...s, [paper]: { kind: "sending", progress: 0, picked } }));
-    const outcome = await sendDocument(paper, picked, (progress) =>
-      setLocal((s) => ({ ...s, [paper]: { kind: "sending", progress, picked } })),
-    );
+    const outcome = await sendDocument(paper, picked, (progress) => {
+      if (mounted.current) setLocal((s) => ({ ...s, [paper]: { kind: "sending", progress, picked } }));
+    });
+    if (outcome.status === "saved" || !mounted.current) {
+      // GRIDGO has it (or the screen is gone): the phone's copy goes now.
+      if (held.current.get(paper) === picked) held.current.delete(paper);
+      void discardPickedCopy(picked);
+    }
+    if (!mounted.current) return;
     if (outcome.status === "saved") {
-      // Drop the photo from memory: GRIDGO has it now.
       setLocal((s) => ({ ...s, [paper]: { kind: "sent", at: new Date().toISOString() } }));
       void reload();
       return;

@@ -108,6 +108,12 @@ export type User = {
    * take jobs before it is verified; read through `lib/shopVerification.ts`.
    */
   verification?: ShopVerification | null;
+  /**
+   * The verification read failed and nothing was known yet. Not "not
+   * offered": the floor stays open (see `isMatchable`) and the next read
+   * settles it.
+   */
+  verificationUnreachable?: boolean;
 };
 
 /**
@@ -1534,16 +1540,51 @@ export async function me(options: { ignoreUnauthorized?: boolean } = {}): Promis
   // The summary says so; its absence (an older API) keeps the old wait.
   const verification =
     verificationStatus === "pending" || verificationStatus === "unverified"
-      ? (await getSupplierVerification({ ignoreUnauthorized: options.ignoreUnauthorized }).catch(() => null))
-          ?.verification ?? null
+      ? await verificationForSession(result.user.id, options)
       : null;
   return {
     ...result.user,
     role: "supplier",
     ...(verificationStatus ? { verificationStatus } : {}),
-    verification,
+    ...verification,
   };
 }
+
+/** The last verification summary each account was read with, for a failed read. */
+const lastVerification = new Map<string, ShopVerification | null>();
+
+/** Remember a summary read elsewhere (`hooks/useShopVerification.ts`). */
+export function rememberVerification(userId: string, verification: ShopVerification | null): void {
+  lastVerification.set(userId, verification);
+}
+
+/**
+ * The verification note beside a pending shop's bootstrap. A route GRIDGO
+ * does not have (403/404/405) is a definite "not offered". A slow or failed
+ * read is not: it must never take a shop's existing jobs away, so it keeps
+ * the last known answer for this account, and with none yet it says
+ * `verificationUnreachable` and the floor stays open until a read lands
+ * (GRIDGO still authorizes every job route itself).
+ */
+async function verificationForSession(
+  userId: string,
+  options: { ignoreUnauthorized?: boolean },
+): Promise<Pick<User, "verification" | "verificationUnreachable">> {
+  try {
+    const read = await withDeadline(
+      getSupplierVerification({ ignoreUnauthorized: options.ignoreUnauthorized }),
+      VERIFICATION_READ_DEADLINE_MS,
+    );
+    const verification = read?.verification ?? null;
+    lastVerification.set(userId, verification);
+    return { verification };
+  } catch {
+    if (lastVerification.has(userId)) return { verification: lastVerification.get(userId) ?? null };
+    return { verification: null, verificationUnreachable: true };
+  }
+}
+
+const VERIFICATION_READ_DEADLINE_MS = 8000;
 
 /**
  * The Owner's verification read (gridgo-api `docs/SUPPLIER_VERIFICATION_API.md`):
