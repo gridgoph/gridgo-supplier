@@ -29,7 +29,9 @@ export function WaitingPayoutList({ waiting }: { waiting: WaitingPayout[] }) {
           style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
         >
           <View className="min-w-0 flex-1 gap-1">
-            <StatusChip tone="neutral" icon="clock" label="Waiting" />
+            <View className="flex-row">
+              <StatusChip tone="neutral" icon="clock" label="Waiting" />
+            </View>
             <Text className="text-caption text-text-secondary">{waitingReasonLine(item.reason)}</Text>
           </View>
           <Text className="text-body font-medium text-text-primary">{formatPhp(item.amountMinor)}</Text>

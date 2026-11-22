@@ -17,7 +17,7 @@ const FRESH = {
   startedAt: "2026-11-20T00:00:00.000Z",
   deadlineAt: "2026-12-20T00:00:00.000Z",
   daysLeft: 28,
-  countdownDays: null,
+  countdownDays: null as number | null,
   payoutCapMinor: 500000,
   paidBeforeVerificationMinor: 124000,
   remainingCapMinor: 376000,
@@ -111,7 +111,7 @@ describe("the To do card", () => {
       summary({ capReached: true, paidBeforeVerificationMinor: 500000, remainingCapMinor: 0 }),
     )!;
     expect(notice.title).toBe("Payouts over ₱5,000.00 are waiting");
-    expect(notice.body).toMatch(/paid in full once you're verified/);
+    expect(notice.body).toMatch(/The rest is paid in full once you're verified/);
     expect(todoVerifyNotice(summary({ capReached: true, payoutCapMinor: 300000 }))!.title).toMatch(/₱3,000/);
   });
 
@@ -174,6 +174,12 @@ describe("the Money banner", () => {
     const banner = moneyVerifyBanner(summary({ verificationState: "being_checked" }))!;
     expect(banner.action).toBeNull();
     expect(banner.body).toMatch(/checking your papers/);
+  });
+
+  it("says what a dropped job takes from the next payouts", () => {
+    expect(moneyVerifyBanner(summary({ recoveryDueMinor: 86000 }))!.body).toBe(
+      "₱1,240.00 of ₱5,000.00 paid out so far. ₱860.00 from a dropped job will come out of your next payouts.",
+    );
   });
 
   it("is gone once verified", () => {

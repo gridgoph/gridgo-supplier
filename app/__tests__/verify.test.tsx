@@ -104,7 +104,7 @@ describe("Get verified", () => {
     await fireEvent.press(await screen.findByTestId("paper-add-valid_id"));
     await waitFor(() => expect(sendDocument).toHaveBeenCalledWith("valid_id", picked, expect.any(Function)));
     expect(await screen.findByText("Checking")).toBeTruthy();
-    expect(screen.getByText("We're checking your papers")).toBeTruthy();
+    expect(screen.getByText("Verified shops get more jobs")).toBeTruthy();
   });
 
   it("offers Try again with the same photo when an upload fails", async () => {

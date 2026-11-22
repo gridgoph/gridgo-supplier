@@ -195,7 +195,7 @@ export function verificationBenefits(v: ShopVerification): { title: string; deta
         ? `Until then, payouts stop at ${formatPhp(v.payoutCapMinor)}`
         : "All your pay, with no limit",
     },
-    { title: "Keep getting orders", detail: "New orders never pause for verification" },
+    { title: "Orders never pause", detail: "New orders keep coming after your time to verify ends" },
   ];
 }
 
@@ -263,8 +263,8 @@ export function todoVerifyNotice(v: ShopVerification): VerifyNotice | null {
       tone: "neutral",
       title: `Payouts over ${formatPhp(v.payoutCapMinor)} are waiting`,
       body: sent
-        ? "GRIDGO is checking your papers. What is waiting is paid once you're verified. Keep taking jobs."
-        : "It is paid in full once you're verified. Keep taking jobs.",
+        ? "GRIDGO is checking your papers. The rest is paid in full once you're verified. Keep taking jobs."
+        : "The rest is paid in full once you're verified. Keep taking jobs.",
       chip: v.countdownDays != null ? daysWord(v.countdownDays) : null,
       action,
     };
@@ -308,7 +308,15 @@ export function moneyVerifyBanner(v: ShopVerification): VerifyNotice | null {
     title: v.capReached
       ? `Payouts over ${cap} are waiting`
       : `Get verified to unlock payouts over ${cap}`,
-    body: sent ? `${paid}. GRIDGO is checking your papers.` : `${paid}.`,
+    body: [
+      `${paid}.`,
+      v.recoveryDueMinor > 0
+        ? `${formatPhp(v.recoveryDueMinor)} from a dropped job will come out of your next payouts.`
+        : null,
+      sent ? "GRIDGO is checking your papers." : null,
+    ]
+      .filter(Boolean)
+      .join(" "),
     chip: null,
     action: sent ? null : "Get verified",
   };

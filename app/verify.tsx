@@ -128,10 +128,10 @@ export default function VerifyScreen() {
         <View className="gap-2 pt-2">
           <Text className="text-caption font-medium text-text-muted">Optional, about a minute</Text>
           <Text className="text-h1 text-text-primary">
-            {anySent ? "We're checking your papers" : "Verified shops get more jobs"}
+            {allSent ? "We're checking your papers" : "Verified shops get more jobs"}
           </Text>
           <Text className="text-body text-text-secondary">
-            {anySent
+            {allSent
               ? "Keep taking jobs while we check. We'll tell you when you're verified."
               : "You can take jobs today. Send your ID and business permit when you're ready."}
           </Text>

@@ -454,6 +454,17 @@ export default function HomeScreen() {
               work, which outranks how much money is waiting. The yellow stays
               with the day's work when there is any.
             */}
+            {/*
+              Getting verified (report F318781A): short, and only for the
+              Owner. A countdown appears only in the last seven days.
+              Above Not ready: when new orders pause, this card says why
+              and what is owed, which GRIDGO's matching steps do not.
+            */}
+            {verifyNotice ? (
+              <View className="mb-6">
+                <VerifyNoticeCard notice={verifyNotice} testID="todo-verify-card" />
+              </View>
+            ) : null}
             {notReady && readiness ? (
               <View className="mb-6">
                 <ShopNotReadyCard
@@ -462,15 +473,6 @@ export default function HomeScreen() {
                   listingCount={boardTotal}
                   takesYellow={!first}
                 />
-              </View>
-            ) : null}
-            {/*
-              Getting verified (report F318781A): short, and only for the
-              Owner. A countdown appears only in the last seven days.
-            */}
-            {verifyNotice ? (
-              <View className="mb-6">
-                <VerifyNoticeCard notice={verifyNotice} testID="todo-verify-card" />
               </View>
             ) : null}
             {todo.express.length ? (
