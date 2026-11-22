@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.454 (New feature)
+
+- My shop shows an Open or Closed sign, your products, and a Shop status sheet for Express, night jobs, pings and pause.
+
 ## 1.0.448 (New feature)
 
 - Express jobs take three taps: Accept, It's ready, and the client's code. New tabs: To do, Messages, Money, My shop.
