@@ -1,4 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
+import { cacheDirectory, deleteAsync } from "expo-file-system/legacy";
 import { withSystemPicker } from "@/lib/sharedDevice";
 import * as ImagePicker from "expo-image-picker";
 
@@ -88,4 +89,51 @@ export function fileSizeText(sizeBytes: number | null): string {
   if (sizeBytes == null || sizeBytes <= 0) return "";
   if (sizeBytes < 1024 * 1024) return `${Math.max(1, Math.round(sizeBytes / 1024))} KB`;
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** A picture from the phone's gallery. Images only: a photo is what GRIDGO asks for. */
+export async function choosePhoto(): Promise<PickOutcome> {
+  if (canPickOnWeb()) {
+    const picked = await pickFileOnWeb("image/*");
+    if (!picked) return CANCELLED;
+    return { ok: true, document: fromWeb(picked) };
+  }
+  const result = await withSystemPicker(() =>
+    ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 }),
+  );
+  const asset = result.canceled ? null : result.assets[0];
+  if (!asset) return CANCELLED;
+  return {
+    ok: true,
+    document: {
+      uri: asset.uri,
+      fileName: asset.fileName || "photo.jpg",
+      mimeType: asset.mimeType ?? null,
+      sizeBytes: asset.fileSize ?? null,
+    },
+  };
+}
+
+/**
+ * Forget a picked photo once it is no longer needed (sent, or abandoned).
+ *
+ * The camera and the gallery both hand back a copy in this app's cache, and an
+ * ID or permit must not stay on the phone after it reaches GRIDGO. Only a file
+ * inside the app's own cache is deleted, never the shop's gallery original;
+ * on web the object URL is released. Failures are ignored: there is nothing
+ * the shop could do about them.
+ */
+export async function discardPickedCopy(picked: PickedDocument): Promise<void> {
+  try {
+    if (picked.uri.startsWith("blob:")) {
+      if (typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
+        URL.revokeObjectURL(picked.uri);
+      }
+      return;
+    }
+    if (!cacheDirectory || !picked.uri.startsWith(cacheDirectory)) return;
+    await deleteAsync(picked.uri, { idempotent: true });
+  } catch {
+    // Nothing to tell the shop.
+  }
 }

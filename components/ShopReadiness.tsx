@@ -6,6 +6,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { StatusChip } from "@/components/StatusChip";
 import { useThemeColors } from "@/hooks/useTheme";
+import { useSession, verifyLater } from "@/store/session";
 import {
   NO_MATCHABLE_LISTING,
   listingFixTarget,
@@ -66,6 +67,7 @@ export function ShopNotReadyCard({
   takesYellow: boolean;
 }) {
   const colors = useThemeColors();
+  const early = verifyLater(useSession((s) => s.user));
   const steps = readiness.missing;
   const pending = listingsNeedingWork(readiness);
 
@@ -74,7 +76,7 @@ export function ShopNotReadyCard({
   const stepButton = (step: ReadinessStep) =>
     step.code === NO_MATCHABLE_LISTING && pending.length > 0
       ? null
-      : stepTarget(step, { listingCount });
+      : stepTarget(step, { listingCount, verifyLater: early });
 
   // The yellow goes to the first button on the card, whichever kind it is.
   const firstButtonStep = steps.find(
@@ -122,7 +124,7 @@ export function ShopNotReadyCard({
                     key={entry.catalogItemId}
                     name={listingNames[entry.catalogItemId] || "A listing"}
                     steps={listingOwnSteps(entry)}
-                    target={listingFixTarget(entry)}
+                    target={listingFixTarget(entry, early)}
                     primary={yellowFor(`listing:${entry.catalogItemId}`)}
                   />
                 ))}
@@ -200,6 +202,7 @@ export function ShopReadyLine({ readiness }: { readiness: Readiness }) {
  */
 export function ShopSetupGaps({ readiness }: { readiness: Readiness }) {
   const colors = useThemeColors();
+  const early = verifyLater(useSession((s) => s.user));
   const gaps = setupGaps(readiness);
   if (!gaps.length) return null;
 
@@ -214,7 +217,7 @@ export function ShopSetupGaps({ readiness }: { readiness: Readiness }) {
         </Text>
       </View>
       {gaps.map(({ step, serviceCount }) => {
-        const target = stepTarget(step);
+        const target = stepTarget(step, { verifyLater: early });
         const detail =
           serviceCount > 1
             ? `${serviceCount} service lines`

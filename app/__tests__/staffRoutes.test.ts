@@ -66,6 +66,8 @@ const STAFF: Flags = {
   legalBlocked: false,
   floorOpen: true,
   matchable: true,
+  verified: true,
+  verifyingLater: false,
   teamPending: false,
   deviceLocked: false,
   owner: false,
@@ -74,7 +76,14 @@ const STAFF: Flags = {
 const MANAGER: Flags = { ...STAFF, runsShop: true };
 const OWNER: Flags = { ...STAFF, owner: true, runsShop: true };
 /** The shared shop phone between turns: Clerk signed in, nobody picked. */
-const LOCKED: Flags = { ...STAFF, signedIn: false, floorOpen: false, matchable: false, deviceLocked: true };
+const LOCKED: Flags = {
+  ...STAFF,
+  signedIn: false,
+  floorOpen: false,
+  matchable: false,
+  verified: false,
+  deviceLocked: true,
+};
 
 const root = guardedScreens(read("app/_layout.tsx"), "Stack");
 
@@ -90,7 +99,8 @@ describe("Staff reach only the work", () => {
 
   it("opens exactly the order floor to a signed-in Staff member", () => {
     const staffOnly = reachable(STAFF).filter(
-      (name) => !reachable({ ...STAFF, signedIn: false, floorOpen: false, matchable: false }).includes(name),
+      (name) =>
+        !reachable({ ...STAFF, signedIn: false, floorOpen: false, matchable: false, verified: false }).includes(name),
     );
     expect(staffOnly).toEqual(
       [
@@ -155,6 +165,16 @@ describe("Staff reach only the work", () => {
     "late-production",
   ])("keeps %s, the Owner's money and settings, closed to a Manager", (name) => {
     expect(reachable(MANAGER)).not.toContain(name);
+  });
+
+  it("opens Get verified to the Owner of a shop taking jobs before it is verified, never to Staff", () => {
+    const early = { verified: false, verifyingLater: true };
+    expect(reachable({ ...OWNER, ...early })).toContain("verify");
+    expect(reachable({ ...OWNER, ...early })).toContain("accreditation");
+    expect(reachable({ ...STAFF, ...early })).not.toContain("verify");
+    expect(reachable({ ...MANAGER, ...early })).not.toContain("verify");
+    expect(reachable(OWNER)).not.toContain("verify");
+    expect(reachable(OWNER)).not.toContain("accreditation");
   });
 
   it("opens only the picker on a locked shop phone, never the login's own screens", () => {

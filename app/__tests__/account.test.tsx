@@ -109,10 +109,10 @@ describe("the shop's account", () => {
    * says the same thing in two words, and gains nothing from a paragraph
    * describing a rule it is not about to break.
    */
-  it("says a shop is accredited with the chip and nothing more", async () => {
+  it("says a shop is verified with the chip and nothing more", async () => {
     view = await render(<AccountScreen />);
 
-    expect(await screen.findByText("Accredited")).toBeTruthy();
+    expect(await screen.findByText("Verified")).toBeTruthy();
     expect(screen.queryByText(/GRIDGO matches work to your shop/)).toBeNull();
     expect(screen.queryByText(/Operations can pause that/)).toBeNull();
   });
@@ -127,6 +127,41 @@ describe("the shop's account", () => {
 
     expect(await screen.findByText("With Operations")).toBeTruthy();
     expect(screen.getByText(/No job is matched until they approve/)).toBeTruthy();
+  });
+
+  /**
+   * Report F318781A: a shop taking jobs before it is verified gets a quiet way
+   * in and never a label saying what it is not.
+   */
+  it("offers Get verified, with no negative label, to a shop taking jobs before it is verified", async () => {
+    const early = {
+      ...shop,
+      verificationStatus: "pending" as const,
+      verification: {
+        verified: false,
+        verificationState: "not_submitted" as const,
+        deadlineAt: null,
+        daysLeft: 20,
+        countdownDays: null,
+        payoutCapMinor: 500000,
+        paidBeforeVerificationMinor: 0,
+        remainingCapMinor: 500000,
+        capReached: false,
+        heldMinor: 0,
+        recoveryDueMinor: 0,
+        paidOpenRegularJobs: 0,
+        newOrdersPaused: false,
+      },
+    };
+    (me as jest.Mock).mockResolvedValue(early);
+    useSession.setState({ user: early });
+
+    view = await render(<AccountScreen />);
+
+    expect((await screen.findAllByText("Get verified")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("With Operations")).toBeNull();
+    expect(screen.queryByText("Verified")).toBeNull();
+    expect(screen.queryByText(/No job is matched until they approve/)).toBeNull();
   });
 
   /**
