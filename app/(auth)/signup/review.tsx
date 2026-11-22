@@ -36,6 +36,7 @@ import { enrollmentIdempotencyKey, toEnrollRequest } from "@/lib/signup";
 import { useLegalLibrary } from "@/store/legalLibrary";
 import { useSession } from "@/store/session";
 import { rememberJobsHandledBy } from "@/store/teamSetup";
+import { offerVerifyAfterSignup } from "@/store/verifyOffer";
 import { useSignupDraft } from "@/store/signupDraft";
 
 /**
@@ -195,6 +196,7 @@ export default function ReviewStep() {
     // GRIDGO refuses an enroll with a field it does not know. A shop with
     // staff lands on the Team screen to add them while it carries on.
     rememberJobsHandledBy(draft.jobsHandledBy ?? "just_me");
+    offerVerifyAfterSignup();
     clearDraft();
     router.replace("/(tabs)/home");
     return true;

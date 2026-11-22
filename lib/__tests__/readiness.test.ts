@@ -182,6 +182,11 @@ describe("normalizeReadiness", () => {
 });
 
 describe("stepTarget", () => {
+  it("sends a shop taking jobs before it is verified to Get verified (report F318781A)", () => {
+    expect(stepTarget(APPROVAL, { verifyLater: true })).toEqual({ label: "Get verified", href: "/verify" });
+    expect(stepTarget(APPROVAL)?.label).toBe("Open accreditation");
+  });
+
   it("takes each action to the screen that fixes it", () => {
     expect(stepTarget(APPROVAL)?.href).toBe("/accreditation");
     expect(stepTarget(PHOTO, { catalogItemId: "item_photo" })?.href).toEqual({

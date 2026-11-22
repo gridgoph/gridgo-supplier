@@ -48,7 +48,7 @@ import { bounceToIsolatedDevWebHost, GRIDGO_DEV_WEB_HOST } from "@/lib/devWebHos
 import { useAppUpdate } from "@/store/appUpdate";
 import { legalGateFor, useLegalConsent } from "@/store/legalConsent";
 import { usePushPrompt } from "@/store/pushPrompt";
-import { canRunShop, isMatchable, isShopOwner, isSignedIn, useSession } from "@/store/session";
+import { canRunShop, isMatchable, isShopOwner, isSignedIn, isVerifiedShop, useSession, verifyLater } from "@/store/session";
 import "@/store/shopWorker";
 import { useWorkerAutoLock } from "@/hooks/useWorkerAutoLock";
 
@@ -190,6 +190,10 @@ function RootStack({ introDone }: { introDone: boolean }) {
   const deviceLocked = identity.kind === "device_locked";
   const signedIn = isSignedIn(user) && !deviceLocked;
   const matchable = signedIn && isMatchable(user);
+  // GRIDGO has checked the shop's papers, or the shop is taking jobs before
+  // it has (gridgo-api docs/SUPPLIER_VERIFICATION_API.md).
+  const verified = signedIn && isVerifiedShop(user);
+  const verifyingLater = signedIn && verifyLater(user);
   const accessBlocked = identity.kind === "mismatch" || identity.kind === "error";
   // Unassigned Clerk stays on apply so Send can enroll. Loading stays on the
   // door too — dropping it unmounted welcome and left a black canvas.
@@ -350,7 +354,7 @@ function RootStack({ introDone }: { introDone: boolean }) {
         />
       </Stack.Protected>
 
-      <Stack.Protected guard={floorOpen && !matchable}>
+      <Stack.Protected guard={floorOpen && !verified}>
         <Stack.Screen
           name="accreditation"
           options={{
@@ -602,6 +606,21 @@ function RootStack({ introDone }: { introDone: boolean }) {
           name="change-password"
           options={{
             title: "Password",
+            headerBackButtonDisplayMode: "minimal",
+          }}
+        />
+      </Stack.Protected>
+
+      <Stack.Protected guard={floorOpen && owner && verifyingLater}>
+        {/*
+          Getting verified while already taking jobs (gridgo-api
+          docs/SUPPLIER_VERIFICATION_API.md). The Owner's: the papers are the
+          owner's, and GRIDGO refuses the read to Staff.
+        */}
+        <Stack.Screen
+          name="verify"
+          options={{
+            title: "Get verified",
             headerBackButtonDisplayMode: "minimal",
           }}
         />

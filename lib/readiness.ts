@@ -232,9 +232,9 @@ function listingTarget(label: string, catalogItemId: string | undefined, photos 
  */
 export function stepTarget(
   step: ReadinessStep,
-  context: { catalogItemId?: string; listingCount?: number } = {},
+  context: { catalogItemId?: string; listingCount?: number; verifyLater?: boolean } = {},
 ): StepTarget | null {
-  const { catalogItemId, listingCount } = context;
+  const { catalogItemId, listingCount, verifyLater } = context;
   switch (step.action) {
     case "contact_operations":
     case "open_shop":
@@ -246,7 +246,11 @@ export function stepTarget(
         ? { label: "Set your shop pin", href: "/shop-location" }
         : { label: "Edit shop details", href: "/shop-details" };
     case "view_approval":
-      return { label: "Open accreditation", href: "/accreditation" };
+      // A shop taking jobs before it is verified sends its papers from Get
+      // verified (`app/accreditation.tsx` forwards there too).
+      return verifyLater
+        ? { label: "Get verified", href: "/verify" as Href }
+        : { label: "Open accreditation", href: "/accreditation" };
     case "edit_listings":
       return listingCount === 0 ? { label: "Add a listing", href: "/shop/new" } : BOARD;
     case "edit_listing":
@@ -277,10 +281,10 @@ export function stepTarget(
  * The fix for one listing as a single door: its first own step decides where
  * the button goes, so a listing missing only a photo opens the photo screen.
  */
-export function listingFixTarget(entry: ListingReadiness): StepTarget {
+export function listingFixTarget(entry: ListingReadiness, verifyLater = false): StepTarget {
   const first = listingOwnSteps(entry)[0];
   if (!first) return listingTarget("Open this listing", entry.catalogItemId);
-  const target = stepTarget(first, { catalogItemId: entry.catalogItemId });
+  const target = stepTarget(first, { catalogItemId: entry.catalogItemId, verifyLater });
   return target ?? listingTarget("Open this listing", entry.catalogItemId);
 }
 

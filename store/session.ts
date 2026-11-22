@@ -132,7 +132,27 @@ export function isShopOwner(user: User | null | undefined): boolean {
   return user != null && user.shopRole !== "staff" && user.shopRole !== "manager";
 }
 
+/**
+ * Whether the shop's job, payout and catalogue screens are open. An approved
+ * shop, and a pending one once GRIDGO lets shops take jobs before they are
+ * verified (the verification summary is present only then, gridgo-api
+ * `docs/SUPPLIER_VERIFICATION_API.md`).
+ */
 export function isMatchable(user: User | null | undefined): boolean {
+  if (user?.verificationStatus === "approved") return true;
+  return (
+    (user?.verificationStatus === "pending" || user?.verificationStatus === "unverified") &&
+    (user.verification != null || user.verificationUnreachable === true)
+  );
+}
+
+/** A pending shop taking jobs before GRIDGO checks its papers. */
+export function verifyLater(user: User | null | undefined): boolean {
+  return !isVerifiedShop(user) && isMatchable(user);
+}
+
+/** GRIDGO has checked this shop's ID and permit: the only badge, and a positive one. */
+export function isVerifiedShop(user: User | null | undefined): boolean {
   return user?.verificationStatus === "approved";
 }
 
