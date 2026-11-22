@@ -2,7 +2,7 @@ import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react-native";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { Redirect, router, useFocusEffect, type Href } from "expo-router";
 
 import { DocumentSlot } from "@/components/DocumentSlot";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -21,7 +21,7 @@ import { describeDocumentQueue, useAccreditationDocs } from "@/store/accreditati
 import type { DocumentKind } from "@/store/signupDraft";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
-import { useSession } from "@/store/session";
+import { useSession, verifyLater } from "@/store/session";
 
 /**
  * Where a shop waits.
@@ -72,6 +72,9 @@ export default function AccreditationScreen() {
   }, [hydrated, sendDocuments]);
 
   const { refreshing, onRefresh } = usePullToRefresh(reload);
+  // A shop taking jobs before it is verified gets the newer screen; every
+  // older way in (readiness steps, links) lands there instead of a dead end.
+  if (verifyLater(user)) return <Redirect href={"/verify" as Href} />;
   const status = presentVerification(user?.verificationStatus);
   const ranked = user?.categoryRanks ?? [];
   const queue = describeDocumentQueue(entries);

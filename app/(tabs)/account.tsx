@@ -23,7 +23,7 @@ import { nightChipLabel, signOf } from "@/lib/shopStatus";
 import { WHATS_NEW_HISTORY_COPY } from "@/lib/whatsNewHistory";
 import { useThemeColors } from "@/hooks/useTheme";
 import { askConfirm } from "@/store/sheets";
-import { isMatchable, isShopManager, isShopStaff, useSession } from "@/store/session";
+import { isMatchable, isShopManager, isShopStaff, isVerifiedShop, useSession, verifyLater } from "@/store/session";
 import { useShopContact } from "@/store/shopContact";
 import { useShopHours } from "@/store/shopHours";
 import { useShopStatus } from "@/store/shopStatus";
@@ -370,7 +370,7 @@ function OwnerAccount() {
           status={shopStatus}
           canChange
           onSignPress={() => void pressSign()}
-          verification={{ approved }}
+          verification={{ approved: isVerifiedShop(user), verifyLater: verifyLater(user) }}
           onDetailsPress={() => router.push("/shop-details")}
         />
         {approved ? null : (
@@ -456,6 +456,12 @@ function OwnerAccount() {
               title="Accreditation"
               detail="Papers and the wait — what Operations still needs from you"
               onPress={() => router.push("/accreditation")}
+            />
+          ) : verifyLater(user) ? (
+            <DestinationRow
+              title="Get verified"
+              detail="Your ID and business permit — shown first, no payout limit"
+              onPress={() => router.push("/verify" as Href)}
             />
           ) : null}
           {approved ? (

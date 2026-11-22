@@ -19,6 +19,7 @@ import {
 import { parseRiderApproach, type RiderApproach } from "@/lib/riderApproach";
 import { pushTokenProvider, type DevicePlatform, type PushTokenProvider } from "@/lib/push";
 import { installChannel } from "@/lib/buildDistribution";
+import { readShopVerification, type ShopVerification, type ShopVerificationRead } from "@/lib/shopVerification";
 import type {
   ActionActor,
   CreatedInvite,
@@ -101,6 +102,12 @@ export type User = {
    * themselves with their PIN. `shopRole` is then theirs, never the login's.
    */
   worker?: { pinStaffId: string; name: string };
+  /**
+   * A pending Owner's verification summary (gridgo-api
+   * `docs/SUPPLIER_VERIFICATION_API.md`). Present only when GRIDGO lets a shop
+   * take jobs before it is verified; read through `lib/shopVerification.ts`.
+   */
+  verification?: ShopVerification | null;
 };
 
 /**
@@ -1330,7 +1337,7 @@ export async function updateShopLocation(shop: ShopLocation): Promise<SupplierPr
 }
 
 /** gridgo-api's `VERIFICATION_DOCUMENT_TYPES`: the only slots a paper can fill. */
-export type VerificationDocumentType = "business_permit" | "valid_id" | "sample_work";
+export type VerificationDocumentType = "business_permit" | "valid_id" | "id_selfie" | "sample_work";
 
 /**
  * Bind an uploaded file to the caller's own accreditation (gridgo-api
@@ -1523,11 +1530,39 @@ export async function me(options: { ignoreUnauthorized?: boolean } = {}): Promis
     status === "approved" || status === "pending" || status === "rejected" || status === "suspended"
       ? status
       : result.user.verificationStatus;
+  // A pending shop takes jobs before it is verified once GRIDGO offers it.
+  // The summary says so; its absence (an older API) keeps the old wait.
+  const verification =
+    verificationStatus === "pending" || verificationStatus === "unverified"
+      ? (await getSupplierVerification({ ignoreUnauthorized: options.ignoreUnauthorized }).catch(() => null))
+          ?.verification ?? null
+      : null;
   return {
     ...result.user,
     role: "supplier",
     ...(verificationStatus ? { verificationStatus } : {}),
+    verification,
   };
+}
+
+/**
+ * The Owner's verification read (gridgo-api `docs/SUPPLIER_VERIFICATION_API.md`):
+ * summary, papers on file and the payouts waiting on it. Staff are refused.
+ * Null when GRIDGO has no such route yet (404/405) or refuses it (403), so
+ * nothing new is drawn.
+ */
+export async function getSupplierVerification(
+  options: { ignoreUnauthorized?: boolean } = {},
+): Promise<ShopVerificationRead | null> {
+  try {
+    const body = await request<unknown>("/me/supplier-verification", {
+      ignoreUnauthorized: options.ignoreUnauthorized,
+    });
+    return readShopVerification(body);
+  } catch (error) {
+    if (error instanceof ApiError && [403, 404, 405].includes(error.status)) return null;
+    throw error;
+  }
 }
 
 /* --------------------------------------------------------------------------

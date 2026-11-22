@@ -38,6 +38,10 @@ import { isTightBeforeAccepting } from "@/lib/scheduling";
 import { statusPillLabel } from "@/lib/shopStatus";
 import { useAlertsStore } from "@/store/alerts";
 import { isMatchable, isShopStaff, useSession } from "@/store/session";
+import { VerifyNoticeCard } from "@/components/verify/VerifyNoticeCard";
+import { useShopVerification } from "@/hooks/useShopVerification";
+import { todoVerifyNotice } from "@/lib/shopVerification";
+import { useVerifyOffer } from "@/store/verifyOffer";
 import { usePlayOptIn } from "@/store/playOptIn";
 import { useShopStatus } from "@/store/shopStatus";
 import { useTesterProgram } from "@/store/testerProgram";
@@ -222,6 +226,15 @@ export default function HomeScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const firstLoad = loading && !loaded;
+  const verification = useShopVerification();
+  const verifyNotice = verification.read ? todoVerifyNotice(verification.read.verification) : null;
+  // Sign-up's last, skippable step: Get verified opens once over To do.
+  const offerVerify = useVerifyOffer((st) => st.open);
+  useEffect(() => {
+    if (!offerVerify || !verification.read || verification.read.verification.verified) return;
+    useVerifyOffer.getState().consume();
+    router.push("/verify?first=1" as Href);
+  }, [offerVerify, verification.read]);
 
   const headline = homeHeadline(jobs);
   const todo = buildTodo(jobs);
@@ -449,6 +462,15 @@ export default function HomeScreen() {
                   listingCount={boardTotal}
                   takesYellow={!first}
                 />
+              </View>
+            ) : null}
+            {/*
+              Getting verified (report F318781A): short, and only for the
+              Owner. A countdown appears only in the last seven days.
+            */}
+            {verifyNotice ? (
+              <View className="mb-6">
+                <VerifyNoticeCard notice={verifyNotice} testID="todo-verify-card" />
               </View>
             ) : null}
             {todo.express.length ? (

@@ -17,8 +17,12 @@ type Props = {
   canChange: boolean;
   /** Called when the sign is tapped; the screen decides (confirm, open, resume). */
   onSignPress: () => void;
-  /** Accredited or not, as the shop's standing chip. Null leaves it off. */
-  verification: { approved: boolean } | null;
+  /**
+   * The shop's standing chip. Null leaves it off. `verifyLater` is a shop
+   * already taking jobs before GRIDGO checks its papers: it gets a quiet way
+   * in, never a label saying what it is not.
+   */
+  verification: { approved: boolean; verifyLater?: boolean } | null;
   /** The card's own way into the shop's details. Absent for Staff. */
   onDetailsPress?: () => void;
 };
@@ -153,7 +157,16 @@ export function ShopSignCard({
         ) : null}
         {verification ? (
           verification.approved ? (
-            <StatusChip tone="success" icon="circle-check" label="Accredited" />
+            <StatusChip tone="success" icon="circle-check" label="Verified" />
+          ) : verification.verifyLater ? (
+            <Pressable
+              onPress={() => router.push("/verify" as Href)}
+              accessibilityRole="button"
+              accessibilityLabel="Get verified"
+              className="gg-touch justify-center"
+            >
+              <StatusChip tone="neutral" icon="sparkles" label="Get verified" />
+            </Pressable>
           ) : (
             <Pressable
               onPress={() => router.push("/accreditation")}

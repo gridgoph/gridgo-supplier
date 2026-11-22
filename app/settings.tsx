@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
@@ -7,7 +7,7 @@ import {
   useThemePreference,
   type ThemePreference,
 } from "@/hooks/useTheme";
-import { isMatchable, isShopOwner, useSession } from "@/store/session";
+import { isMatchable, isShopOwner, useSession, verifyLater } from "@/store/session";
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "system", label: "System" },
@@ -67,6 +67,25 @@ export default function SettingsScreen() {
                 <View className="min-w-0 flex-1 gap-1 py-1">
                   <Text className="text-body font-medium text-text-primary">Team</Text>
                   <Text className="text-caption text-text-muted">Add staff, approve and remove them</Text>
+                </View>
+                <Text className="pl-3 text-body text-text-muted" aria-hidden>
+                  ›
+                </Text>
+              </Pressable>
+            ) : null}
+            {verifyLater(user) ? (
+              <Pressable
+                onPress={() => router.push("/verify" as Href)}
+                accessibilityRole="button"
+                accessibilityLabel="Get verified"
+                className="gg-card flex-row items-center justify-between"
+                style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+              >
+                <View className="min-w-0 flex-1 gap-1 py-1">
+                  <Text className="text-body font-medium text-text-primary">Get verified</Text>
+                  <Text className="text-caption text-text-muted">
+                    Your ID and business permit — shown first, no payout limit
+                  </Text>
                 </View>
                 <Text className="pl-3 text-body text-text-muted" aria-hidden>
                   ›

@@ -89,3 +89,26 @@ export function fileSizeText(sizeBytes: number | null): string {
   if (sizeBytes < 1024 * 1024) return `${Math.max(1, Math.round(sizeBytes / 1024))} KB`;
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+/** A picture from the phone's gallery. Images only: a photo is what GRIDGO asks for. */
+export async function choosePhoto(): Promise<PickOutcome> {
+  if (canPickOnWeb()) {
+    const picked = await pickFileOnWeb("image/*");
+    if (!picked) return CANCELLED;
+    return { ok: true, document: fromWeb(picked) };
+  }
+  const result = await withSystemPicker(() =>
+    ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 }),
+  );
+  const asset = result.canceled ? null : result.assets[0];
+  if (!asset) return CANCELLED;
+  return {
+    ok: true,
+    document: {
+      uri: asset.uri,
+      fileName: asset.fileName || "photo.jpg",
+      mimeType: asset.mimeType ?? null,
+      sizeBytes: asset.fileSize ?? null,
+    },
+  };
+}
