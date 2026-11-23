@@ -146,7 +146,7 @@ describe("MoneyActivity", () => {
 
   it("shows how each job was paid, its daily tag and its launch bonus", async () => {
     await render(<MoneyActivity read={read} period="week" onPeriod={() => {}} />);
-    expect(screen.getByText("Paid in app + voucher")).toBeTruthy();
+    expect(screen.getByText(/^Paid in app \+ voucher · /)).toBeTruthy();
     expect(screen.getByText("Paid daily")).toBeTruthy();
     expect(screen.getByText("+₱14.40 launch bonus")).toBeTruthy();
     expect(screen.getByText("Paid in app")).toBeTruthy();

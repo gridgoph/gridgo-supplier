@@ -37,8 +37,9 @@ export function ShopBalances({
 }) {
   const colors = useThemeColors();
   const net = netLine(balances);
-  const next = nextPayoutLine(balances, schedule, now);
   const notice = payGridgo ? payGridgoNotice(payGridgo, balances, now) : null;
+  // An open request already says when it is due; the line would repeat it.
+  const next = notice && balances.netMinor < 0 ? null : nextPayoutLine(balances, schedule, now);
   const netColor =
     net.tone === "owed"
       ? "text-success"

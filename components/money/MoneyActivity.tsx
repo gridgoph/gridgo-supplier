@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 
-import { StatusChip } from "@/components/StatusChip";
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import { formatPhp } from "@/lib/money";
 import { orderReference } from "@/lib/orderReference";
@@ -103,9 +102,11 @@ export function MoneyActivity({
                 </View>
               );
             })}
-            <Text className="text-caption text-text-muted">
-              A job paid partly by voucher counts under both.
-            </Text>
+            {read.paymentMethods.voucher ? (
+              <Text className="text-caption text-text-muted">
+                A job paid partly by voucher counts under both.
+              </Text>
+            ) : null}
           </View>
         ) : (
           <Text className="text-body text-text-muted">No jobs {periodWord} yet.</Text>
@@ -171,7 +172,7 @@ export function MoneyActivity({
                   >
                     <View className="flex-row items-baseline justify-between gap-3">
                       <Text className="min-w-0 flex-1 text-body font-medium text-text-primary">
-                        {orderReference(job.orderId) ?? "Job"} · {shortTime(job.createdAt)}
+                        {orderReference(job.orderId) ?? "Job"}
                       </Text>
                       {job.shopPayMinor != null ? (
                         <Text
@@ -182,24 +183,18 @@ export function MoneyActivity({
                         </Text>
                       ) : null}
                     </View>
-                    <View className="flex-row flex-wrap items-center justify-between gap-2">
+                    <View className="flex-row items-baseline justify-between gap-3">
                       <Text className="min-w-0 flex-1 text-caption text-text-muted">
-                        {paid ?? "Payment method not recorded"}
+                        {[paid ?? "Payment not recorded", shortTime(job.createdAt)].join(" · ")}
                       </Text>
-                      {bonus ? (
-                        <Text className="text-caption font-medium text-success">
-                          +{formatPhp(bonus)} launch bonus
-                        </Text>
+                      {tag ? (
+                        <Text className="text-caption text-text-secondary">{tag}</Text>
                       ) : null}
                     </View>
-                    {tag ? (
-                      <View className="flex-row">
-                        <StatusChip
-                          tone="neutral"
-                          icon={job.clientPayment.settlement === "daily" ? "zap" : "clock"}
-                          label={tag}
-                        />
-                      </View>
+                    {bonus ? (
+                      <Text className="text-caption font-medium text-success">
+                        +{formatPhp(bonus)} launch bonus
+                      </Text>
                     ) : null}
                   </Pressable>
                 </View>
