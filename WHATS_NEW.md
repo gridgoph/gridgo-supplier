@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.475 (New feature)
+
+- Money shows what GRIDGO owes you and what you owe, the 4 PM payout, Pay GRIDGO and your launch bonus.
+- Add a product in three steps: tick what you make, type full prices, pick a ready time. Or send GRIDGO your price list.
+
 ## 1.0.467 (New feature)
 
 - Take jobs before GRIDGO verifies your shop. Send your ID and permit any time from To do or Money.
