@@ -24,7 +24,14 @@ import type { Option } from "@/components/controls/OptionList";
  * what it cannot see.
  */
 
-export type PayoutField = "provider" | "accountName" | "accountNumber" | "institution" | "qr";
+export type PayoutField =
+  | "provider"
+  | "accountName"
+  | "accountNumber"
+  | "institution"
+  | "qr"
+  | "holder"
+  | "consent";
 
 export type PayoutOutcome<T> =
   | { status: "ok"; value: T }
@@ -55,6 +62,17 @@ export const PROVIDER_OPTIONS: readonly Option<api.PayoutProvider>[] = [
   { value: "other", label: "Another wallet", detail: "Any other wallet with a receiving QR." },
 ];
 
+/**
+ * Whose QR it is (gridgo-supplier#265). There is no name-match rule: a shop
+ * may be paid to family, a friend or staff, and says so here.
+ */
+export const HOLDER_OPTIONS: readonly Option<api.PayoutHolder>[] = [
+  { value: "mine", label: "Mine", detail: "Akoa" },
+  { value: "family", label: "Family", detail: "Pamilya" },
+  { value: "friend", label: "Friend", detail: "Higala" },
+  { value: "staff", label: "Staff", detail: "Trabahante" },
+];
+
 export function providerLabel(provider: api.PayoutProvider): string {
   return PROVIDER_OPTIONS.find((option) => option.value === provider)?.label ?? provider;
 }
@@ -79,6 +97,10 @@ export type PayoutDraft = {
    * `removed` marks a saved plate the shop asked to take down.
    */
   qr: { fileId: string | null; localUri: string | null; removed: boolean };
+  /** Whose QR it is. Asked only when GRIDGO offers the payout consent. */
+  holder: api.PayoutHolder | null;
+  /** The payout consent ticked on this screen, in GRIDGO's own words. */
+  consented: boolean;
 };
 
 export function draftFromAccount(account: api.PayoutAccount | null): PayoutDraft {
@@ -88,6 +110,8 @@ export function draftFromAccount(account: api.PayoutAccount | null): PayoutDraft
     accountNumber: account?.accountNumber ?? "",
     institution: account?.institution ?? "",
     qr: { fileId: account?.qr?.fileId ?? null, localUri: null, removed: false },
+    holder: account?.holder ?? null,
+    consented: account?.consent?.accepted === true,
   };
 }
 
@@ -101,6 +125,7 @@ export function draftFromAccount(account: api.PayoutAccount | null): PayoutDraft
 export function payoutPatch(
   account: api.PayoutAccount | null,
   draft: PayoutDraft,
+  consentWording: string | null = null,
 ): api.PayoutAccountPatch {
   const patch: api.PayoutAccountPatch = {};
   const provider = draft.provider;
@@ -117,11 +142,48 @@ export function payoutPatch(
   if (draft.qr.removed && savedQr) patch.qrFileId = null;
   else if (draft.qr.fileId && draft.qr.fileId !== savedQr) patch.qrFileId = draft.qr.fileId;
 
+  // GRIDGO takes the holder and consent together, and wants them again with
+  // any change to where the money goes — so they ride every save once asked.
+  const holderChanged = Boolean(draft.holder && draft.holder !== (account?.holder ?? null));
+  if (consentWording && draft.holder && (holderChanged || Object.keys(patch).length)) {
+    patch.holder = draft.holder;
+    if (draft.consented) patch.consent = { accepted: true, wording: consentWording };
+  }
+
   return patch;
 }
 
-export function hasPayoutChanges(account: api.PayoutAccount | null, draft: PayoutDraft): boolean {
-  return Object.keys(payoutPatch(account, draft)).length > 0;
+export function hasPayoutChanges(
+  account: api.PayoutAccount | null,
+  draft: PayoutDraft,
+  consentWording: string | null = null,
+): boolean {
+  return Object.keys(payoutPatch(account, draft, consentWording)).length > 0;
+}
+
+/**
+ * Whether saving this patch changes where an existing payout goes — which
+ * GRIDGO answers by pausing the shop's payouts for 24 hours. A first QR is
+ * not a change.
+ */
+export function pausesPayouts(account: api.PayoutAccount | null, patch: api.PayoutAccountPatch): boolean {
+  if (!account?.qr) return false;
+  return (
+    "provider" in patch ||
+    "accountName" in patch ||
+    "accountNumber" in patch ||
+    "institution" in patch ||
+    "qrFileId" in patch ||
+    (patch.holder !== undefined && account.holder != null && patch.holder !== account.holder)
+  );
+}
+
+/** When a destination change has paused payouts, until when. `null` when paid as normal. */
+export function payoutPausedUntil(account: api.PayoutAccount | null): string | null {
+  const status = account?.payoutStatus;
+  if (!status || typeof status !== "object") return null;
+  const row = status as { held?: unknown; pausedUntil?: unknown };
+  return row.held === true && typeof row.pausedUntil === "string" ? row.pausedUntil : null;
 }
 
 /* --------------------------------------------------------------------------
@@ -134,8 +196,12 @@ export type PayoutProblems = Partial<Record<PayoutField, string>>;
  * Caught before a round trip. The plate is not required: a shop can give a
  * number now and photograph the plate when it is back at the counter.
  */
-export function payoutProblems(draft: PayoutDraft): PayoutProblems {
+export function payoutProblems(draft: PayoutDraft, consentWording: string | null = null): PayoutProblems {
   const problems: PayoutProblems = {};
+  if (consentWording) {
+    if (!draft.holder) problems.holder = "Say whose QR this is.";
+    if (!draft.consented) problems.consent = "Tick the box to let GRIDGO pay to this QR.";
+  }
   if (!draft.provider) {
     problems.provider = "Choose where you want to be paid.";
   }
@@ -162,6 +228,8 @@ const REFUSED: Record<PayoutField, string> = {
     "GRIDGO would not accept that number. For GCash or Maya, enter the mobile number the wallet is registered to.",
   institution: "GRIDGO would not accept that bank name. Name the bank as it appears on your account.",
   qr: "GRIDGO could not use that picture as your QR. Take the photo again and save it.",
+  holder: "Say whose QR this is.",
+  consent: "Tick the box to let GRIDGO pay to this QR.",
 };
 
 function refusedField(error: unknown): PayoutField | null {
@@ -170,6 +238,7 @@ function refusedField(error: unknown): PayoutField | null {
   if (typeof body !== "object" || !body) return null;
   const record = body as Record<string, unknown>;
   if (record.error === "invalid_payout_qr" || record.error === "file_already_attached") return "qr";
+  if (record.error === "payout_consent_required") return "consent";
   if (record.error !== "invalid_payout_account") return null;
   const field = record.field;
   return field === "provider"

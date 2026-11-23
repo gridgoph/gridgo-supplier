@@ -26,6 +26,30 @@ export default function SignupLayout() {
 
   return (
     <Stack screenOptions={stackScreenOptions(scheme, top)}>
+      {/*
+        Guided sign-up (gridgo-supplier#265): step 0, the sign-in, then the
+        missions. `start` is the door, so it borrows the platform back control
+        the way the older first step does.
+      */}
+      <Stack.Screen
+        name="start"
+        options={{
+          title: "Before you start",
+          headerLeft: (props) => (
+            <HeaderBackButton
+              tintColor={props.tintColor}
+              displayMode="minimal"
+              onPress={() => router.back()}
+            />
+          ),
+        }}
+      />
+      <Stack.Screen name="account" options={{ title: "Your sign-in" }} />
+      <Stack.Screen name="missions" options={{ title: "Set up your shop" }} />
+      <Stack.Screen name="your-shop" options={{ title: "Your shop" }} />
+      <Stack.Screen name="pin" options={{ title: "Pin your shop" }} />
+      <Stack.Screen name="prints" options={{ title: "What you print" }} />
+      <Stack.Screen name="open-shop" options={{ title: "Who takes jobs" }} />
       <Stack.Screen
         name="index"
         options={{

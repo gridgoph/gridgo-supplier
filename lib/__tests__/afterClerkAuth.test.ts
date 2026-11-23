@@ -53,7 +53,7 @@ describe("enterAfterClerkSession", () => {
     const result = await enterAfterClerkSession(async () => "clerk-jwt");
 
     expect(result).toEqual({ kind: "apply" });
-    expect(hrefAfterClerkAuth({ kind: "apply" })).toBe("/(auth)/signup");
+    expect(hrefAfterClerkAuth({ kind: "apply" })).toBe("/(auth)/signup/start");
     expect(hrefAfterClerkAuth({ kind: "apply" })).not.toBe("/access");
     expect(useSession.getState().identity.kind).toBe("unassigned");
   });
@@ -79,7 +79,7 @@ describe("enterAfterClerkSession", () => {
     expect(useSession.getState().identity.kind).not.toBe("unassigned");
   });
 
-  it("resumes apply at the first unfinished step when a draft is already on the phone", async () => {
+  it("sends a draft already on the phone to step 0, which resumes it", async () => {
     jest.spyOn(api, "me").mockRejectedValue(new api.ApiError(401, { error: "unmapped_identity" }));
     useSignupDraft.setState({
       draft: {
@@ -93,7 +93,8 @@ describe("enterAfterClerkSession", () => {
 
     await enterAfterClerkSession(async () => "clerk-jwt");
 
-    expect(hrefAfterClerkAuth({ kind: "apply" })).toBe("/(auth)/signup/location");
+    // Step 0 reads where the sign-up stands and resumes there (gridgo-supplier#265).
+    expect(hrefAfterClerkAuth({ kind: "apply" })).toBe("/(auth)/signup/start");
   });
 
   it("keeps a client identity on Sign in, not the closed-shop screen", async () => {

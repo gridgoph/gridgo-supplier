@@ -7,8 +7,13 @@ import { FormScrollView } from "@/components/FormScrollView";
 import { spacing } from "@/constants/theme";
 import { ONBOARDING_STEPS, stepIndex, stepProgressLabel, type OnboardingStepId } from "@/lib/onboardingSteps";
 
+/** Guided sign-up's missions draw their own count (`lib/guidedSignup.ts`). */
+export type StepProgress = { label: string; now: number; max: number };
+
 type Props = {
-  id: OnboardingStepId;
+  id?: OnboardingStepId;
+  /** Overrides the older four-step count. */
+  progress?: StepProgress;
   title: string;
   lede: string;
   children: ReactNode;
@@ -43,6 +48,7 @@ type Props = {
  */
 export function OnboardingStep({
   id,
+  progress: progressOverride,
   title,
   lede,
   children,
@@ -53,7 +59,11 @@ export function OnboardingStep({
   scrollRef,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const index = stepIndex(id);
+  const progress: StepProgress = progressOverride ?? {
+    label: stepProgressLabel(id ?? "shop"),
+    now: stepIndex(id ?? "shop") + 1,
+    max: ONBOARDING_STEPS.length,
+  };
   const [footerHeight, setFooterHeight] = useState(0);
 
   const onFooterLayout = (event: LayoutChangeEvent) =>
@@ -71,9 +81,9 @@ export function OnboardingStep({
 
   const heading = (
     <View className={fill ? "gg-page pb-2" : "pb-2"}>
-      <Text className="text-overline text-text-muted">{stepProgressLabel(id)}</Text>
+      <Text className="text-overline text-text-muted">{progress.label}</Text>
       <Text className="mt-2 text-h1 text-text-primary">{title}</Text>
-      <Text className="mt-2 text-body-lg text-text-secondary">{lede}</Text>
+      {lede ? <Text className="mt-2 text-body-lg text-text-secondary">{lede}</Text> : null}
     </View>
   );
 
@@ -83,14 +93,14 @@ export function OnboardingStep({
         <View
           className="flex-row gap-1"
           accessibilityRole="progressbar"
-          accessibilityLabel={stepProgressLabel(id)}
-          accessibilityValue={{ min: 1, max: ONBOARDING_STEPS.length, now: index + 1 }}
+          accessibilityLabel={progress.label}
+          accessibilityValue={{ min: 1, max: progress.max, now: progress.now }}
         >
-          {ONBOARDING_STEPS.map((step, position) => (
+          {Array.from({ length: progress.max }, (_, position) => (
             <View
-              key={step.id}
+              key={position}
               className={
-                position <= index
+                position < progress.now
                   ? "h-1 flex-1 rounded-pill bg-accent"
                   : "h-1 flex-1 rounded-pill bg-outline"
               }

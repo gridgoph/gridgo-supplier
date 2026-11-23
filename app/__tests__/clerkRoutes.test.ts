@@ -13,7 +13,7 @@ describe("public apply and Clerk sign-in routes", () => {
     expect(login).toContain("Recover Password");
     expect(login).toContain("GoogleSignInButton");
     expect(login).toContain("New shop? Sign up");
-    expect(login).toContain('router.push("/(auth)/signup")');
+    expect(login).toContain('router.push("/(auth)/signup/start")');
     expect(login).not.toContain("Use local supplier demo");
     expect(login).not.toContain("GRIDGO on ");
     expect(login).not.toContain("DevDemoLogin");
@@ -37,7 +37,7 @@ describe("public apply and Clerk sign-in routes", () => {
   it("offers public apply first and keeps invitation as a secondary path", () => {
     const welcome = source("app/(auth)/welcome.tsx");
     expect(welcome).toContain('label="Sign up"');
-    expect(welcome).toContain('router.push("/(auth)/signup")');
+    expect(welcome).toContain('router.push("/(auth)/signup/start")');
     expect(welcome).toContain("Already have an account");
     expect(welcome).toContain("Have an invitation? Open it");
     expect(welcome).toContain("welcome.webp");

@@ -2,6 +2,7 @@ import { useAlertsStore } from "@/store/alerts";
 import { useToasts } from "@/store/toasts";
 import { useAccountDeletion } from "@/store/accountDeletion";
 import { useShopContact } from "@/store/shopContact";
+import { useGuidedSignup } from "@/store/guidedSignup";
 import { useShopHours } from "@/store/shopHours";
 import { useShopStatus } from "@/store/shopStatus";
 import { afterShopPlanLoads, useShopPlan } from "@/store/shopPlan";
@@ -191,7 +192,10 @@ type SessionState = {
   clearSignInRefusal: () => void;
   login: (email: string, password: string) => Promise<void>;
   /** Public apply via Clerk enroll. Lands pending; Operations still has to approve matching. */
-  enrollSupplier: (input: api.SupplierEnrollment, idempotencyKey: string) => Promise<boolean>;
+  enrollSupplier: (
+    input: api.SupplierEnrollment | api.GuidedSupplierEnrollment,
+    idempotencyKey: string,
+  ) => Promise<boolean>;
   /** Re-read the account, so an approval that lands is picked up on return. */
   refresh: () => Promise<void>;
   /**
@@ -608,6 +612,8 @@ useSession.subscribe((state, previous) => {
   else useSignInNotice.getState().forgetHeld();
   useShopHours.getState().reset();
   useShopStatus.getState().reset();
+  // Guided setup is read again for whoever is signed in now.
+  useGuidedSignup.getState().reset();
   useShopContact.getState().reset();
   // Tester reminders belong to the shop signed in: signing out cancels them,
   // and the next account's open plans its own.

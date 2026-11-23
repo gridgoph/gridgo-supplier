@@ -1,9 +1,9 @@
 import { useReadVersion } from "@/hooks/useReadVersion";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
-import { Trash2 } from "lucide-react-native";
-import { useCallback, useState } from "react";
+import { Clock, Trash2 } from "lucide-react-native";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { EmptyState } from "@/components/EmptyState";
@@ -13,7 +13,10 @@ import { PayoutQrPlate } from "@/components/PayoutQrPlate";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SkeletonBlock } from "@/components/Skeleton";
+import { CheckboxRow } from "@/components/controls/CheckboxRow";
 import { FieldShell } from "@/components/controls/FieldShell";
+import { JobAlertsCard } from "@/components/signup/JobAlertsCard";
+import { loadGuidedSignup } from "@/lib/guidedSignup";
 import { OptionList } from "@/components/controls/OptionList";
 import { TextField } from "@/components/controls/TextField";
 import type { PayoutAccount } from "@/lib/api";
@@ -21,11 +24,14 @@ import {
   chooseQrPicture,
   draftFromAccount,
   hasPayoutChanges,
+  HOLDER_OPTIONS,
   isWallet,
   loadPayoutAccount,
   PAYOUT_NOT_OPEN_YET,
   PAYOUT_STALE,
   payoutPatch,
+  pausesPayouts,
+  payoutPausedUntil,
   payoutProblems,
   PROVIDER_OPTIONS,
   savePayoutAccount,
@@ -61,6 +67,12 @@ import { WHY_WE_ASK } from "@/lib/legal";
  */
 export default function PayoutAccountScreen() {
   const colors = useThemeColors();
+  // Opened from guided sign-up's map: job alerts sit on the same screen.
+  const setup = useLocalSearchParams<{ setup?: string }>().setup === "1";
+  // GRIDGO's payout consent, word for word (gridgo-api
+  // docs/SUPPLIER_SIGNUP_API.md). Null on a GRIDGO that does not ask for it,
+  // and then the screen keeps its older shape.
+  const [readWording, setReadWording] = useState<string | null>(null);
   const [state, setState] = useState<{ account: PayoutAccount | null; draft: PayoutDraft } | null>(null);
   const account = state?.account ?? null;
   const draft = state?.draft ?? null;
@@ -107,14 +119,28 @@ export default function PayoutAccountScreen() {
 
   useLiveRefresh(["identity"], () => load(false));
 
+  useEffect(() => {
+    let live = true;
+    void loadGuidedSignup().then((read) => {
+      if (live && read.status === "ok" && read.terms.payoutConsentWording) {
+        setReadWording(read.terms.payoutConsentWording);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       void load(false);
     }, [load]),
   );
 
-  const problems = draft ? payoutProblems(draft) : {};
-  const changed = draft ? hasPayoutChanges(account, draft) : false;
+  const consentWording = readWording ?? account?.consent?.wording ?? null;
+  const problems = draft ? payoutProblems(draft, consentWording) : {};
+  const changed = draft ? hasPayoutChanges(account, draft, consentWording) : false;
+  const pausedUntil = payoutPausedUntil(account);
 
   function fieldError(field: PayoutField): string | null {
     return refusals[field] ?? (showProblems ? (problems[field] ?? null) : null);
@@ -163,12 +189,25 @@ export default function PayoutAccountScreen() {
 
   async function save() {
     if (!draft) return;
-    if (Object.keys(payoutProblems(draft)).length) {
+    if (Object.keys(payoutProblems(draft, consentWording)).length) {
       setShowProblems(true);
       return;
     }
-    const patch = payoutPatch(account, draft);
+    const patch = payoutPatch(account, draft, consentWording);
     if (!Object.keys(patch).length) return;
+    // Only a GRIDGO with the destination hold reports `payoutStatus` (or offers
+    // the consent); an older one pauses nothing, so it is not asked about.
+    const holdKnown = Boolean(consentWording) || account?.payoutStatus !== undefined;
+    if (holdKnown && pausesPayouts(account, patch)) {
+      const ok = await askConfirm({
+        question: "Change where GRIDGO pays you?",
+        consequence:
+          "To keep your money safe, payouts pause for 24 hours after a change. Jobs keep coming.",
+        confirmLabel: "Change it",
+        cancelLabel: "Keep the old one",
+      });
+      if (!ok) return;
+    }
 
     beginRead();
     setLoading(false);
@@ -207,6 +246,16 @@ export default function PayoutAccountScreen() {
   return (
     <View className="gg-screen">
       <FormScrollView contentClassName="gg-page pb-16 pt-4">
+        {pausedUntil ? (
+          <View className="mb-4" testID="payout-paused">
+            <View className="gg-panel flex-row items-start gap-3 border border-warning">
+              <Clock size={20} color={colors.warning} aria-hidden />
+              <Text className="min-w-0 flex-1 text-body text-text-primary">
+                {`Payouts paused until ${pausedLabel(pausedUntil)} because where you get paid changed. Nothing is lost.`}
+              </Text>
+            </View>
+          </View>
+        ) : null}
         {draft ? (
           <>
             {/*
@@ -313,9 +362,24 @@ export default function PayoutAccountScreen() {
                 />
               </FieldShell>
 
+              {consentWording ? (
+                <FieldShell label="Whose QR is this?" error={fieldError("holder")}>
+                  <OptionList
+                    options={HOLDER_OPTIONS}
+                    value={draft.holder}
+                    onChange={(holder) => edit({ holder })}
+                    accessibilityLabel="Whose QR is this?"
+                  />
+                </FieldShell>
+              ) : null}
+
               <FieldShell
-                label="Account name"
-                hint="The name the wallet shows Operations after the scan, so they know it is you."
+                label={consentWording ? "Name on the QR" : "Account name"}
+                hint={
+                  consentWording && draft.holder && draft.holder !== "mine"
+                    ? "The QR owner's name, as the wallet shows it after a scan."
+                    : "The name the wallet shows Operations after the scan, so they know it is you."
+                }
                 error={fieldError("accountName")}
               >
                 <TextField
@@ -369,6 +433,30 @@ export default function PayoutAccountScreen() {
               ) : null}
             </View>
 
+            {consentWording ? (
+              <View className="mt-6 gap-2" testID="payout-consent">
+                <CheckboxRow
+                  checked={draft.consented}
+                  onChange={(consented) => edit({ consented })}
+                  label={consentWording}
+                />
+                {fieldError("consent") ? (
+                  <Text className="text-caption text-error">{fieldError("consent")}</Text>
+                ) : null}
+                {account?.qr ? (
+                  <Text className="text-caption text-text-muted">
+                    Only the owner can change this. A change pauses payouts for 24 hours.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+
+            {setup ? (
+              <View className="mt-8">
+                <JobAlertsCard />
+              </View>
+            ) : null}
+
             {saveNotice ? (
               <View className="mt-6">
                 <ErrorNotice
@@ -415,4 +503,11 @@ function PayoutSkeleton() {
       ))}
     </View>
   );
+}
+
+/** "6:30 PM tomorrow"-style enough for a hold: day and time on this phone. */
+function pausedLabel(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "tomorrow";
+  return at.toLocaleString("en-PH", { weekday: "short", hour: "numeric", minute: "2-digit" });
 }

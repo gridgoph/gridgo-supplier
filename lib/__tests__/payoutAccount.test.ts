@@ -51,6 +51,8 @@ describe("the draft", () => {
       accountNumber: "",
       institution: "",
       qr: { fileId: null, localUri: null, removed: false },
+      holder: null,
+      consented: false,
     });
     expect(draftFromAccount(ACCOUNT).qr.fileId).toBe("file_qr");
     expect(hasPayoutChanges(ACCOUNT, draftFromAccount(ACCOUNT))).toBe(false);
@@ -66,6 +68,8 @@ describe("the draft", () => {
       accountNumber: "1234",
       institution: "BPI",
       qr: { fileId: "file_new", localUri: "file:///qr.jpg", removed: false },
+      holder: null,
+      consented: false,
     };
     expect(payoutPatch(null, fresh)).toEqual({
       provider: "bank",

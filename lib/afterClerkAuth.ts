@@ -2,7 +2,6 @@ import * as api from "@/lib/api";
 import { apiErrorCode, humanizeApiError, isNonSupplierIdentity, isUnmappedIdentity } from "@/lib/apiErrors";
 import { awaitClerkSessionToken, clerkSessionToken, type ClerkAccess, type ClerkGetToken } from "@/lib/clerk";
 import { debugAuth } from "@/lib/debugAuth";
-import { applyRoute } from "@/lib/onboardingSteps";
 import { APP_ROLE, useSession } from "@/store/session";
 import { isJoiningTeam, useTeamJoin } from "@/store/teamJoin";
 import { useSignupDraft } from "@/store/signupDraft";
@@ -163,15 +162,15 @@ export function hrefAfterClerkAuth(
   | "/(auth)/login"
   | "/join-team"
   | "/team-waiting"
-  | ReturnType<typeof applyRoute> {
+  | "/(auth)/signup/start" {
   if (result.kind === "home") {
     return "/(tabs)/home";
   }
   if (result.kind === "join") return "/join-team";
   if (result.kind === "team_waiting") return "/team-waiting";
   if (result.kind === "team_removed") return "/(auth)/login";
-  if (result.kind === "apply") {
-    return applyRoute(useSignupDraft.getState().draft, { clerkSession: true });
-  }
+  // Apply's door decides between guided sign-up and the older steps, and
+  // resumes either where the shop left off (`hooks/useApplyEntry.ts`).
+  if (result.kind === "apply") return "/(auth)/signup/start";
   return "/access";
 }

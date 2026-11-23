@@ -419,7 +419,7 @@ export default function LoginScreen() {
             </View>
 
             <Pressable
-              onPress={() => router.push("/(auth)/signup")}
+              onPress={() => router.push("/(auth)/signup/start")}
               accessibilityRole="link"
               className="gg-touch mt-5 items-center justify-center"
             >
