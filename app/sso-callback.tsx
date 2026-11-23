@@ -46,7 +46,7 @@ export default function SsoCallbackScreen() {
       return;
     }
     if (identity.kind === "unassigned") {
-      router.replace("/(auth)/signup");
+      router.replace("/(auth)/signup/start");
       return;
     }
   }, [identity, user]);

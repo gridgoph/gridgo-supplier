@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -30,6 +30,8 @@ type Props = {
   saving: boolean;
   /** Saves the week; resolves to a message when GRIDGO refused it. */
   onSave: (draft: WeekDraft) => Promise<string | null>;
+  /** Told when an unsaved edit starts or ends (the card then owns the save). */
+  onEditingChange?: (editing: boolean) => void;
 };
 
 /**
@@ -39,7 +41,7 @@ type Props = {
  * times for every open day; a half-day Saturday is that day's "Different
  * hours" switch, which GRIDGO saves as an override for that weekday only.
  */
-export function WeeklyHoursCard({ hours, now, saving, onSave }: Props) {
+export function WeeklyHoursCard({ hours, now, saving, onSave, onEditingChange }: Props) {
   const saved = weekDraftOf(hours.week, hours.overrides);
   // Null follows what GRIDGO holds, so a newer answer replaces an untouched
   // week while an edit in progress is kept.
@@ -48,6 +50,9 @@ export function WeeklyHoursCard({ hours, now, saving, onSave }: Props) {
   const [error, setError] = useState<WeekProblem | null>(null);
   const [done, setDone] = useState(false);
   const changed = weekDraftChanged(hours, draft);
+  useEffect(() => {
+    onEditingChange?.(changed);
+  }, [changed, onEditingChange]);
   const today = manilaClock(now).weekday;
 
   function edit(next: WeekDraft) {

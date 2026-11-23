@@ -8,6 +8,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { SessionWait } from "@/components/SessionWait";
 import { useSession } from "@/store/session";
+import { useSignupDraft } from "@/store/signupDraft";
 import { useTeamJoin } from "@/store/teamJoin";
 
 /** Source pixels of `welcome.webp` — width / height. */
@@ -25,6 +26,9 @@ export default function WelcomeScreen() {
   const { width, height } = useWindowDimensions();
   const sessionWait = useSession((state) => state.sessionWait);
   const identity = useSession((state) => state.identity);
+  // Mid-way through guided sign-up on this phone (step 0 answered): a
+  // restored Clerk session goes back to it rather than to the door.
+  const applying = useSignupDraft((state) => state.draft.eligibility?.adult === true);
   const artWidth = Math.round(Math.min(width * 0.78, height * 0.34 * ART_RATIO));
   const artHeight = Math.round(artWidth / ART_RATIO);
 
@@ -36,6 +40,7 @@ export default function WelcomeScreen() {
   if (identity.kind === "signed_out" && identity.reason === "team_removed") {
     return <Redirect href="/(auth)/login" />;
   }
+  if (identity.kind === "unassigned" && applying) return <Redirect href="/(auth)/signup/start" />;
   if (sessionWait) return <SessionWait tone={sessionWait} role="supplier" />;
 
   return (
@@ -65,7 +70,7 @@ export default function WelcomeScreen() {
       </View>
 
       <View className="gap-3">
-        <PrimaryButton label="Sign up" onPress={() => router.push("/(auth)/signup")} />
+        <PrimaryButton label="Sign up" onPress={() => router.push("/(auth)/signup/start")} />
         <SecondaryButton
           label="Already have an account"
           onPress={() => router.push("/(auth)/login")}

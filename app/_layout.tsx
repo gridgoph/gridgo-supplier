@@ -442,6 +442,16 @@ function RootStack({ introDone }: { introDone: boolean }) {
         or a Manager. Money and the Owner's settings stay below, Owner only.
       */}
       <Stack.Protected guard={floorOpen && runsShop}>
+        {/*
+          Guided sign-up after the shop opens (gridgo-supplier#265): the same
+          map of steps, each opening a screen the shop already has, then the
+          finish. An Owner or the Manager who registered the shop; never Staff.
+        */}
+        <Stack.Screen
+          name="setup"
+          options={{ title: "Set up your shop", headerBackButtonDisplayMode: "minimal" }}
+        />
+        <Stack.Screen name="setup-ready" options={{ headerShown: false, title: "Ready", gestureEnabled: false }} />
         <Stack.Screen
           name="team-invite"
           options={{ title: "Add staff", headerBackButtonDisplayMode: "minimal" }}

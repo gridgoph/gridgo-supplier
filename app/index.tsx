@@ -4,6 +4,7 @@ import { SessionWait } from "@/components/SessionWait";
 import { launchHref } from "@/lib/launch";
 import { legalGateFor, useLegalConsent } from "@/store/legalConsent";
 import { isSignedIn, useSession } from "@/store/session";
+import { useSignupDraft } from "@/store/signupDraft";
 
 /**
  * Launch: the door, or the floor.
@@ -20,11 +21,13 @@ export default function Index() {
   const identity = useSession((s) => s.identity);
   const sessionWait = useSession((s) => s.sessionWait);
   const legal = useLegalConsent((s) => legalGateFor(s, user?.id));
+  // Step 0 answered on this phone: a sign-up is under way.
+  const applying = useSignupDraft((s) => s.draft.eligibility?.adult === true);
   if (identity.kind === "mismatch" || identity.kind === "error") {
     return <Redirect href={launchHref(identity, user)} />;
   }
   if (sessionWait) return <SessionWait tone={sessionWait} role="supplier" />;
   if (isSignedIn(user) && legal === "unknown") return <SessionWait tone="in" role="supplier" />;
-  const href = launchHref(identity, user, legal);
+  const href = launchHref(identity, user, legal, applying);
   return <Redirect href={href} />;
 }

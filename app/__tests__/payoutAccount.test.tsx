@@ -1,10 +1,18 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 import PayoutAccountScreen from "@/app/payout-account";
-import { ApiError, getPayoutAccount, updatePayoutAccount, type PayoutAccount } from "@/lib/api";
+import { askConfirm } from "@/store/sheets";
+import {
+  ApiError,
+  getGuidedSignup,
+  getPayoutAccount,
+  updatePayoutAccount,
+  type PayoutAccount,
+} from "@/lib/api";
 
 jest.mock("expo-router", () => ({
-  router: { push: jest.fn(), back: jest.fn() },
+  router: { push: jest.fn(), back: jest.fn(), canGoBack: () => true },
+  useLocalSearchParams: () => ({}),
   useFocusEffect: (callback: () => void) => {
     const { useEffect } = jest.requireActual<typeof import("react")>("react");
     useEffect(callback, [callback]);
@@ -24,8 +32,15 @@ jest.mock("@/lib/api", () => ({
   ...jest.requireActual("@/lib/api"),
   getPayoutAccount: jest.fn(),
   updatePayoutAccount: jest.fn(),
+  // An older GRIDGO without guided sign-up: no payout consent to ask for.
+  getGuidedSignup: jest.fn(async () => {
+    const { ApiError: Refused } = jest.requireActual("@/lib/api");
+    throw new Refused(404, { error: "not_found" });
+  }),
   getDownloadUrl: jest.fn(async () => ({ url: "https://files.test/qr", expiresAt: "", expiresInSeconds: 300 })),
 }));
+
+jest.mock("@/store/sheets", () => ({ askConfirm: jest.fn(async () => true) }));
 
 const mockRouter = jest.requireMock("expo-router").router as { back: jest.Mock; push: jest.Mock };
 
@@ -148,5 +163,47 @@ describe("where the shop gets paid", () => {
     expect(screen.queryByLabelText("Account name")).toBeNull();
     expect(screen.getByLabelText("Check again")).toBeTruthy();
     await view.unmount();
+  });
+
+  describe("with GRIDGO's payout consent (guided sign-up)", () => {
+    const WORDING = "I authorize GRIDGO to send shop payouts to this QR account.";
+
+    beforeEach(() => {
+      (getGuidedSignup as jest.Mock).mockResolvedValueOnce({
+        signup: { version: 9, supplierId: "usr_1", steps: {}, nextStep: "payout" },
+        printGroups: ["documents"],
+        locationConsentWording: "Location wording.",
+        payoutConsentWording: WORDING,
+        documentRates: { bwMinor: 300, colourMinor: 500 },
+      });
+    });
+
+    it("takes someone else's QR only with whose it is and the consent in GRIDGO's words", async () => {
+      (getPayoutAccount as jest.Mock).mockResolvedValue({ ...ACCOUNT, accountName: "" , version: 2 });
+      (updatePayoutAccount as jest.Mock).mockResolvedValue({ ...ACCOUNT, holder: "family", version: 3 });
+
+      const view = await render(<PayoutAccountScreen />);
+      await screen.findByText(WORDING);
+      await fireEvent.press(screen.getByText("Family"));
+      await fireEvent.changeText(screen.getByLabelText("Account name"), "Test Sister");
+      await fireEvent.press(screen.getByLabelText("Save changes"));
+      expect(screen.getByText("Tick the box to let GRIDGO pay to this QR.")).toBeTruthy();
+      expect(updatePayoutAccount).not.toHaveBeenCalled();
+
+      await fireEvent.press(screen.getByText(WORDING));
+      await fireEvent.press(screen.getByLabelText("Save changes"));
+      await waitFor(() =>
+        expect(updatePayoutAccount).toHaveBeenCalledWith(2, {
+          accountName: "Test Sister",
+          holder: "family",
+          consent: { accepted: true, wording: WORDING },
+        }),
+      );
+      // Changing where an established QR pays pauses payouts; the shop is asked first.
+      expect(askConfirm).toHaveBeenCalledWith(
+        expect.objectContaining({ question: "Change where GRIDGO pays you?" }),
+      );
+      await view.unmount();
+    });
   });
 });

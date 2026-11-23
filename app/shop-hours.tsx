@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { EmptyState } from "@/components/EmptyState";
+import { PrimaryButton } from "@/components/PrimaryButton";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { SwitchRow } from "@/components/controls/SwitchRow";
@@ -28,6 +30,7 @@ import {
   type WeekWindow,
 } from "@/lib/shopHours";
 import { saveSchedule } from "@/store/shopSchedule";
+import { useGuidedSignup } from "@/store/guidedSignup";
 import { useShopHours } from "@/store/shopHours";
 import { phoneOnlyClosuresFor, useShopPlan } from "@/store/shopPlan";
 import { useSession } from "@/store/session";
@@ -44,6 +47,16 @@ import { askConfirm } from "@/store/sheets";
  */
 export default function ShopHoursScreen() {
   const hours = useShopHours((s) => s.hours);
+  // Opened from guided setup (gridgo-supplier#265): GRIDGO counts this step
+  // done once the shop saves a week, and until then it draws its usual hours,
+  // so the footer saves them as they stand. An edit in the weekly card owns
+  // its own save (and the one yellow button) instead.
+  const fromSetup = useLocalSearchParams<{ setup?: string }>().setup === "1";
+  const hoursStepOpen = useGuidedSignup((s) => s.signup?.nextStep === "hours");
+  const settingUp = fromSetup && hoursStepOpen;
+  const insets = useSafeAreaInsets();
+  const [weekEditing, setWeekEditing] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
   const status = useShopHours((s) => s.status);
   const loadError = useShopHours((s) => s.error);
   const saving = useShopHours((s) => s.saving);
@@ -188,6 +201,13 @@ export default function ShopHoursScreen() {
     );
   }
 
+  async function saveUsualHours() {
+    setSetupError(null);
+    const refused = await saveSchedule({});
+    if (refused) setSetupError(refused);
+    else if (router.canGoBack()) router.back();
+  }
+
   return (
     <View className="gg-screen">
       <ScrollView
@@ -229,6 +249,7 @@ export default function ShopHoursScreen() {
           onSave={(draft: WeekDraft) =>
             saveSchedule({ week: weekFromDraft(draft), overrides: overridesFromDraft(draft) })
           }
+          onEditingChange={setWeekEditing}
         />
 
         <ClosureDatesCard
@@ -256,6 +277,17 @@ export default function ShopHoursScreen() {
           Changes apply to new jobs. Jobs you already accepted keep the dates you agreed to.
         </Text>
       </ScrollView>
+      {settingUp && !weekEditing ? (
+        <View className="gg-page gap-2 bg-canvas pt-4" style={{ paddingBottom: insets.bottom + 16 }}>
+          {setupError ? <ErrorNotice message={setupError} /> : null}
+          <PrimaryButton
+            label={saving ? "Saving…" : "Use these hours"}
+            hint="Gamita kini nga oras"
+            disabled={saving}
+            onPress={() => void saveUsualHours()}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
