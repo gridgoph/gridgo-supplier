@@ -8,10 +8,12 @@ import { AlertsBell } from "@/components/AlertsBell";
 import { ChatButton } from "@/components/ChatButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
+import { CheckProductsCard } from "@/components/myshop/CheckProductsCard";
 import { ProductRail } from "@/components/myshop/ProductRail";
 import { ShopSignCard } from "@/components/myshop/ShopSignCard";
 import { StatusChip } from "@/components/StatusChip";
 import { useBoard } from "@/hooks/useBoard";
+import { useCheckProducts } from "@/hooks/useCheckProducts";
 import { useReadiness } from "@/hooks/useReadiness";
 import * as api from "@/lib/api";
 import { clerkDisplayName } from "@/lib/clerk";
@@ -286,6 +288,7 @@ function OwnerAccount() {
 
   // The first few products, with their standing, for the rail.
   const board = useBoard(PRODUCT_RAIL_QUERY);
+  const { check: productCheck } = useCheckProducts();
   const { readiness } = useReadiness();
 
   const night = shopStatus ? nightChipLabel(shopStatus.nightJobs) : null;
@@ -397,6 +400,12 @@ function OwnerAccount() {
                 <Text className="text-button text-text-primary underline">Undo</Text>
               </Pressable>
             ) : null}
+          </View>
+        ) : null}
+
+        {productCheck?.items.length ? (
+          <View className="mt-6">
+            <CheckProductsCard check={productCheck} />
           </View>
         ) : null}
 

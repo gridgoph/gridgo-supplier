@@ -4,6 +4,7 @@ import { Text, View } from "react-native";
 import type { KeyboardAwareScrollViewRef } from "react-native-keyboard-controller";
 import { useReducedMotion } from "react-native-reanimated";
 import { Stack, router, useLocalSearchParams } from "expo-router";
+import { templateProductHref } from "@/lib/productTemplates";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BusyOverlay } from "@/components/BusyOverlay";
@@ -142,8 +143,10 @@ import { isMatchable, useSession } from "@/store/session";
  * their own records on GRIDGO and save as they are added.
  */
 export default function ListingScreen() {
-  const params = useLocalSearchParams<{ id?: string | string[] }>();
+  const params = useLocalSearchParams<{ id?: string | string[]; full?: string }>();
   const id = routeId(params.id);
+  /** Asked for the full builder on purpose (extras on a GRIDGO template product). */
+  const full = params.full === "1";
   const insets = useSafeAreaInsets();
   const approved = isMatchable(useSession((s) => s.user));
   const formats = useAcceptedFileFormats();
@@ -173,6 +176,13 @@ export default function ListingScreen() {
     error,
     reload,
   } = useListing(id, useCallback(() => dirtyRef.current, []));
+
+  // A GRIDGO template product is edited as its price table (gridgo-supplier#268).
+  // The board list does not say which products are, so this is where it is known.
+  useEffect(() => {
+    if (!listing || full || !listing.template) return;
+    if (listing.template.managed || listing.template.needsPrice) router.replace(templateProductHref(listing.id));
+  }, [full, listing]);
 
   // Never null while a listing is loaded. Deriving it here rather than waiting
   // for an effect is what stops the screen rendering its "not reachable" state

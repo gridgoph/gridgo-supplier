@@ -9,7 +9,7 @@ import { useThemeColors } from "@/hooks/useTheme";
 import {
   boardContextFor,
   boardStanding,
-  photoViewUrl,
+  firstPhotoUrl,
   priceLine,
   type Listing,
   type ServiceLine,
@@ -95,7 +95,7 @@ export function ProductRail({ listings, total, services, readiness, shopApproved
                 >
                   <SamplePhoto
                     fileId={first?.fileId}
-                    url={photoViewUrl(first)}
+                    url={firstPhotoUrl(listing)}
                     altText={first?.altText ?? listing.name}
                     gutter="tight"
                     emptyLabel="No photo yet"
@@ -116,7 +116,7 @@ export function ProductRail({ listings, total, services, readiness, shopApproved
               );
             })}
         <Pressable
-          onPress={() => router.push("/shop/new")}
+          onPress={() => router.push("/shop/add" as Href)}
           accessibilityRole="button"
           accessibilityLabel="Add a product"
           className="items-center justify-center gap-2 rounded-card border border-dashed border-outline"

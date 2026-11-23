@@ -5,7 +5,7 @@ import {
   boardContextFor,
   effectiveMinimumTurnaround,
   effectiveTurnaround,
-  photoViewUrl,
+  firstPhotoUrl,
   priceLine,
   readyInLine,
   type Listing,
@@ -43,7 +43,7 @@ export function ClientPreviewCard({ listing, services, onPress }: Props) {
         <View className="w-16 shrink-0">
           <SamplePhoto
             fileId={listing.photos[0]?.fileId}
-            url={photoViewUrl(listing.photos[0])}
+            url={firstPhotoUrl(listing)}
             altText={listing.photos[0]?.altText ?? name}
             gutter="tight"
             emptyLabel="No sample"

@@ -404,6 +404,25 @@ const MESSAGES: Record<string, string> = {
   assignment_notification_required:
     "The client has not been told your price yet. Pull down to refresh and try again.",
 
+  // GRIDGO product templates (gridgo-supplier#268).
+  template_price_required: "Every ticked option needs a full price above ₱0. Enter one, or untick it.",
+  template_already_added: "You already have this product. Open it from Products to change its prices.",
+  template_service_required:
+    "Add this kind of work to Services you offer first. GRIDGO only lists products under a service you have.",
+  invalid_ready_time: "Choose when it is ready.",
+  invalid_template_request: "Something in this product is missing. Check the prices and More options, then try again.",
+  invalid_template_options: "This product's options changed. Go back to the list and open it again.",
+  product_template_not_found: "GRIDGO no longer offers this product. Go back to the list and pick again.",
+  template_formats_unavailable: "The GRIDGO team still has to finish this product. Try again later, or message them.",
+  template_manual_conversion_required:
+    "This product is priced by colour, so it keeps its own editor until the GRIDGO team moves it over.",
+  template_change_not_allowed: "Add a separate product for that one instead.",
+  product_merged: "This product was merged into another one. Open the other one to change its prices.",
+  already_confirmed: "These prices are already confirmed.",
+  invalid_setup_file: "One of the files could not be used. Send a photo, PDF or voice note again.",
+  setup_request_not_found: "That request is no longer open.",
+  printer_cap_required: "Enter how wide your printer prints, in whole feet from 1 to 20.",
+
   // The shop's own board.
   catalog_item_not_found:
     "That listing is no longer on your board. Pull down to refresh and open it again.",

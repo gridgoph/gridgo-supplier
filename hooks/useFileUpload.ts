@@ -254,17 +254,20 @@ export function useFileUpload(purpose: StoredFile["purpose"], { maxBytes = MAX_P
     [acceptMany],
   );
 
-  /** Several PDFs or images from the phone's files in one go. */
+  /**
+   * Several PDFs or images from the phone's files in one go. `types` widens
+   * what may be picked — a price list may also be a voice note.
+   */
   const pickDocuments = useCallback(
-    async (limit = 0) => {
+    async (limit = 0, types: string[] = ["application/pdf", "image/*"]) => {
       if (canPickOnWeb()) {
-        const picked = await pickFilesOnWeb("application/pdf,image/*");
+        const picked = await pickFilesOnWeb(types.join(","));
         const capped = limit > 0 ? picked.slice(0, limit) : picked;
         await acceptMany(capped.map((p, i) => fromWeb(p, `evidence-${counter.current + i + 1}`)));
         return;
       }
       const result = await withSystemPicker(() => DocumentPicker.getDocumentAsync({
-        type: ["application/pdf", "image/*"],
+        type: types,
         copyToCacheDirectory: true,
         multiple: true,
       }));

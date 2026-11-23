@@ -25,7 +25,7 @@ const OPENS_A_KEYBOARD = /<(TextInput|TextField|PasswordField|NoteField|MoneyFie
  * Somewhere in this file's own tree, the keyboard is accounted for: either the
  * app's keyboard-aware scroll surface or an avoiding view.
  */
-const HANDLES_A_KEYBOARD = /<(FormScrollView|KeyboardAvoidingView|OnboardingStep|FlowScreen|ListingWizardShell)\b/;
+const HANDLES_A_KEYBOARD = /<(FormScrollView|KeyboardAvoidingView|OnboardingStep|FlowScreen|ListingWizardShell|TemplateFlowShell)\b/;
 
 /**
  * The controls themselves — a text field is not a screen, and cannot know what
@@ -68,6 +68,8 @@ const HANDLED_BY_ITS_CALLERS = [
   "components/listing/wizard/ArtworkStep.tsx",
   "components/listing/ProductTypeGrid.tsx",
   "components/listing/wizard/PickStep.tsx",
+  "components/templates/PriceTable.tsx",
+  "components/templates/MoreOptions.tsx",
 ];
 
 /**
@@ -114,6 +116,10 @@ const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
   { component: "ArtworkStep", users: /<ArtworkStep\b/, least: 1 },
   // The product-type search sits in the Pick step, inside the wizard shell.
   { component: "ProductTypeGrid", users: /<ProductTypeGrid\b/, least: 1 },
+  // A GRIDGO product's price table and More options: the add flow's shell and
+  // the product page, both keyboard-aware (gridgo-supplier#268).
+  { component: "PriceTable", users: /<PriceTable\b/, least: 2 },
+  { component: "MoreOptions", users: /<MoreOptions\b/, least: 2 },
   { component: "PickStep", users: /<PickStep\b/, least: 1 },
   // Six-digit boxes: the emailed code (inside JobTicketCode) and the Express counter code.
   { component: "DigitBoxes", users: /<DigitBoxes\b/, least: 2 },

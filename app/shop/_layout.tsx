@@ -22,9 +22,14 @@ export default function ShopLayout() {
 
   return (
     <Stack screenOptions={nestedStackScreenOptions(scheme, top)}>
-      <Stack.Screen name="new" options={{ title: "Add a listing" }} />
-      <Stack.Screen name="[id]/index" options={{ title: "Listing" }} />
-      <Stack.Screen name="[id]/photos" options={{ title: "Sample photos" }} />
+      <Stack.Screen name="add" options={{ title: "Add a product" }} />
+      <Stack.Screen name="product/[id]" options={{ title: "Product" }} />
+      <Stack.Screen name="ask-template" options={{ title: "Ask GRIDGO" }} />
+      <Stack.Screen name="setup-help" options={{ title: "Let GRIDGO set it up" }} />
+      <Stack.Screen name="check-products" options={{ title: "Check your products" }} />
+      <Stack.Screen name="new" options={{ title: "Custom product" }} />
+      <Stack.Screen name="[id]/index" options={{ title: "Product" }} />
+      <Stack.Screen name="[id]/photos" options={{ title: "Photos" }} />
       <Stack.Screen name="[id]/preview" options={{ title: "What clients see" }} />
       <Stack.Screen name="request-type" options={{ title: "Request a product type" }} />
       {/*
