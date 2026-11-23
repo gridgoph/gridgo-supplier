@@ -21,6 +21,7 @@ import {
   type ProductionTimeReview,
 } from "@/lib/productionDays";
 import { listingOwnSteps, type ListingReadiness } from "@/lib/readiness";
+import { readStockPhotoUrl, readTemplateFacts, type TemplateFacts } from "@/lib/productTemplates";
 import { readPrintLayouts, type PrintLayoutCode } from "@/lib/printLayout";
 import {
   COLOUR_PRICES_NEEDED,
@@ -191,6 +192,8 @@ export type SamplePhoto = {
    */
   downloadUrl?: string | null;
   downloadUrlExpiresAt?: string | null;
+  /** On a template product: the shop's own photo, not GRIDGO's stock one ("Real photo"). */
+  realPhoto?: boolean;
 };
 
 /**
@@ -199,6 +202,15 @@ export type SamplePhoto = {
  * Identity stays `fileId`. A link that has less than a minute left is treated
  * as already gone, matching the in-memory cache on the plate.
  */
+/**
+ * The first tile's picture: the shop's own photo, or — on a template product
+ * with none yet — GRIDGO's stock photo.
+ */
+export function firstPhotoUrl(listing: Pick<Listing, "photos" | "stockPhotoUrl">): string | null {
+  const first = listing.photos[0];
+  return first ? photoViewUrl(first) : (listing.stockPhotoUrl ?? null);
+}
+
 export function photoViewUrl(photo: SamplePhoto | null | undefined): string | null {
   if (!photo?.downloadUrl) return null;
   if (!photo.downloadUrlExpiresAt) return photo.downloadUrl;
@@ -362,6 +374,13 @@ export type Listing = {
   hasApprovedVersion?: boolean;
   sortOrder: number;
   photos: SamplePhoto[];
+  /**
+   * A GRIDGO template product's stock photo, drawn while the shop has added
+   * none of its own (gridgo-supplier#268). Never a file id: it is GRIDGO's.
+   */
+  stockPhotoUrl?: string | null;
+  /** What a template product remembers of its template; absent on a custom product. */
+  template?: TemplateFacts | null;
   groups: SpecGroup[];
   /**
    * GRIDGO's own completeness codes from the list/read payload (`blockers`).
@@ -533,7 +552,18 @@ function readPhoto(raw: Raw, index: number): SamplePhoto | null {
     altText: str(pick(raw, "altText", "alt_text")),
     downloadUrl: str(pick(raw, "downloadUrl", "download_url")),
     downloadUrlExpiresAt: str(pick(raw, "downloadUrlExpiresAt", "download_url_expires_at")),
+    ...(raw.realPhoto === true ? { realPhoto: true } : {}),
   };
+}
+
+/**
+ * A template product's facts and its stock photo. A custom product gets
+ * neither key, so nothing about it changes.
+ */
+function readTemplatePart(raw: Raw): Pick<Listing, "template" | "stockPhotoUrl"> {
+  const template = readTemplateFacts(raw.template);
+  if (!template) return {};
+  return { template, stockPhotoUrl: readStockPhotoUrl(raw) };
 }
 
 /** Photos may arrive as records or as bare file ids. Both are read. */
@@ -667,6 +697,7 @@ export function normalizeListing(body: unknown, index = 0): Listing | null {
     ...readReview(raw),
     sortOrder: num(pick(raw, "sortOrder", "sort_order")) ?? index,
     photos: readPhotos(pick(raw, "photos", "samplePhotos")),
+    ...readTemplatePart(raw),
     groups: asArray(pick(raw, "optionGroups", "option_groups", "groups"))
       .map(readGroup)
       .filter((group): group is SpecGroup => group != null)
@@ -1406,9 +1437,9 @@ function standingFromReadiness(entry: ListingReadiness): BoardStanding {
 }
 
 /** The board's own empty line. One place, so it cannot drift. */
-export const EMPTY_BOARD_TITLE = "Nothing on the board yet";
+export const EMPTY_BOARD_TITLE = "No products yet";
 export const EMPTY_BOARD_BODY =
-  "Add a listing so clients can see what you print.";
+  "Add a product so clients can see what you print.";
 
 /* --------------------------------------------------------------------------
    Where a listing sits in the shop's accreditation

@@ -158,10 +158,35 @@ export function presentListingAlert(
   }
 }
 
+/**
+ * Where a GRIDGO template-product notice opens (gridgo-supplier#268,
+ * gridgo-api `docs/PRODUCT_TEMPLATES_API.md`). These rows carry no item id.
+ */
+export function templateAlertHref(type: string): Href | null {
+  switch (type) {
+    case "template_product_live":
+    case "template_product_price_checked":
+    case "template_product_price_check":
+      return "/(tabs)/catalogues";
+    case "template_product_confirmation_required":
+    case "template_products_check":
+      return "/shop/check-products" as Href;
+    case "template_request_completed":
+      return "/shop/add" as Href;
+    case "product_setup_requested":
+    case "product_setup_updated":
+      return "/shop/setup-help" as Href;
+    default:
+      return null;
+  }
+}
+
 /** Where a review or take-down alert opens, or null for any other alert. */
 export function listingAlertHref(
   alert: Pick<Notification, "type" | "catalogItemId">,
 ): Href | null {
+  const template = templateAlertHref(alert.type ?? "");
+  if (template) return template;
   if (
     (alert.type === LISTING_SUSPENDED_ALERT || alert.type === LISTING_RESTORED_ALERT) &&
     alert.catalogItemId

@@ -60,14 +60,14 @@ describe("a product's quick actions", () => {
       .mockResolvedValueOnce(item({ active: true, version: 5 }));
     view = await render(<ProductActionsSheet />);
 
-    await fireEvent.press(await screen.findByRole("switch", { name: "Show to clients" }));
+    await fireEvent.press(await screen.findByRole("switch", { name: "Live" }));
 
     expect(updateCatalogItem).toHaveBeenCalledWith("item_1", 3, { active: false });
     expect(await screen.findByText(/Your prices and ready time are kept/)).toBeTruthy();
 
     await fireEvent.press(screen.getByLabelText("Undo, show it to clients again"));
     expect(updateCatalogItem).toHaveBeenLastCalledWith("item_1", 4, { active: true });
-    expect(await screen.findByText("Shown to clients again.")).toBeTruthy();
+    expect(await screen.findByText("Live again. Clients can order it.")).toBeTruthy();
   });
 
   it("asks before removing, and removes nothing when the shop keeps it", async () => {
@@ -103,7 +103,7 @@ describe("a product's quick actions", () => {
     view = await render(<ProductActionsSheet />);
 
     expect(await screen.findByText(/Only GRIDGO can put it back/)).toBeTruthy();
-    expect(screen.queryByRole("switch", { name: "Show to clients" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Live" })).toBeNull();
   });
 
   it("reloads a product another phone changed, and removes only after a fresh confirm", async () => {

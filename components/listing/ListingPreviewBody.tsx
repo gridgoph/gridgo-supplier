@@ -13,6 +13,7 @@ import {
   effectiveTurnaround,
   fromPriceMinor,
   hasPriceRange,
+  firstPhotoUrl,
   photoViewUrl,
   pickLine,
   printerCapLine,
@@ -56,7 +57,7 @@ export function ListingPreviewBody({
       <View>
         <SamplePhoto
           fileId={listing.photos[0]?.fileId}
-          url={photoViewUrl(listing.photos[0])}
+          url={firstPhotoUrl(listing)}
           altText={listing.photos[0]?.altText ?? listing.name}
           ratio="wide"
           emptyLabel="No sample photo"

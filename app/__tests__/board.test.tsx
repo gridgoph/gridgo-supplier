@@ -144,8 +144,8 @@ describe("the shop's board", () => {
 
     const view = await render(<BoardScreen />);
 
-    expect(await screen.findByText("Nothing on the board yet")).toBeTruthy();
-    expect(screen.getByText("Put something on the board")).toBeTruthy();
+    expect(await screen.findByText("No products yet")).toBeTruthy();
+    expect(screen.getByText("Add a product")).toBeTruthy();
     // Nothing to hunt through, so nothing to hunt with.
     expect(screen.queryByLabelText("Find a sample on your board")).toBeNull();
     await view.unmount();
@@ -163,7 +163,7 @@ describe("the shop's board", () => {
     const view = await render(<BoardScreen />);
 
     expect(await screen.findByText("Your board is not open yet")).toBeTruthy();
-    expect(screen.queryByText("Nothing on the board yet")).toBeNull();
+    expect(screen.queryByText("No products yet")).toBeNull();
     expect(screen.getByText("Check again")).toBeTruthy();
     await view.unmount();
   });
@@ -179,7 +179,7 @@ describe("the shop's board", () => {
     expect(screen.queryByText("Ready in 1 working day")).toBeNull();
     expect(screen.queryByText(/still needs something/)).toBeNull();
     expect(screen.getByLabelText("Add a listing")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Put something on the board" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add a product" })).toBeNull();
     await view.unmount();
   });
 
@@ -202,7 +202,7 @@ describe("the shop's board", () => {
 
     await fireEvent.press(screen.getByLabelText("Add a listing"));
 
-    expect(router.push).toHaveBeenCalledWith("/shop/new");
+    expect(router.push).toHaveBeenCalledWith("/shop/add");
     expect(useTour.getState().progress.u1).toEqual({ status: "active", step: 6 });
     await view.unmount();
     useTour.getState().reset();
@@ -414,7 +414,7 @@ describe("the shop's board", () => {
     const view = await render(<BoardScreen />);
 
     expect(await screen.findByText("Operations is still reviewing your shop")).toBeTruthy();
-    expect(await screen.findByText("Put something on the board")).toBeTruthy();
+    expect(await screen.findByText("Add a product")).toBeTruthy();
     await view.unmount();
   });
 });
@@ -490,7 +490,7 @@ describe("hunting the board", () => {
         "Nothing on your board matches that. Clear the hunt, or put a new sample up.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByText("Nothing on the board yet")).toBeNull();
+    expect(screen.queryByText("No products yet")).toBeNull();
 
     (loadBoard as jest.Mock).mockResolvedValue(page([listing, flyers]));
     await fireEvent.press(screen.getByText("Clear the hunt"));

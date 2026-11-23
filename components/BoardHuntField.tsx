@@ -15,6 +15,9 @@ type Props = {
   onHunt: (value: string) => void;
   /** True while the field has the caret, so the rail can fold its filters. */
   onFocusChange?: (focused: boolean) => void;
+  /** The field's words, for a search that is not the board's own. */
+  placeholder?: string;
+  accessibilityLabel?: string;
 };
 
 /**
@@ -40,7 +43,13 @@ type Props = {
  * and a name, because a shop clearing a hunt one-handed at the counter is the
  * ordinary case, not the recovery case.
  */
-export function BoardHuntField({ value, onHunt, onFocusChange }: Props) {
+export function BoardHuntField({
+  value,
+  onHunt,
+  onFocusChange,
+  placeholder = "Find a sample",
+  accessibilityLabel = "Find a sample on your board",
+}: Props) {
   const colors = useThemeColors();
   const [text, setText] = useState(value);
   const [focused, setFocused] = useState(false);
@@ -109,9 +118,9 @@ export function BoardHuntField({ value, onHunt, onFocusChange }: Props) {
         onFocus={() => focus(true)}
         onBlur={() => focus(false)}
         onSubmitEditing={() => hunt(typed.current)}
-        placeholder="Find a sample"
+        placeholder={placeholder}
         placeholderTextColor={colors.textMuted}
-        accessibilityLabel="Find a sample on your board"
+        accessibilityLabel={accessibilityLabel}
         returnKeyType="search"
         autoCapitalize="none"
         autoCorrect={false}

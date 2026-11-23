@@ -12,7 +12,7 @@ import {
   effectiveTurnaround,
   fromPriceMinor,
   hasPriceRange,
-  photoViewUrl,
+  firstPhotoUrl,
   priceLine,
   readyInLine,
   subcategoryName,
@@ -71,7 +71,7 @@ export function ListingRow({
       <View className="w-28 shrink-0">
         <SamplePhoto
           fileId={first?.fileId}
-          url={photoViewUrl(first)}
+          url={firstPhotoUrl(listing)}
           altText={first?.altText ?? listing.name}
           emptyLabel="No sample yet"
           gutter="tight"
