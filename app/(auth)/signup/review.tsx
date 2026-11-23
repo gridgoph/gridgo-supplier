@@ -7,6 +7,7 @@ import { Pressable, Text, View } from "react-native";
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { JobTicketCode } from "@/components/JobTicketCode";
+import { HowYouEarn } from "@/components/money/HowYouEarn";
 import { OnboardingStep } from "@/components/OnboardingStep";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SupplierTermsNotice } from "@/components/SupplierTermsNotice";
@@ -23,6 +24,7 @@ import {
 import { continuationAfterSignUp } from "@/lib/clerkSignUp";
 import { firstIncompleteStep, stepAt, type OnboardingStep as Step } from "@/lib/onboardingSteps";
 import { coordinateText, isPlaced } from "@/lib/shopLocation";
+import type { ShopMoneySchedule } from "@/lib/shopMoney";
 import { debugAuth } from "@/lib/debugAuth";
 import {
   APPLY_CONSENT_REFUSED,
@@ -66,6 +68,20 @@ export default function ReviewStep() {
   const { setActive } = useClerk();
   const step = stepAt("review");
   const incomplete = firstIncompleteStep(draft, { clerkSession: Boolean(isSignedIn) });
+  // "How you earn" in GRIDGO's own words, read once the Clerk session exists.
+  // Quiet: a GRIDGO without daily payouts, or one that will not answer an
+  // account it has not enrolled yet, leaves the panel out.
+  const [earnSchedule, setEarnSchedule] = useState<ShopMoneySchedule | null>(null);
+  useEffect(() => {
+    if (!isSignedIn) return;
+    let live = true;
+    void api.getShopMoneySchedule().then((next) => {
+      if (live) setEarnSchedule(next);
+    });
+    return () => {
+      live = false;
+    };
+  }, [isSignedIn]);
   const [verifying, setVerifying] = useState(false);
   const [code, setCode] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -357,6 +373,8 @@ export default function ReviewStep() {
               They usually come back within a working day. You will not need to apply again.
             </Text>
           </View>
+
+          <HowYouEarn schedule={earnSchedule} />
 
           <SupplierTermsNotice />
 

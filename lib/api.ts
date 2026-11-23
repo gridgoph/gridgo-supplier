@@ -20,6 +20,13 @@ import { parseRiderApproach, type RiderApproach } from "@/lib/riderApproach";
 import { pushTokenProvider, type DevicePlatform, type PushTokenProvider } from "@/lib/push";
 import { installChannel } from "@/lib/buildDistribution";
 import { readShopVerification, type ShopVerification, type ShopVerificationRead } from "@/lib/shopVerification";
+import {
+  readShopMoney,
+  readShopMoneySchedule,
+  type MoneyPeriod,
+  type ShopMoneyRead,
+  type ShopMoneySchedule,
+} from "@/lib/shopMoney";
 import type {
   ActionActor,
   CreatedInvite,
@@ -430,6 +437,14 @@ export type Order = {
   paymentMethod: string | null;
   paymentStatus: string;
   payments?: Partial<Record<InstallmentCode, Installment>>;
+  /**
+   * How the client paid, recorded once per job (gridgo-api
+   * `docs/SHOP_MONEY_API.md`). Read through `clientPaymentLine` in
+   * `lib/shopMoney.ts`; absent from an older GRIDGO.
+   */
+  clientPayment?: unknown;
+  /** The launch-week bonus on this job, the Owner's only. Read with `readLaunchBonus`. */
+  shopLaunchBonus?: unknown;
   /** Share of the client total paid up front: 100 (paid in full) or 75. */
   downpaymentPercent?: number;
   /** The plan this order's stages were committed under; null before commitment. */
@@ -681,6 +696,8 @@ export type Settings = {
   colourDetection?: { a3MonochromeMaxBps?: number };
   /** Days a sampled batch keeps the shop's old prices after the sample arrives. */
   sampleBatchHoldDays?: number;
+  /** Daily payout schedule and launch bonus. Read with `readShopMoneySchedule`. */
+  shopMoney?: unknown;
 };
 
 /** Stored file metadata. `fileId` is the only durable identity a client keeps. */
@@ -1947,6 +1964,36 @@ export async function requestOrderChange(
 export async function getSettings(): Promise<Settings> {
   const result = await request<{ settings: Settings }>("/settings");
   return result.settings;
+}
+
+/**
+ * The payout schedule and launch-bonus terms (`GET /settings` `shopMoney`), or
+ * null when GRIDGO does not offer them or cannot be read. Quiet on purpose:
+ * sign-up reads it on a Clerk session GRIDGO has not enrolled yet, and a 401
+ * there must not sign the shop out — it only leaves "How you earn" unsaid.
+ */
+export async function getShopMoneySchedule(): Promise<ShopMoneySchedule | null> {
+  try {
+    const result = await request<{ settings?: Settings }>("/settings", { ignoreUnauthorized: true });
+    return readShopMoneySchedule(result.settings?.shopMoney);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The Owner's balances with GRIDGO (gridgo-api `docs/SHOP_MONEY_API.md`).
+ * Null when GRIDGO has no such route yet (404/405) or refuses it (403, Staff),
+ * so Money draws what it did before.
+ */
+export async function getShopMoney(period: MoneyPeriod): Promise<ShopMoneyRead | null> {
+  try {
+    const body = await request<unknown>(`/me/shop-money?period=${period}`);
+    return readShopMoney(body);
+  } catch (error) {
+    if (error instanceof ApiError && [403, 404, 405].includes(error.status)) return null;
+    throw error;
+  }
 }
 
 /** GRIDGO's live hours as `GET /settings` states them. Read through `lib/dispatchHours.ts`. */
