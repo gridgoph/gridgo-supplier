@@ -10,6 +10,7 @@ import { SheetSurface } from "@/components/SheetSurface";
 import { useThemeColors } from "@/hooks/useTheme";
 import { awaitsFirstApproval, isTakenDown, priceLine, type Listing } from "@/lib/listings";
 import { ARCHIVED_SENTENCE, BOARD_NOT_OPEN_YET, loadListing, removeListing, saveListing } from "@/lib/listingsApi";
+import { productHref, templateStanding } from "@/lib/productTemplates";
 import { useListingWizard } from "@/store/listingWizard";
 import { endPhotoPolicySubmission, ensurePhotoPolicy } from "@/store/photoPolicy";
 import { askConfirm } from "@/store/sheets";
@@ -85,8 +86,8 @@ export default function ProductActionsSheet() {
       setFeedback({
         ok: true,
         message: next
-          ? "Shown to clients again."
-          : "Hidden from clients. Your prices and ready time are kept.",
+          ? "Live again. Clients can order it."
+          : "Hidden. Clients cannot see it. Your prices and ready time are kept.",
         undo: !next && !fromUndo,
       });
     } else {
@@ -135,7 +136,12 @@ export default function ProductActionsSheet() {
 
   // A listing GRIDGO took down, or one waiting for its first approval, is not
   // the shop's to switch on from here: the editor says what it needs.
-  const switchable = listing != null && !isTakenDown(listing) && !awaitsFirstApproval(listing);
+  // A template product may be hidden or shown while its price check is pending.
+  const switchable =
+    listing != null &&
+    (listing.template?.managed
+      ? templateStanding(listing).switchable
+      : !isTakenDown(listing) && !awaitsFirstApproval(listing));
 
   return (
     <SheetSurface
@@ -182,8 +188,8 @@ export default function ProductActionsSheet() {
         <View className="gap-1">
           {switchable ? (
             <SwitchRow
-              label="Show to clients"
-              hint="Off hides it and keeps your prices"
+              label={listing.onTheBoard ? "Live" : "Hidden"}
+              hint="Hiding is instant. Your prices are kept."
               value={listing.onTheBoard}
               disabled={busy}
               onChange={(next) => void setShown(next)}
@@ -195,7 +201,7 @@ export default function ProductActionsSheet() {
           <Pressable
             onPress={() => {
               router.back();
-              router.push({ pathname: "/shop/[id]", params: { id: listing.id } });
+              router.push(productHref(listing));
             }}
             accessibilityRole="button"
             accessibilityLabel="Edit prices and ready time"

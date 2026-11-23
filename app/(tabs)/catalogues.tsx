@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { RefreshControl, Text, View } from "react-native";
 import Animated, { FadeIn, useReducedMotion } from "react-native-reanimated";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 
 import { AlertsBell } from "@/components/AlertsBell";
 import { BoardPager } from "@/components/BoardPager";
@@ -20,6 +20,7 @@ import { TourTarget } from "@/components/TourTarget";
 import { useTourScreen } from "@/hooks/useTourScreen";
 import { useTour } from "@/store/tour";
 import { EMPTY_BOARD_BODY, EMPTY_BOARD_TITLE, type Listing } from "@/lib/listings";
+import { productHref } from "@/lib/productTemplates";
 import {
   CATALOGUE_SORTS,
   DEFAULT_BOARD_QUERY,
@@ -198,7 +199,7 @@ export default function BoardScreen() {
    */
   function addListing() {
     if (user?.id) useTour.getState().complete(user.id, "catalogue.add");
-    router.push("/shop/new");
+    router.push("/shop/add" as Href);
   }
 
   async function pickKind() {
@@ -345,7 +346,7 @@ export default function BoardScreen() {
             <EmptyState
               title={EMPTY_BOARD_TITLE}
               body={EMPTY_BOARD_BODY}
-              actionLabel="Put something on the board"
+              actionLabel="Add a product"
               onAction={addListing}
             />
           </TourTarget>
@@ -449,12 +450,7 @@ function Wall({
             shopApproved={shopApproved}
             readiness={listingReadinessFor(readiness, listing.id)}
             hunt={hunt}
-            onPress={() =>
-              router.push({
-                pathname: "/shop/[id]",
-                params: { id: listing.id },
-              })
-            }
+            onPress={() => router.push(productHref(listing))}
             onRemove={onRemove ? () => onRemove(listing) : undefined}
           />
         ))}
@@ -473,12 +469,7 @@ function Wall({
             shopApproved={shopApproved}
             readiness={listingReadinessFor(readiness, listing.id)}
             hunt={hunt}
-            onPress={() =>
-              router.push({
-                pathname: "/shop/[id]",
-                params: { id: listing.id },
-              })
-            }
+            onPress={() => router.push(productHref(listing))}
             onRemove={onRemove ? () => onRemove(listing) : undefined}
           />
         </View>

@@ -7,7 +7,7 @@ import { StandingChips, standingCaption } from "@/components/listing/StandingChi
 import {
   boardContextFor,
   boardStanding,
-  photoViewUrl,
+  firstPhotoUrl,
   priceLine,
   printerCapLine,
   subcategoryName,
@@ -75,7 +75,7 @@ export function ListingCard({
     <View collapsable={false} className="rounded-card border border-outline bg-surface">
       <SamplePhoto
         fileId={first?.fileId}
-        url={photoViewUrl(first)}
+        url={firstPhotoUrl(listing)}
         altText={first?.altText ?? listing.name}
         emptyLabel="No sample yet"
       />

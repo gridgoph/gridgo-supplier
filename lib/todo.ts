@@ -1,5 +1,6 @@
 import type { Order } from "@/lib/api";
 import { awaitsCounterCode, expressView, isExpressDocumentOrder } from "@/lib/expressOrder";
+import { clientPaymentLine, readClientPayment } from "@/lib/shopMoney";
 import { actionsForJob, primaryAction, type SupplierActionKind, type SupplierActionRoute } from "@/lib/jobState";
 
 /**
@@ -36,7 +37,13 @@ const PAYMENT_LINE: Record<PaymentKind, string> = {
   voucher: "Paid by voucher",
 };
 
-export function paymentLine(order: Pick<Order, "paymentMethod" | "payments">): string | null {
+export function paymentLine(
+  order: Pick<Order, "paymentMethod" | "payments"> & Partial<Pick<Order, "clientPayment">>,
+): string | null {
+  // GRIDGO's own record of every method the client used wins: it is the only
+  // one that says a job was paid partly by voucher and partly in the app.
+  const recorded = clientPaymentLine(readClientPayment(order.clientPayment));
+  if (recorded) return recorded;
   const kind = paymentKind(order);
   return kind ? PAYMENT_LINE[kind] : null;
 }

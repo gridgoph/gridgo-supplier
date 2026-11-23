@@ -124,6 +124,7 @@ describe("Staff reach only the work", () => {
     "team-invite",
     "team-pin",
     "payout",
+    "pay-gridgo",
     "payout-account",
     "shop-hours",
     "shop-closure",
@@ -154,6 +155,7 @@ describe("Staff reach only the work", () => {
 
   it.each([
     "payout",
+    "pay-gridgo",
     "payout-account",
     "shop-details",
     "shop-location",

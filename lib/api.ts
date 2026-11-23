@@ -20,6 +20,13 @@ import { parseRiderApproach, type RiderApproach } from "@/lib/riderApproach";
 import { pushTokenProvider, type DevicePlatform, type PushTokenProvider } from "@/lib/push";
 import { installChannel } from "@/lib/buildDistribution";
 import { readShopVerification, type ShopVerification, type ShopVerificationRead } from "@/lib/shopVerification";
+import {
+  readShopMoney,
+  readShopMoneySchedule,
+  type MoneyPeriod,
+  type ShopMoneyRead,
+  type ShopMoneySchedule,
+} from "@/lib/shopMoney";
 import type {
   ActionActor,
   CreatedInvite,
@@ -430,6 +437,14 @@ export type Order = {
   paymentMethod: string | null;
   paymentStatus: string;
   payments?: Partial<Record<InstallmentCode, Installment>>;
+  /**
+   * How the client paid, recorded once per job (gridgo-api
+   * `docs/SHOP_MONEY_API.md`). Read through `clientPaymentLine` in
+   * `lib/shopMoney.ts`; absent from an older GRIDGO.
+   */
+  clientPayment?: unknown;
+  /** The launch-week bonus on this job, the Owner's only. Read with `readLaunchBonus`. */
+  shopLaunchBonus?: unknown;
   /** Share of the client total paid up front: 100 (paid in full) or 75. */
   downpaymentPercent?: number;
   /** The plan this order's stages were committed under; null before commitment. */
@@ -681,6 +696,8 @@ export type Settings = {
   colourDetection?: { a3MonochromeMaxBps?: number };
   /** Days a sampled batch keeps the shop's old prices after the sample arrives. */
   sampleBatchHoldDays?: number;
+  /** Daily payout schedule and launch bonus. Read with `readShopMoneySchedule`. */
+  shopMoney?: unknown;
 };
 
 /** Stored file metadata. `fileId` is the only durable identity a client keeps. */
@@ -707,7 +724,9 @@ export type StoredFile = {
     | "supplier_invoice"
     | "support_chat_image"
     /** An optional face for a teammate, bound by the team route itself. */
-    | "shop_team_photo";
+    | "shop_team_photo"
+    /** A price list (photo, PDF or voice note) for "Let GRIDGO set it up". Private to the shop and the GRIDGO team. */
+    | "product_setup";
   originalFilename: string;
   declaredContentType: string;
   detectedContentType: string;
@@ -1949,6 +1968,36 @@ export async function getSettings(): Promise<Settings> {
   return result.settings;
 }
 
+/**
+ * The payout schedule and launch-bonus terms (`GET /settings` `shopMoney`), or
+ * null when GRIDGO does not offer them or cannot be read. Quiet on purpose:
+ * sign-up reads it on a Clerk session GRIDGO has not enrolled yet, and a 401
+ * there must not sign the shop out — it only leaves "How you earn" unsaid.
+ */
+export async function getShopMoneySchedule(): Promise<ShopMoneySchedule | null> {
+  try {
+    const result = await request<{ settings?: Settings }>("/settings", { ignoreUnauthorized: true });
+    return readShopMoneySchedule(result.settings?.shopMoney);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The Owner's balances with GRIDGO (gridgo-api `docs/SHOP_MONEY_API.md`).
+ * Null when GRIDGO has no such route yet (404/405) or refuses it (403, Staff),
+ * so Money draws what it did before.
+ */
+export async function getShopMoney(period: MoneyPeriod): Promise<ShopMoneyRead | null> {
+  try {
+    const body = await request<unknown>(`/me/shop-money?period=${period}`);
+    return readShopMoney(body);
+  } catch (error) {
+    if (error instanceof ApiError && [403, 404, 405].includes(error.status)) return null;
+    throw error;
+  }
+}
+
 /** GRIDGO's live hours as `GET /settings` states them. Read through `lib/dispatchHours.ts`. */
 export async function getOperatingStatus(): Promise<unknown> {
   const result = await request<{ operatingStatus?: unknown }>("/settings");
@@ -2532,6 +2581,78 @@ export async function createProductTypeRequest(body: {
 /** This shop's own product-type requests. Answers `{ requests, nextCursor }`. */
 export async function listProductTypeRequests(): Promise<unknown> {
   return request<unknown>("/me/product-type-requests");
+}
+
+/*
+  Product templates (gridgo-supplier#268, gridgo-api `docs/PRODUCT_TEMPLATES_API.md`).
+  Read only through `lib/productTemplates.ts` and `lib/productTemplatesApi.ts`.
+*/
+
+/** GRIDGO's templates, the ready-time chips and `checkYourProducts`. */
+export async function listProductTemplates(query: { q?: string; group?: string } = {}): Promise<unknown> {
+  const params = new URLSearchParams();
+  if (query.q?.trim()) params.set("q", query.q.trim().slice(0, 120));
+  if (query.group) params.set("group", query.group);
+  const search = params.toString();
+  return request<unknown>(`/me/product-templates${search ? `?${search}` : ""}`);
+}
+
+/** The client's view and a dated ready-by example for a table not saved yet. Saves nothing. */
+export async function previewTemplateProduct(body: Record<string, unknown>): Promise<unknown> {
+  return request<unknown>("/me/template-products/preview", { method: "POST", body: JSON.stringify(body) });
+}
+
+/** Add a template product. Answers `201 { item }`. */
+export async function createTemplateProduct(body: Record<string, unknown>): Promise<unknown> {
+  return request<unknown>("/me/template-products", { method: "POST", body: JSON.stringify(body) });
+}
+
+/** One template product with its full price table. Answers `{ item, prices }`. */
+export async function getTemplateProduct(itemId: string): Promise<unknown> {
+  return request<unknown>(`/me/template-products/${encodeURIComponent(itemId)}`);
+}
+
+/** Replace the whole price table, ready time and More options. Also confirms GRIDGO-prepared prices. */
+export async function updateTemplateProduct(
+  itemId: string,
+  version: number | null,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>(`/me/template-products/${encodeURIComponent(itemId)}`, {
+    method: "PUT",
+    ...versioned(version, body),
+  });
+}
+
+/** GRIDGO's ready-by example for a saved product under another chip. Saves nothing. */
+export async function templateReadyPreview(itemId: string, readyTime: string): Promise<unknown> {
+  return request<unknown>(`/me/template-products/${encodeURIComponent(itemId)}/ready-preview`, {
+    method: "POST",
+    body: JSON.stringify({ readyTime }),
+  });
+}
+
+/** Confirm prices the GRIDGO team prepared, unchanged. Answers `{ item }`. */
+export async function confirmTemplateProduct(itemId: string, version: number | null): Promise<unknown> {
+  return request<unknown>(`/me/template-products/${encodeURIComponent(itemId)}/confirm`, {
+    method: "POST",
+    ...versioned(version, {}),
+  });
+}
+
+/** Ask GRIDGO for a template, or to set products up from a price list. Answers `201 { request }`. */
+export async function createProductSetupRequest(body: {
+  kind: "template" | "setup";
+  requestedName?: string;
+  message?: string;
+  fileIds?: string[];
+}): Promise<unknown> {
+  return request<unknown>("/me/product-setup-requests", { method: "POST", body: JSON.stringify(body) });
+}
+
+/** This shop's template and setup requests. Answers `{ requests }`. */
+export async function listProductSetupRequests(): Promise<unknown> {
+  return request<unknown>("/me/product-setup-requests");
 }
 
 /* --------------------------------------------------------------------------
