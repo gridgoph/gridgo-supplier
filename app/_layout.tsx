@@ -305,6 +305,8 @@ function RootStack({ introDone }: { introDone: boolean }) {
         <Stack.Screen name="(auth)/join-account" options={{ title: "Your login" }} />
         {/* A teammate who joined with their mobile signs back in with a texted code. */}
         <Stack.Screen name="(auth)/phone-sign-in" options={{ title: "Sign in with mobile" }} />
+        {/* Facebook shared no email: add an email or mobile and its code. */}
+        <Stack.Screen name="(auth)/facebook-details" options={{ title: "Continue with Facebook" }} />
       </Stack.Protected>
 
       <Stack.Protected guard={accessBlocked}>
