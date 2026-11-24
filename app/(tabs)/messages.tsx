@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { router, useFocusEffect } from "expo-router";
 import { ChevronRight, Headset, MessagesSquare } from "lucide-react-native";
 

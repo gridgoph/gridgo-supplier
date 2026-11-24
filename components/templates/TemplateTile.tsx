@@ -1,5 +1,6 @@
 import { Check } from "lucide-react-native";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { useThemeColors } from "@/hooks/useTheme";

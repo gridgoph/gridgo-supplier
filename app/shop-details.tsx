@@ -3,7 +3,8 @@ import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useUser } from "@clerk/expo";
 import { ChevronRight } from "lucide-react-native";
 import { useCallback, useState } from "react";
-import { Alert, Platform, Pressable, Text, View } from "react-native";
+import { Alert, Platform, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { router, useFocusEffect } from "expo-router";
 
 import { DangerZone } from "@/components/AccountPrivacy";

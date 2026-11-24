@@ -1,6 +1,7 @@
 import { Eye, EyeOff } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, TextInput, View, type TextInputProps } from "react-native";
+import { TextInput, View, type TextInputProps } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { singleLineFieldTextStyle } from "@/constants/theme";
 import { useThemeColors } from "@/hooks/useTheme";

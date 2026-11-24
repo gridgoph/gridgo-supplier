@@ -1,7 +1,8 @@
 import { router, type Href } from "expo-router";
 import { Banknote, ChevronRight, LockKeyhole } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ErrorNotice } from "@/components/ErrorNotice";

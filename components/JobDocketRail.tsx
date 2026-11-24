@@ -1,5 +1,6 @@
 import { ChevronDown, Search, X } from "lucide-react-native";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { useThemeColors } from "@/hooks/useTheme";
 import {

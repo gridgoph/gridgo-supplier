@@ -1,7 +1,8 @@
 import { useUser } from "@clerk/expo";
 import { ChevronRight } from "lucide-react-native";
 import { useCallback, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { router, useFocusEffect, type Href } from "expo-router";
 
 import { AlertsBell } from "@/components/AlertsBell";

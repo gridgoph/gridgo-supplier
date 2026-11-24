@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { PixelRatio, Pressable, Text, View } from "react-native";
+import { PixelRatio, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { WEEKDAYS } from "@/lib/shopHours";
 

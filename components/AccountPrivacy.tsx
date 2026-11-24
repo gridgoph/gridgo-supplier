@@ -1,7 +1,8 @@
 import { router, type Href } from 'expo-router';
 import { ExternalLink, ShieldCheck, TriangleAlert } from 'lucide-react-native';
 import { useState } from 'react';
-import { Linking, Pressable, Text, View } from 'react-native';
+import { Linking, Text, View } from 'react-native';
+import { Pressable } from '@/components/Pressable';
 
 import { DangerButton } from '@/components/DangerButton';
 import { useThemeColors } from '@/hooks/useTheme';

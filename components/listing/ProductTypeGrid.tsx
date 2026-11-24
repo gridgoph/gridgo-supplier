@@ -1,6 +1,7 @@
 import { Check, Search } from "lucide-react-native";
 import { useMemo } from "react";
-import { Image, Pressable, Text, TextInput, View } from "react-native";
+import { Image, Text, TextInput, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { CropMarkFrame } from "@/components/CropMarkFrame";
 import { DestinationRow } from "@/components/listing/DestinationRow";

@@ -1,5 +1,6 @@
 import { Plus, Trash2 } from "lucide-react-native";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { CoverageGlyph } from "@/components/CoverageGlyph";
 import { SecondaryButton } from "@/components/SecondaryButton";

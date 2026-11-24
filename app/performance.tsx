@@ -1,6 +1,7 @@
 import { ChevronRight } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-router";
 
 import { ErrorNotice } from "@/components/ErrorNotice";

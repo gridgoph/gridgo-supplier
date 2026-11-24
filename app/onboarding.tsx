@@ -1,7 +1,6 @@
 import { router, useLocalSearchParams, type Href } from "expo-router";
 import { useState } from "react";
 import {
-  Pressable,
   Text,
   useWindowDimensions,
   View,
@@ -9,6 +8,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import Animated, {
   useAnimatedRef,
   useAnimatedScrollHandler,

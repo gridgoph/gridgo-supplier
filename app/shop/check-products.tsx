@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react-native";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { router } from "expo-router";
 
 import { EmptyState } from "@/components/EmptyState";

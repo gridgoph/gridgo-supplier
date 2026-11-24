@@ -1,7 +1,8 @@
 import { useReadVersion } from "@/hooks/useReadVersion";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
+import { FlatList, RefreshControl, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { router, useFocusEffect, useNavigation, type Href } from "expo-router";
 
 import { AlertCard } from "@/components/AlertCard";

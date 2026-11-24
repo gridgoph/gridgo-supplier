@@ -1,6 +1,7 @@
 import { Bell, X } from "lucide-react-native";
 import { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import Animated, { FadeInUp, FadeOut, useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";

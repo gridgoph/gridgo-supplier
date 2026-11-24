@@ -1,7 +1,8 @@
 import { router, type Href } from "expo-router";
 import { ChevronRight, Link2, Mail, Phone, QrCode, Send, Smartphone, UserRound, X, Zap, type LucideIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Share, Text, View } from "react-native";
+import { RefreshControl, ScrollView, Share, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNotice } from "@/components/ErrorNotice";

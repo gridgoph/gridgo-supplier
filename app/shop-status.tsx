@@ -1,6 +1,7 @@
 import { Bell, Moon, Pause, Zap } from "lucide-react-native";
 import { useEffect, useState, type ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { router } from "expo-router";
 
 import { SegmentedControl } from "@/components/controls/SegmentedControl";

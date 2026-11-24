@@ -3,7 +3,8 @@ import {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import { CalendarDays } from "lucide-react-native";
-import { Platform, Pressable, Text } from "react-native";
+import { Platform, Text } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { useThemeColors } from "@/hooks/useTheme";
 import { askDate } from "@/store/sheets";

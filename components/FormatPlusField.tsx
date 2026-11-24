@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { Plus, X } from "lucide-react-native";
 
 import { FORMAT_QUERY_MAX, UNOPENED_FILE_MESSAGE, type PublishedFileFormat } from "@/data/fileFormats";

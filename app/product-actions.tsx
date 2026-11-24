@@ -1,6 +1,7 @@
 import { ChevronRight } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { SwitchRow } from "@/components/controls/SwitchRow";
