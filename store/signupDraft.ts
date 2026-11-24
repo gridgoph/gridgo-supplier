@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 
 import type { VerificationDocumentType } from "@/lib/api";
 import { createPersistStorage } from "@/lib/persistStorage";
+import { EMPTY_ELIGIBILITY, type Eligibility } from "@/lib/guidedSignup";
 import type { ShopPin } from "@/lib/shopLocation";
 
 /**
@@ -52,6 +53,15 @@ export type SignupDraft = {
    */
   jobsHandledBy?: "just_me" | "me_and_staff";
   documents: Partial<Record<DocumentKind, PickedDocument>>;
+  /**
+   * Guided sign-up's step 0, held here until there is a session to save it
+   * with (gridgo-api `docs/SUPPLIER_SIGNUP_API.md`).
+   */
+  eligibility?: Eligibility;
+  /** A manager's owner. Saved with the shop step. */
+  ownerPhone?: string;
+  /** The optional shop logo, uploaded once the shop exists. */
+  logo?: PickedDocument | null;
 };
 
 export const EMPTY_SIGNUP_DRAFT: SignupDraft = {
@@ -65,6 +75,9 @@ export const EMPTY_SIGNUP_DRAFT: SignupDraft = {
   enrollKey: "",
   jobsHandledBy: "just_me",
   documents: {},
+  eligibility: EMPTY_ELIGIBILITY,
+  ownerPhone: "",
+  logo: null,
 };
 
 type SignupDraftState = {

@@ -146,7 +146,7 @@ describe("Staff reach only the work", () => {
     expect(reachable(OWNER)).toContain(name);
   });
 
-  it.each(["team-invite", "team-pin", "shop-hours", "shop-closure", "shop", "product-actions"])(
+  it.each(["team-invite", "team-pin", "shop-hours", "shop-closure", "shop", "product-actions", "setup", "setup-ready"])(
     "opens %s to a Manager, who runs the team, hours and products",
     (name) => {
       expect(reachable(MANAGER)).toContain(name);

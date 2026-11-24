@@ -84,7 +84,7 @@ describe("Sign in of an unmapped Clerk identity", () => {
     });
   });
 
-  it("opens apply at the first unfinished step, not Home and not a fresh password", async () => {
+  it("opens apply at step 0, which resumes it, not Home and not a fresh password", async () => {
     mockPassword.mockImplementation(async () => {
       mockSignInStatus = "complete";
       return { error: null };
@@ -99,7 +99,8 @@ describe("Sign in of an unmapped Clerk identity", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Sign in" }));
 
     await waitFor(() => {
-      expect(mockRouter.replace).toHaveBeenCalledWith("/(auth)/signup/location");
+      // Step 0 resumes the sign-up wherever it stands (gridgo-supplier#265).
+      expect(mockRouter.replace).toHaveBeenCalledWith("/(auth)/signup/start");
     });
     expect(mockRouter.replace).not.toHaveBeenCalledWith("/(tabs)/home");
     expect(mockRouter.replace).not.toHaveBeenCalledWith("/(auth)/signup");

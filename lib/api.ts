@@ -726,7 +726,9 @@ export type StoredFile = {
     /** An optional face for a teammate, bound by the team route itself. */
     | "shop_team_photo"
     /** A price list (photo, PDF or voice note) for "Let GRIDGO set it up". Private to the shop and the GRIDGO team. */
-    | "product_setup";
+    | "product_setup"
+    /** The shop's logo or cover, attached to a shop media slot. */
+    | "supplier_shop_image";
   originalFilename: string;
   declaredContentType: string;
   detectedContentType: string;
@@ -1285,6 +1287,18 @@ export type SupplierEnrollment = {
 };
 
 /**
+ * Guided sign-up's enrollment (gridgo-api `docs/SUPPLIER_SIGNUP_API.md`). The
+ * shop, pin and print choices are already saved in the draft, so the body
+ * names the draft's version instead of repeating them.
+ */
+export type GuidedSupplierEnrollment = {
+  signupVersion: number;
+  jobsHandledBy: "just_me" | "me_and_staff";
+  legalConsentVersion?: typeof LEGAL_CONSENT_VERSION;
+  legalConsent?: EnrollmentConsentBody;
+};
+
+/**
  * Open a pending shop account from a live Clerk session.
  *
  * Caller must already have a Clerk JWT on the token provider. The enroll
@@ -1292,7 +1306,7 @@ export type SupplierEnrollment = {
  * hydrates — `/auth/me` is the adopt step.
  */
 export async function enrollSupplier(
-  input: SupplierEnrollment,
+  input: SupplierEnrollment | GuidedSupplierEnrollment,
   idempotencyKey: string,
 ): Promise<User> {
   await request("/auth/clerk/enroll/supplier", {
@@ -1301,6 +1315,53 @@ export async function enrollSupplier(
     body: JSON.stringify(input),
   });
   return me({ ignoreUnauthorized: true });
+}
+
+/* --------------------------------------------------------------------------
+   Guided sign-up (gridgo-api `docs/SUPPLIER_SIGNUP_API.md`)
+
+   A private draft saved one step at a time before the shop exists, then the
+   shop's own routes after enrollment. Every shape is read defensively in
+   `lib/guidedSignup.ts`; this block only moves bytes.
+   -------------------------------------------------------------------------- */
+
+/** `GET /auth/clerk/supplier-signup` — the draft plus GRIDGO's wording and rates. */
+export async function getGuidedSignup(): Promise<unknown> {
+  return request<unknown>("/auth/clerk/supplier-signup", { ignoreUnauthorized: true });
+}
+
+/** Save one step. A stale version is `409 supplier_signup_stale`. */
+export async function saveGuidedSignupStep(
+  expectedVersion: number,
+  step: "eligibility" | "shop" | "location" | "prints",
+  value: Record<string, unknown>,
+): Promise<unknown> {
+  return request<unknown>("/auth/clerk/supplier-signup", {
+    method: "PATCH",
+    ignoreUnauthorized: true,
+    body: JSON.stringify({ expectedVersion, step, value }),
+  });
+}
+
+/** After enrollment: saved steps, `nextStep` and the payout hold, for Owner or Manager. */
+export async function getMySupplierSignup(): Promise<unknown> {
+  return request<unknown>("/me/supplier-signup");
+}
+
+/** Attach a stored `supplier_shop_image` as the shop's logo. */
+export async function attachShopLogo(fileId: string): Promise<void> {
+  await request(`/files/${encodeURIComponent(fileId)}/attach`, {
+    method: "POST",
+    body: JSON.stringify({ slot: "logo" }),
+  });
+}
+
+/**
+ * The unbranded sample picture GRIDGO hands every generated document listing,
+ * fetched with the session so it can be uploaded once per listing.
+ */
+export async function guidedSignupSampleUrl(): Promise<{ url: string; token: string | null }> {
+  return { url: `${getApiBase()}/auth/clerk/supplier-signup/document-sample`, token: await getAuthToken() };
 }
 
 /* --------------------------------------------------------------------------
@@ -1756,7 +1817,7 @@ export async function lockWorker(turnToken: string | null = null): Promise<void>
 
 /** A single-use, 24-hour invite. The token comes back once, only here. */
 export async function createShopInvite(
-  kind: InviteKind,
+  kind: InviteKind | "owner",
   identity?: string,
 ): Promise<CreatedInvite> {
   const result = await request<{ invite: TeamInvite; token: string }>("/me/shop-team/invites", {
@@ -2937,7 +2998,15 @@ export type PayoutAccount = {
   /** Round-tripped on every write. A stale one is a 409, not a silent write. */
   version: number;
   updatedAt: string;
+  /** Whose QR it is. Absent on an older GRIDGO and on accounts saved before it was asked. */
+  holder?: PayoutHolder | null;
+  /** The payout consent the Owner ticked, with GRIDGO's exact wording. */
+  consent?: { accepted: boolean; wording: string; at?: string | null } | null;
+  /** Held payouts after a destination change: read through `payoutPausedUntil`. */
+  payoutStatus?: unknown;
 };
+
+export type PayoutHolder = "mine" | "family" | "friend" | "staff";
 
 /**
  * What one save may change. `qrFileId` binds a stored `supplier_payout_qr`
@@ -2949,6 +3018,9 @@ export type PayoutAccountPatch = {
   accountNumber?: string;
   institution?: string;
   qrFileId?: string | null;
+  /** Sent only by guided sign-up and screens that show the consent. */
+  holder?: PayoutHolder;
+  consent?: { accepted: true; wording: string };
 };
 
 export async function getPayoutAccount(): Promise<PayoutAccount | null> {

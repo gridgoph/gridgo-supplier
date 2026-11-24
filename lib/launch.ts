@@ -6,6 +6,7 @@ export type LaunchHref =
   | "/access"
   | "/(auth)/welcome"
   | "/(auth)/login"
+  | "/(auth)/signup/start"
   | "/legal/review"
   | "/team-waiting"
   | "/who-is-working"
@@ -31,12 +32,16 @@ export function launchHref(
   identity: IdentityState,
   user: User | null,
   legal: LegalGateStatus = "clear",
+  applying = false,
 ): LaunchHref {
   if (identity.kind === "mismatch" || identity.kind === "error") return "/access";
   if (identity.kind === "team_pending") return "/team-waiting";
   // A shared shop phone opens on the picker, never on the login's own screens.
   if (identity.kind === "device_locked") return "/who-is-working";
   if (signedOutWithNotice(identity)) return "/(auth)/login";
+  // Signed in at Clerk, mid-way through guided sign-up on this phone: back to
+  // sign-up, which reopens wherever GRIDGO says it stands (gridgo-supplier#265).
+  if (identity.kind === "unassigned" && applying) return "/(auth)/signup/start";
   if (!isSignedIn(user)) return "/(auth)/welcome";
   if (legal === "blocked") return "/legal/review";
   // Staff and Owner both open on To do; Staff simply see no money there.

@@ -19,6 +19,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { LinkPill } from "@/components/LinkPill";
 import { LegalNoticeCard } from "@/components/legal/LegalNoticeCard";
 import { PushEnableCard } from "@/components/PushEnableCard";
+import { SetupResumeCard } from "@/components/signup/SetupResumeCard";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { ShopNotReadyCard, ShopReadyLine, ShopSetupGaps } from "@/components/ShopReadiness";
@@ -37,7 +38,9 @@ import { loadBoard } from "@/lib/listingsApi";
 import { isTightBeforeAccepting } from "@/lib/scheduling";
 import { statusPillLabel } from "@/lib/shopStatus";
 import { useAlertsStore } from "@/store/alerts";
-import { isMatchable, isShopStaff, useSession } from "@/store/session";
+import { canRunShop, isMatchable, isShopStaff, useSession } from "@/store/session";
+import { useGuidedSignup } from "@/store/guidedSignup";
+import { setupComplete } from "@/lib/guidedSignup";
 import { VerifyNoticeCard } from "@/components/verify/VerifyNoticeCard";
 import { useShopVerification } from "@/hooks/useShopVerification";
 import { missingPapers, todoVerifyNotice } from "@/lib/shopVerification";
@@ -249,7 +252,15 @@ export default function HomeScreen() {
     Home step lights the Jobs tab, so the floor only has to have arrived.
   */
   useTourScreen("home", waitingOnOps || !firstLoad);
-  useTourAutoStart(waitingOnOps || (loaded && !error && jobs.length === 0));
+  // Not over a half-finished sign-up: its card is the one thing to do first.
+  const guided = useGuidedSignup((st) => st.signup);
+  const shopRead = useGuidedSignup((st) => st.shopRead);
+  // The tour waits until GRIDGO has said whether guided setup is finished:
+  // a shop mid-way through it is shown the setup card, not a tour of a floor
+  // it cannot use yet.
+  const setupPending =
+    (canRunShop(user) && !shopRead) || Boolean(guided?.supplierId && !setupComplete(guided));
+  useTourAutoStart(!setupPending && (waitingOnOps || (loaded && !error && jobs.length === 0)));
 
   const board = boardOpen ? boardPrompt(listings, services, !waitingOnOps) : null;
   const needsBoardWork = board != null && board.kind !== "ready";
@@ -343,6 +354,9 @@ export default function HomeScreen() {
           with one tap; it draws nothing once seen on this phone.
         */}
         <LegalNoticeCard className="mb-4" />
+
+        {/* Guided sign-up left mid-way (gridgo-supplier#265). Owner or Manager only. */}
+        <SetupResumeCard enabled={canRunShop(user)} />
 
         {joining.length ? (
           <Pressable
