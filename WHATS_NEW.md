@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.481 (New feature)
+
+- Sign up a document shop in about 5 minutes: six short steps, and you can stop and pick up where you left off.
+
 ## 1.0.475 (New feature)
 
 - Money shows what GRIDGO owes you and what you owe, the 4 PM payout, Pay GRIDGO and your launch bonus.
