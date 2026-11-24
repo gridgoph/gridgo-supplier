@@ -2,6 +2,7 @@ import { Plus } from "lucide-react-native";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { router, type Href } from "expo-router";
 
+import { RenderGuard } from "@/components/RenderGuard";
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { StatusChip } from "@/components/StatusChip";
@@ -29,13 +30,18 @@ type Props = {
 
 const TILE_WIDTH = 144;
 
-/** How many of these clients can see right now. */
+/** How many of these clients can see right now. A product that cannot be judged is not counted. */
 export function liveCount(listings: Listing[], services: ServiceLine[], shopApproved: boolean, readiness: Readiness | null): number {
-  return listings.filter(
-    (listing) =>
-      boardStanding(listing, boardContextFor(listing, services), shopApproved, listingReadinessFor(readiness, listing.id))
-        .kind === "live",
-  ).length;
+  return listings.filter((listing) => {
+    try {
+      return (
+        boardStanding(listing, boardContextFor(listing, services), shopApproved, listingReadinessFor(readiness, listing.id))
+          .kind === "live"
+      );
+    } catch {
+      return false;
+    }
+  }).length;
 }
 
 /**
@@ -75,57 +81,105 @@ export function ProductRail({ listings, total, services, readiness, shopApproved
                 <SkeletonBlock className="h-52 w-full rounded-card" />
               </View>
             ))
-          : listings.map((listing) => {
-              const standing = boardStanding(
-                listing,
-                boardContextFor(listing, services),
-                shopApproved,
-                listingReadinessFor(readiness, listing.id),
-              );
-              const first = listing.photos[0];
-              return (
-                <Pressable
-                  key={listing.id}
-                  onPress={() => router.push(`/product-actions?id=${encodeURIComponent(listing.id)}` as Href)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${listing.name || "Untitled product"}. ${standing.label}. Show, hide, edit or remove.`}
-                  className="rounded-card border border-outline bg-surface"
-                  style={({ pressed }) => [{ width: TILE_WIDTH }, pressed ? { opacity: 0.7 } : null]}
-                  testID={`product-tile-${listing.id}`}
-                >
-                  <SamplePhoto
-                    fileId={first?.fileId}
-                    url={firstPhotoUrl(listing)}
-                    altText={first?.altText ?? listing.name}
-                    gutter="tight"
-                    emptyLabel="No photo yet"
-                    enlarge={false}
-                  />
-                  <View className="gap-1 px-3 pb-3">
-                    <Text className="text-body font-medium text-text-primary" numberOfLines={1}>
-                      {listing.name || "Untitled product"}
-                    </Text>
-                    <Text className="text-caption text-text-muted" numberOfLines={1}>
-                      {priceLine(listing)}
-                    </Text>
-                    <View className="mt-1 flex-row">
-                      <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} wrap />
-                    </View>
-                  </View>
-                </Pressable>
-              );
-            })}
+          : listings.map((listing) => (
+              <RenderGuard key={listing.id} fallback={<UnavailableTile listing={listing} />}>
+                <ProductTile listing={listing} services={services} readiness={readiness} shopApproved={shopApproved} />
+              </RenderGuard>
+            ))}
         <Pressable
           onPress={() => router.push("/shop/add" as Href)}
           accessibilityRole="button"
           accessibilityLabel="Add a product"
-          className="items-center justify-center gap-2 rounded-card border border-dashed border-outline"
           style={({ pressed }) => [{ width: 112, minHeight: 176 }, pressed ? { opacity: 0.7 } : null]}
         >
-          <Plus size={24} color={colors.textPrimary} aria-hidden />
-          <Text className="text-body font-medium text-text-primary">Add</Text>
+          <View className="flex-1 items-center justify-center gap-2 rounded-card border border-dashed border-outline">
+            <Plus size={24} color={colors.textPrimary} aria-hidden />
+            <Text className="text-body font-medium text-text-primary">Add</Text>
+          </View>
         </Pressable>
       </ScrollView>
     </View>
+  );
+}
+
+type TileProps = {
+  listing: Listing;
+  services: ServiceLine[];
+  readiness: Readiness | null;
+  shopApproved: boolean;
+};
+
+/*
+ * The tile's size is on a Pressable with no className, and its classes are on
+ * the View inside. On a phone, NativeWind merges a Pressable's className and a
+ * `style` function into `[classStyle, styleFn]`, and React Native only calls a
+ * `style` that is itself a function, so the width in that function was
+ * dropped: the tile had no width, its square photo grew to the picture's own
+ * pixel size, and My shop closed the app (issue report 8DC78D1F).
+ */
+function ProductTile({ listing, services, readiness, shopApproved }: TileProps) {
+  const standing = boardStanding(
+    listing,
+    boardContextFor(listing, services),
+    shopApproved,
+    listingReadinessFor(readiness, listing.id),
+  );
+  const first = listing.photos[0];
+  const price = priceLine(listing);
+  return (
+    <Pressable
+      onPress={() => router.push(`/product-actions?id=${encodeURIComponent(listing.id)}` as Href)}
+      accessibilityRole="button"
+      accessibilityLabel={`${listing.name || "Untitled product"}. ${standing.label}. Show, hide, edit or remove.`}
+      style={({ pressed }) => [{ width: TILE_WIDTH }, pressed ? { opacity: 0.7 } : null]}
+      testID={`product-tile-${listing.id}`}
+    >
+      <View className="rounded-card border border-outline bg-surface">
+        <SamplePhoto
+          fileId={first?.fileId}
+          url={firstPhotoUrl(listing)}
+          altText={first?.altText ?? listing.name}
+          gutter="tight"
+          emptyLabel="No photo yet"
+          enlarge={false}
+        />
+        <View className="gap-1 px-3 pb-3">
+          <Text className="text-body font-medium text-text-primary" numberOfLines={1}>
+            {listing.name || "Untitled product"}
+          </Text>
+          <Text className="text-caption text-text-muted" numberOfLines={1}>
+            {price}
+          </Text>
+          <View className="mt-1 flex-row">
+            <StatusChip tone={standing.tone} icon={standing.icon} label={standing.label} wrap />
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * A product this rail could not draw, said plainly. It still opens the
+ * product's actions, so the shop can fix or remove it from here.
+ */
+function UnavailableTile({ listing }: { listing: Listing }) {
+  return (
+    <Pressable
+      onPress={() => router.push(`/product-actions?id=${encodeURIComponent(listing.id)}` as Href)}
+      accessibilityRole="button"
+      accessibilityLabel={`${listing.name || "Untitled product"}. Can't show this here. Open it to check it.`}
+      style={({ pressed }) => [{ width: TILE_WIDTH, minHeight: 176 }, pressed ? { opacity: 0.7 } : null]}
+      testID={`product-tile-${listing.id}-unavailable`}
+    >
+      <View className="flex-1 justify-end gap-1 rounded-card border border-outline bg-surface p-3">
+        <Text className="text-body font-medium text-text-primary" numberOfLines={2}>
+          {listing.name || "Untitled product"}
+        </Text>
+        <View className="flex-row">
+          <StatusChip tone="warning" icon="triangle-alert" label="Can't show this here" wrap />
+        </View>
+      </View>
+    </Pressable>
   );
 }

@@ -6,6 +6,7 @@ import { router, useFocusEffect, type Href } from "expo-router";
 
 import { AlertsBell } from "@/components/AlertsBell";
 import { ChatButton } from "@/components/ChatButton";
+import { RenderGuard } from "@/components/RenderGuard";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { CheckProductsCard } from "@/components/myshop/CheckProductsCard";
@@ -403,23 +404,29 @@ function OwnerAccount() {
           </View>
         ) : null}
 
-        {productCheck?.items.length ? (
-          <View className="mt-6">
-            <CheckProductsCard check={productCheck} />
-          </View>
-        ) : null}
+        {/*
+          Products are GRIDGO's data, drawn row by row; if they cannot be drawn
+          at all, the rest of My shop still opens (issue report 8DC78D1F).
+        */}
+        <RenderGuard fallback={<ProductsUnavailable />}>
+          {productCheck?.items.length ? (
+            <View className="mt-6">
+              <CheckProductsCard check={productCheck} />
+            </View>
+          ) : null}
 
-        <View className="mt-6">
-          <ProductRail
-            listings={board.listings}
-            total={board.total}
-            services={board.services}
-            readiness={readiness}
-            shopApproved={approved}
-            loading={board.loading}
-            error={board.error}
-          />
-        </View>
+          <View className="mt-6">
+            <ProductRail
+              listings={board.listings}
+              total={board.total}
+              services={board.services}
+              readiness={readiness}
+              shopApproved={approved}
+              loading={board.loading}
+              error={board.error}
+            />
+          </View>
+        </RenderGuard>
 
         <View className="mt-6 gap-2">
           <Text className="text-overline text-text-muted">YOUR SHOP</Text>
@@ -614,6 +621,22 @@ function DestinationRow({
       ) : null}
       <ChevronRight size={20} color={colors.textMuted} aria-hidden />
     </Pressable>
+  );
+}
+
+/** Said in place of the products when they cannot be drawn here. */
+function ProductsUnavailable() {
+  return (
+    <View className="mt-6 gap-2">
+      <Text className="text-h3 text-text-primary" accessibilityRole="header">
+        Products
+      </Text>
+      <DestinationRow
+        title="Open your products"
+        detail="They could not be shown here. Open them to see each one."
+        onPress={() => router.push("/(tabs)/catalogues")}
+      />
+    </View>
   );
 }
 
