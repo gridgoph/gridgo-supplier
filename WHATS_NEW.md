@@ -21,6 +21,11 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.501 (New feature)
+
+- You can sign in with Facebook once GRIDGO turns it on. A Facebook without an email adds one with a code.
+- My shop opens again on Android with your products in a row, and a product it cannot show no longer closes the app.
+
 ## 1.0.493 (New feature)
 
 - Print from home: sign up as a home printer, get to Starter, and go online for document jobs from To do.
