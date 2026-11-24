@@ -201,6 +201,23 @@ export function appleRevocationRefusal(error: unknown): AppleRevocationRefusal {
 }
 
 const MESSAGES: Record<string, string> = {
+  // Home printers (gridgo-api docs/HOME_PRINTERS_API.md).
+  home_current_location_required: "GRIDGO needs your location to put you online. Allow location and try again.",
+  home_pin_change_limited: "Your home pin can move once a month. Try again after the date shown.",
+  home_verified_pickup_required: "Pickup at home opens once you're Verified.",
+  home_documents_only: "Home printers print Short, A4 and Long documents only.",
+  home_give_back_unavailable: "This job can no longer be given back. Open it to see what is next.",
+  home_printer_required: "Only home printers can give a job back.",
+  invalid_home_pin: "Check your pin, barangay, street and house type.",
+  home_pin_consent_required: "Tick the box about how your pin is shared to continue.",
+  home_file_privacy_required: "Agree to keep client files private first.",
+  home_starter_review_required: "GRIDGO is still checking your Starter steps. You can go online once you're a Starter.",
+  home_starter_revoked: "GRIDGO is reviewing your Starter level. Offers start again after that.",
+  home_verification_deadline: "Your time to get Verified ended. Send your papers to take new jobs again.",
+  home_weekly_cap: "You reached this week's jobs. Offers come back as older jobs pass a week.",
+  home_fair_play_hold: "Offers are resting for a day after late give-backs. Try again after the time shown.",
+  home_away_from_pin: "You're away from your home pin. Offers start again when you're back home.",
+  home_express_accept_required: "Accept this job from its Express card first.",
   transition_not_allowed:
     "This job has already moved on. Pull down to refresh and take the step the job now shows.",
   order_not_found:

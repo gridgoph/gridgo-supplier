@@ -1,4 +1,4 @@
-import { router, useFocusEffect } from "expo-router";
+import { Stack, router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { Share, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,6 +11,7 @@ import { MissionMap } from "@/components/signup/MissionMap";
 import { spacing } from "@/constants/theme";
 import {
   currentMission,
+  isHomeSignup,
   ownerClaimLink,
   ownerClaimMessage,
   setupComplete,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/guidedSignup";
 import { joinTeamLink } from "@/lib/shopTeam";
 import { useGuidedSignup } from "@/store/guidedSignup";
+import { useHomePrinter } from "@/store/homePrinter";
 import { isShopOwner, isVerifiedShop, useSession, verifyLater } from "@/store/session";
 
 /**
@@ -41,10 +43,14 @@ export default function SetupScreen() {
   const next = currentMission(signup);
   const complete = setupComplete(signup);
   const waitingForOwner = signup?.nextStep === "owner_claim";
+  // A home printer's setup ends at Starter, which comes before any job.
+  const home = isHomeSignup(signup);
+  const homeStarter = useHomePrinter((s) => (s.home ? s.home.status.level !== "pending" : false));
 
   useFocusEffect(
     useCallback(() => {
       void useGuidedSignup.getState().loadShop();
+      void useHomePrinter.getState().load();
     }, []),
   );
 
@@ -63,7 +69,7 @@ export default function SetupScreen() {
         router.push("/(tabs)/catalogues");
         return;
       case "verify":
-        router.push(verifyLater(user) ? "/verify" : "/accreditation");
+        router.push(home || verifyLater(user) ? "/verify" : "/accreditation");
         return;
       default:
         return;
@@ -84,28 +90,39 @@ export default function SetupScreen() {
 
   return (
     <View className="gg-screen">
+      {home ? <Stack.Screen options={{ title: "Get set up" }} /> : null}
       <FormScrollView contentClassName="gg-page gap-6 pb-8 pt-4">
         <View className="gap-2">
           <Text className="text-h1 text-text-primary">
-            {complete ? "Your shop is set up" : "Set up your shop in 5 minutes"}
+            {home
+              ? complete
+                ? "You're set up"
+                : "Start printing from home in 5 minutes"
+              : complete
+                ? "Your shop is set up"
+                : "Set up your shop in 5 minutes"}
           </Text>
           <Text className="text-body-lg text-text-secondary">
-            {complete
-              ? "Everything GRIDGO needs is saved."
-              : waitingForOwner
-                ? "Your part is done. Your owner sets where GRIDGO pays."
-                : "Your shop is open. A few more taps and it can take jobs."}
+            {home
+              ? complete
+                ? "Last step: Starter. Then you can go online."
+                : "Your account is open. A few more taps, then Starter."
+              : complete
+                ? "Everything GRIDGO needs is saved."
+                : waitingForOwner
+                  ? "Your part is done. Your owner sets where GRIDGO pays."
+                  : "Your shop is open. A few more taps and it can take jobs."}
           </Text>
         </View>
 
-        <MissionMap signup={signup} onOpen={open} verified={isVerifiedShop(user)} />
+        <MissionMap signup={signup} onOpen={open} verified={home ? homeStarter : isVerifiedShop(user)} />
 
         {waitingForOwner ? (
           <View className="gg-card gap-3" testID="owner-claim">
             <Text className="text-body font-medium text-text-primary">Ask your owner to claim the shop</Text>
             <Text className="text-body text-text-secondary">
-              Send them this link. They sign in with their own mobile and set where GRIDGO pays.
-              Payouts wait until they do; jobs do not.
+              Send them this link. They sign in with their own mobile and set where GRIDGO pays. Payouts wait
+              until they do; jobs do not.
             </Text>
             {ownerError ? <ErrorNotice message={ownerError} /> : null}
             <SecondaryButton
@@ -118,7 +135,13 @@ export default function SetupScreen() {
       </FormScrollView>
 
       <View className="gg-page bg-canvas pt-4" style={{ paddingBottom: insets.bottom + spacing.lg }}>
-        {complete || (waitingForOwner && !next) ? (
+        {home && complete ? (
+          <PrimaryButton
+            label="Continue: Get to Starter"
+            hint="Padayon"
+            onPress={() => router.push("/verify")}
+          />
+        ) : complete || (waitingForOwner && !next) ? (
           <PrimaryButton label="Finish" hint="Human na" onPress={() => router.replace("/setup-ready")} />
         ) : next && (next.id !== "paid" || owner) ? (
           <PrimaryButton label={`Continue: ${next.title}`} hint="Padayon" onPress={() => open(next.id)} />

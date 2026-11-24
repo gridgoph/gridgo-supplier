@@ -1,9 +1,8 @@
-import { Camera, FileText, IdCard, RotateCcw, ScanFace } from "lucide-react-native";
+import { Camera, FileText, IdCard, Printer, ReceiptText, RotateCcw, ScanFace } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
 import { StatusChip } from "@/components/StatusChip";
 import { useThemeColors } from "@/hooks/useTheme";
-import type { PaperDefinition, VerificationPaper } from "@/lib/shopVerification";
 
 export type PaperRowState =
   | { kind: "missing" }
@@ -11,11 +10,17 @@ export type PaperRowState =
   | { kind: "failed"; message: string }
   | { kind: "checking"; sentAt: string | null };
 
-const ICON = {
+/** A paper to send: a shop's (`lib/shopVerification`) or a home printer's (`lib/homePrinter`). */
+export type PaperRowDefinition = { paper: string; title: string; detail: string };
+
+const ICON: Record<string, typeof IdCard> = {
   valid_id: IdCard,
   id_selfie: ScanFace,
   business_permit: FileText,
-} satisfies Record<VerificationPaper, unknown>;
+  barangay_clearance: FileText,
+  sample_work: Printer,
+  tin: ReceiptText,
+};
 
 function sentLine(sentAt: string | null): string {
   if (!sentAt) return "Sent";
@@ -35,13 +40,13 @@ export function PaperRow({
   onAdd,
   onRetry,
 }: {
-  definition: PaperDefinition;
+  definition: PaperRowDefinition;
   state: PaperRowState;
   onAdd: () => void;
   onRetry: () => void;
 }) {
   const colors = useThemeColors();
-  const Icon = ICON[definition.paper];
+  const Icon = ICON[definition.paper] ?? FileText;
 
   return (
     <View className="gap-2 py-3" testID={`paper-${definition.paper}`}>

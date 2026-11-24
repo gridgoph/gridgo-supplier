@@ -1,5 +1,5 @@
 import { useAuth } from "@clerk/expo";
-import { router, useFocusEffect } from "expo-router";
+import { Stack, router, useFocusEffect } from "expo-router";
 import { useCallback } from "react";
 import { Text, View } from "react-native";
 
@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { spacing } from "@/constants/theme";
 import * as api from "@/lib/api";
 import { awaitClerkSessionToken } from "@/lib/clerk";
-import { currentMission, type MissionId } from "@/lib/guidedSignup";
+import { currentMission, isHomeSignup, requiredMissionsFor, type MissionId } from "@/lib/guidedSignup";
 import { useGuidedSignup } from "@/store/guidedSignup";
 
 /** Before the shop exists, the missions that open a screen in this stack. */
@@ -35,6 +35,9 @@ export default function SignupMissionsScreen() {
   const signup = useGuidedSignup((s) => s.signup);
   const error = useGuidedSignup((s) => s.error);
   const next = currentMission(signup);
+  const home = isHomeSignup(signup);
+  const steps =
+    ["Zero", "One", "Two", "Three", "Four", "Five", "Six"][requiredMissionsFor(signup).length] ?? "A few";
   const { getToken } = useAuth();
 
   useFocusEffect(
@@ -54,14 +57,21 @@ export default function SignupMissionsScreen() {
 
   return (
     <View className="gg-screen">
+      {home ? <Stack.Screen options={{ title: "Get set up" }} /> : null}
       <FormScrollView contentClassName="gg-page gap-6 pb-8 pt-4">
         <View className="gap-2">
-          <Text className="text-h1 text-text-primary">Set up your shop in 5 minutes</Text>
+          <Text className="text-h1 text-text-primary">
+            {home ? "Start printing from home in 5 minutes" : "Set up your shop in 5 minutes"}
+          </Text>
           <Text className="text-body-lg text-text-secondary">
-            Six short steps. Finish them and your shop can take jobs today.
+            {home
+              ? `${steps} short steps, then Starter. Your home address stays private.`
+              : "Six short steps. Finish them and your shop can take jobs today."}
           </Text>
         </View>
-        {error ? <ErrorNotice message={error} onRetry={() => void useGuidedSignup.getState().load()} /> : null}
+        {error ? (
+          <ErrorNotice message={error} onRetry={() => void useGuidedSignup.getState().load()} />
+        ) : null}
         <MissionMap signup={signup} onOpen={open} verifyOpen={false} />
       </FormScrollView>
       {next && next.id in ROUTES ? (

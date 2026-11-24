@@ -1423,7 +1423,14 @@ export async function updateShopLocation(shop: ShopLocation): Promise<SupplierPr
 }
 
 /** gridgo-api's `VERIFICATION_DOCUMENT_TYPES`: the only slots a paper can fill. */
-export type VerificationDocumentType = "business_permit" | "valid_id" | "id_selfie" | "sample_work";
+export type VerificationDocumentType =
+  | "business_permit"
+  | "valid_id"
+  | "id_selfie"
+  | "sample_work"
+  /** Home printers (gridgo-api `docs/HOME_PRINTERS_API.md`). */
+  | "barangay_clearance"
+  | "tin";
 
 /**
  * Bind an uploaded file to the caller's own accreditation (gridgo-api
@@ -1941,6 +1948,38 @@ export async function declineExpress(orderId: string, reason: string): Promise<v
     method: "POST",
     body: JSON.stringify({ reason }),
   });
+}
+
+/**
+ * A home printer hands an accepted Express job on (gridgo-api
+ * `docs/HOME_PRINTERS_API.md` §9). GRIDGO moves it to the next printer at the
+ * same price; within the free window it is not counted against the printer.
+ */
+export async function giveBackExpress(orderId: string, reason: string): Promise<void> {
+  await request(`/orders/${orderId}/express/give-back`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+/** The owner's home printing: level, online switch and private pin. Read through `lib/homePrinter.ts`. */
+export async function getHomePrinter(): Promise<unknown> {
+  return request<unknown>("/me/home-printer");
+}
+
+/** One versioned change to home printing (`expectedVersion` included by the caller). */
+export async function patchHomePrinter(body: Record<string, unknown>): Promise<unknown> {
+  return request<unknown>("/me/home-printer", { method: "PATCH", body: JSON.stringify(body) });
+}
+
+/**
+ * Whether this GRIDGO offers home printers: its settings carry `homePrinter`.
+ * Quiet like the payout schedule read, because sign-up asks before the shop exists.
+ */
+export async function getHomePrinterOffered(): Promise<boolean> {
+  const result = await request<{ settings?: Record<string, unknown> }>("/settings", { ignoreUnauthorized: true });
+  const policy = result.settings?.homePrinter;
+  return Boolean(policy && typeof policy === "object");
 }
 
 /**

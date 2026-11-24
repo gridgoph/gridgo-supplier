@@ -29,6 +29,7 @@ export default function JobLayout() {
       <Stack.Screen name="index" options={{ title: "Job" }} />
       <Stack.Screen name="accept" options={{ title: "Accept job" }} />
       <Stack.Screen name="decline" options={{ title: "Decline job" }} />
+      <Stack.Screen name="give-back" options={{ title: "Give job back" }} />
       {/*
         Cancelling, renegotiating and the payout evidence are the Owner's:
         GRIDGO refuses them to Staff, so the screens are not mounted for them.

@@ -69,6 +69,8 @@ type Props = {
    * or that a move is still being read.
    */
   onBlockerChange?: (problem: string | null) => void;
+  /** Why GRIDGO asks for the pin; a home printer has a door, not a counter. */
+  whyWeAsk?: string;
 };
 
 /** How long the pin rests after a nudge before its address is read. */
@@ -96,6 +98,7 @@ export function ShopLocationPicker({
   onSearchFocusChange,
   searchPlaceholder = "Street, barangay or landmark",
   onBlockerChange,
+  whyWeAsk,
 }: Props) {
   const { height } = useWindowDimensions();
   const mapHeight = Math.max(280, Math.min(480, height * 0.45));
@@ -589,7 +592,7 @@ export function ShopLocationPicker({
           ) : null}
 
           <Text className="text-caption text-text-secondary">{PIN_CONSEQUENCE}</Text>
-          <WhyWeAsk readable>{WHY_WE_ASK.shopPin}</WhyWeAsk>
+          <WhyWeAsk readable>{whyWeAsk ?? WHY_WE_ASK.shopPin}</WhyWeAsk>
         </View>
       </View>
     </View>
