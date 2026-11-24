@@ -365,6 +365,7 @@ export function openRequestOf(
 export const WHY_WE_ASK = {
   phone: "We use this number so Operations and the rider collecting a job can reach you.",
   shopPin: "We use this address to send riders to your counter and to work out delivery fees.",
+  homePin: "We use this pin to send your rider to your door and to work out delivery fees.",
   shopPhoto: "This photo shows clients and riders which shop they are dealing with.",
   papers: "We use these papers only to check your shop is a real, registered business.",
   samplePhoto: "Clients see these photos on your board when choosing a shop.",

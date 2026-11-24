@@ -46,6 +46,9 @@ import { VerifyNoticeCard } from "@/components/verify/VerifyNoticeCard";
 import { useShopVerification } from "@/hooks/useShopVerification";
 import { missingPapers, todoVerifyNotice } from "@/lib/shopVerification";
 import { useVerifyOffer } from "@/store/verifyOffer";
+import { HomeSwitchCard } from "@/components/home/HomeSwitchCard";
+import { useHomeLocationFixes } from "@/hooks/useHomeLocationFixes";
+import { useHomePrinter } from "@/store/homePrinter";
 import { usePlayOptIn } from "@/store/playOptIn";
 import { useShopStatus } from "@/store/shopStatus";
 import { useTesterProgram } from "@/store/testerProgram";
@@ -232,14 +235,31 @@ export default function HomeScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const firstLoad = loading && !loaded;
   const verification = useShopVerification();
-  const verifyNotice = verification.read ? todoVerifyNotice(verification.read.verification, missingPapers(verification.read.files)) : null;
+  // A home printer's switch, level and weekly count (gridgo-api#412). Owner only:
+  // GRIDGO refuses /me/home-printer to Staff, which reads as "not a home printer".
+  const home = useHomePrinter((st) => st.home);
+  const loadHome = useCallback(async () => {
+    if (!staff) await useHomePrinter.getState().load();
+  }, [staff]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadHome();
+    }, [loadHome]),
+  );
+  useLiveRefresh(["availability", "catalog", "identity", "jobs"], loadHome);
+  useHomeLocationFixes(Boolean(home) && !staff);
+  // The shop's papers card names a business permit; a home printer's levels live on its own card.
+  const verifyNotice =
+    verification.read && !home
+      ? todoVerifyNotice(verification.read.verification, missingPapers(verification.read.files))
+      : null;
   // Sign-up's last, skippable step: Get verified opens once over To do.
   const offerVerify = useVerifyOffer((st) => st.open);
   useEffect(() => {
-    if (!offerVerify || !verification.read || verification.read.verification.verified) return;
+    if (!offerVerify || home === null || !verification.read || verification.read.verification.verified) return;
     useVerifyOffer.getState().consume();
-    router.push("/verify?first=1" as Href);
-  }, [offerVerify, verification.read]);
+    router.push((home ? "/home-printer?first=1" : "/verify?first=1") as Href);
+  }, [home, offerVerify, verification.read]);
 
   const headline = homeHeadline(jobs);
   const todo = buildTodo(jobs);
@@ -359,6 +379,14 @@ export default function HomeScreen() {
 
         {/* Guided sign-up left mid-way (gridgo-supplier#265). Owner or Manager only. */}
         <SetupResumeCard enabled={canRunShop(user)} />
+
+        {/* Printing from home: the switch is the floor's first question (gridgo-api#412),
+            unless an Express job is on the clock — then the job comes first. */}
+        {home && !staff && !todo.express.length ? (
+          <View className="mb-6">
+            <HomeSwitchCard home={home} />
+          </View>
+        ) : null}
 
         {joining.length ? (
           <Pressable
@@ -496,6 +524,11 @@ export default function HomeScreen() {
                 {todo.express.map((job) => (
                   <ExpressJobCard key={job.id} job={job} reload={reload} staff={staff} />
                 ))}
+                {home && !staff ? (
+                  <View className="mt-3">
+                    <HomeSwitchCard home={home} />
+                  </View>
+                ) : null}
               </View>
             ) : null}
 

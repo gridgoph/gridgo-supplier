@@ -1,6 +1,6 @@
 import { useUser } from "@clerk/expo";
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { Stack, router } from "expo-router";
 import { BadgeCheck, ImagePlus } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -23,6 +23,7 @@ import {
   type ClerkPhoneUser,
 } from "@/lib/clerkPhone";
 import {
+  isHomeSignup,
   isManagerSignup,
   missionProgress,
   philippineMobile,
@@ -53,6 +54,10 @@ export default function SignupYourShopStep() {
   const draft = useSignupDraft((s) => s.draft);
   const patch = useSignupDraft((s) => s.patch);
   const manager = isManagerSignup(signup);
+  // A home printer's name and photo never reach a client (gridgo-api#412):
+  // no logo, and the name is said to be GRIDGO's only.
+  const home = isHomeSignup(signup);
+  const progress = missionProgress("shop", home);
   const [showProblems, setShowProblems] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +87,7 @@ export default function SignupYourShopStep() {
   };
   const mobile = philippineMobile(draft.phone);
   const phoneConfirmed = Boolean(mobile && (confirmedNow === mobile || isVerifiedPhone(clerkUser, mobile)));
-  const problems = shopProblems(fields, { manager, phoneConfirmed });
+  const problems = shopProblems(fields, { manager, phoneConfirmed, home });
   const problem = (field: keyof ShopFields) => (showProblems ? (problems[field] ?? null) : null);
 
   async function sendCode() {
@@ -142,7 +147,7 @@ export default function SignupYourShopStep() {
 
   if (codeFor) {
     return (
-      <OnboardingStep progress={missionProgress("shop")} title="Enter the code" lede="" contentClassName="gap-6 pb-4 pt-4">
+      <OnboardingStep progress={progress} title="Enter the code" lede="" contentClassName="gap-6 pb-4 pt-4">
         <JobTicketCode
           title=""
           email={draft.phone.trim()}
@@ -162,103 +167,124 @@ export default function SignupYourShopStep() {
   }
 
   return (
-    <OnboardingStep
-      progress={missionProgress("shop")}
-      title="Your shop"
-      lede="What clients and riders see, and the number they call."
-      contentClassName="gap-6 pb-4 pt-4"
-      overlay={<BusyOverlay visible={busy} label="Saving…" />}
-      footer={
-        <>
-          {error ? <ErrorNotice message={error} /> : null}
-          <PrimaryButton label="Save" hint="I-save" disabled={busy} onPress={() => void next()} />
-        </>
-      }
-    >
-      <Pressable
-        onPress={() => void pickLogo()}
-        accessibilityRole="button"
-        accessibilityLabel={draft.logo ? "Change your shop logo" : "Add your shop logo"}
-        className="flex-row items-center gap-3"
-        style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+    <>
+      {home ? <Stack.Screen options={{ title: "About you" }} /> : null}
+      <OnboardingStep
+        progress={progress}
+        title={home ? "About you" : "Your shop"}
+        lede={
+          home
+            ? "Clients never see your name. GRIDGO and your rider call this number."
+            : "What clients and riders see, and the number they call."
+        }
+        contentClassName="gap-6 pb-4 pt-4"
+        overlay={<BusyOverlay visible={busy} label="Saving…" />}
+        footer={
+          <>
+            {error ? <ErrorNotice message={error} /> : null}
+            <PrimaryButton label="Save" hint="I-save" disabled={busy} onPress={() => void next()} />
+          </>
+        }
       >
-        <View className="h-16 w-16 items-center justify-center overflow-hidden rounded-card border border-outline bg-surface-variant">
-          {draft.logo ? (
-            <Image source={{ uri: draft.logo.uri }} style={{ width: 64, height: 64 }} contentFit="cover" />
-          ) : (
-            <ImagePlus size={24} color={colors.textMuted} aria-hidden />
-          )}
-        </View>
-        <View className="min-w-0 flex-1">
-          <Text className="text-body font-medium text-text-primary">
-            {draft.logo ? "Change logo" : "Add your logo"}
-          </Text>
-          <Text className="text-caption text-text-muted">Optional. You can add it later.</Text>
-        </View>
-      </Pressable>
+        {home ? null : (
+          <Pressable
+            onPress={() => void pickLogo()}
+            accessibilityRole="button"
+            accessibilityLabel={draft.logo ? "Change your shop logo" : "Add your shop logo"}
+            className="flex-row items-center gap-3"
+            style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+          >
+            <View className="h-16 w-16 items-center justify-center overflow-hidden rounded-card border border-outline bg-surface-variant">
+              {draft.logo ? (
+                <Image
+                  source={{ uri: draft.logo.uri }}
+                  style={{ width: 64, height: 64 }}
+                  contentFit="cover"
+                />
+              ) : (
+                <ImagePlus size={24} color={colors.textMuted} aria-hidden />
+              )}
+            </View>
+            <View className="min-w-0 flex-1">
+              <Text className="text-body font-medium text-text-primary">
+                {draft.logo ? "Change logo" : "Add your logo"}
+              </Text>
+              <Text className="text-caption text-text-muted">Optional. You can add it later.</Text>
+            </View>
+          </Pressable>
+        )}
 
-      <FieldShell label="Shop name" error={problem("shopName")}>
-        <TextField
-          value={draft.shopName}
-          onChange={(shopName) => patch({ shopName })}
-          kind="name"
-          placeholder="Your shop's name"
-          accessibilityLabel="Shop name"
-        />
-      </FieldShell>
-
-      <FieldShell label="Your name" error={problem("contactName")}>
-        <TextField
-          value={draft.contactName}
-          onChange={(contactName) => patch({ contactName })}
-          kind="name"
-          placeholder="First and last name"
-          accessibilityLabel="Your name"
-        />
-      </FieldShell>
-
-      <FieldShell
-        label="Your mobile"
-        hint={phoneConfirmed ? undefined : "We text you a code to confirm it."}
-        error={problem("phone")}
-      >
-        <TextField
-          value={draft.phone}
-          onChange={(phone) => {
-            patch({ phone });
-            setConfirmedNow(null);
-          }}
-          kind="phone"
-          placeholder="0917 123 4567"
-          accessibilityLabel="Your mobile"
-        />
-      </FieldShell>
-      {phoneConfirmed ? (
-        <View className="-mt-3 flex-row items-center gap-2" testID="phone-confirmed">
-          <BadgeCheck size={18} color={colors.success} aria-hidden />
-          <Text className="text-caption font-medium text-success">Number confirmed</Text>
-        </View>
-      ) : (
-        <View className="-mt-3">
-          <SecondaryButton label="Text me a code" disabled={busy || !mobile} onPress={() => void sendCode()} />
-        </View>
-      )}
-
-      {manager ? (
         <FieldShell
-          label="Owner's mobile"
-          hint="Your owner gets a link to claim the shop. It only works with this number."
-          error={problem("ownerPhone")}
+          label={home ? "A name for your printing" : "Shop name"}
+          hint={home ? "Only GRIDGO sees this. Clients see your barangay." : undefined}
+          error={problem("shopName")}
         >
           <TextField
-            value={draft.ownerPhone ?? ""}
-            onChange={(ownerPhone) => patch({ ownerPhone })}
-            kind="phone"
-            placeholder="0917 765 4321"
-            accessibilityLabel="Owner's mobile"
+            value={draft.shopName}
+            onChange={(shopName) => patch({ shopName })}
+            kind="name"
+            placeholder={home ? "For example, Night prints" : "Your shop's name"}
+            accessibilityLabel={home ? "A name for your printing" : "Shop name"}
           />
         </FieldShell>
-      ) : null}
-    </OnboardingStep>
+
+        <FieldShell label="Your name" error={problem("contactName")}>
+          <TextField
+            value={draft.contactName}
+            onChange={(contactName) => patch({ contactName })}
+            kind="name"
+            placeholder="First and last name"
+            accessibilityLabel="Your name"
+          />
+        </FieldShell>
+
+        <FieldShell
+          label="Your mobile"
+          hint={phoneConfirmed ? undefined : "We text you a code to confirm it."}
+          error={problem("phone")}
+        >
+          <TextField
+            value={draft.phone}
+            onChange={(phone) => {
+              patch({ phone });
+              setConfirmedNow(null);
+            }}
+            kind="phone"
+            placeholder="0917 123 4567"
+            accessibilityLabel="Your mobile"
+          />
+        </FieldShell>
+        {phoneConfirmed ? (
+          <View className="-mt-3 flex-row items-center gap-2" testID="phone-confirmed">
+            <BadgeCheck size={18} color={colors.success} aria-hidden />
+            <Text className="text-caption font-medium text-success">Number confirmed</Text>
+          </View>
+        ) : (
+          <View className="-mt-3">
+            <SecondaryButton
+              label="Text me a code"
+              disabled={busy || !mobile}
+              onPress={() => void sendCode()}
+            />
+          </View>
+        )}
+
+        {manager ? (
+          <FieldShell
+            label="Owner's mobile"
+            hint="Your owner gets a link to claim the shop. It only works with this number."
+            error={problem("ownerPhone")}
+          >
+            <TextField
+              value={draft.ownerPhone ?? ""}
+              onChange={(ownerPhone) => patch({ ownerPhone })}
+              kind="phone"
+              placeholder="0917 765 4321"
+              accessibilityLabel="Owner's mobile"
+            />
+          </FieldShell>
+        ) : null}
+      </OnboardingStep>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import { awaitClerkSessionToken, clerkErrorMessage, isAlreadySignedInError } fro
 import { clerkOffersPhoneNumbers } from "@/lib/clerkPhone";
 import { continuationAfterSignUp } from "@/lib/clerkSignUp";
 import { eligibilityValue } from "@/lib/guidedSignup";
+import { HOME_NOT_OPEN_YET, homeKindHonoured } from "@/lib/homePrinter";
 import { applyRoute } from "@/lib/onboardingSteps";
 import { useGuidedSignup } from "@/store/guidedSignup";
 import { useSignupDraft } from "@/store/signupDraft";
@@ -49,21 +50,45 @@ export function useApplyEntry() {
       const signup = useGuidedSignup.getState().signup;
       // Not started on GRIDGO yet, and this Clerk cannot confirm a mobile:
       // the guided flow would stop at its first step, so use the older one.
-      if (!signup?.steps.shop && (await clerkOffersPhoneNumbers(clerk.publishableKey)) === false) {
+      // A home printer stays here either way: the older steps would open a print shop.
+      const local0 = useSignupDraft.getState().draft.eligibility;
+      const home = local0?.shopKind === "home_printer" || signup?.steps.eligibility?.shopKind === "home_printer";
+      if (!home && !signup?.steps.shop && (await clerkOffersPhoneNumbers(clerk.publishableKey)) === false) {
         useGuidedSignup.setState({ mode: "legacy" });
         router.replace(applyRoute(useSignupDraft.getState().draft, { clerkSession: true }));
         return true;
       }
       const local = useSignupDraft.getState().draft.eligibility;
-      if (!signup?.steps.eligibility) {
+      const savedKind = signup?.steps.eligibility?.shopKind;
+      // A home choice GRIDGO did not take is asked again, and the new answer replaces it.
+      const retake = Boolean(savedKind === "home_printer" && useGuidedSignup.getState().homeUnavailable && !signup?.steps.shop);
+      if (!signup?.steps.eligibility || retake) {
         const value = local ? eligibilityValue(local) : null;
+        if (!value && retake) {
+          router.replace("/(auth)/signup/start");
+          return false;
+        }
         if (!value) {
           router.replace("/(auth)/signup/start");
           return true;
         }
+        const before = useGuidedSignup.getState().terms?.locationConsentWording ?? "";
         const saved = await store.save("eligibility", value);
         if (saved.status === "failed") {
           setEntryError(saved.message);
+          return false;
+        }
+        // A GRIDGO without home printers would open a print shop: say so, and ask again.
+        if (
+          value.shopKind === "home_printer" &&
+          saved.status === "ok" &&
+          !homeKindHonoured(before, saved.terms.locationConsentWording)
+        ) {
+          useGuidedSignup.setState({ homeUnavailable: true });
+          const draft = useSignupDraft.getState();
+          draft.patch({ eligibility: { ...(local ?? { registrantRole: null, adult: false }), shopKind: null } });
+          setEntryError(HOME_NOT_OPEN_YET);
+          router.replace("/(auth)/signup/start");
           return false;
         }
       }

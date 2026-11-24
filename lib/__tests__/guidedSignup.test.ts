@@ -65,11 +65,23 @@ describe("step 0", () => {
   });
 
   it("sends exactly the three answers", () => {
-    expect(eligibilityValue({ shopKind: "home_printer", registrantRole: "manager", adult: true })).toEqual({
-      shopKind: "home_printer",
+    expect(eligibilityValue({ shopKind: "print_shop", registrantRole: "manager", adult: true })).toEqual({
+      shopKind: "print_shop",
       registrantRole: "manager",
       adult: true,
     });
+  });
+
+  it("makes a home printer their own owner, without asking", () => {
+    expect(eligibilityProblems({ shopKind: "home_printer", registrantRole: null, adult: true })).toEqual({});
+    expect(eligibilityValue({ shopKind: "home_printer", registrantRole: null, adult: true })).toEqual({
+      shopKind: "home_printer",
+      registrantRole: "owner",
+      adult: true,
+    });
+    expect(eligibilityProblems({ shopKind: "home_printer", registrantRole: null, adult: false }).adult).toBe(
+      "You must be 18 or older to print on GRIDGO.",
+    );
   });
 });
 

@@ -7,8 +7,9 @@ import {
   minutesLabel,
   minutesLeft,
   missionStates,
-  MISSIONS,
-  REQUIRED_MISSIONS,
+  isHomeSignup,
+  missionsFor,
+  requiredMissionsFor,
   type GuidedSignup,
   type Mission,
   type MissionId,
@@ -38,15 +39,18 @@ type Props = {
 export function MissionMap({ signup, onOpen, verified = false, verifyOpen = true }: Props) {
   const states = missionStates(signup);
   const done = doneCount(signup);
-  const total = REQUIRED_MISSIONS.length;
+  const required = requiredMissionsFor(signup);
+  const total = required.length;
   const left = minutesLeft(signup);
-  const verify = MISSIONS.find((mission) => mission.id === "verify");
+  const verify = missionsFor(signup).find((mission) => mission.id === "verify");
+  // A home printer's last stop is Starter: needed before the first job, not optional.
+  const home = isHomeSignup(signup);
 
   return (
     <View className="gap-6">
       <View className="gap-2">
         <Text className="text-body font-medium text-text-primary" testID="mission-count">
-          {done === total ? "All 6 done" : `${done} of ${total} done · about ${left} min left`}
+          {done === total ? `All ${total} done` : `${done} of ${total} done · about ${left} min left`}
         </Text>
         <View
           className="h-2 flex-row overflow-hidden rounded-pill bg-outline"
@@ -59,7 +63,7 @@ export function MissionMap({ signup, onOpen, verified = false, verifyOpen = true
       </View>
 
       <View>
-        {REQUIRED_MISSIONS.map((mission, index) => (
+        {required.map((mission, index) => (
           <Stop
             key={mission.id}
             mission={mission}
@@ -73,7 +77,9 @@ export function MissionMap({ signup, onOpen, verified = false, verifyOpen = true
 
       {verify ? (
         <View className="gap-2">
-          <Text className="text-body font-medium text-text-primary">Optional</Text>
+          <Text className="text-body font-medium text-text-primary">
+            {home ? "Before your first job" : "Optional"}
+          </Text>
           <Stop
             mission={verify}
             number={null}
@@ -83,9 +89,13 @@ export function MissionMap({ signup, onOpen, verified = false, verifyOpen = true
             onOpen={() => onOpen("verify")}
           />
           <Text className="text-caption text-text-muted">
-            {verifyOpen
-              ? "Send your papers any time. Verified shops show a badge to clients."
-              : "Opens once your shop is set up."}
+            {home
+              ? verifyOpen
+                ? "Your ID, a selfie and a test print. GRIDGO checks them, then you can go online."
+                : "Opens once your account is open."
+              : verifyOpen
+                ? "Send your papers any time. Verified shops show a badge to clients."
+                : "Opens once your shop is set up."}
           </Text>
         </View>
       ) : null}

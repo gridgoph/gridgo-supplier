@@ -31,6 +31,8 @@ type GuidedSignupState = {
   error: string | null;
   /** The shop's setup has been read once since sign-in (answered or not). */
   shopRead: boolean;
+  /** This GRIDGO did not take "I print from home": step 0 hides it (gridgo-api#412). */
+  homeUnavailable: boolean;
   /** Read the draft (before enrollment). */
   load: () => Promise<Mode>;
   /** @internal The read `load` shares. */
@@ -60,6 +62,7 @@ export const useGuidedSignup = create<GuidedSignupState>()((set, get) => ({
   payoutStatus: null,
   error: null,
   shopRead: false,
+  homeUnavailable: false,
   load: () => {
     loading ??= get()
       .readDraft()
@@ -122,5 +125,13 @@ export const useGuidedSignup = create<GuidedSignupState>()((set, get) => ({
     return result;
   },
   reset: () =>
-    set({ mode: "unknown", signup: null, terms: null, payoutStatus: null, error: null, shopRead: false }),
+    set({
+      mode: "unknown",
+      signup: null,
+      terms: null,
+      payoutStatus: null,
+      error: null,
+      shopRead: false,
+      homeUnavailable: false,
+    }),
 }));

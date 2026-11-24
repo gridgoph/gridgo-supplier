@@ -49,6 +49,7 @@ const CONTROLS = "components/controls";
 const HANDLED_BY_ITS_CALLERS = [
   "components/ConversationDetails.tsx",
   "components/ShopLocationPicker.tsx",
+  "components/home/HomePinFields.tsx",
   "components/JobTicketCode.tsx",
   "components/DigitBoxes.tsx",
   "components/SpecGroupEditor.tsx",
@@ -83,6 +84,8 @@ const CALLER_CHECKS: { component: string; users: RegExp; least: number }[] = [
   { component: "ConversationDetails", users: /<ConversationDetails\b/, least: 1 },
   // Shop pin from Settings, and the public apply location step.
   { component: "ShopLocationPicker", users: /<ShopLocationPicker\b/, least: 2 },
+  // A home printer's private pin: the sign-up pin step and Move my pin.
+  { component: "HomePinFields", users: /<HomePinFields\b/, least: 2 },
   // Every step and add-on on one listing is edited inside the listing screen.
   { component: "SpecGroupEditor", users: /<SpecGroupEditor\b/, least: 1 },
   // Only the add form takes typing; the preview draws the read-only row and is

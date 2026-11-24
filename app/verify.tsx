@@ -4,6 +4,8 @@ import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
 
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { HomeLevels } from "@/components/home/HomeLevels";
+import { useHomePrinter } from "@/store/homePrinter";
 import { SecondaryButton } from "@/components/SecondaryButton";
 import { PaperRow, type PaperRowState } from "@/components/verify/PaperRow";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -38,8 +40,18 @@ const BENEFIT_ICONS = [BadgeCheck, ArrowUpToLine, NoLimit, CalendarCheck] as con
  * it is sent, or when the screen is left with it unsent (`discardPickedCopy`).
  */
 export default function VerifyScreen() {
-  const colors = useThemeColors();
   const { first } = useLocalSearchParams<{ first?: string }>();
+  // A home printer's papers and levels are their own (gridgo-api#412).
+  const home = useHomePrinter((s) => s.home);
+  useEffect(() => {
+    void useHomePrinter.getState().load();
+  }, []);
+  if (home) return <HomeLevels home={home} firstRun={first === "1"} />;
+  return <ShopVerifyScreen first={first} />;
+}
+
+function ShopVerifyScreen({ first }: { first?: string }) {
+  const colors = useThemeColors();
   const firstRun = first === "1";
   const { read, reload } = useShopVerification();
   const { refreshing, onRefresh } = usePullToRefresh(reload);

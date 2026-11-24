@@ -59,7 +59,14 @@ export type DocumentChoices = {
 export type SignupSteps = {
   eligibility?: { shopKind: ShopKind; registrantRole: RegistrantRole; adult: boolean };
   shop?: { shopName: string; contactName: string; phone: string; ownerPhone?: string };
-  location?: { point: { lat: number; lng: number; label: string } };
+  location?: {
+    point: { lat: number; lng: number; label: string };
+    /** A home printer's private pin (gridgo-api#412). */
+    barangay?: string;
+    street?: string;
+    propertyType?: "house" | "boarding_house";
+    landmark?: string | null;
+  };
   prints?: { groups: string[]; documents?: DocumentChoices };
   ownerClaim?: { status: string };
 };
@@ -282,9 +289,31 @@ export type Eligibility = {
 export const EMPTY_ELIGIBILITY: Eligibility = { shopKind: null, registrantRole: null, adult: false };
 
 export const SHOP_KIND_OPTIONS = [
-  { value: "print_shop", label: "Print shop", detail: "Imprentahan nga tindahan" },
-  { value: "home_printer", label: "Home printer", detail: "Nag-print sa balay" },
+  { value: "print_shop", label: "I have a print shop", detail: "Imprentahan nga tindahan" },
+  {
+    value: "home_printer",
+    label: "I print from home",
+    detail: "Documents, mostly at night. No shop hours. · Nag-print sa balay",
+  },
 ] as const;
+
+/**
+ * The kinds this GRIDGO takes. Home printing is offered only when GRIDGO's
+ * settings carry its policy (`homePrintingOffered`), so an older API keeps
+ * today's sign-up exactly.
+ */
+export function shopKindOptions(homeOffered: boolean) {
+  return SHOP_KIND_OPTIONS.filter((option) => homeOffered || option.value !== "home_printer");
+}
+
+/** A home printer is always its own owner: there is no manager to ask about. */
+export function isHomeKind(value: { shopKind: ShopKind | null } | undefined | null): boolean {
+  return value?.shopKind === "home_printer";
+}
+
+export function isHomeSignup(signup: GuidedSignup | null): boolean {
+  return signup?.steps.eligibility?.shopKind === "home_printer";
+}
 
 export const ROLE_OPTIONS = [
   { value: "owner", label: "I own the shop", detail: "Ako ang tag-iya" },
@@ -294,14 +323,19 @@ export const ROLE_OPTIONS = [
 export function eligibilityProblems(value: Eligibility): Partial<Record<keyof Eligibility, string>> {
   const problems: Partial<Record<keyof Eligibility, string>> = {};
   if (!value.shopKind) problems.shopKind = "Choose where you print.";
-  if (!value.registrantRole) problems.registrantRole = "Choose owner or manager.";
-  if (!value.adult) problems.adult = "You must be 18 or older to open a shop on GRIDGO.";
+  if (!value.registrantRole && value.shopKind !== "home_printer") problems.registrantRole = "Choose owner or manager.";
+  if (!value.adult)
+    problems.adult =
+      value.shopKind === "home_printer"
+        ? "You must be 18 or older to print on GRIDGO."
+        : "You must be 18 or older to open a shop on GRIDGO.";
   return problems;
 }
 
 export function eligibilityValue(value: Eligibility): Record<string, unknown> | null {
-  if (!value.shopKind || !value.registrantRole || !value.adult) return null;
-  return { shopKind: value.shopKind, registrantRole: value.registrantRole, adult: true };
+  const role = value.shopKind === "home_printer" ? "owner" : value.registrantRole;
+  if (!value.shopKind || !role || !value.adult) return null;
+  return { shopKind: value.shopKind, registrantRole: role, adult: true };
 }
 
 /* --------------------------------------------------------------------------
@@ -327,10 +361,11 @@ export type ShopFields = {
 
 export function shopProblems(
   fields: ShopFields,
-  options: { manager: boolean; phoneConfirmed: boolean },
+  options: { manager: boolean; phoneConfirmed: boolean; home?: boolean },
 ): Partial<Record<keyof ShopFields, string>> {
   const problems: Partial<Record<keyof ShopFields, string>> = {};
-  if (!fields.shopName.trim()) problems.shopName = "Enter your shop's name.";
+  if (!fields.shopName.trim())
+    problems.shopName = options.home ? "Enter a name for your printing." : "Enter your shop's name.";
   if (!fields.contactName.trim()) problems.contactName = "Enter your name.";
   const mobile = philippineMobile(fields.phone);
   if (!mobile) problems.phone = "Enter a mobile number like 0917 123 4567.";
@@ -526,6 +561,23 @@ export function printsValue(draft: PrintsDraft): Record<string, unknown> {
   return { groups, documents };
 }
 
+/**
+ * A home printer's prints: documents only, on Short, A4 and Long, with no A3
+ * or finishing (`home_documents_only` otherwise).
+ */
+export function homePrintsValue(draft: PrintsDraft): Record<string, unknown> {
+  const papers = PAPERS.map((p) => p.value).filter((paper) => paper !== "a3" && draft.papers.includes(paper));
+  const colours = COLOURS.map((c) => c.value).filter((colour) => draft.colours.includes(colour));
+  return { groups: ["documents"], documents: { papers, colours, duplex: draft.duplex } };
+}
+
+export function homePrintsProblems(draft: PrintsDraft): PrintsProblems {
+  const problems: PrintsProblems = {};
+  if (!draft.papers.some((paper) => paper !== "a3")) problems.papers = "Tick at least one paper size.";
+  if (!draft.colours.length) problems.colours = "Tick black & white, colour, or both.";
+  return problems;
+}
+
 /** "₱3.00 a side" — GRIDGO's fixed page price, read-only in this flow. */
 export function pagePriceLine(terms: SignupTerms, colour: Colour): string {
   const value = colour === "bw" ? terms.documentRates.bwMinor : terms.documentRates.colourMinor;
@@ -559,6 +611,30 @@ export const MISSIONS: readonly Mission[] = [
 ];
 
 export const REQUIRED_MISSIONS = MISSIONS.filter((mission) => !mission.optional);
+
+/**
+ * The same map for someone printing from home: no shop hours (GRIDGO skips
+ * them; the To do switch replaces them), and the last stop is Starter, which
+ * comes before the first job rather than being optional.
+ */
+export const HOME_MISSIONS: readonly Mission[] = [
+  { id: "shop", title: "About you", local: "Bahin nimo", minutes: 1 },
+  { id: "pin", title: "Your home pin", local: "Asa ka nagpuyo", minutes: 1 },
+  { id: "prints", title: "What you print", local: "Unsa imong i-print", minutes: 0.5 },
+  { id: "staff", title: "Open your account", local: "Ablihi imong account", minutes: 0.5 },
+  { id: "paid", title: "Get paid and alerts", local: "Bayad ug pahibalo", minutes: 0.5 },
+  { id: "verify", title: "Get to Starter", local: "Sugod isip Starter", minutes: 2, optional: true },
+];
+
+export const HOME_REQUIRED_MISSIONS = HOME_MISSIONS.filter((mission) => !mission.optional);
+
+export function missionsFor(signup: GuidedSignup | null): readonly Mission[] {
+  return isHomeSignup(signup) ? HOME_MISSIONS : MISSIONS;
+}
+
+export function requiredMissionsFor(signup: GuidedSignup | null): readonly Mission[] {
+  return isHomeSignup(signup) ? HOME_REQUIRED_MISSIONS : REQUIRED_MISSIONS;
+}
 
 const AFTER_ENROLL: readonly SignupNextStep[] = [
   "hours",
@@ -606,7 +682,7 @@ export function missionStates(
 ): Record<Exclude<MissionId, "verify">, MissionState> {
   const states = {} as Record<Exclude<MissionId, "verify">, MissionState>;
   let currentTaken = false;
-  for (const mission of REQUIRED_MISSIONS) {
+  for (const mission of requiredMissionsFor(signup)) {
     const id = mission.id as Exclude<MissionId, "verify">;
     if (missionDone(signup, id)) {
       states[id] = "done";
@@ -625,18 +701,18 @@ export function missionStates(
 /** The first mission still to do, or null when every required one is done (or waiting). */
 export function currentMission(signup: GuidedSignup | null): Mission | null {
   const states = missionStates(signup);
-  return REQUIRED_MISSIONS.find((mission) => states[mission.id as keyof typeof states] === "current") ?? null;
+  return requiredMissionsFor(signup).find((mission) => states[mission.id as keyof typeof states] === "current") ?? null;
 }
 
 export function doneCount(signup: GuidedSignup | null): number {
   const states = missionStates(signup);
-  return REQUIRED_MISSIONS.filter((mission) => states[mission.id as keyof typeof states] === "done").length;
+  return requiredMissionsFor(signup).filter((mission) => states[mission.id as keyof typeof states] === "done").length;
 }
 
 /** "About 3 min left" — the minutes of every required mission not yet done. */
 export function minutesLeft(signup: GuidedSignup | null): number {
   const states = missionStates(signup);
-  const left = REQUIRED_MISSIONS.filter(
+  const left = requiredMissionsFor(signup).filter(
     (mission) => states[mission.id as keyof typeof states] !== "done",
   ).reduce((sum, mission) => sum + mission.minutes, 0);
   return Math.ceil(left);
@@ -668,10 +744,15 @@ export function readyToEnroll(signup: GuidedSignup | null): boolean {
 }
 
 /** The bar and line above a mission's screen: "Step 2 of 6 · 1 min". */
-export function missionProgress(id: MissionId): { label: string; now: number; max: number } {
-  const index = REQUIRED_MISSIONS.findIndex((mission) => mission.id === id);
-  const mission = MISSIONS.find((item) => item.id === id) ?? MISSIONS[0];
-  const max = REQUIRED_MISSIONS.length;
+export function missionProgress(
+  id: MissionId,
+  home = false,
+): { label: string; now: number; max: number } {
+  const required = home ? HOME_REQUIRED_MISSIONS : REQUIRED_MISSIONS;
+  const all = home ? HOME_MISSIONS : MISSIONS;
+  const index = required.findIndex((mission) => mission.id === id);
+  const mission = all.find((item) => item.id === id) ?? all[0];
+  const max = required.length;
   if (index < 0) return { label: `Optional · ${minutesLabel(mission.minutes)}`, now: max, max };
   return { label: `Step ${index + 1} of ${max} · ${minutesLabel(mission.minutes)}`, now: index + 1, max };
 }

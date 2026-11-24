@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { Stack, router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Text, View } from "react-native";
 import type { KeyboardAwareScrollViewRef } from "react-native-keyboard-controller";
@@ -9,7 +9,9 @@ import { OnboardingStep } from "@/components/OnboardingStep";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ShopLocationPicker } from "@/components/ShopLocationPicker";
 import { CheckboxRow } from "@/components/controls/CheckboxRow";
-import { locationValue, missionProgress, pinStepProblem } from "@/lib/guidedSignup";
+import { HomePinFields } from "@/components/home/HomePinFields";
+import { isHomeSignup, locationValue, missionProgress, pinStepProblem } from "@/lib/guidedSignup";
+import { homePinDraftFrom, homePinProblems, homePinValue, type HomePinDraft } from "@/lib/homePrinter";
 import { returnToMissions, useGuidedStepDraft } from "@/hooks/useApplyEntry";
 import { useGuidedSignup } from "@/store/guidedSignup";
 import { useSignupDraft } from "@/store/signupDraft";
@@ -23,6 +25,77 @@ import { useSignupDraft } from "@/store/signupDraft";
  */
 export default function SignupPinStep() {
   useGuidedStepDraft();
+  const signup = useGuidedSignup((s) => s.signup);
+  if (isHomeSignup(signup)) return <HomePinStep />;
+  return <ShopPinStep />;
+}
+
+/**
+ * A home printer's pin (gridgo-api#412): their home, kept private. The same
+ * map, plus barangay, street and house type, and GRIDGO's own consent about
+ * who sees what — with the plain-words version right above it.
+ */
+function HomePinStep() {
+  const signup = useGuidedSignup((s) => s.signup);
+  const terms = useGuidedSignup((s) => s.terms);
+  const save = useGuidedSignup((s) => s.save);
+  const saved = signup?.steps.location;
+  const [draft, setDraft] = useState<HomePinDraft>(() => homePinDraftFrom(saved ?? null));
+  const [consented, setConsented] = useState(Boolean(saved?.barangay));
+  const [showProblems, setShowProblems] = useState(false);
+  const [blocker, setBlocker] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const wording = terms?.locationConsentWording ?? "";
+  const problems = homePinProblems(draft, consented);
+  const shown = showProblems ? { ...problems, ...(blocker ? { pin: blocker } : {}) } : {};
+
+  async function next() {
+    setError(null);
+    const value = homePinValue(draft, wording);
+    if (Object.keys(problems).length || blocker || !value) {
+      setShowProblems(true);
+      return;
+    }
+    setBusy(true);
+    const result = await save("location", value);
+    setBusy(false);
+    if (result.status === "ok") returnToMissions();
+    else if (result.status === "enrolled") router.replace("/(auth)/signup/missions");
+    else setError(result.status === "failed" ? result.message : "Try again in a moment.");
+  }
+
+  return (
+    <>
+      <Stack.Screen options={{ title: "Your home pin" }} />
+      <OnboardingStep
+        progress={missionProgress("pin", true)}
+        title="Your home pin"
+        lede="Where your rider picks up. Only GRIDGO and your rider see it."
+        contentClassName="gap-6 pb-4 pt-4"
+        overlay={<BusyOverlay visible={busy} label="Saving…" />}
+        footer={
+          <>
+            {error ? <ErrorNotice message={error} /> : null}
+            <PrimaryButton label="Save my pin" hint="I-save" disabled={busy} onPress={() => void next()} />
+          </>
+        }
+      >
+        <HomePinFields
+          draft={draft}
+          onChange={(change) => setDraft((current) => ({ ...current, ...change }))}
+          problems={shown}
+          wording={wording}
+          consented={consented}
+          onConsent={setConsented}
+          onBlockerChange={setBlocker}
+        />
+      </OnboardingStep>
+    </>
+  );
+}
+
+function ShopPinStep() {
   const signup = useGuidedSignup((s) => s.signup);
   const terms = useGuidedSignup((s) => s.terms);
   const save = useGuidedSignup((s) => s.save);
@@ -91,7 +164,12 @@ export default function SignupPinStep() {
           ) : null}
           {showProblem && problem ? <Text className="text-caption text-error">{problem}</Text> : null}
           {error ? <ErrorNotice message={error} /> : null}
-          <PrimaryButton label="Use this pin" hint="Gamita kini" disabled={busy} onPress={() => void next()} />
+          <PrimaryButton
+            label="Use this pin"
+            hint="Gamita kini"
+            disabled={busy}
+            onPress={() => void next()}
+          />
         </>
       }
     >

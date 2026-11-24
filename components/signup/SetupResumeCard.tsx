@@ -7,7 +7,8 @@ import { useThemeColors } from "@/hooks/useTheme";
 import {
   doneCount,
   minutesLeft,
-  REQUIRED_MISSIONS,
+  isHomeSignup,
+  requiredMissionsFor,
   setupComplete,
 } from "@/lib/guidedSignup";
 import { useGuidedSignup } from "@/store/guidedSignup";
@@ -32,14 +33,15 @@ export function SetupResumeCard({ enabled }: { enabled: boolean }) {
 
   if (!enabled || !signup?.supplierId || setupComplete(signup)) return null;
   const done = doneCount(signup);
-  const total = REQUIRED_MISSIONS.length;
+  const total = requiredMissionsFor(signup).length;
+  const home = isHomeSignup(signup);
   const waitingForOwner = signup.nextStep === "owner_claim";
 
   return (
     <Pressable
       onPress={() => router.push("/setup")}
       accessibilityRole="button"
-      accessibilityLabel={`Finish setting up your shop. ${done} of ${total} done.`}
+      accessibilityLabel={`${home ? "Finish setting up" : "Finish setting up your shop"}. ${done} of ${total} done.`}
       className="gg-card mb-4 gap-3"
       style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
       testID="setup-resume"
@@ -47,7 +49,7 @@ export function SetupResumeCard({ enabled }: { enabled: boolean }) {
       <View className="flex-row items-center gap-3">
         <View className="min-w-0 flex-1 gap-1">
           <Text className="text-body-lg font-medium text-text-primary">
-            {waitingForOwner ? "Waiting for your owner" : "Finish setting up your shop"}
+            {waitingForOwner ? "Waiting for your owner" : home ? "Finish setting up" : "Finish setting up your shop"}
           </Text>
           <Text className="text-caption text-text-muted">
             {waitingForOwner
