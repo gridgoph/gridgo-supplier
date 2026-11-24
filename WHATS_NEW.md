@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.489 (New feature)
+
+- Group orders show who each print is for, so you can pack and label one bundle per person.
+
 ## 1.0.481 (New feature)
 
 - Sign up a document shop in about 5 minutes: six short steps, and you can stop and pick up where you left off.
