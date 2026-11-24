@@ -1,5 +1,6 @@
 import { Pencil } from "lucide-react-native";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { router, type Href } from "expo-router";
 
 import { ShopPortrait } from "@/components/ShopPortrait";

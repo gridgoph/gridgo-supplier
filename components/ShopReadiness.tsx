@@ -1,5 +1,6 @@
 import { ChevronRight, Circle } from "lucide-react-native";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { router } from "expo-router";
 
 import { PrimaryButton } from "@/components/PrimaryButton";

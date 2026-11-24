@@ -1,12 +1,6 @@
 import { useEffect, useState } from "react";
-import {
-  AccessibilityInfo,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { AccessibilityInfo, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import Animated, {
   Easing,
   FadeIn,

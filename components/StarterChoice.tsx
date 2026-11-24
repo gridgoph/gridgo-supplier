@@ -1,5 +1,6 @@
 import { Circle, CircleDot } from "lucide-react-native";
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { CropMarkFrame } from "@/components/CropMarkFrame";
 import { starterImage } from "@/constants/images";

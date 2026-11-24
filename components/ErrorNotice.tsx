@@ -1,6 +1,7 @@
 import { TriangleAlert } from "lucide-react-native";
 import { useEffect } from "react";
-import { AccessibilityInfo, Platform, Pressable, Text, View } from "react-native";
+import { AccessibilityInfo, Platform, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { useThemeColors } from "@/hooks/useTheme";
 

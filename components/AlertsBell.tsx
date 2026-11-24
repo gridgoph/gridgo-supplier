@@ -1,5 +1,6 @@
 import { Bell } from "lucide-react-native";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { router } from "expo-router";
 
 import { useAlertsStore } from "@/store/alerts";

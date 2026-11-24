@@ -1,7 +1,8 @@
 import { router, useFocusEffect } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
 import { useCallback } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { useThemeColors } from "@/hooks/useTheme";
 import {

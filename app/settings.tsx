@@ -1,5 +1,6 @@
 import { router, type Href } from "expo-router";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { SegmentedControl } from "@/components/controls/SegmentedControl";
 import {

@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { SelectField } from "@/components/controls/SelectField";

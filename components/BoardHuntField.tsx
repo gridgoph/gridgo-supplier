@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, TextInput, View } from "react-native";
+import { TextInput, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { Search, X } from "lucide-react-native";
 
 import { MAX_HUNT_LENGTH } from "@/lib/catalogueBoard";

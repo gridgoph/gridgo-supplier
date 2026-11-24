@@ -1,7 +1,8 @@
 import * as WebBrowser from "expo-web-browser";
 import { ChevronRight, ImageOff, Receipt } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { SkeletonBlock } from "@/components/Skeleton";
 import * as api from "@/lib/api";

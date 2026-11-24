@@ -1,7 +1,8 @@
 import { Image } from "expo-image";
 import { Camera } from "lucide-react-native";
 import { useEffect, useRef } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { TeamFace } from "@/components/team/TeamFace";
 import { useFileUpload } from "@/hooks/useFileUpload";

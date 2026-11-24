@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { useReducedMotion } from "react-native-reanimated";
 

@@ -4,7 +4,8 @@ import { usePhotoLinkRefresh } from "@/hooks/usePhotoLinkRefresh";
 import { useUser } from "@clerk/expo";
 import { useTourAutoStart, useTourScreen } from "@/hooks/useTourScreen";
 import { useCallback, useEffect, useState } from "react";
-import { AppState, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { AppState, RefreshControl, ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { ChevronDown, ChevronRight, Zap } from "lucide-react-native";
 import { router, useFocusEffect, type Href } from "expo-router";
 

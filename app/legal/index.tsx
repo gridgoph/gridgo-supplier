@@ -1,7 +1,8 @@
 import { router, useFocusEffect, type Href } from "expo-router";
 import { ChevronRight, LockKeyhole } from "lucide-react-native";
 import { useCallback } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { LegalDocumentRow } from "@/components/legal/LegalDocumentRow";

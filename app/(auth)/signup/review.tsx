@@ -2,7 +2,8 @@ import { useAuth, useClerk, useSignUp } from "@clerk/expo";
 import { router } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { ErrorNotice } from "@/components/ErrorNotice";
