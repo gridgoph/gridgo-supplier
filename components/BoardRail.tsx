@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ArrowUpDown, LayoutGrid, List, Plus, SlidersHorizontal } from "lucide-react-native";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import Animated, { FadeIn, useReducedMotion } from "react-native-reanimated";
 
 import { TourTarget } from "@/components/TourTarget";

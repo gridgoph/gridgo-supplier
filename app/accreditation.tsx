@@ -1,7 +1,8 @@
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react-native";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { Redirect, router, useFocusEffect, type Href } from "expo-router";
 
 import { DocumentSlot } from "@/components/DocumentSlot";

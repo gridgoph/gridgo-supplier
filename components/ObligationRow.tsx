@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react-native";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { formatPhp } from "@/lib/api";
 import type { Obligation } from "@/lib/homeBoard";

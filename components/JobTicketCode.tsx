@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { DigitBoxes, digitsOf } from "@/components/DigitBoxes";
 import { ErrorNotice } from "@/components/ErrorNotice";

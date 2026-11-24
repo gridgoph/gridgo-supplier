@@ -3,7 +3,8 @@ import { Image } from "expo-image";
 import { Stack, router } from "expo-router";
 import { BadgeCheck, ImagePlus } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { ErrorNotice } from "@/components/ErrorNotice";

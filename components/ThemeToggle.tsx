@@ -1,4 +1,5 @@
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { Moon, Sun } from "lucide-react-native";
 
 import { setThemePreference, useThemeColors, useThemeName } from "@/hooks/useTheme";

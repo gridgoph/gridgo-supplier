@@ -1,7 +1,8 @@
 import * as WebBrowser from "expo-web-browser";
 import { FileText } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";

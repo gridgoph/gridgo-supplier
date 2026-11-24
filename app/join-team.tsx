@@ -3,7 +3,8 @@ import * as Linking from "expo-linking";
 import { router, useFocusEffect } from "expo-router";
 import { QrCode, Store } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { FormScrollView } from "@/components/FormScrollView";

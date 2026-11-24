@@ -1,5 +1,6 @@
 import { Square, SquareCheck } from "lucide-react-native";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { PrintLayoutDiagram } from "@/components/PrintLayoutDiagram";
 import { useThemeColors } from "@/hooks/useTheme";

@@ -1,4 +1,5 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/components/Pressable";
 
 import { SamplePhoto } from "@/components/SamplePhoto";
 import { photoViewUrl, type Listing } from "@/lib/listings";

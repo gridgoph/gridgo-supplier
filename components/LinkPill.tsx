@@ -1,4 +1,5 @@
-import { Pressable, Text } from "react-native";
+import { Text } from "react-native";
+import { Pressable } from "@/components/Pressable";
 import { ChevronRight } from "lucide-react-native";
 
 import { useThemeColors } from "@/hooks/useTheme";
