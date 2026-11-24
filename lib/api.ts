@@ -413,6 +413,11 @@ export type Order = {
    */
   orderType?: string;
   expressOrder?: unknown;
+  /**
+   * A group Express order (gridgo-api `docs/GROUP_EXPRESS_API.md`):
+   * `{ id, memberCount, hostName }`. Read only through `lib/expressOrder.ts`.
+   */
+  groupOrder?: unknown;
   /** `pickup` (the client collects at this shop) or `delivery`. */
   fulfillmentMode?: string | null;
   /**

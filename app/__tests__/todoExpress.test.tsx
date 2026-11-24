@@ -131,3 +131,19 @@ it("shows Staff the same card with no money on it", async () => {
   expect(screen.queryByText(/₱/)).toBeNull();
   await view.unmount();
 });
+
+it("tags a group order on the card, and only a group order", async () => {
+  signIn(owner);
+  (listJobs as jest.Mock).mockResolvedValue([
+    express({ groupOrder: { id: "grp_1", memberCount: 4, hostName: "Host H" } }),
+  ]);
+  const view = await render(<HomeScreen />);
+  expect(await screen.findByText("Group order, 4 people")).toBeTruthy();
+  await view.unmount();
+
+  (listJobs as jest.Mock).mockResolvedValue([express()]);
+  const plain = await render(<HomeScreen />);
+  expect(await screen.findByTestId("express-offer-card")).toBeTruthy();
+  expect(screen.queryByTestId("group-order-chip")).toBeNull();
+  await plain.unmount();
+});

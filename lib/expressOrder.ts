@@ -34,6 +34,30 @@ export type ExpressPrint = {
   layout: string | null;
   paperStock: string | null;
   note: string;
+  /**
+   * Whose prints these are on a group order (gridgo-api
+   * `docs/GROUP_EXPRESS_API.md`): one bundle per person, labelled with the
+   * name GRIDGO sends. Null on every ordinary order.
+   */
+  member: ExpressMember | null;
+};
+
+export type ExpressMember = { id: string; name: string };
+
+/** A group order: one Express order the host paid for, packed per person. */
+export type ExpressGroup = {
+  /** People in the group, host included; null when GRIDGO sent no count. */
+  memberCount: number | null;
+  /** Who collects every bundle; null when GRIDGO sent no name. */
+  hostName: string | null;
+};
+
+/** One person's prints on a group order, packed and labelled together. */
+export type ExpressBundle = {
+  member: ExpressMember;
+  prints: ExpressPrint[];
+  /** Printed pages in this bundle; null when a file has no count. */
+  totalPages: number | null;
 };
 
 export type ExpressView = {
@@ -46,6 +70,8 @@ export type ExpressView = {
   totalPages: number | null;
   /** The client collected it with the counter code. */
   pickedUp: boolean;
+  /** Null unless the order is a group order. */
+  group: ExpressGroup | null;
 };
 
 type Raw = Record<string, unknown>;
@@ -78,12 +104,56 @@ function readPrint(raw: unknown): ExpressPrint | null {
     layout: str(row.layout),
     paperStock: str(row.paperStock),
     note: typeof row.note === "string" ? row.note.trim() : "",
+    member: readMember(row),
   };
+}
+
+function readMember(row: Raw): ExpressMember | null {
+  const id = str(row.groupMemberId);
+  const name = typeof row.groupMemberName === "string" ? row.groupMemberName.trim() : "";
+  return id && name ? { id, name } : null;
+}
+
+/** The group tag's facts, or null for an ordinary order. */
+export function expressGroup(order: Partial<Pick<Order, "groupOrder">> | null | undefined): ExpressGroup | null {
+  const raw = obj(order?.groupOrder);
+  if (!raw) return null;
+  const host = typeof raw.hostName === "string" ? raw.hostName.trim() : "";
+  return { memberCount: count(raw.memberCount), hostName: host || null };
+}
+
+/** "Group order, 4 people", or "Group order" when GRIDGO sent no count. */
+export function groupTagLabel(group: ExpressGroup): string {
+  const n = group.memberCount;
+  return n == null ? "Group order" : `Group order, ${n} ${n === 1 ? "person" : "people"}`;
+}
+
+/**
+ * The prints split into one bundle per person, in the order GRIDGO lists the
+ * files. Null unless this is a group order and **every** file names its
+ * person: a half-labelled list would let a shop pack someone's pages into the
+ * wrong bundle, so it stays one plain list instead.
+ */
+export function expressBundles(view: ExpressView): ExpressBundle[] | null {
+  if (!view.group || !view.prints.length || view.prints.some((print) => !print.member)) return null;
+  const bundles = new Map<string, ExpressBundle>();
+  for (const print of view.prints) {
+    const member = print.member as ExpressMember;
+    const bundle = bundles.get(member.id) ?? { member, prints: [], totalPages: 0 };
+    bundle.prints.push(print);
+    bundles.set(member.id, bundle);
+  }
+  return [...bundles.values()].map((bundle) => ({
+    ...bundle,
+    totalPages: bundle.prints.every((print) => print.pages != null)
+      ? bundle.prints.reduce((sum, print) => sum + (print.pages ?? 0) * print.copies, 0)
+      : null,
+  }));
 }
 
 /** The Express side of an order, or null for every other order. */
 export function expressView(
-  order: Partial<Pick<Order, "orderType" | "expressOrder" | "fulfillmentMode">> | null | undefined,
+  order: Partial<Pick<Order, "orderType" | "expressOrder" | "fulfillmentMode" | "groupOrder">> | null | undefined,
 ): ExpressView | null {
   if (!order || !isExpressDocumentOrder(order)) return null;
   const raw = obj(order.expressOrder) ?? {};
@@ -98,7 +168,26 @@ export function expressView(
     prints,
     totalPages: prints.length && known ? prints.reduce((sum, p) => sum + (p.pages ?? 0) * p.copies, 0) : null,
     pickedUp: raw.status === "picked_up",
+    group: expressGroup(order),
   };
+}
+
+/** "2 files · 14 pages" under a person's name. */
+export function bundleLine(bundle: ExpressBundle): string {
+  const files = bundle.prints.length === 1 ? "1 file" : `${bundle.prints.length} files`;
+  const pages =
+    bundle.totalPages == null ? null : bundle.totalPages === 1 ? "1 page" : `${bundle.totalPages} pages`;
+  return [files, pages].filter(Boolean).join(" · ");
+}
+
+/** The line under "Pack each person separately": who ends up with every bundle. */
+export function bundleHint(view: ExpressView): string {
+  const host = view.group?.hostName;
+  const label = "Write each name on its bundle.";
+  if (view.fulfillment === "delivery") {
+    return host ? `${label} The rider takes them all to ${host}, the host.` : `${label} The rider takes them all to the host.`;
+  }
+  return host ? `${label} ${host}, the host, collects them all.` : `${label} The host collects them all.`;
 }
 
 const PAPER: Record<string, string> = { a4: "A4", short: "Short", long: "Long" };
