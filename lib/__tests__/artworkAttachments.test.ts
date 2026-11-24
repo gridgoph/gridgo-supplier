@@ -62,6 +62,16 @@ describe("artwork attachments", () => {
     expect(attachmentCountLine(groups[1].entries)).toBe("1 file");
   });
 
+  it("names whose bundle each line's files go in on a group order, and nobody's otherwise", () => {
+    const member = item({ id: "g1", itemName: "Documents", artworkFileId: "doc", groupMember: { id: "u_b", name: "Member B" } });
+    expect(attachmentGroups({ productionItems: [member] })[0].memberName).toBe("Member B");
+    expect(orderArtwork({ productionItems: [member] })).toEqual([
+      { fileId: "doc", kind: "artwork", itemName: "Documents", memberName: "Member B" },
+    ]);
+    expect(attachmentGroups({ productionItems: [several] })[0].memberName).toBeNull();
+    expect(orderArtwork({ productionItems: [several] })[0]).not.toHaveProperty("memberName");
+  });
+
   it("counts every attached file and carries link labels to the rest of the job screen", () => {
     expect(orderArtwork({ productionItems: [several] }).map((file) => file.fileId)).toEqual(["front", "back", "logo"]);
     expect(orderDesignLinks({ productionItems: [several] })).toEqual([

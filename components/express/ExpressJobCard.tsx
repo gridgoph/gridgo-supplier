@@ -2,6 +2,7 @@ import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import { Printer, Zap } from "lucide-react-native";
 
+import { GroupOrderChip } from "@/components/GroupOrderChip";
 import { OrderReference } from "@/components/OrderReference";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { StatusChip } from "@/components/StatusChip";
@@ -11,6 +12,7 @@ import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";
 import { acceptWindow, acceptWindowTickMs, formatCountdown } from "@/lib/acceptWindow";
 import { formatDeadlineTime, shopDueAt } from "@/lib/dates";
+import { expressGroup } from "@/lib/expressOrder";
 import { expressStage, fulfilmentLine, paymentLine, settingsLine, workLine } from "@/lib/todo";
 
 type Props = {
@@ -45,6 +47,7 @@ export function ExpressJobCard({ job, reload, staff }: Props) {
   const paid = paymentLine(job);
   const settings = settingsLine(job);
   const price = job.supplierPriceMinor;
+  const group = expressGroup(job);
 
   const details = () => router.push({ pathname: "/job/[id]", params: { id: job.id } });
 
@@ -95,6 +98,11 @@ export function ExpressJobCard({ job, reload, staff }: Props) {
           <Text className="text-body text-text-secondary" testID="express-card-meta">
             {[fulfilmentLine(job), paid].filter(Boolean).join(" · ")}
           </Text>
+          {group ? (
+            <View className="mt-1 flex-row">
+              <GroupOrderChip group={group} />
+            </View>
+          ) : null}
         </View>
         {offer && !staff && price != null ? (
           <View className="items-end" testID="express-card-earn">
