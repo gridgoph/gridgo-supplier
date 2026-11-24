@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 
 import { ExpressChip } from "@/components/ExpressChip";
+import { GroupOrderChip } from "@/components/GroupOrderChip";
 import { SampleTagChip } from "@/components/SampleTagChip";
 import { OrderReference } from "@/components/OrderReference";
 import { orderReferenceSpoken } from "@/lib/orderReference";
@@ -11,6 +12,7 @@ import { isExpressOrder } from "@/lib/express";
 import { SAMPLE_TAG_LABEL, sampleTagOf } from "@/lib/sampleFirst";
 import { presentJobStatus, primaryAction } from "@/lib/jobState";
 import { deadlineUrgency } from "@/lib/urgency";
+import { expressGroup } from "@/lib/expressOrder";
 
 type Props = {
   job: Order;
@@ -36,6 +38,7 @@ export function JobRow({ job, now = new Date(), onPress }: Props) {
   const time = formatDeadlineTime(shopDueAt(job));
   const late = urgency.level === "overdue";
   const express = isExpressOrder(job);
+  const group = expressGroup(job);
   const sampleTag = sampleTagOf(job);
 
   return (
@@ -70,6 +73,7 @@ export function JobRow({ job, now = new Date(), onPress }: Props) {
             <StatusChip tone={status.tone} label={status.label} icon={status.icon} />
           )}
           {express ? <ExpressChip /> : null}
+          {group ? <GroupOrderChip group={group} /> : null}
           {sampleTag ? <SampleTagChip tag={sampleTag} /> : null}
           <Text className="min-w-0 flex-1 text-caption text-text-muted" numberOfLines={1}>
             {job.quantity} × {job.size || "size not set"}

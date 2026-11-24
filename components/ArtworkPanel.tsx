@@ -165,7 +165,12 @@ function ArtworkFile({ orderId, reference }: { orderId: string; reference: Artwo
         )}
       </View>
       <View className="gap-2 p-3">
-        {reference.itemName ? <Text className="text-body font-medium text-text-primary">{reference.itemName}</Text> : null}
+        {reference.itemName ? (
+          <Text className="text-body font-medium text-text-primary">
+            {reference.itemName}
+            {reference.memberName ? <Text className="text-body text-text-muted">{` · For ${reference.memberName}`}</Text> : null}
+          </Text>
+        ) : null}
         <Text className="text-overline text-text-muted">{kind === "mockup" ? "REFERENCE MOCKUP" : "ARTWORK"}</Text>
         <Text className="text-body font-medium text-text-primary">{file?.originalFilename ?? (state.kind === "error" ? "File could not load" : "Loading attachment…")}</Text>
         {file ? <Text className="text-caption text-text-muted">{describeArtwork(file)}</Text> : null}

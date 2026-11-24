@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { ExpressChip } from "@/components/ExpressChip";
+import { GroupOrderChip } from "@/components/GroupOrderChip";
 import { OrderReference } from "@/components/OrderReference";
 import { SampleTagChip } from "@/components/SampleTagChip";
 import { orderReferenceSpoken } from "@/lib/orderReference";
@@ -20,6 +21,7 @@ import { orderSpecSummary } from "@/lib/productionSpecs";
 import { shopRelease } from "@/lib/shopRecovery";
 import { useNow } from "@/hooks/useNow";
 import { isShopStaff, useSession } from "@/store/session";
+import { expressGroup } from "@/lib/expressOrder";
 
 type Props = {
   job: Order;
@@ -56,6 +58,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
   const urgency = deadlineUrgency(shopRelease(job) || isFulfilmentFinished(job) ? null : dueAt, now);
   const spec = orderSpecSummary(job);
   const express = isExpressOrder(job);
+  const group = expressGroup(job);
   const sampleTag = sampleTagOf(job);
   const tight = isTightBeforeAccepting(job);
   const sameDay = sameDayReadyLine(job);
@@ -109,6 +112,7 @@ export function JobCard({ job, onPress, footer, showSpec = true }: Props) {
         {express || sampleTag ? (
           <View className="flex-row flex-wrap gap-2 py-1">
             {express ? <ExpressChip /> : null}
+            {group ? <GroupOrderChip group={group} /> : null}
             {sampleTag ? <SampleTagChip tag={sampleTag} /> : null}
           </View>
         ) : null}
