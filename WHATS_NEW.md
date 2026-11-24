@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.493 (New feature)
+
+- Print from home: sign up as a home printer, get to Starter, and go online for document jobs from To do.
+
 ## 1.0.489 (New feature)
 
 - Group orders show who each print is for, so you can pack and label one bundle per person.
