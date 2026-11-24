@@ -621,6 +621,21 @@ function RootStack({ introDone }: { introDone: boolean }) {
         />
       </Stack.Protected>
 
+      {/*
+        Home printers (gridgo-api#412): Starter / Verified and the private pin.
+        The owner's: GRIDGO refuses /me/home-printer to Staff.
+      */}
+      <Stack.Protected guard={floorOpen && owner}>
+        <Stack.Screen
+          name="home-printer"
+          options={{ title: "Get verified", headerBackButtonDisplayMode: "minimal" }}
+        />
+        <Stack.Screen
+          name="home-pin"
+          options={{ title: "Your home pin", headerBackButtonDisplayMode: "minimal" }}
+        />
+      </Stack.Protected>
+
       <Stack.Protected guard={floorOpen && owner && verifyingLater}>
         {/*
           Getting verified while already taking jobs (gridgo-api

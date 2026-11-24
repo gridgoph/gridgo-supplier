@@ -122,7 +122,7 @@ describe("step 0", () => {
 
   it("tells a manager the owner claims the shop, then goes on to the sign-in", async () => {
     await render(<SignupStartStep />);
-    await fireEvent.press(screen.getByText("Print shop"));
+    await fireEvent.press(screen.getByText("I have a print shop"));
     await fireEvent.press(screen.getByText("I manage it for the owner"));
     expect(screen.getByText(/Your owner gets a link to claim it/)).toBeTruthy();
     await fireEvent.press(screen.getByText("I am 18 or older"));

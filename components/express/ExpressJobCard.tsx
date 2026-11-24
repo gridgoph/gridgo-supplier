@@ -12,8 +12,10 @@ import { useThemeColors } from "@/hooks/useTheme";
 import * as api from "@/lib/api";
 import { acceptWindow, acceptWindowTickMs, formatCountdown } from "@/lib/acceptWindow";
 import { formatDeadlineTime, shopDueAt } from "@/lib/dates";
+import { canGiveBack, giveBackLine, giveBackWindow } from "@/lib/homePrinter";
 import { expressGroup } from "@/lib/expressOrder";
 import { expressStage, fulfilmentLine, paymentLine, settingsLine, workLine } from "@/lib/todo";
+import { useHomePrinter } from "@/store/homePrinter";
 
 type Props = {
   job: api.Order;
@@ -47,6 +49,10 @@ export function ExpressJobCard({ job, reload, staff }: Props) {
   const paid = paymentLine(job);
   const settings = settingsLine(job);
   const price = job.supplierPriceMinor;
+  // A home printer can hand an accepted job on (gridgo-api#412 §9); the line says when it is free.
+  const home = useHomePrinter((s) => Boolean(s.home));
+  const givable = home && !offer && canGiveBack(job);
+  const giveBack = giveBackWindow(job, now);
   const group = expressGroup(job);
 
   const details = () => router.push({ pathname: "/job/[id]", params: { id: job.id } });
@@ -163,7 +169,22 @@ export function ExpressJobCard({ job, reload, staff }: Props) {
         </Text>
       ) : null}
 
-      {!offer ? <TextLink label="Details" onPress={details} /> : null}
+      {!offer && givable ? (
+        <View className="flex-row items-center justify-between gap-3">
+          <TextLink label="Details" onPress={details} />
+          <View className="items-end">
+            <TextLink
+              label="Give it back"
+              onPress={() => router.push({ pathname: "/job/[id]/give-back", params: { id: job.id } })}
+            />
+            <Text className="text-caption text-text-muted" testID="express-card-give-back">
+              {giveBackLine(giveBack)}
+            </Text>
+          </View>
+        </View>
+      ) : !offer ? (
+        <TextLink label="Details" onPress={details} />
+      ) : null}
     </View>
   );
 }

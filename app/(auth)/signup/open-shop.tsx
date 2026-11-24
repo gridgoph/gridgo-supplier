@@ -1,5 +1,5 @@
 import { useAuth } from "@clerk/expo";
-import { router } from "expo-router";
+import { Stack, router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
@@ -12,7 +12,7 @@ import { OptionList } from "@/components/controls/OptionList";
 import { ApplyConsentFields } from "@/components/legal/ApplyConsentFields";
 import * as api from "@/lib/api";
 import { awaitClerkSessionToken } from "@/lib/clerk";
-import { missionProgress, readyToEnroll, currentMission } from "@/lib/guidedSignup";
+import { currentMission, isHomeSignup, missionProgress, readyToEnroll } from "@/lib/guidedSignup";
 import {
   APPLY_CONSENT_REFUSED,
   applyDocuments,
@@ -65,6 +65,8 @@ export default function SignupOpenShopStep() {
   const legacyLegal = libraryStatus === "unsupported";
   const ready = readyToEnroll(signup);
   const missing = ready ? null : currentMission(signup);
+  // A home printer prints alone: no staff question, and "account", not "shop".
+  const home = isHomeSignup(signup);
 
   useEffect(() => {
     void useLegalLibrary.getState().load({ force: true });
@@ -92,7 +94,7 @@ export default function SignupOpenShopStep() {
       if (key !== draft.enrollKey) patch({ enrollKey: key });
       const body: api.GuidedSupplierEnrollment = {
         signupVersion: signup.version,
-        jobsHandledBy: draft.jobsHandledBy ?? "just_me",
+        jobsHandledBy: home ? "just_me" : (draft.jobsHandledBy ?? "just_me"),
       };
       if (!legacyLegal && documents) {
         body.legalConsentVersion = api.LEGAL_CONSENT_VERSION;
@@ -122,52 +124,76 @@ export default function SignupOpenShopStep() {
   const shownError = localError ?? error;
 
   return (
-    <OnboardingStep
-      progress={missionProgress("staff")}
-      title="Who takes jobs?"
-      lede="Answer this and your shop opens. You add staff on the next screen."
-      contentClassName="gap-6 pb-4 pt-4"
-      overlay={<BusyOverlay visible={busy} label="Opening your shop. Do not close the app." />}
-      footer={
-        <>
-          {consentProblem ? (
-            <Text className="text-caption text-error">Tick the agreement below to open your shop.</Text>
-          ) : null}
-          {shownError ? <ErrorNotice message={shownError} /> : null}
-          <PrimaryButton
-            label={busy ? "Opening…" : "Open my shop"}
-            hint="Ablihi akong tindahan"
-            disabled={busy}
-            onPress={() => void open()}
+    <>
+      {home ? <Stack.Screen options={{ title: "Open your account" }} /> : null}
+      <OnboardingStep
+        progress={missionProgress("staff", home)}
+        title={home ? "Open your account" : "Who takes jobs?"}
+        lede={
+          home
+            ? "Agree to GRIDGO's terms and your account opens."
+            : "Answer this and your shop opens. You add staff on the next screen."
+        }
+        contentClassName="gap-6 pb-4 pt-4"
+        overlay={
+          <BusyOverlay
+            visible={busy}
+            label={
+              home
+                ? "Opening your account. Do not close the app."
+                : "Opening your shop. Do not close the app."
+            }
           />
-        </>
-      }
-    >
-      <OptionList
-        options={CHOICES}
-        value={draft.jobsHandledBy ?? "just_me"}
-        onChange={(jobsHandledBy) => patch({ jobsHandledBy })}
-        accessibilityLabel="Who takes jobs"
-      />
-      <View className="gg-panel gap-1">
-        <Text className="text-body font-medium text-text-primary">After you open</Text>
-        <Text className="text-body text-text-secondary">
-          Two short steps left: your hours, and where you get paid.
-        </Text>
-      </View>
-      <SupplierTermsNotice />
-      <ApplyConsentFields
-        consent={consent}
-        onChange={(next) => {
-          setConsent(next);
-          setConsentProblem(false);
-        }}
-        documents={documents}
-        status={libraryStatus}
-        onRetry={() => void useLegalLibrary.getState().load({ force: true })}
-        showProblem={consentProblem}
-        disabled={busy}
-      />
-    </OnboardingStep>
+        }
+        footer={
+          <>
+            {consentProblem ? (
+              <Text className="text-caption text-error">
+                {home
+                  ? "Tick the agreement below to open your account."
+                  : "Tick the agreement below to open your shop."}
+              </Text>
+            ) : null}
+            {shownError ? <ErrorNotice message={shownError} /> : null}
+            <PrimaryButton
+              label={busy ? "Opening…" : home ? "Open my account" : "Open my shop"}
+              hint={home ? "Ablihi akong account" : "Ablihi akong tindahan"}
+              disabled={busy}
+              onPress={() => void open()}
+            />
+          </>
+        }
+      >
+        {home ? null : (
+          <OptionList
+            options={CHOICES}
+            value={draft.jobsHandledBy ?? "just_me"}
+            onChange={(jobsHandledBy) => patch({ jobsHandledBy })}
+            accessibilityLabel="Who takes jobs"
+          />
+        )}
+        <View className="gg-panel gap-1">
+          <Text className="text-body font-medium text-text-primary">After you open</Text>
+          <Text className="text-body text-text-secondary">
+            {home
+              ? "Where you get paid, then Starter: your ID, a selfie with it and a test print."
+              : "Two short steps left: your hours, and where you get paid."}
+          </Text>
+        </View>
+        <SupplierTermsNotice />
+        <ApplyConsentFields
+          consent={consent}
+          onChange={(next) => {
+            setConsent(next);
+            setConsentProblem(false);
+          }}
+          documents={documents}
+          status={libraryStatus}
+          onRetry={() => void useLegalLibrary.getState().load({ force: true })}
+          showProblem={consentProblem}
+          disabled={busy}
+        />
+      </OnboardingStep>
+    </>
   );
 }

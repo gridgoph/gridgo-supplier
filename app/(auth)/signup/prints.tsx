@@ -18,6 +18,9 @@ import {
   FINISHING,
   groupLabel,
   hasPrintsProblems,
+  homePrintsProblems,
+  homePrintsValue,
+  isHomeSignup,
   missionProgress,
   orderedGroups,
   pagePriceLine,
@@ -64,9 +67,12 @@ export default function SignupPrintsStep() {
     setDraft(printsDraftFrom(signup.steps.prints));
   }, [signup]);
 
-  const problems = printsProblems(draft);
+  // A home printer prints documents only, on Short, A4 and Long (gridgo-api#412).
+  const home = isHomeSignup(signup);
+  const problems = home ? homePrintsProblems(draft) : printsProblems(draft);
   const shown = showProblems ? problems : {};
-  const documents = draft.groups.includes("documents");
+  const documents = home || draft.groups.includes("documents");
+  const papers = home ? PAPERS.filter((paper) => paper.value !== "a3") : PAPERS;
   const groups = orderedGroups(terms?.printGroups ?? DEFAULT_PRINTS.groups);
   const hasFinishing = FINISHING.some((item) => draft.finishing[item.value].trim());
 
@@ -82,7 +88,7 @@ export default function SignupPrintsStep() {
       return;
     }
     setBusy(true);
-    const result = await save("prints", printsValue(draft));
+    const result = await save("prints", home ? homePrintsValue(draft) : printsValue(draft));
     setBusy(false);
     if (result.status === "ok") returnToMissions();
     else if (result.status === "enrolled") router.replace("/(auth)/signup/missions");
@@ -91,9 +97,13 @@ export default function SignupPrintsStep() {
 
   return (
     <OnboardingStep
-      progress={missionProgress("prints")}
+      progress={missionProgress("prints", home)}
       title="What you print"
-      lede="Tick what you can do. No typing."
+      lede={
+        home
+          ? "Documents on Short, A4 and Long. Tick what your printer does."
+          : "Tick what you can do. No typing."
+      }
       contentClassName="gap-8 pb-4 pt-4"
       overlay={<BusyOverlay visible={busy} label="Saving…" />}
       footer={
@@ -103,27 +113,29 @@ export default function SignupPrintsStep() {
         </>
       }
     >
-      <View className="gap-3">
-        <FieldShell label="Your shop prints" error={shown.groups ?? null}>
-          <ChipMultiSelect
-            options={groups.map((code) => ({ value: code, label: groupLabel(code).label }))}
-            selected={draft.groups}
-            onToggle={(code) => edit({ groups: toggle(draft.groups, code) })}
-            accessibilityLabel="Your shop prints"
-          />
-        </FieldShell>
-        <Text className="text-caption text-text-muted">
-          Documents start today. Other kinds can wait; add them later from Products.
-        </Text>
-      </View>
+      {home ? null : (
+        <View className="gap-3">
+          <FieldShell label="Your shop prints" error={shown.groups ?? null}>
+            <ChipMultiSelect
+              options={groups.map((code) => ({ value: code, label: groupLabel(code).label }))}
+              selected={draft.groups}
+              onToggle={(code) => edit({ groups: toggle(draft.groups, code) })}
+              accessibilityLabel="Your shop prints"
+            />
+          </FieldShell>
+          <Text className="text-caption text-text-muted">
+            Documents start today. Other kinds can wait; add them later from Products.
+          </Text>
+        </View>
+      )}
 
       {documents ? (
         <View className="gap-6">
-          <Text className="text-h3 text-text-primary">Documents</Text>
+          {home ? null : <Text className="text-h3 text-text-primary">Documents</Text>}
 
           <FieldShell label="Paper" error={shown.papers ?? null}>
             <ChipMultiSelect
-              options={PAPERS.map((paper) => ({ value: paper.value, label: paper.label }))}
+              options={papers.map((paper) => ({ value: paper.value, label: paper.label }))}
               selected={draft.papers}
               onToggle={(paper) => edit({ papers: toggle(draft.papers, paper as Paper) })}
               accessibilityLabel="Paper"
@@ -163,7 +175,7 @@ export default function SignupPrintsStep() {
             </View>
           ) : null}
 
-          {draft.papers.includes("a3") ? (
+          {!home && draft.papers.includes("a3") ? (
             <View className="gap-4" testID="a3-prices">
               <View className="gap-1">
                 <Text className="text-body font-medium text-text-primary">Your A3 price</Text>
@@ -192,51 +204,55 @@ export default function SignupPrintsStep() {
             <View className="min-w-0 flex-1">
               <Text className="text-body font-medium text-text-primary">Express is on</Text>
               <Text className="text-caption text-text-muted">
-                Rush document jobs reach you first. You can turn it off later.
+                {home
+                  ? "Rush document jobs reach you while you're online. You switch online on To do."
+                  : "Rush document jobs reach you first. You can turn it off later."}
               </Text>
             </View>
           </View>
 
-          <View className="gap-4">
-            <Pressable
-              onPress={() => setFinishingOpen((open) => !open)}
-              accessibilityRole="button"
-              accessibilityState={{ expanded: finishingOpen }}
-              className="gg-touch flex-row items-center justify-between gap-3"
-            >
-              <View className="min-w-0 flex-1">
-                <Text className="text-body font-medium text-text-primary">
-                  Stapling, binding, photo paper
-                </Text>
-                <Text className="text-caption text-text-muted">
-                  {hasFinishing ? "Your prices are set." : "Optional, at your own price."}
-                </Text>
-              </View>
-              {finishingOpen ? (
-                <ChevronUp size={20} color={colors.textMuted} aria-hidden />
-              ) : (
-                <ChevronDown size={20} color={colors.textMuted} aria-hidden />
-              )}
-            </Pressable>
-            {finishingOpen
-              ? FINISHING.map((item) => (
-                  <FieldShell
-                    key={item.value}
-                    label={`${item.label}, ${item.unit}`}
-                    hint="Leave empty if you do not offer it."
-                    error={shown.finishing?.[item.value] ?? null}
-                  >
-                    <MoneyField
-                      value={draft.finishing[item.value]}
-                      onChange={(value) =>
-                        edit({ finishing: { ...draft.finishing, [item.value as Finishing]: value } })
-                      }
-                      accessibilityLabel={`${item.label} price`}
-                    />
-                  </FieldShell>
-                ))
-              : null}
-          </View>
+          {home ? null : (
+            <View className="gap-4">
+              <Pressable
+                onPress={() => setFinishingOpen((open) => !open)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: finishingOpen }}
+                className="gg-touch flex-row items-center justify-between gap-3"
+              >
+                <View className="min-w-0 flex-1">
+                  <Text className="text-body font-medium text-text-primary">
+                    Stapling, binding, photo paper
+                  </Text>
+                  <Text className="text-caption text-text-muted">
+                    {hasFinishing ? "Your prices are set." : "Optional, at your own price."}
+                  </Text>
+                </View>
+                {finishingOpen ? (
+                  <ChevronUp size={20} color={colors.textMuted} aria-hidden />
+                ) : (
+                  <ChevronDown size={20} color={colors.textMuted} aria-hidden />
+                )}
+              </Pressable>
+              {finishingOpen
+                ? FINISHING.map((item) => (
+                    <FieldShell
+                      key={item.value}
+                      label={`${item.label}, ${item.unit}`}
+                      hint="Leave empty if you do not offer it."
+                      error={shown.finishing?.[item.value] ?? null}
+                    >
+                      <MoneyField
+                        value={draft.finishing[item.value]}
+                        onChange={(value) =>
+                          edit({ finishing: { ...draft.finishing, [item.value as Finishing]: value } })
+                        }
+                        accessibilityLabel={`${item.label} price`}
+                      />
+                    </FieldShell>
+                  ))
+                : null}
+            </View>
+          )}
         </View>
       ) : null}
     </OnboardingStep>

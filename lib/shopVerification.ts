@@ -46,6 +46,8 @@ export type VerificationPaper = "valid_id" | "id_selfie" | "business_permit";
 export type VerificationFile = {
   fileId: string;
   paper: VerificationPaper | null;
+  /** GRIDGO's own document type, including a home printer's papers (`lib/homePrinter`). */
+  documentType: string | null;
   sentAt: string | null;
 };
 
@@ -128,6 +130,17 @@ function paperOf(file: Record<string, unknown>): VerificationPaper | null {
   return null;
 }
 
+function rawType(file: Record<string, unknown>): string | null {
+  const direct = file.verificationDocumentType ?? file.documentType;
+  if (typeof direct === "string") return direct;
+  const refs = Array.isArray(file.references) ? file.references : [];
+  for (const ref of refs) {
+    const type = record(ref)?.documentType;
+    if (typeof type === "string") return type;
+  }
+  return null;
+}
+
 /**
  * Payouts whose latest ledger entry is still `held`. The ledger is
  * append-only, so a later `available`, `reserved` or `released` entry under
@@ -163,6 +176,7 @@ export function readShopVerification(value: unknown): ShopVerificationRead | nul
     .map((file) => ({
       fileId: file.fileId as string,
       paper: paperOf(file),
+      documentType: rawType(file),
       sentAt: text(file.readyAt) ?? text(file.createdAt),
     }));
   return { verification, files, waiting: waitingPayouts(body.ledger) };
@@ -381,4 +395,32 @@ export function waitingReasonLine(reason: WaitingPayout["reason"]): string {
   return reason === "open_jobs"
     ? "Waiting until one of your other jobs is delivered"
     : "Waiting for your verification. Paid once you're verified.";
+}
+
+/**
+ * The Money banner for someone printing from home (gridgo-api#412): the same
+ * cap, but Verified asks for a barangay clearance or DTI permit and a TIN,
+ * not a shop's business permit. `missing` is `verifiedMissing` from
+ * `lib/homePrinter.ts`.
+ */
+export function homeMoneyVerifyBanner(
+  v: ShopVerification,
+  missing: { permit: boolean; tin: boolean },
+): VerifyNotice | null {
+  if (v.verified) return null;
+  const cap = formatPhp(v.payoutCapMinor);
+  const send = [
+    missing.permit ? "your barangay clearance or DTI permit" : null,
+    missing.tin ? "your TIN" : null,
+  ].filter(Boolean);
+  return {
+    tone: "neutral",
+    title: v.capReached ? `Payouts over ${cap} are waiting` : `Get Verified to unlock payouts over ${cap}`,
+    body: [
+      `${formatPhp(v.paidBeforeVerificationMinor)} of ${cap} paid out so far.`,
+      send.length ? `Send ${send.join(" and ")} to get Verified.` : "GRIDGO is checking your papers.",
+    ].join(" "),
+    chip: null,
+    action: send.length ? "Get Verified" : null,
+  };
 }

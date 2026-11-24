@@ -15,10 +15,12 @@ import { useApplyEntry } from "@/hooks/useApplyEntry";
 import {
   EMPTY_ELIGIBILITY,
   eligibilityProblems,
+  isHomeKind,
   ROLE_OPTIONS,
-  SHOP_KIND_OPTIONS,
+  shopKindOptions,
   type Eligibility,
 } from "@/lib/guidedSignup";
+import { HOME_NOT_OPEN_YET, homePrintingOffered, type HomeOffer } from "@/lib/homePrinter";
 import { useGuidedSignup } from "@/store/guidedSignup";
 import { useSignupDraft } from "@/store/signupDraft";
 
@@ -30,8 +32,9 @@ import { useSignupDraft } from "@/store/signupDraft";
  * with. A phone already signed in at Clerk goes straight to wherever GRIDGO
  * says the sign-up stands.
  *
- * Home printers are a choice GRIDGO records; their own rules are later work,
- * so nothing here treats them differently yet.
+ * "I print from home" (gridgo-api#412) is drawn only when GRIDGO offers home
+ * printing, so an older API keeps today's two questions. A home printer is
+ * its own owner, so the owner question goes away for them.
  */
 export default function SignupStartStep() {
   const { isSignedIn } = useAuth();
@@ -39,17 +42,35 @@ export default function SignupStartStep() {
   const patch = useSignupDraft((s) => s.patch);
   const { enter, entering, entryError } = useApplyEntry();
   const [showProblems, setShowProblems] = useState(false);
-  const [checking, setChecking] = useState(Boolean(isSignedIn));
+  // Sent back here because GRIDGO did not take home printing: answer again, no auto-entry.
+  const [checking, setChecking] = useState(Boolean(isSignedIn) && !useGuidedSignup.getState().homeUnavailable);
   const checked = useRef(false);
+  // Shown unless GRIDGO said it does not take home printers (see `homeKindHonoured`).
+  const [offer, setOffer] = useState<HomeOffer>("unknown");
+  const homeUnavailable = useGuidedSignup((s) => s.homeUnavailable);
+  const homeOffered = offer === "offered" || (offer === "unknown" && !homeUnavailable);
 
-  const value: Eligibility = draft.eligibility ?? EMPTY_ELIGIBILITY;
+  useEffect(() => {
+    let live = true;
+    void homePrintingOffered().then((answer) => {
+      if (live) setOffer(answer);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const stored: Eligibility = draft.eligibility ?? EMPTY_ELIGIBILITY;
+  // A home choice kept from a GRIDGO that offered it is dropped where it is not.
+  const value: Eligibility = !homeOffered && isHomeKind(stored) ? { ...stored, shopKind: null } : stored;
+  const home = isHomeKind(value);
   const problems = eligibilityProblems(value);
   const problem = (field: keyof Eligibility) => (showProblems ? (problems[field] ?? null) : null);
 
   // Signed in already (back from Sign in, or reopening the app): GRIDGO knows
   // where this sign-up stands, unless step 0 has not been answered anywhere.
   useEffect(() => {
-    if (!isSignedIn || checked.current) return;
+    if (!isSignedIn || checked.current || useGuidedSignup.getState().homeUnavailable) return;
     checked.current = true;
     void (async () => {
       const local = useSignupDraft.getState().draft.eligibility;
@@ -84,9 +105,13 @@ export default function SignupStartStep() {
 
   return (
     <OnboardingStep
-      progress={{ label: "Takes 30 sec", now: 0, max: 6 }}
+      progress={{ label: "Takes 30 sec", now: 0, max: home ? 5 : 6 }}
       title="Tell us about you"
-      lede="Three quick answers. Then your shop is about 5 minutes away."
+      lede={
+        home
+          ? "Two quick answers. Then you're about 5 minutes from printing."
+          : "Three quick answers. Then your shop is about 5 minutes away."
+      }
       contentClassName="gap-6 pb-4 pt-4"
       footer={
         <>
@@ -108,22 +133,36 @@ export default function SignupStartStep() {
     >
       <FieldShell label="Where do you print?" error={problem("shopKind")}>
         <OptionList
-          options={SHOP_KIND_OPTIONS}
+          options={shopKindOptions(homeOffered)}
           value={value.shopKind}
           onChange={(shopKind) => edit({ shopKind })}
           accessibilityLabel="Where do you print?"
         />
       </FieldShell>
 
-      <FieldShell label="Are you the owner?" error={problem("registrantRole")}>
-        <OptionList
-          options={ROLE_OPTIONS}
-          value={value.registrantRole}
-          onChange={(registrantRole) => edit({ registrantRole })}
-          accessibilityLabel="Are you the owner?"
-        />
-      </FieldShell>
-      {value.registrantRole === "manager" ? (
+      {homeUnavailable ? (
+        <Text className="-mt-3 text-caption text-text-muted" testID="home-not-open">
+          {HOME_NOT_OPEN_YET}
+        </Text>
+      ) : null}
+
+      {home ? (
+        <Text className="-mt-3 text-caption text-text-muted" testID="home-kind-note">
+          {"No shop hours: you go online when you're ready. Clients only ever see your barangay."}
+        </Text>
+      ) : null}
+
+      {home ? null : (
+        <FieldShell label="Are you the owner?" error={problem("registrantRole")}>
+          <OptionList
+            options={ROLE_OPTIONS}
+            value={value.registrantRole}
+            onChange={(registrantRole) => edit({ registrantRole })}
+            accessibilityLabel="Are you the owner?"
+          />
+        </FieldShell>
+      )}
+      {!home && value.registrantRole === "manager" ? (
         <Text className="-mt-3 text-caption text-text-muted">
           {"You set up the shop. Your owner gets a link to claim it and sets where GRIDGO pays."}
         </Text>

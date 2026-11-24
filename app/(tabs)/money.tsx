@@ -12,7 +12,9 @@ import { WaitingPayoutList } from "@/components/verify/WaitingPayoutList";
 import { useShopMoney } from "@/hooks/useShopMoney";
 import { useShopVerification } from "@/hooks/useShopVerification";
 import { launchBonusSummary, type MoneyPeriod } from "@/lib/shopMoney";
-import { missingPapers, moneyVerifyBanner } from "@/lib/shopVerification";
+import { homePapersOnFile, verifiedMissing } from "@/lib/homePrinter";
+import { homeMoneyVerifyBanner, missingPapers, moneyVerifyBanner } from "@/lib/shopVerification";
+import { useHomePrinter } from "@/store/homePrinter";
 import { PayoutView } from "../payout";
 
 /**
@@ -29,7 +31,13 @@ export default function MoneyScreen() {
   // While the shop is not verified: how much of the cap is used, and which
   // staged payments wait on verification. Kept off the receiving-QR screen.
   const { read } = useShopVerification();
-  const banner = read ? moneyVerifyBanner(read.verification, missingPapers(read.files)) : null;
+  // A home printer's Verified papers are not a shop's (gridgo-api#412).
+  const home = useHomePrinter((s) => s.home);
+  const banner = !read
+    ? null
+    : home
+      ? homeMoneyVerifyBanner(read.verification, verifiedMissing(homePapersOnFile(read.files)))
+      : moneyVerifyBanner(read.verification, missingPapers(read.files));
   const [period, setPeriod] = useState<MoneyPeriod>("week");
   const money = useShopMoney(period);
   const bonus = money.read ? launchBonusSummary(money.read.jobs) : null;
