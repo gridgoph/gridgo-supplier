@@ -21,6 +21,10 @@ Changes that have merged but are not released yet. Each one is a file in [`whats
 
 <!-- CI adds each release below this line. -->
 
+## 1.0.507 (Fix)
+
+- Buttons dim when you tap them again, and week days and small close buttons keep their size on phones.
+
 ## 1.0.501 (New feature)
 
 - You can sign in with Facebook once GRIDGO turns it on. A Facebook without an email adds one with a code.
