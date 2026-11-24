@@ -1,67 +1,41 @@
 import {
-  clerkOffersFacebook,
   environmentOffersFacebook,
   facebookContactFrom,
   facebookOutcome,
   isContactTakenError,
   isFacebookEmailTakenError,
-  resetFacebookOfferForTests,
 } from "@/lib/facebookSignIn";
 
-const KEY = "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k"; // clerk.example.com
-
-function environment(facebook?: { enabled: boolean; authenticatable?: boolean }) {
-  return {
-    user_settings: {
-      social: {
-        oauth_google: { enabled: true, authenticatable: true },
-        ...(facebook ? { oauth_facebook: facebook } : {}),
-      },
-    },
-  };
-}
-
-function answering(body: unknown, ok = true) {
-  return jest.fn(async () => ({ ok, json: async () => body }) as unknown as Response);
-}
-
 describe("whether Clerk offers Facebook", () => {
-  beforeEach(() => resetFacebookOfferForTests());
+  it("reads the sign-in strategies Clerk loaded", () => {
+    expect(
+      environmentOffersFacebook({
+        userSettings: { authenticatableSocialStrategies: ["oauth_google", "oauth_facebook"] },
+      }),
+    ).toBe(true);
+    expect(environmentOffersFacebook({ userSettings: { authenticatableSocialStrategies: ["oauth_google"] } })).toBe(
+      false,
+    );
+  });
 
-  it("is on only when the environment lists oauth_facebook as enabled", () => {
-    expect(environmentOffersFacebook(environment({ enabled: true, authenticatable: true }))).toBe(true);
-    expect(environmentOffersFacebook(environment({ enabled: false }))).toBe(false);
-    expect(environmentOffersFacebook(environment({ enabled: true, authenticatable: false }))).toBe(false);
-    expect(environmentOffersFacebook(environment())).toBe(false);
+  it("falls back to the social settings when the strategy list is absent", () => {
+    expect(
+      environmentOffersFacebook({ userSettings: { social: { oauth_facebook: { enabled: true, authenticatable: true } } } }),
+    ).toBe(true);
+    expect(
+      environmentOffersFacebook({ userSettings: { social: { oauth_facebook: { enabled: false } } } }),
+    ).toBe(false);
+    expect(
+      environmentOffersFacebook({
+        userSettings: { social: { oauth_facebook: { enabled: true, authenticatable: false } } },
+      }),
+    ).toBe(false);
+  });
+
+  it("hides the button before Clerk has an environment", () => {
+    expect(environmentOffersFacebook(undefined)).toBe(false);
     expect(environmentOffersFacebook(null)).toBe(false);
-  });
-
-  it("reads Clerk's public environment for this key's instance", async () => {
-    const fetchImpl = answering(environment({ enabled: true }));
-    await expect(clerkOffersFacebook(KEY, fetchImpl)).resolves.toBe(true);
-    expect(fetchImpl).toHaveBeenCalledWith("https://clerk.example.com/v1/environment");
-  });
-
-  it("asks once per launch", async () => {
-    const fetchImpl = answering(environment({ enabled: true }));
-    await clerkOffersFacebook(KEY, fetchImpl);
-    await clerkOffersFacebook(KEY, fetchImpl);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-  });
-
-  it("hides the button when the read fails, and asks again next time", async () => {
-    const failing = jest.fn(async () => {
-      throw new Error("offline");
-    });
-    await expect(clerkOffersFacebook(KEY, failing)).resolves.toBe(false);
-    const fetchImpl = answering(environment({ enabled: true }));
-    await expect(clerkOffersFacebook(KEY, fetchImpl)).resolves.toBe(true);
-  });
-
-  it("hides the button with no usable key", async () => {
-    const fetchImpl = answering(environment({ enabled: true }));
-    await expect(clerkOffersFacebook(undefined, fetchImpl)).resolves.toBe(false);
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(environmentOffersFacebook({ userSettings: null })).toBe(false);
   });
 });
 

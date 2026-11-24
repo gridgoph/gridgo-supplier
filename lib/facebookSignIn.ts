@@ -1,5 +1,4 @@
 import { clerkErrorCode } from "@/lib/clerk";
-import { frontendApiHost } from "@/lib/clerkPhone";
 import { missingSignUpFieldsMessage } from "@/lib/clerkSignUp";
 import { isEmailish } from "@/lib/onboardingSteps";
 import { normalizeInviteIdentity } from "@/lib/shopTeam";
@@ -8,7 +7,7 @@ import { normalizeInviteIdentity } from "@/lib/shopTeam";
  * Continue with Facebook (issue report 329B287C).
  *
  * The button exists only while GRIDGO's Clerk instance offers Facebook: the
- * answer is read from Clerk's public environment at launch, so switching the
+ * answer is read from the environment Clerk loads at launch, so switching the
  * connection on in Clerk lights the button up without an app release, and a
  * Clerk without it leaves the sign-in screen exactly as it was.
  *
@@ -42,46 +41,27 @@ export const FACEBOOK_CONTACT_PROBLEM = "Add an email like you@example.com, or a
 export const FACEBOOK_NO_TEXTS =
   "GRIDGO cannot text codes to mobiles yet. Add your email instead.";
 
-type EnvironmentBody = {
-  user_settings?: {
-    social?: Record<string, { enabled?: unknown; authenticatable?: unknown } | undefined>;
-  };
-};
-
-/** Whether Clerk's environment lists Facebook as a way to sign in. */
-export function environmentOffersFacebook(body: unknown): boolean {
-  const social = (body as EnvironmentBody | null)?.user_settings?.social;
-  const facebook = social?.[FACEBOOK_STRATEGY];
-  return facebook?.enabled === true && facebook.authenticatable !== false;
-}
-
-let asked: { key: string; answer: Promise<boolean> } | null = null;
+/** The part of Clerk's loaded environment this reads. */
+export type ClerkEnvironmentLike = {
+  userSettings?: {
+    authenticatableSocialStrategies?: readonly string[] | null;
+    social?: Record<string, { enabled?: unknown; authenticatable?: unknown } | undefined> | null;
+  } | null;
+} | null | undefined;
 
 /**
- * Read once per launch. A failed read hides the button and is not kept, so
- * the next visit to Sign in asks again.
+ * Whether Clerk's environment lists Facebook as a way to sign in. Read from
+ * the environment Clerk loads at launch (native and web alike), so there is
+ * no second request and nothing to keep in step.
  */
-export function clerkOffersFacebook(
-  publishableKey: string | null | undefined,
-  fetchImpl: typeof fetch = fetch,
-): Promise<boolean> {
-  const host = frontendApiHost(publishableKey);
-  if (!host) return Promise.resolve(false);
-  if (asked?.key === host) return asked.answer;
-  const answer = fetchImpl(`https://${host}/v1/environment`)
-    .then(async (response) => (response.ok ? environmentOffersFacebook(await response.json()) : null))
-    .catch(() => null)
-    .then((offered) => {
-      if (offered === null) asked = null;
-      return offered === true;
-    });
-  asked = { key: host, answer };
-  return answer;
-}
-
-/** Tests only: forget the launch's answer. */
-export function resetFacebookOfferForTests() {
-  asked = null;
+export function environmentOffersFacebook(environment: ClerkEnvironmentLike): boolean {
+  const settings = environment?.userSettings;
+  if (!settings) return false;
+  if (Array.isArray(settings.authenticatableSocialStrategies)) {
+    return settings.authenticatableSocialStrategies.includes(FACEBOOK_STRATEGY);
+  }
+  const facebook = settings.social?.[FACEBOOK_STRATEGY];
+  return facebook?.enabled === true && facebook.authenticatable !== false;
 }
 
 export type FacebookFlowResult = {

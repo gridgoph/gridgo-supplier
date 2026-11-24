@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 const mockSetActive = jest.fn(async () => undefined);
 const mockStartSSOFlow = jest.fn();
 let mockClerkUser: unknown = null;
+let mockStrategies: string[] = ["oauth_google"];
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), replace: jest.fn(), dismissTo: jest.fn() },
@@ -10,9 +11,9 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("@clerk/expo", () => ({
-  useAuth: () => ({ isSignedIn: false, getToken: jest.fn(async () => "clerk-jwt") }),
+  useAuth: () => ({ isLoaded: true, isSignedIn: false, getToken: jest.fn(async () => "clerk-jwt") }),
   useClerk: () => ({
-    publishableKey: "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k",
+    __internal_environment: { userSettings: { authenticatableSocialStrategies: mockStrategies } },
     setActive: mockSetActive,
     signOut: jest.fn(async () => undefined),
     get user() {
@@ -55,7 +56,6 @@ import {
   FACEBOOK_CANCELLED,
   FACEBOOK_EMAIL_TAKEN,
   FACEBOOK_UNAVAILABLE,
-  resetFacebookOfferForTests,
 } from "@/lib/facebookSignIn";
 import { EMPTY_SIGNUP_DRAFT, useSignupDraft } from "@/store/signupDraft";
 import { useSession } from "@/store/session";
@@ -65,20 +65,8 @@ const mockRouter = jest.requireMock("expo-router").router as {
   replace: jest.Mock;
 };
 
-const originalFetch = global.fetch;
-
 function clerkEnvironment(withFacebook: boolean) {
-  global.fetch = jest.fn(async () => ({
-    ok: true,
-    json: async () => ({
-      user_settings: {
-        social: {
-          oauth_google: { enabled: true, authenticatable: true },
-          ...(withFacebook ? { oauth_facebook: { enabled: true, authenticatable: true } } : {}),
-        },
-      },
-    }),
-  })) as unknown as typeof fetch;
+  mockStrategies = withFacebook ? ["oauth_google", "oauth_facebook"] : ["oauth_google"];
 }
 
 const approvedShop = {
@@ -102,7 +90,6 @@ describe("Continue with Facebook", () => {
     jest.clearAllMocks();
     mockStartSSOFlow.mockReset();
     mockClerkUser = null;
-    resetFacebookOfferForTests();
     useSession.setState({
       user: null,
       loading: false,
@@ -114,15 +101,9 @@ describe("Continue with Facebook", () => {
     useSignupDraft.setState({ draft: { ...EMPTY_SIGNUP_DRAFT }, hydrated: true });
   });
 
-  afterAll(() => {
-    global.fetch = originalFetch;
-  });
-
   it("is not drawn while Clerk does not offer Facebook, and the screen stays as it was", async () => {
     clerkEnvironment(false);
     await render(<LoginScreen />);
-    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
-    await act(async () => undefined);
     expect(screen.queryByLabelText("Continue with Facebook")).toBeNull();
     const labels = screen.getAllByRole("button").map((b) => b.props.accessibilityLabel as string | undefined);
     expect(labels.indexOf("Continue with Apple")).toBeLessThan(labels.indexOf("Continue with Google"));

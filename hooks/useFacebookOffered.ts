@@ -1,26 +1,15 @@
-import { useClerk } from "@clerk/expo";
-import { useEffect, useState } from "react";
+import { useAuth, useClerk } from "@clerk/expo";
 
-import { clerkOffersFacebook } from "@/lib/facebookSignIn";
+import { environmentOffersFacebook, type ClerkEnvironmentLike } from "@/lib/facebookSignIn";
 
 /**
- * True once Clerk's environment says Facebook is switched on. Until then, and
- * whenever the read fails, the button is simply not drawn.
+ * True once Clerk has loaded and its environment offers Facebook. Until then,
+ * and on a Clerk without Facebook, the button is simply not drawn.
  */
 export function useFacebookOffered(): boolean {
-  const clerk = useClerk() as { publishableKey?: string | null };
-  const key = clerk.publishableKey;
-  const [offered, setOffered] = useState(false);
-
-  useEffect(() => {
-    let live = true;
-    void clerkOffersFacebook(key).then((answer) => {
-      if (live) setOffered(answer);
-    });
-    return () => {
-      live = false;
-    };
-  }, [key]);
-
-  return offered;
+  // `isLoaded` re-renders this once Clerk's environment has arrived.
+  const { isLoaded } = useAuth();
+  const clerk = useClerk() as { __internal_environment?: ClerkEnvironmentLike };
+  if (!isLoaded) return false;
+  return environmentOffersFacebook(clerk.__internal_environment);
 }
