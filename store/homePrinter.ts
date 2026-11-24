@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { liveGeneration } from "@/lib/live";
 import { loadHomePrinter, updateHomePrinter, type HomePrinterRead, type HomeWrite } from "@/lib/homePrinter";
 
 /**
@@ -20,30 +21,49 @@ type HomePrinterState = {
 };
 
 let loading: Promise<HomePrinterRead | false | null> | null = null;
+/**
+ * Bumped by `reset()` on every account change. An answer that started under an
+ * earlier epoch (or live generation) is dropped, so one owner's private pin and
+ * status can never land on the next account's screens.
+ */
+let epoch = 0;
+const ticket = () => `${epoch}:${liveGeneration()}`;
 
 export const useHomePrinter = create<HomePrinterState>()((set, get) => ({
   home: null,
   error: null,
   load: () => {
     loading ??= (async () => {
+      const mine = ticket();
       const read = await loadHomePrinter();
+      if (mine !== ticket()) return null;
       if (read.status === "ok") set({ home: read.read, error: null });
       else if (read.status === "none") set({ home: false, error: null });
       else set({ error: read.message });
       return get().home;
-    })().finally(() => {
-      loading = null;
-    });
-    return loading;
+    })();
+    const current = loading;
+    current
+      .finally(() => {
+        if (loading === current) loading = null;
+      })
+      .catch(() => undefined);
+    return current;
   },
   update: async (change, fallback) => {
     const current = get().home;
     if (!current) return { status: "failed", message: "GRIDGO has not loaded your home printing yet. Try again.", code: null };
+    const mine = ticket();
     const result = await updateHomePrinter(current.version, change, fallback);
+    if (mine !== ticket()) return { status: "failed", message: fallback, code: null };
     if (result.status === "ok") set({ home: result.read, error: null });
     return result;
   },
-  reset: () => set({ home: null, error: null }),
+  reset: () => {
+    epoch += 1;
+    loading = null;
+    set({ home: null, error: null });
+  },
 }));
 
 /** True once GRIDGO said this signed-in owner prints from home. */
