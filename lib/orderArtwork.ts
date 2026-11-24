@@ -1,23 +1,30 @@
 import type { Order, StoredFile } from "@/lib/api";
 import { itemAttachments } from "@/lib/artworkAttachments";
+import { itemMemberName } from "@/lib/expressOrder";
 
-export type ArtworkReference = { fileId: string; kind: "artwork" | "mockup"; itemName?: string };
+export type ArtworkReference = {
+  fileId: string;
+  kind: "artwork" | "mockup";
+  itemName?: string;
+  /** On a group order, whose bundle the file goes in. */
+  memberName?: string;
+};
 
 /** Only production artwork/reference pictures; never receipts or private evidence. */
 export function orderArtwork(order: Pick<Order, "artworkFileIds" | "mockupFileIds" | "productionItems">): ArtworkReference[] {
   const files: ArtworkReference[] = [];
   const seen = new Set<string>();
-  function add(fileId: string | null | undefined, kind: ArtworkReference["kind"], itemName?: string) {
+  function add(fileId: string | null | undefined, kind: ArtworkReference["kind"], itemName?: string, memberName?: string | null) {
     if (!fileId || seen.has(fileId)) return;
     seen.add(fileId);
-    files.push({ fileId, kind, ...(itemName ? { itemName } : {}) });
+    files.push({ fileId, kind, ...(itemName ? { itemName } : {}), ...(memberName ? { memberName } : {}) });
   }
   for (const item of order.productionItems ?? []) {
     // Every file the client attached to the line, main file first.
     for (const entry of itemAttachments(item)) {
-      if (entry.kind === "file") add(entry.fileId, "artwork", item.itemName);
+      if (entry.kind === "file") add(entry.fileId, "artwork", item.itemName, itemMemberName(item));
     }
-    add(item.mockupFileId, "mockup", item.itemName);
+    add(item.mockupFileId, "mockup", item.itemName, itemMemberName(item));
   }
   for (const id of order.artworkFileIds ?? []) add(id, "artwork");
   for (const id of order.mockupFileIds ?? []) add(id, "mockup");

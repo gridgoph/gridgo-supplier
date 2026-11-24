@@ -47,7 +47,10 @@ function AttachmentCard({ orderId, group, showItem }: { orderId: string; group: 
     <View className="gap-2">
       {showItem ? (
         <View className="flex-row flex-wrap items-baseline justify-between gap-x-3">
-          <Text className="text-body font-medium text-text-primary">{group.itemName}</Text>
+          <Text className="text-body font-medium text-text-primary">
+            {group.itemName}
+            {group.memberName ? <Text className="text-body text-text-muted">{` · For ${group.memberName}`}</Text> : null}
+          </Text>
           <Text className="text-caption text-text-muted">{attachmentCountLine(group.entries)}</Text>
         </View>
       ) : null}

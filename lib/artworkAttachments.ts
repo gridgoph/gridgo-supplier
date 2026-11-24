@@ -1,5 +1,6 @@
 import type { Order, ProductionItem } from "@/lib/api";
 import { toDesignLink, type DesignLink } from "@/lib/designLink";
+import { itemMemberName } from "@/lib/expressOrder";
 
 /**
  * Several files and design links on one item (gridgo-api
@@ -33,6 +34,8 @@ export type AttachmentEntry =
 export type AttachmentGroup = {
   itemId: string;
   itemName: string;
+  /** On a group order, whose bundle this line goes in; null otherwise. */
+  memberName: string | null;
   entries: AttachmentEntry[];
 };
 
@@ -83,7 +86,7 @@ export function itemAttachments(item: ProductionItem): AttachmentEntry[] {
 /** Each line that has artwork, in the order's line order. */
 export function attachmentGroups(order: Pick<Order, "productionItems">): AttachmentGroup[] {
   return (order.productionItems ?? [])
-    .map((item) => ({ itemId: item.id, itemName: item.itemName, entries: itemAttachments(item) }))
+    .map((item) => ({ itemId: item.id, itemName: item.itemName, memberName: itemMemberName(item), entries: itemAttachments(item) }))
     .filter((group) => group.entries.length > 0);
 }
 

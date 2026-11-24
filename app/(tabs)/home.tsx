@@ -25,6 +25,7 @@ import { SecondaryButton } from "@/components/SecondaryButton";
 import { ShopNotReadyCard, ShopReadyLine, ShopSetupGaps } from "@/components/ShopReadiness";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { StatusChip } from "@/components/StatusChip";
+import { GroupOrderChip } from "@/components/GroupOrderChip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { TodoRow } from "@/components/TodoRow";
 import { TourTarget } from "@/components/TourTarget";
@@ -56,6 +57,7 @@ import { loadReadiness } from "@/hooks/useReadiness";
 import type { Readiness } from "@/lib/readiness";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useThemeColors } from "@/hooks/useTheme";
+import { expressGroup } from "@/lib/expressOrder";
 
 type QuietRead = { loading: boolean; error: string | null };
 
@@ -700,6 +702,7 @@ function NextCard({
           />
         </View>
         <Text className="text-h2 text-text-primary">{obligation.title}</Text>
+        <GroupTag job={job} />
         {/* The same Tight badge the job screen shows: it is why the shop may decline. */}
         {job && isTightBeforeAccepting(job) ? <SchedulingNotice order={job} compact /> : null}
         {obligation.kind === "proof" && obligation.amountMinor != null && !hideMoney ? (
@@ -715,6 +718,16 @@ function NextCard({
       <PrimaryButton label={obligation.actionLabel} onPress={onPress} />
     </View>
   );
+}
+
+/** A group order's tag under the title: the person at the counter collects every bundle. */
+function GroupTag({ job }: { job?: api.Order }) {
+  const group = job ? expressGroup(job) : null;
+  return group ? (
+    <View className="flex-row">
+      <GroupOrderChip group={group} />
+    </View>
+  ) : null;
 }
 
 /**

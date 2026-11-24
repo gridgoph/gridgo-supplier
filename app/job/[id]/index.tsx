@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ExpressChip } from "@/components/ExpressChip";
 import { ExpressOffer } from "@/components/express/ExpressOffer";
 import { ExpressPrintList } from "@/components/ExpressPrintList";
+import { GroupOrderChip } from "@/components/GroupOrderChip";
 import { SchedulingNotice } from "@/components/SchedulingNotice";
 import { ForcedStepNotice } from "@/components/ForcedStepNotice";
 import { JobActionBar } from "@/components/JobActionBar";
@@ -339,8 +340,9 @@ export default function JobWorkspaceScreen() {
             </Text>
           ) : null}
           {express ? (
-            <View className="flex-row">
+            <View className="flex-row flex-wrap gap-2">
               <ExpressChip />
+              {express.group ? <GroupOrderChip group={express.group} /> : null}
             </View>
           ) : isExpressOrder(job) ? (
             <View className="gap-1.5">
