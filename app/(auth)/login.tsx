@@ -7,6 +7,7 @@ import { Pressable, Text, View } from "react-native";
 import { AppleSignInButton } from "@/components/AppleSignInButton";
 import { AuthDivider } from "@/components/AuthDivider";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { FacebookSignInButton } from "@/components/FacebookSignInButton";
 import { FormScrollView } from "@/components/FormScrollView";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { GridgoLogo } from "@/components/GridgoLogo";
@@ -27,6 +28,7 @@ import {
 import { health } from "@/lib/api";
 import {
   clerkAccessFor,
+  clerkDisplayName,
   clerkErrorMessage,
   isAlreadySignedInError,
   type ClerkGetToken,
@@ -39,7 +41,16 @@ import {
 } from "@/lib/clerkSignIn";
 import { SessionWait } from "@/components/SessionWait";
 import { appleSignInOutcome, isAppleCancel, type AppleFlowResult } from "@/lib/appleSignIn";
+import {
+  FACEBOOK_CANCELLED,
+  FACEBOOK_EMAIL_TAKEN,
+  FACEBOOK_STRATEGY,
+  FACEBOOK_UNAVAILABLE,
+  facebookOutcome,
+  isFacebookEmailTakenError,
+} from "@/lib/facebookSignIn";
 import { completeGoogleSso } from "@/lib/googleSso";
+import { useFacebookOffered } from "@/hooks/useFacebookOffered";
 import { SESSION_ENDED_MESSAGE, TEAM_REMOVED_DETAIL, TEAM_REMOVED_TITLE, useSession } from "@/store/session";
 import { useSignInNotice } from "@/store/signInNotice";
 import { isJoiningTeam, useTeamJoin } from "@/store/teamJoin";
@@ -51,13 +62,17 @@ export default function LoginScreen() {
   const { startSSOFlow } = useSSO();
   const { isSignedIn, getToken } = useAuth();
   const { user: clerkUser } = useUser();
-  const { setActive, signOut } = useClerk();
+  const clerk = useClerk();
+  const { setActive, signOut } = clerk;
+  const facebookOffered = useFacebookOffered();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // A calm word, not an error: the person closed Facebook's window.
+  const [notice, setNotice] = useState<string | null>(null);
   const [healthState, setHealthState] = useState<HealthState>("checking");
   const sessionWait = useSession((state) => state.sessionWait);
   const identity = useSession((state) => state.identity);
@@ -95,6 +110,7 @@ export default function LoginScreen() {
   function startAttempt() {
     setBusy(true);
     setProblem(null);
+    setNotice(null);
     useSession.getState().clearSignInRefusal();
   }
 
@@ -115,7 +131,11 @@ export default function LoginScreen() {
       return;
     }
     if (next.kind === "apply") {
-      prepareApplyDraft(clerkUser?.primaryEmailAddress?.emailAddress);
+      // Read the live Clerk user: right after Google, Apple or Facebook the
+      // hook's copy can still be the signed-out one. The name is only a
+      // default the shop can change on the apply form.
+      const person = clerk.user ?? clerkUser;
+      prepareApplyDraft(person?.primaryEmailAddress?.emailAddress, clerkDisplayName(person));
     }
     if (next.kind === "join" || next.kind === "team_removed") {
       useSession.getState().clearSessionWait();
@@ -277,6 +297,52 @@ export default function LoginScreen() {
   }
 
   /**
+   * Continue with Facebook. Clerk links a Facebook login to the GRIDGO person
+   * who already holds its email, so this lands an existing shop in its own
+   * account; a Facebook login without an email finishes on the next screen,
+   * which asks for an email or mobile and its six-digit code.
+   */
+  async function continueWithFacebook() {
+    startAttempt();
+    try {
+      if (isSignedIn) {
+        useSession.getState().beginSessionWait("in");
+        await adoptAndEnter();
+        return;
+      }
+      const result = await startSSOFlow({ strategy: FACEBOOK_STRATEGY });
+      const outcome = facebookOutcome(result);
+      if (outcome.status === "activated") {
+        await setActive({ session: outcome.sessionId });
+        useSession.getState().beginSessionWait("in");
+        await adoptAndEnter();
+        return;
+      }
+      if (outcome.status === "needs_contact" || outcome.status === "needs_code") {
+        router.push({
+          pathname: "/(auth)/facebook-details",
+          params: { step: outcome.status === "needs_code" ? "code" : "contact" },
+        });
+        return;
+      }
+      if (outcome.status === "incomplete") {
+        setProblem(outcome.message);
+        return;
+      }
+      if (outcome.status === "cancelled") {
+        useSession.getState().clearSessionWait();
+        setNotice(FACEBOOK_CANCELLED);
+      }
+      // "pending": the native return is adopting on /sso-callback.
+    } catch (error) {
+      useSession.getState().clearSessionWait();
+      setProblem(isFacebookEmailTakenError(error) ? FACEBOOK_EMAIL_TAKEN : FACEBOOK_UNAVAILABLE);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
    * Sign in with Apple (iPhone only). Apple's sheet is native, so unlike
    * Google there is no browser return to wait for: the flow either hands back
    * a session, which is activated and joined to GRIDGO exactly as Google's is,
@@ -405,6 +471,10 @@ export default function LoginScreen() {
               <View className="mt-4">
                 <ErrorNotice message={shown} />
               </View>
+            ) : notice ? (
+              <Text className="mt-4 text-body text-text-secondary" accessibilityRole="alert">
+                {notice}
+              </Text>
             ) : null}
 
             <View className="mt-6 gap-4">
@@ -414,8 +484,19 @@ export default function LoginScreen() {
                 onPress={() => void submitPassword()}
               />
               <AuthDivider />
-              <AppleSignInButton disabled={busy} onPress={(start) => void continueWithApple(start)} />
-              <GoogleSignInButton disabled={busy} onPress={() => void continueWithGoogle()} />
+              {facebookOffered ? (
+                <>
+                  {/* Facebook first, then Google, then Apple (report 329B287C). */}
+                  <FacebookSignInButton disabled={busy} onPress={() => void continueWithFacebook()} />
+                  <GoogleSignInButton disabled={busy} onPress={() => void continueWithGoogle()} />
+                  <AppleSignInButton disabled={busy} onPress={(start) => void continueWithApple(start)} />
+                </>
+              ) : (
+                <>
+                  <AppleSignInButton disabled={busy} onPress={(start) => void continueWithApple(start)} />
+                  <GoogleSignInButton disabled={busy} onPress={() => void continueWithGoogle()} />
+                </>
+              )}
             </View>
 
             <Pressable

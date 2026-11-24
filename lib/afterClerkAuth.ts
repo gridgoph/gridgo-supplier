@@ -148,9 +148,18 @@ export async function enterAfterClerkSession(
   }
 }
 
-export function prepareApplyDraft(email?: string | null) {
+/**
+ * Carry what the login already knows onto the apply form. The name (from
+ * Google, Apple or Facebook) only fills an empty field: it is a default the
+ * shop can change, never something it has to undo.
+ */
+export function prepareApplyDraft(email?: string | null, name?: string | null) {
   const trimmed = email?.trim();
   if (trimmed) useSignupDraft.getState().patch({ email: trimmed });
+  const person = name?.trim();
+  if (person && !useSignupDraft.getState().draft.contactName.trim()) {
+    useSignupDraft.getState().patch({ contactName: person });
+  }
 }
 
 export function hrefAfterClerkAuth(
