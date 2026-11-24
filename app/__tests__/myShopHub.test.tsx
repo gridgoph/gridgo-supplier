@@ -43,6 +43,7 @@ jest.mock("@/store/sheets", () => ({
 }));
 
 import AccountScreen from "@/app/(tabs)/account";
+import * as productRail from "@/components/myshop/ProductRail";
 import {
   getMyReviews,
   getShopHours,
@@ -163,6 +164,41 @@ describe("My shop hub", () => {
     expect(await screen.findByText("A3 prints")).toBeTruthy();
     await fireEvent.press(screen.getByTestId("product-tile-item_1"));
     expect(router.push).toHaveBeenCalledWith("/product-actions?id=item_1");
+  });
+
+  // Issue report 8DC78D1F: one product the tab cannot draw must not close it.
+  it("opens with a product it cannot draw, shown plainly beside the rest", async () => {
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+    (listCatalogItems as jest.Mock).mockResolvedValue({
+      items: [
+        { id: "item_1", version: 1, name: "A3 prints", basePriceMinor: 1000, active: true, photos: [] },
+        { id: "item_2", version: 1, name: "Odd price", basePriceMinor: 12.5, active: true, photos: [] },
+      ],
+      nextCursor: null,
+      total: 2,
+    });
+    view = await render(<AccountScreen />);
+
+    expect(await screen.findByText("A3 prints")).toBeTruthy();
+    expect(screen.getByTestId("product-tile-item_2-unavailable")).toBeTruthy();
+    expect(screen.getByText("OPEN")).toBeTruthy();
+    expect(screen.getByText("Sign out")).toBeTruthy();
+    consoleError.mockRestore();
+  });
+
+  it("still opens when the products cannot be drawn at all", async () => {
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+    const rail = jest.spyOn(productRail, "ProductRail").mockImplementation(() => {
+      throw new Error("unexpected product data");
+    });
+    view = await render(<AccountScreen />);
+
+    expect(await screen.findByText("Open your products")).toBeTruthy();
+    expect(screen.getByText("Sign out")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Open your products"));
+    expect(router.push).toHaveBeenCalledWith("/(tabs)/catalogues");
+    rail.mockRestore();
+    consoleError.mockRestore();
   });
 
   it("shows Staff the sign without letting them change it", async () => {
