@@ -114,6 +114,13 @@ function readMember(row: Raw): ExpressMember | null {
   return id && name ? { id, name } : null;
 }
 
+/** Whose bundle a production line goes in on a group order; null on every other line. */
+export function itemMemberName(item: { groupMember?: unknown }): string | null {
+  const member = obj(item.groupMember);
+  const name = typeof member?.name === "string" ? member.name.trim() : "";
+  return name || null;
+}
+
 /** The group tag's facts, or null for an ordinary order. */
 export function expressGroup(order: Partial<Pick<Order, "groupOrder">> | null | undefined): ExpressGroup | null {
   const raw = obj(order?.groupOrder);

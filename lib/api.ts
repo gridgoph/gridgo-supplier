@@ -230,6 +230,11 @@ export type SupplierSettlementPayout = {
 export type RefundDisposition = "cancelled" | "fulfilled_with_refund";
 
 export type ProductionItem = {
+  /**
+   * On a group Express order, the person this line is packed for
+   * (gridgo-api `docs/GROUP_EXPRESS_API.md`). Read through `itemMemberName`.
+   */
+  groupMember?: unknown;
   documentPages?: { total: number; range: string | null; printed: number } | null;
   id: string;
   itemName: string;

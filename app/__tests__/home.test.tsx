@@ -320,6 +320,16 @@ describe("a Tight offer on Home", () => {
     await view.unmount();
   });
 
+  it("tags a group order on Needs you next", async () => {
+    (listJobs as jest.Mock).mockResolvedValue([
+      { ...offer, groupOrder: { id: "grp", memberCount: 3, hostName: "Host" } },
+    ]);
+    const view = await render(<HomeScreen />);
+    expect(await screen.findByText("NEEDS YOU NEXT")).toBeTruthy();
+    expect(screen.getByText("Group order, 3 people")).toBeTruthy();
+    await view.unmount();
+  });
+
   it("draws no badge for an offer that is not Tight", async () => {
     (listJobs as jest.Mock).mockResolvedValue([
       { ...offer, scheduling: { status: "secured", sameDay: false, tightDeadline: false, label: null } },

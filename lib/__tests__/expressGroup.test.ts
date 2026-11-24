@@ -1,4 +1,4 @@
-import { bundleHint, bundleLine, expressBundles, expressView, groupTagLabel } from "@/lib/expressOrder";
+import { bundleHint, bundleLine, expressBundles, expressView, groupTagLabel, itemMemberName } from "@/lib/expressOrder";
 import type { Order } from "@/lib/api";
 
 const print = (fileId: string, printed: number, copies: number, member?: { id: string; name: string }) => ({
@@ -71,5 +71,11 @@ describe("group orders", () => {
       order([print("f1", 2, 1, ana)], { fulfillmentMode: "delivery", groupOrder: { id: "grp_1", memberCount: 2 } }),
     )!;
     expect(bundleHint(delivery)).toBe("Write each name on its bundle. The rider takes them all to the host.");
+  });
+
+  it("names the person a production line is packed for, and nobody on an ordinary line", () => {
+    expect(itemMemberName({ groupMember: { id: "user_b", name: " Member B " } })).toBe("Member B");
+    expect(itemMemberName({ groupMember: { id: "user_b" } })).toBeNull();
+    expect(itemMemberName({})).toBeNull();
   });
 });

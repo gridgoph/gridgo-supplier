@@ -38,6 +38,7 @@ import {
 } from "@/lib/jobBrief";
 import { showsAttachmentList } from "@/lib/artworkAttachments";
 import { colourLines } from "@/lib/colourPricing";
+import { itemMemberName } from "@/lib/expressOrder";
 import { orderArtwork } from "@/lib/orderArtwork";
 import { counterCheck } from "@/lib/pickupCheck";
 import { progressPhotoViews } from "@/lib/productionPhoto";
@@ -187,7 +188,12 @@ function SectionBody({
             return (
               <View key={item.id}>
                 {items.length > 1 ? (
-                  <Text className="pt-1 text-body font-medium text-text-primary">{item.itemName}</Text>
+                  <Text className="pt-1 text-body font-medium text-text-primary">
+                    {item.itemName}
+                    {itemMemberName(item) ? (
+                      <Text className="text-body text-text-muted">{` · For ${itemMemberName(item)}`}</Text>
+                    ) : null}
+                  </Text>
                 ) : null}
                 {rows.map((spec, index) => (
                   <SpecRow

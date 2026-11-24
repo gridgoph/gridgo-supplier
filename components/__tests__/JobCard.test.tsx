@@ -181,3 +181,11 @@ it("keeps the shop's price off a Staff member's card", async () => {
   expect(screen.getByText(/A5/)).toBeTruthy();
   useSession.setState({ user: null });
 });
+
+it("tags a group Express order in the job list, and only a group order", async () => {
+  const express = { ...job, orderType: "express" };
+  await render(<JobCard job={{ ...express, groupOrder: { id: "grp", memberCount: 5, hostName: "Host" } }} />);
+  expect(screen.getByText("Group order, 5 people")).toBeTruthy();
+  await render(<JobCard job={express} />);
+  expect(screen.queryByTestId("group-order-chip")).toBeNull();
+});
